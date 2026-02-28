@@ -1,123 +1,134 @@
 #!/bin/bash
 # =============================================================
 # SunSea Steel Website - One-Click Server Setup
-# Domain: www.sunseasteel.com  IP: 43.159.129.164
-# Usage:  bash server-setup.sh
+# Tested on: Ubuntu 22.04 LTS (non-root user with sudo)
+# Usage: bash server-setup.sh
 # =============================================================
 set -e
 
-# Colors
 G='\033[0;32m'; Y='\033[1;33m'; B='\033[0;34m'; R='\033[0;31m'; N='\033[0m'
 ok()   { echo -e "${G}[OK] $1${N}"; }
 info() { echo -e "${B}[..] $1${N}"; }
 warn() { echo -e "${Y}[!!] $1${N}"; }
 die()  { echo -e "${R}[ERR] $1${N}"; exit 1; }
 
-# Auto sudo detection
-if [ "$EUID" -eq 0 ]; then
-  SUDO=""
-else
-  SUDO="sudo"
-  warn "Running as ubuntu, will use sudo for system commands"
-  sudo -v 2>/dev/null || die "sudo not available. Try: sudo bash server-setup.sh"
-fi
-
+# ---------- Config (pre-filled) ----------
 REPO="https://github.com/jameson99799/steel-trader-website.git"
 DIR="/www/wwwroot/steel-trader"
 DOMAIN="www.sunseasteel.com"
+APP_NAME="led-trade"
 PORT=3001
+# -----------------------------------------
+
+# Detect root vs sudo
+if [ "$EUID" -eq 0 ]; then
+  SUDO=""
+  warn "Running as root"
+else
+  SUDO="sudo"
+  warn "Running as $(whoami) - using sudo for system commands"
+  sudo -n true 2>/dev/null || sudo -v || die "No sudo access. Try: sudo bash server-setup.sh"
+fi
 
 echo ""
-echo "=============================================="
-echo "  SunSea Steel - Server Setup"
-echo "  Domain : $DOMAIN"
+echo "======================================================"
+echo "  SunSea Steel - One-Click Setup"
+echo "  Repo   : $REPO"
 echo "  Dir    : $DIR"
-echo "=============================================="
+echo "  Domain : $DOMAIN"
+echo "======================================================"
 echo ""
 
-# 1. Node.js 20
+# 1. System updates (optional but safe)
+info "Updating apt cache..."
+$SUDO apt-get update -qq
+
+# 2. Node.js 20 LTS
 if ! command -v node &>/dev/null; then
   info "Installing Node.js 20..."
-  curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO bash - >/dev/null 2>&1
-  $SUDO apt-get install -y nodejs >/dev/null 2>&1
+  curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO bash - >/dev/null
+  $SUDO apt-get install -y nodejs
 fi
+node --version | grep -q "v2" || die "Node.js 20 required. Found: $(node --version 2>/dev/null || echo 'none')"
 ok "Node.js $(node --version)"
 
-# 2. Git
+# 3. Git
 if ! command -v git &>/dev/null; then
-  info "Installing Git..."
-  $SUDO apt-get install -y git >/dev/null 2>&1
+  info "Installing git..."
+  $SUDO apt-get install -y git
 fi
-ok "Git ready"
-
-# 3. PM2
-if ! command -v pm2 &>/dev/null; then
-  info "Installing PM2..."
-  $SUDO npm install -g pm2 >/dev/null 2>&1
-fi
-ok "PM2 $(pm2 --version)"
+ok "Git $(git --version | cut -d' ' -f3)"
 
 # 4. Nginx
 if ! command -v nginx &>/dev/null; then
   info "Installing Nginx..."
-  $SUDO apt-get install -y nginx >/dev/null 2>&1
+  $SUDO apt-get install -y nginx
 fi
 ok "Nginx ready"
 
-# 5. Clone or update code
-$SUDO mkdir -p "$DIR"
-$SUDO chown -R "$(whoami)" "$DIR"
+# 5. PM2
+if ! command -v pm2 &>/dev/null; then
+  info "Installing PM2..."
+  $SUDO npm install -g pm2 --silent
+fi
+ok "PM2 $(pm2 --version)"
 
+# 6. Deploy directory
+info "Preparing deploy directory..."
+$SUDO mkdir -p "$DIR"
+$SUDO chown -R "$(whoami)":"$(whoami)" "$DIR"
+
+# 7. Clone or update code
 if [ -d "$DIR/.git" ]; then
-  info "Updating existing repo..."
-  cd "$DIR" && git pull
+  info "Updating existing code..."
+  cd "$DIR"
+  git pull --ff-only || { git fetch origin; git reset --hard origin/master; }
 else
-  info "Cloning from GitHub..."
+  info "Cloning repository..."
   git clone "$REPO" "$DIR"
   cd "$DIR"
 fi
 ok "Code: $(git log --oneline -1)"
 
-# 6. Install dependencies
-info "npm install..."
-npm install >/dev/null 2>&1
-ok "Dependencies installed"
+# 8. Install Node dependencies
+info "Installing dependencies..."
+npm install --silent
+ok "Dependencies ready"
 
-# 7. Build frontend
-info "npm run build..."
+# 9. Build frontend
+info "Building frontend..."
 npm run build
-ok "Frontend built"
+ok "Frontend built (dist/ ready)"
 
-# 8. Create required directories
+# 10. Create directories
 mkdir -p data uploads logs
 
-# 9. Create .env file
+# 11. Environment file
 if [ ! -f .env ]; then
-  JWT=$(head /dev/urandom | tr -dc 'A-Za-z0-9!@#$%' | head -c 48)
+  info "Creating .env..."
+  JWT=$(head /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 48)
   cat > .env << ENVEOF
 NODE_ENV=production
 PORT=${PORT}
 JWT_SECRET=${JWT}
 ENVEOF
-  ok ".env created (JWT_SECRET auto-generated)"
+  ok ".env created (JWT auto-generated)"
 else
-  ok ".env exists"
+  ok ".env already exists"
 fi
 
-# 10. PM2 ecosystem config
-cat > ecosystem.config.cjs << 'ECOEOF'
+# 12. PM2 ecosystem config
+cat > ecosystem.config.cjs << ECOEOF
 module.exports = {
   apps: [{
-    name: 'led-trade',
+    name: '${APP_NAME}',
     script: 'server/index.js',
+    cwd: '${DIR}',
     instances: 1,
     exec_mode: 'fork',
-    env: {
-      NODE_ENV: 'production',
-      PORT: 3001
-    },
-    error_file: './logs/err.log',
-    out_file: './logs/out.log',
+    env: { NODE_ENV: 'production', PORT: ${PORT} },
+    error_file: '${DIR}/logs/err.log',
+    out_file:   '${DIR}/logs/out.log',
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
     autorestart: true,
     watch: false,
@@ -126,48 +137,55 @@ module.exports = {
 }
 ECOEOF
 
-# 11. Start PM2
-info "Starting PM2..."
-pm2 delete led-trade 2>/dev/null || true
+# 13. Start/restart PM2
+info "Starting PM2 app..."
+pm2 delete "$APP_NAME" 2>/dev/null || true
 pm2 start ecosystem.config.cjs
-pm2 save >/dev/null 2>&1
-ok "PM2 started"
+pm2 save --force >/dev/null
+ok "PM2 app '$APP_NAME' started on port $PORT"
 
-# 12. PM2 auto-start on reboot
-info "Setting up PM2 auto-start..."
-PM2_PATH=$(which pm2)
-NODE_PATH=$(which node)
-NODE_DIR=$(dirname "$NODE_PATH")
-$SUDO env PATH="$PATH:$NODE_DIR" "$PM2_PATH" startup systemd -u "$(whoami)" --hp "$HOME" 2>/dev/null \
-  && ok "PM2 auto-start enabled" \
-  || warn "PM2 startup skipped (run manually: sudo pm2 startup)"
+# 14. PM2 startup on reboot
+info "Configuring PM2 auto-start..."
+if [ "$EUID" -eq 0 ]; then
+  pm2 startup systemd >/dev/null 2>&1 || true
+else
+  # Get the startup command and execute it
+  STARTUP_CMD=$(pm2 startup systemd -u "$(whoami)" --hp "$HOME" 2>&1 | grep "sudo" | tail -1)
+  if [ -n "$STARTUP_CMD" ]; then
+    eval "$STARTUP_CMD" >/dev/null 2>&1 || warn "PM2 startup skipped - run manually if needed"
+  fi
+  pm2 save --force >/dev/null
+fi
+ok "PM2 auto-start configured"
 
-# 13. Nginx configuration
-info "Configuring Nginx..."
-$SUDO tee /etc/nginx/sites-available/steel-trader >/dev/null << NGINXCONF
+# 15. Nginx site config
+info "Writing Nginx config..."
+$SUDO tee /etc/nginx/sites-available/${APP_NAME} >/dev/null << NGINXEOF
 server {
     listen 80;
     server_name ${DOMAIN} sunseasteel.com 43.159.129.164;
     client_max_body_size 20M;
 
-    # Static frontend
+    # Frontend (Vue SPA)
     location / {
         root ${DIR}/dist;
         index index.html;
         try_files \$uri \$uri/ /index.html;
     }
 
-    # Cached assets
+    # Hashed assets - long cache
     location /assets/ {
         root ${DIR}/dist;
         expires 1y;
         add_header Cache-Control "public, immutable";
+        access_log off;
     }
 
-    # API proxy to Node.js
+    # API proxy -> Node.js
     location /api/ {
         proxy_pass http://127.0.0.1:${PORT};
         proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -175,47 +193,52 @@ server {
         proxy_read_timeout 300s;
     }
 
-    # Uploaded files
+    # Uploads
     location /uploads/ {
         alias ${DIR}/uploads/;
         expires 30d;
+        access_log off;
     }
 
-    # Sitemap (generated by Node)
+    # Dynamic sitemap
     location = /sitemap.xml {
         proxy_pass http://127.0.0.1:${PORT};
         proxy_set_header Host \$host;
     }
 }
-NGINXCONF
+NGINXEOF
 
-$SUDO ln -sf /etc/nginx/sites-available/steel-trader /etc/nginx/sites-enabled/steel-trader
+# Enable site, disable default
+$SUDO ln -sf /etc/nginx/sites-available/${APP_NAME} /etc/nginx/sites-enabled/${APP_NAME}
 $SUDO rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-$SUDO nginx -t && $SUDO systemctl enable nginx && $SUDO systemctl restart nginx
-ok "Nginx configured and started"
 
-# 14. Firewall
-$SUDO ufw allow 22/tcp  2>/dev/null || true
-$SUDO ufw allow 80/tcp  2>/dev/null || true
-$SUDO ufw allow 443/tcp 2>/dev/null || true
+# Test and reload
+$SUDO nginx -t || die "Nginx config test failed"
+$SUDO systemctl enable nginx >/dev/null 2>&1
+$SUDO systemctl reload nginx 2>/dev/null || $SUDO systemctl restart nginx
+ok "Nginx configured for $DOMAIN"
 
-# Done
+# 16. Firewall
+$SUDO ufw allow 22/tcp  >/dev/null 2>&1 || true
+$SUDO ufw allow 80/tcp  >/dev/null 2>&1 || true
+$SUDO ufw allow 443/tcp >/dev/null 2>&1 || true
+
+# Done!
 echo ""
-echo "=============================================="
-echo -e "${G}  Setup Complete!${N}"
-echo "=============================================="
+echo "======================================================"
+echo -e "${G}  All done! Your website is live.${N}"
+echo "======================================================"
 echo ""
-echo "  Website : http://${DOMAIN}"
-echo "  Admin   : http://${DOMAIN}/admin/login"
-echo "  Login   : admin / admin123"
-echo ""
-echo -e "${Y}  IMPORTANT: Change the admin password now!${N}"
+echo "  Visit   : http://43.159.129.164"
+echo "  or      : http://${DOMAIN}  (after DNS)"
+echo "  Admin   : http://43.159.129.164/admin/login"
+echo "  Account : admin / admin123  <-- CHANGE THIS!"
 echo ""
 echo "  PM2 commands:"
-echo "    pm2 status           # check status"
-echo "    pm2 logs led-trade   # view logs"
-echo "    pm2 restart led-trade"
+echo "    pm2 status            # running processes"
+echo "    pm2 logs ${APP_NAME}  # live logs"
+echo "    pm2 restart ${APP_NAME}"
 echo ""
 echo "  Update code anytime:"
 echo "    cd ${DIR} && bash server-update.sh"
-echo ""
+echo "======================================================"
