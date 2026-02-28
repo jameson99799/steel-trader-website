@@ -53,7 +53,7 @@ router.put('/', authMiddleware, upload.fields([
       INSERT INTO company (id, name, name_en, description, description_en, phone, email,
         address, address_en, whatsapp, wechat, facebook, linkedin, instagram, tiktok, twitter,
         whatsapp_qr, wechat_qr, logo, favicon, about_image, advantages, advantages_en, map_embed_url)
-      VALUES (1, ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (1, ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [name, name_en, description, description_en, phone, email, address, address_en,
       whatsapp, wechat, facebook, linkedin, instagram, tiktok, twitter,
       whatsapp_qr, wechat_qr, logo, favicon, about_image,
