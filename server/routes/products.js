@@ -104,7 +104,9 @@ router.put('/:id', authMiddleware, upload.array('images', 10), async (req, res) 
     imageUrls.push(`/uploads/${req.file.filename}`)
   }
 
-  let images = existing_images || product.images
+  // Use existing_images from frontend (may be empty string if all deleted)
+  // Don't use || because empty string is a valid value (all images removed)
+  let images = existing_images !== undefined ? existing_images : product.images
   if (imageUrls.length) {
     images = images ? `${images},${imageUrls.join(',')}` : imageUrls.join(',')
   }
