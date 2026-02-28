@@ -18,37 +18,38 @@ echo ""
 
 [ ! -f "package.json" ] && echo -e "${RED}❌ 请在项目目录下运行: cd /www/wwwroot/steel-trader${NC}" && exit 1
 
-# ── 1. 拉取最新代码 ───────────────────────────────────────────
+# ── 1. 拉取最新代码（强制覆盖，不影响数据库和uploads）──────────
 info "从 GitHub 拉取最新代码..."
 git fetch origin
-
-LOCAL=$(git rev-parse HEAD)
-REMOTE=$(git rev-parse @{u} 2>/dev/null || echo "unknown")
-
-if [ "$LOCAL" = "$REMOTE" ]; then
-  warn "代码已是最新，是否强制重建？(y/n) "
-  read -r -n 1 REPLY; echo
-  [[ ! $REPLY =~ ^[Yy]$ ]] && echo "已取消" && exit 0
-fi
-
-git pull
+git reset --hard origin/master
 ok "代码: $(git log --oneline -1)"
 
 # ── 2. 安装依赖 ───────────────────────────────────────────────
 info "npm install..."
-npm install
+npm install --production=false
 ok "依赖就绪"
 
-# ── 3. 重新构建 ───────────────────────────────────────────────
+# ── 3. 重新构建前端 ───────────────────────────────────────────
 info "npm run build..."
 npm run build
-ok "构建完成"
+ok "前端构建完成"
 
 # ── 4. 重启 PM2 ───────────────────────────────────────────────
 info "重启 PM2..."
-pm2 restart steel-trader 2>/dev/null || pm2 start ecosystem.config.cjs
+# Try both possible PM2 process names
+if pm2 describe led-trade > /dev/null 2>&1; then
+  pm2 restart led-trade
+  ok "PM2 进程 led-trade 已重启"
+elif pm2 describe steel-trader > /dev/null 2>&1; then
+  pm2 restart steel-trader
+  ok "PM2 进程 steel-trader 已重启"
+else
+  # No existing process, start new one
+  pm2 start server/index.js --name led-trade --node-args="--experimental-specifier-resolution=node"
+  ok "PM2 进程 led-trade 已启动"
+fi
 pm2 save
-ok "PM2 已重启"
+
 echo ""
 pm2 status
 
@@ -57,4 +58,6 @@ echo "============================================================"
 ok "🎉 更新完成！$(date '+%H:%M:%S')"
 echo "============================================================"
 echo ""
-echo "查看日志: pm2 logs steel-trader --lines 30"
+echo "查看日志: pm2 logs led-trade --lines 30"
+echo ""
+echo "⚠️  注意: 数据库和已上传的图片不受更新影响，会自动保留"
