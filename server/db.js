@@ -109,6 +109,7 @@ async function initDb() {
       about_image TEXT,
       advantages TEXT,
       advantages_en TEXT,
+      map_embed_url TEXT,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
