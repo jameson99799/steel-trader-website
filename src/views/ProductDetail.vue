@@ -435,6 +435,7 @@ onMounted(async () => {
 .main-image {
   position: relative;
   aspect-ratio: 1;
+  max-height: 500px;
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--white);

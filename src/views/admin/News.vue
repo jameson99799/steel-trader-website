@@ -177,6 +177,26 @@ watch(activeTab, async (tab) => {
         }
       })
       setupImageGrid(quillInstance)
+      // Custom image upload handler — uploads to server instead of base64/URL prompt
+      const toolbar = quillInstance.getModule('toolbar')
+      toolbar.addHandler('image', () => {
+        const input = document.createElement('input')
+        input.setAttribute('type', 'file')
+        input.setAttribute('accept', 'image/*')
+        input.click()
+        input.onchange = async () => {
+          const file = input.files[0]
+          if (!file) return
+          try {
+            const res = await api.upload(file)
+            const range = quillInstance.getSelection(true)
+            quillInstance.insertEmbed(range.index, 'image', res.url)
+            quillInstance.setSelection(range.index + 1)
+          } catch (e) {
+            alert('图片上传失败: ' + e.message)
+          }
+        }
+      })
     }
     // Set content from form
     const currentContent = form.value.content || ''
