@@ -1,28 +1,42 @@
-FROM node:20-alpine
+# ============================================================
+# SunSea Steel Website - Production Dockerfile
+# Multi-stage: builder (full deps) + runner (prod only)
+# ============================================================
 
-# 设置工作目录
+# Stage 1: Build frontend
+FROM node:20-alpine AS builder
 WORKDIR /app
-
-# 复制 package 文件
 COPY package*.json ./
-
-# 安装依赖
-RUN npm install --production
-
-# 复制项目文件
+RUN npm install
 COPY . .
-
-# 构建前端
 RUN npm run build
 
-# 创建必要的目录
-RUN mkdir -p data uploads
+# Stage 2: Production runtime (smaller image)
+FROM node:20-alpine AS runner
+WORKDIR /app
 
-# 暴露端口
+# Install only production dependencies
+COPY package*.json ./
+RUN npm install --omit=dev --silent
+
+# Copy built frontend and server code
+COPY --from=builder /app/dist ./dist
+COPY server ./server
+
+# Create persistent directories
+RUN mkdir -p data uploads logs
+
+# Non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup \
+    && chown -R appuser:appgroup /app
+USER appuser
+
+ENV NODE_ENV=production
+ENV PORT=3001
+
 EXPOSE 3001
 
-# 设置环境变量
-ENV NODE_ENV=production
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD wget -qO- http://localhost:3001/api/health 2>/dev/null || exit 1
 
-# 启动应用
 CMD ["node", "server/index.js"]
