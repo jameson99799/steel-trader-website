@@ -1,109 +1,121 @@
 #!/bin/bash
-# ============================================================
-# LED Trade Website — 服务器一键安装脚本
-# 针对: www.sunseasteel.com (43.159.129.164)
-# 运行: bash server-setup.sh
-# ============================================================
-
+# =============================================================
+# SunSea Steel Website - One-Click Server Setup
+# Domain: www.sunseasteel.com  IP: 43.159.129.164
+# Usage:  bash server-setup.sh
+# =============================================================
 set -e
-GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; RED='\033[0;31m'; NC='\033[0m'
-ok()  { echo -e "${GREEN}✅ $1${NC}"; }
-info(){ echo -e "${BLUE}➜  $1${NC}"; }
-warn(){ echo -e "${YELLOW}⚠️  $1${NC}"; }
-err() { echo -e "${RED}❌ $1${NC}"; exit 1; }
 
-# ─── 配置（已预填）────────────────────────────────────────────
-GITHUB_REPO="https://github.com/jameson99799/steel-trader-website.git"
-DEPLOY_DIR="/www/wwwroot/steel-trader"
+# Colors
+G='\033[0;32m'; Y='\033[1;33m'; B='\033[0;34m'; R='\033[0;31m'; N='\033[0m'
+ok()   { echo -e "${G}[OK] $1${N}"; }
+info() { echo -e "${B}[..] $1${N}"; }
+warn() { echo -e "${Y}[!!] $1${N}"; }
+die()  { echo -e "${R}[ERR] $1${N}"; exit 1; }
+
+# Auto sudo detection
+if [ "$EUID" -eq 0 ]; then
+  SUDO=""
+else
+  SUDO="sudo"
+  warn "Running as ubuntu, will use sudo for system commands"
+  sudo -v 2>/dev/null || die "sudo not available. Try: sudo bash server-setup.sh"
+fi
+
+REPO="https://github.com/jameson99799/steel-trader-website.git"
+DIR="/www/wwwroot/steel-trader"
 DOMAIN="www.sunseasteel.com"
-# ─────────────────────────────────────────────────────────────
+PORT=3001
 
 echo ""
-echo "============================================================"
-echo "  SunSea Steel Website — 服务器一键安装"
-echo "  域名: $DOMAIN"
-echo "  目录: $DEPLOY_DIR"
-echo "  仓库: $GITHUB_REPO"
-echo "============================================================"
+echo "=============================================="
+echo "  SunSea Steel - Server Setup"
+echo "  Domain : $DOMAIN"
+echo "  Dir    : $DIR"
+echo "=============================================="
 echo ""
 
-# ── 1. 检测系统并安装 Node.js 20 LTS ─────────────────────────
-if ! command -v node &>/dev/null || [[ $(node -e "process.exit(process.version.slice(1).split('.')[0] < 18 ? 1 : 0)" 2>/dev/null; echo $?) == "1" ]]; then
-  info "安装 Node.js 20 LTS..."
-  if command -v apt-get &>/dev/null; then
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    apt-get install -y nodejs
-  elif command -v yum &>/dev/null; then
-    curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
-    yum install -y nodejs
-  else
-    err "不支持的系统，请手动安装 Node.js 20"
-  fi
+# 1. Node.js 20
+if ! command -v node &>/dev/null; then
+  info "Installing Node.js 20..."
+  curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO bash - >/dev/null 2>&1
+  $SUDO apt-get install -y nodejs >/dev/null 2>&1
 fi
 ok "Node.js $(node --version)"
 
-# ── 2. 安装 Git ───────────────────────────────────────────────
+# 2. Git
 if ! command -v git &>/dev/null; then
-  command -v apt-get &>/dev/null && apt-get install -y git || yum install -y git
+  info "Installing Git..."
+  $SUDO apt-get install -y git >/dev/null 2>&1
 fi
-ok "Git 就绪"
+ok "Git ready"
 
-# ── 3. 安装 PM2 ───────────────────────────────────────────────
+# 3. PM2
 if ! command -v pm2 &>/dev/null; then
-  info "安装 PM2..."
-  npm install -g pm2
+  info "Installing PM2..."
+  $SUDO npm install -g pm2 >/dev/null 2>&1
 fi
 ok "PM2 $(pm2 --version)"
 
-# ── 4. 克隆代码 ───────────────────────────────────────────────
-mkdir -p "$(dirname "$DEPLOY_DIR")"
-if [ -d "$DEPLOY_DIR/.git" ]; then
-  info "更新现有仓库..."
-  cd "$DEPLOY_DIR"
-  git pull
-else
-  info "克隆仓库..."
-  git clone "$GITHUB_REPO" "$DEPLOY_DIR"
-  cd "$DEPLOY_DIR"
+# 4. Nginx
+if ! command -v nginx &>/dev/null; then
+  info "Installing Nginx..."
+  $SUDO apt-get install -y nginx >/dev/null 2>&1
 fi
-ok "代码就绪: $(git log --oneline -1)"
+ok "Nginx ready"
 
-# ── 5. 安装依赖 ───────────────────────────────────────────────
+# 5. Clone or update code
+$SUDO mkdir -p "$DIR"
+$SUDO chown -R "$(whoami)" "$DIR"
+
+if [ -d "$DIR/.git" ]; then
+  info "Updating existing repo..."
+  cd "$DIR" && git pull
+else
+  info "Cloning from GitHub..."
+  git clone "$REPO" "$DIR"
+  cd "$DIR"
+fi
+ok "Code: $(git log --oneline -1)"
+
+# 6. Install dependencies
 info "npm install..."
-npm install
-ok "依赖安装完成"
+npm install >/dev/null 2>&1
+ok "Dependencies installed"
 
-# ── 6. 构建前端 ───────────────────────────────────────────────
+# 7. Build frontend
 info "npm run build..."
 npm run build
-ok "前端构建完成"
+ok "Frontend built"
 
-# ── 7. 目录和环境变量 ─────────────────────────────────────────
+# 8. Create required directories
 mkdir -p data uploads logs
+
+# 9. Create .env file
 if [ ! -f .env ]; then
-  JWT_SEC=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 48)
+  JWT=$(head /dev/urandom | tr -dc 'A-Za-z0-9!@#$%' | head -c 48)
   cat > .env << ENVEOF
 NODE_ENV=production
-PORT=3001
-JWT_SECRET=${JWT_SEC}
+PORT=${PORT}
+JWT_SECRET=${JWT}
 ENVEOF
-  ok ".env 已创建（JWT_SECRET 随机生成）"
+  ok ".env created (JWT_SECRET auto-generated)"
 else
-  ok ".env 已存在"
+  ok ".env exists"
 fi
 
-# ── 8. PM2 启动 ───────────────────────────────────────────────
-info "启动 PM2..."
-pm2 delete steel-trader 2>/dev/null || true
-# 更新 ecosystem 使用 steel-trader 名称
+# 10. PM2 ecosystem config
 cat > ecosystem.config.cjs << 'ECOEOF'
 module.exports = {
   apps: [{
-    name: 'steel-trader',
+    name: 'led-trade',
     script: 'server/index.js',
     instances: 1,
     exec_mode: 'fork',
-    env: { NODE_ENV: 'production', PORT: 3001 },
+    env: {
+      NODE_ENV: 'production',
+      PORT: 3001
+    },
     error_file: './logs/err.log',
     out_file: './logs/out.log',
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
@@ -113,95 +125,97 @@ module.exports = {
   }]
 }
 ECOEOF
+
+# 11. Start PM2
+info "Starting PM2..."
+pm2 delete led-trade 2>/dev/null || true
 pm2 start ecosystem.config.cjs
-pm2 save
-pm2 startup 2>/dev/null || true
-ok "PM2 已启动"
+pm2 save >/dev/null 2>&1
+ok "PM2 started"
 
-# ── 9. 安装并配置 Nginx ──────────────────────────────────────
-if ! command -v nginx &>/dev/null; then
-  info "安装 Nginx..."
-  command -v apt-get &>/dev/null && apt-get install -y nginx || yum install -y nginx
-fi
+# 12. PM2 auto-start on reboot
+info "Setting up PM2 auto-start..."
+PM2_PATH=$(which pm2)
+NODE_PATH=$(which node)
+NODE_DIR=$(dirname "$NODE_PATH")
+$SUDO env PATH="$PATH:$NODE_DIR" "$PM2_PATH" startup systemd -u "$(whoami)" --hp "$HOME" 2>/dev/null \
+  && ok "PM2 auto-start enabled" \
+  || warn "PM2 startup skipped (run manually: sudo pm2 startup)"
 
-info "配置 Nginx..."
-NGINX_DIR="/etc/nginx"
-# 检测 Nginx 配置路径 (CentOS 无 sites-available)
-if [ -d "$NGINX_DIR/sites-available" ]; then
-  CONF_FILE="$NGINX_DIR/sites-available/steel-trader"
-  ln -sf "$CONF_FILE" "$NGINX_DIR/sites-enabled/steel-trader" 2>/dev/null || true
-  rm -f "$NGINX_DIR/sites-enabled/default" 2>/dev/null || true
-else
-  CONF_FILE="$NGINX_DIR/conf.d/steel-trader.conf"
-fi
-
-cat > "$CONF_FILE" << NGINXEOF
+# 13. Nginx configuration
+info "Configuring Nginx..."
+$SUDO tee /etc/nginx/sites-available/steel-trader >/dev/null << NGINXCONF
 server {
     listen 80;
     server_name ${DOMAIN} sunseasteel.com 43.159.129.164;
     client_max_body_size 20M;
 
-    # 前端静态文件
+    # Static frontend
     location / {
-        root ${DEPLOY_DIR}/dist;
+        root ${DIR}/dist;
         index index.html;
         try_files \$uri \$uri/ /index.html;
     }
 
-    # 带缓存的静态资源
+    # Cached assets
     location /assets/ {
-        root ${DEPLOY_DIR}/dist;
+        root ${DIR}/dist;
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
 
-    # API 代理
+    # API proxy to Node.js
     location /api/ {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:${PORT};
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_read_timeout 300s;
         proxy_connect_timeout 30s;
+        proxy_read_timeout 300s;
     }
 
-    # 上传文件
+    # Uploaded files
     location /uploads/ {
-        alias ${DEPLOY_DIR}/uploads/;
+        alias ${DIR}/uploads/;
         expires 30d;
     }
 
-    # Sitemap (Node 生成)
+    # Sitemap (generated by Node)
     location = /sitemap.xml {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:${PORT};
         proxy_set_header Host \$host;
     }
 }
-NGINXEOF
+NGINXCONF
 
-nginx -t && (service nginx reload 2>/dev/null || systemctl reload nginx 2>/dev/null || nginx -s reload 2>/dev/null)
-ok "Nginx 配置完成"
+$SUDO ln -sf /etc/nginx/sites-available/steel-trader /etc/nginx/sites-enabled/steel-trader
+$SUDO rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+$SUDO nginx -t && $SUDO systemctl enable nginx && $SUDO systemctl restart nginx
+ok "Nginx configured and started"
 
-# ── 10. 防火墙 ────────────────────────────────────────────────
-ufw allow 80/tcp 2>/dev/null || firewall-cmd --permanent --add-port=80/tcp 2>/dev/null || true
-ufw allow 443/tcp 2>/dev/null || firewall-cmd --permanent --add-port=443/tcp 2>/dev/null || true
+# 14. Firewall
+$SUDO ufw allow 22/tcp  2>/dev/null || true
+$SUDO ufw allow 80/tcp  2>/dev/null || true
+$SUDO ufw allow 443/tcp 2>/dev/null || true
 
-# ── 完成 ──────────────────────────────────────────────────────
+# Done
 echo ""
-echo "============================================================"
-echo -e "${GREEN}🎉 部署完成！${NC}"
-echo "============================================================"
+echo "=============================================="
+echo -e "${G}  Setup Complete!${N}"
+echo "=============================================="
 echo ""
-echo -e "${GREEN}  🌐 网站地址:   http://${DOMAIN}${NC}"
-echo -e "${GREEN}  🔧 后台地址:   http://${DOMAIN}/admin/login${NC}"
-echo -e "${GREEN}  👤 默认账号:   admin / admin123${NC}"
-echo -e "${YELLOW}  ⚠️  请立即登录后修改密码！${NC}"
+echo "  Website : http://${DOMAIN}"
+echo "  Admin   : http://${DOMAIN}/admin/login"
+echo "  Login   : admin / admin123"
 echo ""
-echo "常用命令:"
-echo "  pm2 logs steel-trader       # 查看日志"
-echo "  pm2 restart steel-trader    # 重启服务"
-echo "  pm2 status                  # 查看状态"
+echo -e "${Y}  IMPORTANT: Change the admin password now!${N}"
 echo ""
-echo "一键更新: cd ${DEPLOY_DIR} && bash server-update.sh"
+echo "  PM2 commands:"
+echo "    pm2 status           # check status"
+echo "    pm2 logs led-trade   # view logs"
+echo "    pm2 restart led-trade"
+echo ""
+echo "  Update code anytime:"
+echo "    cd ${DIR} && bash server-update.sh"
 echo ""
