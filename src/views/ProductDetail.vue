@@ -425,6 +425,7 @@ onMounted(async () => {
 .product-images {
   position: sticky;
   top: calc(var(--spacing-xl) + 80px);
+  min-width: 0;
 }
 
 .main-image-container {
@@ -547,6 +548,17 @@ onMounted(async () => {
   gap: var(--spacing);
   overflow-x: auto;
   padding: var(--spacing-sm) 0;
+  max-width: 100%;
+  scrollbar-width: thin;
+}
+
+.thumbnails::-webkit-scrollbar {
+  height: 4px;
+}
+
+.thumbnails::-webkit-scrollbar-thumb {
+  background: var(--gray-300);
+  border-radius: 2px;
 }
 
 .thumbnail-btn {
