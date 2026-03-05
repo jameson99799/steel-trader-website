@@ -30,7 +30,8 @@ router.put('/', authMiddleware, (req, res) => {
     about_iso, about_iso_en,
     about_global, about_global_en,
     about_innovation, about_innovation_en,
-    inquiry_subtitle, inquiry_subtitle_en
+    inquiry_subtitle, inquiry_subtitle_en,
+    show_contact_panel
   } = req.body
 
   const params = [
@@ -52,7 +53,8 @@ router.put('/', authMiddleware, (req, res) => {
     about_iso, about_iso_en,
     about_global, about_global_en,
     about_innovation, about_innovation_en,
-    inquiry_subtitle, inquiry_subtitle_en
+    inquiry_subtitle, inquiry_subtitle_en,
+    show_contact_panel !== undefined ? (parseInt(show_contact_panel) || 0) : 0
   ]
 
   if (texts) {
@@ -76,6 +78,7 @@ router.put('/', authMiddleware, (req, res) => {
       about_global=?, about_global_en=?,
       about_innovation=?, about_innovation_en=?,
       inquiry_subtitle=?, inquiry_subtitle_en=?,
+      show_contact_panel=?,
       updated_at=CURRENT_TIMESTAMP
       WHERE id=1`, params)
   } else {
@@ -98,8 +101,9 @@ router.put('/', authMiddleware, (req, res) => {
       about_iso, about_iso_en,
       about_global, about_global_en,
       about_innovation, about_innovation_en,
-      inquiry_subtitle, inquiry_subtitle_en
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, params)
+      inquiry_subtitle, inquiry_subtitle_en,
+      show_contact_panel
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, params)
   }
 
   res.json({ message: '更新成功' })

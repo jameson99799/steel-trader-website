@@ -119,7 +119,7 @@
           </div>
 
           <!-- Sticky Contact Panel (right column) -->
-          <div class="contact-panel">
+          <div class="contact-panel" v-if="pageTexts?.show_contact_panel">
             <div class="contact-panel-inner">
               <h3 class="panel-title">{{ pageTexts?.inquiry_panel_title || 'Contact Our Team' }}</h3>
               <p class="panel-subtitle">Need more information? Scan to contact us directly.</p>
@@ -282,6 +282,11 @@ const pageTexts = ref(null)
 const lightboxImg = ref(null)
 const allCategories = ref([])
 
+// Grid: 3 cols with contact panel, 2 cols without
+const layoutColumns = computed(() =>
+  pageTexts.value?.show_contact_panel ? '1fr 1fr 280px' : '1fr 1fr'
+)
+
 const images = computed(() => {
   if (!product.value?.images) return []
   return product.value.images.split(',').filter(Boolean)
@@ -416,7 +421,7 @@ onMounted(async () => {
 
 .product-layout {
   display: grid;
-  grid-template-columns: 1fr 1fr 280px;
+  grid-template-columns: v-bind(layoutColumns);
   gap: var(--spacing-xl);
   align-items: start;
 }
@@ -671,14 +676,16 @@ onMounted(async () => {
 }
 
 .specs-table {
+  display: table;
+  width: 100%;
   background: var(--gray-50);
   border-radius: var(--radius);
   overflow: hidden;
+  table-layout: fixed;
 }
 
 .spec-row {
-  display: grid;
-  grid-template-columns: 1fr 2fr;
+  display: table-row;
   border-bottom: 1px solid var(--border);
 }
 
@@ -687,16 +694,22 @@ onMounted(async () => {
 }
 
 .spec-label {
+  display: table-cell;
+  width: 38%;
   padding: var(--spacing) var(--spacing-md);
   background: var(--white);
   font-weight: 600;
   color: var(--text-primary);
   border-right: 1px solid var(--border);
+  vertical-align: middle;
 }
 
 .spec-value {
+  display: table-cell;
+  width: 62%;
   padding: var(--spacing) var(--spacing-md);
   color: var(--text-secondary);
+  vertical-align: middle;
 }
 
 .action-section .section-content {

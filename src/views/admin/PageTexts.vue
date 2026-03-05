@@ -116,7 +116,15 @@
           </div>
 
           <h3 class="section-title">产品详情页 - 联系面板</h3>
-          <div class="grid grid-2">
+          <div class="form-group toggle-group">
+            <label>显示 Contact Our Team 面板<span class="hint">关闭后，规格参数和产品描述将占满整行宽度</span></label>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="contactPanelOn" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">{{ contactPanelOn ? '已开启' : '已关闭' }}</span>
+            </label>
+          </div>
+          <div class="grid grid-2" v-if="contactPanelOn">
             <div class="form-group">
               <label>面板标题（中文）</label>
               <input v-model="form.inquiry_panel_title" type="text" class="form-control" />
@@ -126,7 +134,7 @@
               <input v-model="form.inquiry_panel_title_en" type="text" class="form-control" />
             </div>
           </div>
-          <div class="grid grid-2">
+          <div class="grid grid-2" v-if="contactPanelOn">
             <div class="form-group">
               <label>询盘弹窗副标题（中文）<span class="hint">显示在询盘弹窗标题下方，如：Get a quote for your LED requirements</span></label>
               <input v-model="form.inquiry_subtitle" type="text" class="form-control" placeholder="Get a quote for your LED requirements" />
@@ -225,6 +233,7 @@ import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 
 const loading = ref(false)
+const contactPanelOn = ref(false)
 
 const form = reactive({
   logo_subtitle: '',
@@ -250,7 +259,7 @@ const form = reactive({
 const handleSubmit = async () => {
   loading.value = true
   try {
-    await api.updatePageTexts({ ...form })
+    await api.updatePageTexts({ ...form, show_contact_panel: contactPanelOn.value ? 1 : 0 })
     alert('保存成功')
   } catch (e) {
     alert(e.message)
@@ -265,6 +274,7 @@ onMounted(async () => {
     Object.keys(form).forEach(key => {
       if (data[key] !== undefined && data[key] !== null) form[key] = data[key]
     })
+    contactPanelOn.value = !!data.show_contact_panel
   } catch (e) {
     console.error(e)
   }
@@ -297,4 +307,21 @@ onMounted(async () => {
   font-weight: normal;
   margin-left: 8px;
 }
+
+.toggle-group { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.toggle-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.toggle-switch input { display: none; }
+.toggle-slider {
+  width: 44px; height: 24px; background: #d1d5db; border-radius: 12px;
+  position: relative; transition: background 0.2s;
+}
+.toggle-slider::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 18px; height: 18px; border-radius: 50%; background: white;
+  transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.toggle-switch input:checked + .toggle-slider { background: var(--primary); }
+.toggle-switch input:checked + .toggle-slider::after { transform: translateX(20px); }
+.toggle-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+
 </style>

@@ -71,6 +71,8 @@ async function initDb() {
   try { db.exec('ALTER TABLE products ADD COLUMN seo_keywords TEXT') } catch (e) { }
   // Migration: add map_embed_url to company
   try { db.exec('ALTER TABLE company ADD COLUMN map_embed_url TEXT') } catch (e) { }
+  // Migration: add show_contact_panel to page_texts
+  try { db.exec('ALTER TABLE page_texts ADD COLUMN show_contact_panel INTEGER DEFAULT 0') } catch (e) { }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS banners (
