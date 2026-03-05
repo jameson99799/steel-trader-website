@@ -37,6 +37,7 @@
               </td>
               <td>
                 <button class="btn btn-sm btn-secondary" @click="openModal(product)">编辑</button>
+                <button class="btn btn-sm btn-outline" @click="duplicateProduct(product)" style="color:#0077b5;border-color:#0077b5;">复制</button>
                 <button class="btn btn-sm btn-danger" @click="handleDelete(product)">删除</button>
               </td>
             </tr>
@@ -381,6 +382,32 @@ const handleDelete = async (product) => {
   } catch (e) {
     alert(e.message)
   }
+}
+
+async function duplicateProduct(product) {
+  if (!confirm(`复制产品「${product.name}」？`)) return
+  try {
+    const original = await api.getProduct(product.id)
+    // Open the modal pre-filled with the original's data, ready to save as new
+    openModal(null)  // reset first
+    await new Promise(r => setTimeout(r, 50))
+    form.name = original.name + ' (副本)'
+    form.name_en = (original.name_en || '') + ' (Copy)'
+    form.category_id = original.category_id
+    form.description = original.description || ''
+    form.description_en = original.description_en || ''
+    form.detail_content = original.detail_content || ''
+    form.is_featured = original.is_featured || 0
+    form.status = original.status !== undefined ? original.status : 1
+    form.sort_order = original.sort_order || 0
+    form.seo_title = original.seo_title || ''
+    form.seo_description = original.seo_description || ''
+    form.seo_keywords = original.seo_keywords || ''
+    existingImages.value = original.images ? original.images.split(',').filter(Boolean) : []
+    specs.value = original.specs ? JSON.parse(original.specs) : []
+    // Load detail content into Quill if already mounted
+    if (quillInstance) quillInstance.root.innerHTML = form.detail_content || ''
+  } catch(e) { alert('复制失败: ' + e.message) }
 }
 
 onMounted(() => {
