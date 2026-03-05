@@ -132,6 +132,7 @@ export const api = {
   // SEO
   getSeoSettings: () => request('/seo'),
   updateSeoSettings: (data) => request('/seo', { method: 'PUT', body: data }),
+  seoAudit: () => request('/seo/audit'),
 
   // Upload
   upload: (file) => {

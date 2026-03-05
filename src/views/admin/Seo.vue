@@ -2,7 +2,52 @@
   <div class="seo-page">
     <div class="page-header">
       <h2>🔍 SEO设置</h2>
-      <button class="btn btn-primary" @click="save" :disabled="saving">{{ saving ? '保存中...' : '保存设置' }}</button>
+      <div class="header-actions">
+        <button class="btn btn-audit" @click="runAudit" :disabled="auditing">
+          {{ auditing ? '检测中...' : '🔎 SEO检测' }}
+        </button>
+        <button class="btn btn-primary" @click="save" :disabled="saving">{{ saving ? '保存中...' : '保存设置' }}</button>
+      </div>
+    </div>
+
+    <!-- Audit Results -->
+    <div v-if="auditResult" class="audit-section">
+      <div class="audit-score-card">
+        <div class="score-ring" :class="scoreClass">
+          <span class="score-number">{{ auditResult.score }}</span>
+          <span class="score-label">分</span>
+        </div>
+        <div class="score-info">
+          <h3>SEO健康度评分</h3>
+          <div class="score-stats">
+            <span class="stat pass">✅ 通过 {{ auditResult.passed }}</span>
+            <span class="stat warn">⚠️ 警告 {{ auditResult.warnings }}</span>
+            <span class="stat fail">❌ 失败 {{ auditResult.failed }}</span>
+          </div>
+          <p class="score-desc">{{ scoreDesc }}</p>
+        </div>
+        <button class="close-audit" @click="auditResult = null">✕</button>
+      </div>
+
+      <div class="audit-categories">
+        <div v-for="(items, cat) in auditResult.categories" :key="cat" class="audit-cat">
+          <h4>{{ cat }}</h4>
+          <div v-for="item in items" :key="item.name" :class="['audit-item', item.status]">
+            <span class="audit-icon">
+              {{ item.status === 'pass' ? '✅' : item.status === 'warn' ? '⚠️' : '❌' }}
+            </span>
+            <span class="audit-name">{{ item.name }}</span>
+            <span v-if="item.suggestion" class="audit-suggestion">{{ item.suggestion }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="audit-tips" v-if="auditResult.topTips">
+        <h4>💡 Google SEO 核心建议</h4>
+        <ul>
+          <li v-for="(tip, i) in auditResult.topTips" :key="i">{{ tip }}</li>
+        </ul>
+      </div>
     </div>
 
     <div class="seo-cards">
@@ -59,32 +104,19 @@
           <small>设置搜索引擎爬虫访问规则。默认允许所有爬虫。</small>
         </div>
       </div>
-
-      <!-- SEO Checklist -->
-      <div class="seo-card seo-tips">
-        <h3>Google SEO 优化建议</h3>
-        <ul class="tips-list">
-          <li>✅ 每个产品页面都有独立的标题和描述</li>
-          <li>✅ 新闻文章支持独立的SEO标题/描述</li>
-          <li>⭐ 确保网站标题包含主要关键词</li>
-          <li>⭐ Meta描述要有吸引力，推动用户点击</li>
-          <li>⭐ 图片都有alt属性</li>
-          <li>⭐ 保持网站加载速度快（图片压缩，缓存）</li>
-          <li>⭐ 定期发布高质量的新闻/文章</li>
-          <li>⭐ 确保网站移动端友好（已响应式）</li>
-        </ul>
-      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '../../api'
 
 const saving = ref(false)
+const auditing = ref(false)
 const ogFile = ref(null)
 const ogPreview = ref(null)
+const auditResult = ref(null)
 
 const form = ref({
   site_title: '',
@@ -93,6 +125,23 @@ const form = ref({
   google_analytics: '',
   google_search_console: '',
   robots_txt: 'User-agent: *\nAllow: /\n'
+})
+
+const scoreClass = computed(() => {
+  if (!auditResult.value) return ''
+  const s = auditResult.value.score
+  if (s >= 80) return 'score-good'
+  if (s >= 50) return 'score-ok'
+  return 'score-bad'
+})
+
+const scoreDesc = computed(() => {
+  if (!auditResult.value) return ''
+  const s = auditResult.value.score
+  if (s >= 90) return '🎉 非常棒！SEO设置很完善，继续保持！'
+  if (s >= 70) return '👍 不错！还有一些细节可以优化'
+  if (s >= 50) return '⚠️ 需要改进，请按照建议逐项修复'
+  return '❌ SEO设置严重不足，请尽快按照建议优化'
 })
 
 function handleOgImage(e) {
@@ -131,6 +180,14 @@ async function save() {
   saving.value = false
 }
 
+async function runAudit() {
+  auditing.value = true
+  try {
+    auditResult.value = await api.seoAudit()
+  } catch(e) { alert('检测失败: ' + e.message) }
+  auditing.value = false
+}
+
 onMounted(load)
 </script>
 
@@ -138,6 +195,7 @@ onMounted(load)
 .seo-page { padding: 0; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .page-header h2 { font-size: 22px; font-weight: 700; }
+.header-actions { display: flex; gap: 10px; }
 
 .seo-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 
@@ -161,14 +219,89 @@ onMounted(load)
 
 .og-preview { width: 100%; max-height: 160px; object-fit: cover; border-radius: 6px; margin-top: 8px; }
 
-.seo-tips { grid-column: 1 / -1; }
-
-.tips-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-.tips-list li { font-size: 14px; color: var(--text-secondary); padding: 8px 12px; background: var(--gray-50); border-radius: 6px; }
-
 .btn { padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; border: none; font-size: 14px; }
 .btn-primary { background: var(--primary); color: white; }
+.btn-audit { background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; }
+.btn-audit:hover { opacity: 0.9; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-@media (max-width: 768px) { .seo-cards { grid-template-columns: 1fr; } }
+/* ── Audit Section ──────────────────────────────── */
+.audit-section { margin-bottom: 28px; }
+
+.audit-score-card {
+  display: flex; align-items: center; gap: 24px;
+  background: white; border-radius: 12px; padding: 24px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+  margin-bottom: 20px; position: relative;
+}
+
+.close-audit {
+  position: absolute; top: 12px; right: 14px;
+  background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted);
+}
+
+.score-ring {
+  width: 90px; height: 90px; border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.score-ring.score-good { background: linear-gradient(135deg, #22c55e, #16a34a); color: white; }
+.score-ring.score-ok { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
+.score-ring.score-bad { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }
+.score-number { font-size: 32px; font-weight: 800; line-height: 1; }
+.score-label { font-size: 12px; opacity: 0.9; }
+
+.score-info h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.score-stats { display: flex; gap: 14px; margin-bottom: 6px; }
+.stat { font-size: 13px; font-weight: 600; }
+.stat.pass { color: #22c55e; }
+.stat.warn { color: #f59e0b; }
+.stat.fail { color: #ef4444; }
+.score-desc { font-size: 14px; color: var(--text-secondary); margin: 0; }
+
+.audit-categories {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  margin-bottom: 20px;
+}
+
+.audit-cat {
+  background: white; border-radius: 10px; padding: 16px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+}
+
+.audit-cat h4 {
+  font-size: 14px; font-weight: 700; margin-bottom: 10px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.audit-item {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px;
+  padding: 6px 0; font-size: 13px;
+  border-bottom: 1px solid #f5f5f5;
+}
+.audit-item:last-child { border-bottom: none; }
+.audit-icon { flex-shrink: 0; }
+.audit-name { font-weight: 600; color: var(--text-primary); }
+.audit-suggestion {
+  width: 100%; font-size: 12px; color: var(--text-secondary);
+  padding-left: 22px; margin-top: 2px;
+}
+.audit-item.fail .audit-name { color: #dc2626; }
+.audit-item.warn .audit-name { color: #d97706; }
+.audit-item.pass .audit-name { color: #16a34a; }
+
+.audit-tips {
+  background: linear-gradient(135deg, #eff6ff, #eef2ff);
+  border: 1px solid #c7d2fe; border-radius: 10px; padding: 18px 22px;
+}
+.audit-tips h4 { font-size: 15px; font-weight: 700; margin-bottom: 10px; color: #4338ca; }
+.audit-tips ul { list-style: none; padding: 0; margin: 0; }
+.audit-tips li { font-size: 13px; color: #3730a3; padding: 4px 0; }
+
+@media (max-width: 768px) {
+  .seo-cards { grid-template-columns: 1fr; }
+  .audit-categories { grid-template-columns: 1fr; }
+  .audit-score-card { flex-direction: column; text-align: center; }
+}
 </style>
