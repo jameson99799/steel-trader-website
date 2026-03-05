@@ -422,7 +422,7 @@ onMounted(async () => {
 .product-layout {
   display: grid;
   grid-template-columns: v-bind(layoutColumns);
-  gap: var(--spacing-xl);
+  gap: 8px;
   align-items: start;
 }
 
@@ -911,9 +911,18 @@ onMounted(async () => {
   vertical-align: top;
 }
 
-/* Two 50% images sit side by side automatically */
+/* Inline images (same paragraph) sit side by side - respect width set by imageResize */
+.detail-content :deep(.ql-editor) p {
+  font-size: 0; /* collapse whitespace between inline-block imgs */
+}
+.detail-content :deep(.ql-editor) p > * {
+  font-size: 16px;
+}
 .detail-content :deep(.ql-editor) p img {
+  display: inline-block;
+  vertical-align: top;
   max-width: 100%;
+  height: auto;
 }
 
 /* Tables render with visible borders */

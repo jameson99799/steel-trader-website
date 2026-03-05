@@ -42,6 +42,35 @@
         </article>
       </div>
     </div>
+
+    <!-- Product Categories Section -->
+    <div class="categories-section" v-if="allCategories.length">
+      <div class="container">
+        <div class="section-hdr">
+          <h2>Product Categories</h2>
+          <p>{{ pageTexts?.categories_subtitle || 'Explore our comprehensive range of LED products' }}</p>
+        </div>
+        <div class="categories-grid">
+          <router-link
+            v-for="cat in allCategories"
+            :key="cat.id"
+            :to="`/products?category_id=${cat.id}`"
+            class="cat-card"
+          >
+            <div class="cat-image" v-if="cat.image">
+              <img :src="cat.image" :alt="localizedValue(cat, 'name')" />
+            </div>
+            <div class="cat-image cat-image-placeholder" v-else>
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+            </div>
+            <div class="cat-info">
+              <h3>{{ localizedValue(cat, 'name') }}</h3>
+              <span v-if="cat.product_count" class="cat-count">{{ cat.product_count }} products</span>
+            </div>
+          </router-link>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div v-else-if="loading" class="loading-state">
@@ -71,6 +100,8 @@ const { localizedValue } = useLang()
 
 const article = ref(null)
 const loading = ref(true)
+const allCategories = ref([])
+const pageTexts = ref(null)
 
 function formatDate(d) {
   if (!d) return ''
@@ -81,8 +112,14 @@ async function loadArticle(slug) {
   loading.value = true
   article.value = null
   try {
-    article.value = await api.getNewsItem(slug)
-    // Set page SEO title
+    const [art, cats, texts] = await Promise.all([
+      api.getNewsItem(slug),
+      api.getCategories(),
+      api.getPageTexts()
+    ])
+    article.value = art
+    allCategories.value = cats || []
+    pageTexts.value = texts
     if (article.value) {
       document.title = article.value.seo_title || localizedValue(article.value, 'title')
     }
@@ -165,9 +202,22 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
   color: var(--text-primary);
 }
 
-:deep(.ql-editor p) { margin-bottom: 16px; }
-:deep(.ql-editor h1, .ql-editor h2, .ql-editor h3) { margin: 24px 0 12px; font-weight: 700; }
-:deep(.ql-editor img) { max-width: 100%; border-radius: 8px; }
+:deep(.ql-editor) p { margin-bottom: 16px; font-size: 0; }
+:deep(.ql-editor) p > * { font-size: 16px; }
+:deep(.ql-editor h1), :deep(.ql-editor h2), :deep(.ql-editor h3) { margin: 24px 0 12px; font-weight: 700; font-size: revert; }
+:deep(.ql-editor img) {
+  max-width: 100%; border-radius: 8px;
+  display: inline-block; vertical-align: top; height: auto;
+}
+:deep(.ql-editor) figure {
+  text-align: center; margin: 16px 0;
+}
+:deep(.ql-editor) figcaption {
+  text-align: center; color: #666; font-size: 13px; margin-top: 4px;
+}
+:deep(.ql-editor table) { width: 100%; border-collapse: collapse; margin: 16px 0; }
+:deep(.ql-editor td), :deep(.ql-editor th) { border: 1px solid #d1d5db; padding: 8px 12px; }
+:deep(.ql-editor th) { background: var(--gray-50); font-weight: 600; }
 
 .article-footer {
   padding: var(--spacing-xl) var(--spacing-2xl) var(--spacing-2xl);
@@ -181,6 +231,66 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
 }
 
 .back-link:hover { gap: 10px; }
+
+/* ── Product Categories ── */
+.categories-section {
+  background: var(--white);
+  padding: var(--spacing-2xl) 0;
+  border-top: 1px solid var(--border);
+  margin-top: var(--spacing-xl);
+}
+
+.section-hdr {
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.section-hdr h2 {
+  font-size: var(--text-3xl);
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.section-hdr p {
+  color: var(--text-secondary);
+  font-size: var(--text-lg);
+}
+
+.categories-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.cat-card {
+  background: var(--gray-50);
+  border-radius: var(--radius);
+  overflow: hidden;
+  text-decoration: none;
+  transition: var(--transition);
+  border: 1px solid var(--border);
+}
+
+.cat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary);
+}
+
+.cat-image {
+  height: 120px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #f0f4ff, #e8f0fe);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.cat-image img { width: 100%; height: 100%; object-fit: cover; }
+.cat-image-placeholder svg { width: 40px; height: 40px; color: var(--text-muted); }
+
+.cat-info { padding: var(--spacing-sm) var(--spacing); }
+.cat-info h3 { font-size: var(--text-sm); font-weight: 700; color: var(--text-primary); margin-bottom: 2px; }
+.cat-count { font-size: 11px; color: var(--text-muted); }
 
 .loading-state, .not-found {
   min-height: 60vh; display: flex; align-items: center;

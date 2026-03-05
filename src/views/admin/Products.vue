@@ -120,7 +120,77 @@
             <div class="form-group">
               <label>产品详情（富文本）</label>
               <p class="form-hint">支持文字格式、图片插入、表格、超链接、字体颜色等富文本编辑</p>
-              <div ref="quillEditorEl" class="quill-editor-wrap"></div>
+
+              <!-- Editor mode bar -->
+              <div class="editor-mode-bar">
+                <div class="mode-tabs">
+                  <button type="button" :class="['mode-tab', prodEditorMode === 'quill' ? 'active' : '']" @click="switchProdMode('quill')">
+                    ✏️ 富文本编辑器
+                  </button>
+                  <button type="button" :class="['mode-tab', prodEditorMode === 'block' ? 'active' : '']" @click="switchProdMode('block')">
+                    🔷 简洁编辑器
+                  </button>
+                </div>
+                <button type="button" class="fullscreen-btn" @click="prodFullscreen = !prodFullscreen">
+                  {{ prodFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
+                </button>
+              </div>
+
+              <!-- Quill editor -->
+              <div v-show="prodEditorMode === 'quill'" :class="['editor-wrap', prodFullscreen ? 'is-fullscreen' : '']">
+                <div ref="quillEditorEl" class="quill-editor-wrap"></div>
+              </div>
+
+              <!-- Block editor -->
+              <div v-show="prodEditorMode === 'block'" :class="['editor-wrap', prodFullscreen ? 'is-fullscreen' : '']">
+                <div class="block-editor">
+                  <div v-for="(block, i) in prodBlocks" :key="block.id" class="block-row" @click="prodActiveBlock = i">
+                    <div v-if="block.type === 'h1'" class="block-controls-row">
+                      <div class="block-handle">⋮⋮</div>
+                      <input v-model="block.content" placeholder="标题 H1" class="block-input block-h1" />
+                      <button type="button" class="block-del" @click.stop="prodBlocks.splice(i, 1)">×</button>
+                    </div>
+                    <div v-else-if="block.type === 'h2'" class="block-controls-row">
+                      <div class="block-handle">⋮⋮</div>
+                      <input v-model="block.content" placeholder="小标题 H2" class="block-input block-h2" />
+                      <button type="button" class="block-del" @click.stop="prodBlocks.splice(i, 1)">×</button>
+                    </div>
+                    <div v-else-if="block.type === 'p'" class="block-controls-row">
+                      <div class="block-handle">⋮⋮</div>
+                      <textarea v-model="block.content" placeholder="正文段落..." class="block-input block-p" rows="3" @input="autoResizeProd($event)" />
+                      <button type="button" class="block-del" @click.stop="prodBlocks.splice(i, 1)">×</button>
+                    </div>
+                    <div v-else-if="block.type === 'quote'" class="block-controls-row">
+                      <div class="block-handle">⋮⋮</div>
+                      <textarea v-model="block.content" placeholder="引用文字..." class="block-input block-quote" rows="2" />
+                      <button type="button" class="block-del" @click.stop="prodBlocks.splice(i, 1)">×</button>
+                    </div>
+                    <div v-else-if="block.type === 'hr'" class="block-controls-row">
+                      <div class="block-handle">⋮⋮</div>
+                      <hr class="block-hr" />
+                      <button type="button" class="block-del" @click.stop="prodBlocks.splice(i, 1)">×</button>
+                    </div>
+                    <div v-else-if="block.type === 'image'" class="block-controls-row block-image-row">
+                      <div class="block-handle">⋮⋮</div>
+                      <div class="block-image-wrap">
+                        <img :src="block.src" class="block-img" />
+                        <div class="block-img-caption-wrap">
+                          <input v-model="block.caption" placeholder="图片描述（点击添加）" class="block-caption-input" />
+                        </div>
+                      </div>
+                      <button type="button" class="block-del" @click.stop="prodBlocks.splice(i, 1)">×</button>
+                    </div>
+                  </div>
+                  <div class="add-block-row">
+                    <button type="button" @click="addProdBlock('p')" class="add-block-btn">&para; 段落</button>
+                    <button type="button" @click="addProdBlock('h1')" class="add-block-btn">H1 大标题</button>
+                    <button type="button" @click="addProdBlock('h2')" class="add-block-btn">H2 小标题</button>
+                    <button type="button" @click="addProdBlock('quote')" class="add-block-btn">“ 引用</button>
+                    <button type="button" @click="addProdBlock('hr')" class="add-block-btn">— 分割线</button>
+                    <button type="button" @click="addProdBlockImage()" class="add-block-btn">🖼️ 图片</button>
+                  </div>
+                </div>
+              </div>
             </div>
             <div class="grid grid-3">
               <div class="form-group">
@@ -191,6 +261,81 @@ const specs = ref([])
 const quillEditorEl = ref(null)
 let quillInstance = null
 
+// Block editor state for Products
+const prodEditorMode = ref('quill')
+const prodFullscreen = ref(false)
+const prodActiveBlock = ref(-1)
+let prodBlockIdSeq = 0
+const prodBlocks = ref([])
+
+function makeProdBlock(type, content = '', extra = {}) {
+  return { id: ++prodBlockIdSeq, type, content, ...extra }
+}
+function addProdBlock(type) {
+  prodBlocks.value.push(makeProdBlock(type))
+}
+async function addProdBlockImage() {
+  const input = document.createElement('input')
+  input.type = 'file'; input.accept = 'image/*'; input.click()
+  input.onchange = async () => {
+    const file = input.files[0]; if (!file) return
+    try {
+      const res = await api.upload(file)
+      prodBlocks.value.push({ id: ++prodBlockIdSeq, type: 'image', src: res.url, caption: '' })
+    } catch(e) { alert('图片上传失败: ' + e.message) }
+  }
+}
+function autoResizeProd(e) {
+  const el = e.target; el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'
+}
+function prodBlocksToHtml(bks) {
+  return bks.map(b => {
+    if (b.type === 'h1') return `<h1>${b.content}</h1>`
+    if (b.type === 'h2') return `<h2>${b.content}</h2>`
+    if (b.type === 'p') return `<p>${b.content.replace(/\n/g, '<br>')}</p>`
+    if (b.type === 'quote') return `<blockquote>${b.content}</blockquote>`
+    if (b.type === 'hr') return `<hr>`
+    if (b.type === 'image') {
+      const cap = b.caption ? `<figcaption style="text-align:center;color:#666;font-size:13px;margin-top:4px;">${b.caption}</figcaption>` : ''
+      return `<figure style="text-align:center;margin:16px 0;"><img src="${b.src}" style="max-width:100%;height:auto;"/>${cap}</figure>`
+    }
+    return ''
+  }).join('\n')
+}
+function parseProdBlocksFromHtml(html) {
+  if (!html) return []
+  const div = document.createElement('div'); div.innerHTML = html
+  const result = []
+  div.childNodes.forEach(node => {
+    if (node.nodeType !== 1) return
+    const tag = node.tagName.toLowerCase()
+    if (tag === 'h1') result.push(makeProdBlock('h1', node.textContent))
+    else if (tag === 'h2') result.push(makeProdBlock('h2', node.textContent))
+    else if (tag === 'p') result.push(makeProdBlock('p', node.textContent))
+    else if (tag === 'blockquote') result.push(makeProdBlock('quote', node.textContent))
+    else if (tag === 'hr') result.push(makeProdBlock('hr'))
+    else if (tag === 'figure') {
+      const img = node.querySelector('img')
+      const cap = node.querySelector('figcaption')
+      if (img) result.push({ id: ++prodBlockIdSeq, type: 'image', src: img.src, caption: cap?.textContent || '' })
+    } else result.push(makeProdBlock('p', node.textContent))
+  })
+  return result.length ? result : [makeProdBlock('p')]
+}
+function switchProdMode(mode) {
+  if (mode === prodEditorMode.value) return
+  if (prodEditorMode.value === 'quill' && mode === 'block') {
+    const html = quillInstance ? quillInstance.root.innerHTML : (form.detail_content || '')
+    prodBlocks.value = parseProdBlocksFromHtml(html)
+  } else if (prodEditorMode.value === 'block' && mode === 'quill') {
+    const html = prodBlocksToHtml(prodBlocks.value)
+    form.detail_content = html
+    if (quillInstance) quillInstance.root.innerHTML = html
+  }
+  prodEditorMode.value = mode
+}
+
+
 const form = reactive({
   name: '',
   name_en: '',
@@ -254,6 +399,12 @@ const openModal = async (product = null) => {
   existingImages.value = product?.images?.split(',').filter(Boolean) || []
   specs.value = product?.specs ? JSON.parse(product.specs) : []
   imageFiles.value = []
+  
+  // Reset block editor state
+  prodEditorMode.value = 'quill'
+  prodFullscreen.value = false
+  prodBlocks.value = []
+
   showModal.value = true
 
   // Initialize Quill after modal DOM is rendered
@@ -272,7 +423,7 @@ const openModal = async (product = null) => {
             [{ header: [1, 2, 3, 4, false] }],
             [{ font: [] }, { size: [] }],
             ['bold', 'italic', 'underline', 'strike'],
-            [{ color: [] }, { background: [] }],
+            [{ color: [] }, { background: [false, 'transparent', '#000000', '#e60000', '#ff9900', '#ffff00', '#008a00', '#0066cc', '#9933ff', '#ffffff', '#facccc', '#ffebcc', '#ffffcc', '#cce8cc', '#cce0f5', '#ebd6ff', '#bbbbbb', '#f06666', '#ffc266', '#ffff66', '#66b966', '#66a3e0', '#c285ff', '#888888', '#a10000', '#b26b00', '#b2b200', '#006100', '#0047b2', '#6b24b2', '#444444', '#5c0000', '#663d00', '#666600', '#003700', '#002966', '#3d1466'] }],
             [{ list: 'ordered' }, { list: 'bullet' }],
             [{ align: [] }],
             ['link', 'image'],
@@ -336,9 +487,11 @@ const handleFileChange = (e) => {
 const handleSubmit = async () => {
   loading.value = true
   try {
-    // Collect Quill content before submit
-    if (quillInstance) {
-      form.detail_content = quillInstance.root.innerHTML
+    // Collect content before submit
+    if (prodEditorMode.value === 'quill') {
+      form.detail_content = quillInstance ? quillInstance.root.innerHTML : (form.detail_content || '')
+    } else {
+      form.detail_content = prodBlocksToHtml(prodBlocks.value)
     }
     const formData = new FormData()
     formData.append('name', form.name)
@@ -589,4 +742,118 @@ onMounted(() => {
 }
 
 .seo-section small { font-size: 11px; color: #94a3b8; }
+
+/* ── Editor mode bar ──────────────────────────────────────── */
+.editor-mode-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #f8fafc; border: 1px solid var(--border);
+  border-radius: 8px 8px 0 0; padding: 8px 12px;
+  margin-bottom: 0;
+}
+
+.mode-tabs { display: flex; gap: 4px; }
+.mode-tab {
+  padding: 6px 14px; border: none; background: transparent;
+  border-radius: 6px; font-size: 13px; font-weight: 600;
+  cursor: pointer; color: var(--text-muted); transition: all 0.18s;
+}
+.mode-tab.active { background: white; color: var(--primary); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+
+.fullscreen-btn {
+  padding: 5px 12px; border: 1.5px solid var(--border); border-radius: 6px;
+  background: white; font-size: 12px; font-weight: 600;
+  cursor: pointer; color: var(--text-muted); transition: all 0.18s;
+}
+.fullscreen-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ── Editor wrap — normal and fullscreen ─────────────────── */
+.editor-wrap { border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; }
+
+.editor-wrap.is-fullscreen {
+  position: fixed; inset: 0; z-index: 99999;
+  border-radius: 0; border: none;
+  display: flex; flex-direction: column;
+  background: white; padding: 20px;
+  overflow-y: auto;
+}
+
+.editor-wrap.is-fullscreen .quill-editor-wrap,
+.editor-wrap.is-fullscreen .block-editor {
+  flex: 1; height: calc(100vh - 100px);
+}
+
+.editor-wrap.is-fullscreen :deep(.ql-container) {
+  max-height: none; height: 100%;
+}
+
+/* ── Block editor ─────────────────────────────────────────── */
+.block-editor {
+  padding: 16px; min-height: 400px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+.block-row { position: relative; }
+
+.block-controls-row {
+  display: flex; align-items: flex-start; gap: 8px;
+}
+
+.block-handle {
+  flex-shrink: 0; width: 20px; padding-top: 10px;
+  color: #cbd5e1; cursor: grab; font-size: 12px;
+  letter-spacing: -3px; user-select: none;
+}
+
+.block-del {
+  flex-shrink: 0; width: 26px; height: 26px; margin-top: 6px;
+  background: none; border: 1px solid #e5e7eb; border-radius: 50%;
+  cursor: pointer; color: #94a3b8; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; flex-shrink: 0;
+}
+.block-del:hover { background: #fee2e2; border-color: #ef4444; color: #ef4444; }
+
+.block-input {
+  flex: 1; border: none; outline: none; resize: none;
+  font-family: inherit; width: 100%;
+  padding: 8px 0; background: transparent;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+.block-input:focus { border-bottom-color: var(--primary); }
+
+.block-h1 { font-size: 26px; font-weight: 700; color: #0f172a; }
+.block-h2 { font-size: 20px; font-weight: 700; color: #1e293b; }
+.block-p { font-size: 16px; line-height: 1.7; color: #374151; }
+.block-quote {
+  font-size: 16px; line-height: 1.6; color: #475569;
+  padding-left: 16px; border-left: 4px solid #0077b5;
+  font-style: italic;
+}
+.block-hr { flex: 1; height: 2px; background: #e5e7eb; border: none; margin-top: 12px; }
+
+/* Image block */
+.block-image-row { flex-direction: column; padding: 8px 0; }
+.block-image-wrap { width: 100%; display: flex; flex-direction: column; align-items: center; }
+.block-img { max-width: 100%; max-height: 400px; object-fit: contain; border-radius: 6px; }
+.block-img-caption-wrap { width: 100%; text-align: center; margin-top: 6px; }
+.block-caption-input {
+  text-align: center; border: none; border-bottom: 1px dashed #cbd5e1;
+  outline: none; font-size: 13px; color: #64748b; width: 60%;
+  padding: 4px 0; background: transparent;
+}
+.block-caption-input:focus { border-bottom-color: var(--primary); }
+.block-caption-input::placeholder { color: #cbd5e1; }
+
+/* Add block row */
+.add-block-row {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 12px 0; border-top: 1px dashed #e2e8f0; margin-top: 8px;
+}
+.add-block-btn {
+  padding: 6px 14px; border: 1.5px dashed #cbd5e1; border-radius: 20px;
+  background: transparent; font-size: 13px; color: #64748b;
+  cursor: pointer; transition: all 0.15s; font-weight: 500;
+}
+.add-block-btn:hover { border-color: #0077b5; color: #0077b5; background: #eff8ff; }
 </style>
