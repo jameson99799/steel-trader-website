@@ -98,9 +98,21 @@
               <p class="form-hint">建议尺寸：800×800px，JPG/PNG格式，支持多图上传（最多10张）</p>
               <input type="file" multiple @change="handleFileChange" accept="image/*" />
               <div class="image-preview" v-if="existingImages.length">
-                <div v-for="(img, index) in existingImages" :key="index" class="preview-item">
+                <p class="form-hint">拖动图片可排序；第一张为主图（⭐点击设为主图）</p>
+                <div
+                  v-for="(img, index) in existingImages"
+                  :key="img"
+                  class="preview-item"
+                  draggable="true"
+                  @dragstart="dragStart(index)"
+                  @dragover.prevent
+                  @drop="dragDrop(index)"
+                  :class="{ 'is-main': index === 0 }"
+                >
                   <img :src="img" />
-                  <button type="button" @click="existingImages.splice(index, 1)">&times;</button>
+                  <span v-if="index === 0" class="main-badge">主图</span>
+                  <button type="button" class="btn-main" @click="setMain(index)" :title="'设为主图'">⭐</button>
+                  <button type="button" class="btn-del" @click="existingImages.splice(index, 1)">×</button>
                 </div>
               </div>
             </div>
@@ -298,6 +310,24 @@ const openModal = async (product = null) => {
   }
 }
 
+let dragIndex = -1
+const dragStart = (index) => { dragIndex = index }
+const dragDrop = (toIndex) => {
+  if (dragIndex < 0 || dragIndex === toIndex) return
+  const arr = [...existingImages.value]
+  const [moved] = arr.splice(dragIndex, 1)
+  arr.splice(toIndex, 0, moved)
+  existingImages.value = arr
+  dragIndex = -1
+}
+const setMain = (index) => {
+  if (index === 0) return
+  const arr = [...existingImages.value]
+  const [img] = arr.splice(index, 1)
+  arr.unshift(img)
+  existingImages.value = arr
+}
+
 const handleFileChange = (e) => {
   imageFiles.value = Array.from(e.target.files)
 }
@@ -393,30 +423,63 @@ onMounted(() => {
 
 .preview-item {
   position: relative;
-  width: 80px;
-  height: 80px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  width: 90px;
+  height: 90px;
+  border: 2px solid var(--border);
+  border-radius: 6px;
   overflow: hidden;
+  cursor: grab;
+  transition: border-color 0.2s;
+}
+
+.preview-item.is-main {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(37,99,235,0.2);
 }
 
 .preview-item img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  pointer-events: none;
 }
 
-.preview-item button {
+.preview-item .main-badge {
   position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--primary);
+  color: white;
+  font-size: 10px;
+  text-align: center;
+  padding: 2px;
+}
+
+.preview-item .btn-del,
+.preview-item .btn-main {
+  position: absolute;
   border: none;
-  background: var(--danger);
-  color: #fff;
+  border-radius: 50%;
   cursor: pointer;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-item .btn-del {
+  top: 2px; right: 2px;
+  width: 18px; height: 18px;
+  background: rgba(220,38,38,0.85);
+  color: white; font-size: 13px;
+}
+
+.preview-item .btn-main {
+  top: 2px; left: 2px;
+  width: 18px; height: 18px;
+  background: rgba(255,255,255,0.9);
+  font-size: 10px;
 }
 
 .badge-secondary {
@@ -433,20 +496,41 @@ onMounted(() => {
 .quill-editor-wrap {
   border: 1px solid var(--border);
   border-radius: 4px;
-  min-height: 200px;
   background: #fff;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Style Quill toolbar inside scoped component */
+/* Sticky toolbar */
 :deep(.ql-toolbar) {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #fff;
   border-radius: 4px 4px 0 0;
   border-bottom: 1px solid var(--border);
 }
 
 :deep(.ql-container) {
   border-radius: 0 0 4px 4px;
-  min-height: 160px;
+  min-height: 200px;
+  max-height: 60vh;
+  overflow-y: auto;
   font-size: 14px;
+}
+
+/* Images and tables inside the admin editor */
+:deep(.ql-editor) img {
+  max-width: 100%;
+  height: auto;
+}
+
+:deep(.ql-editor) table,
+:deep(.ql-editor) td,
+:deep(.ql-editor) th {
+  border: 1px solid #d1d5db;
+  border-collapse: collapse;
+  padding: 6px 10px;
 }
 
 /* SEO section within product modal */

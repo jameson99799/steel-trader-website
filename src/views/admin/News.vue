@@ -355,6 +355,27 @@ onMounted(loadNews)
 :deep(.ql-image-grid-3:hover),
 :deep(.ql-image-grid-4:hover) { background: #3b82f6; color: white !important; }
 
+/* Images auto-fit container */
+:deep(.ql-editor) img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Tables display with borders */
+:deep(.ql-editor) table,
+:deep(.ql-editor) td,
+:deep(.ql-editor) th {
+  border: 1px solid #d1d5db;
+  border-collapse: collapse;
+  padding: 6px 10px;
+}
+
+/* Limit editor height so toolbar stays visible */
+:deep(.ql-container) {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
 .btn { padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; border: none; font-size: 14px; transition: all 0.2s; }
 .btn-primary { background: var(--primary); color: white; }
 .btn-outline { background: white; color: var(--primary); border: 2px solid var(--primary); }

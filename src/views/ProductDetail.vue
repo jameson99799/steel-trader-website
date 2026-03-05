@@ -553,7 +553,7 @@ onMounted(async () => {
   gap: var(--spacing);
   overflow-x: auto;
   padding: var(--spacing-sm) 0;
-  max-width: 100%;
+  max-width: 440px;
   scrollbar-width: thin;
 }
 
@@ -673,6 +673,7 @@ onMounted(async () => {
   color: var(--text-secondary);
   line-height: var(--leading-relaxed);
   font-size: var(--text-lg);
+  white-space: pre-wrap;
 }
 
 .specs-table {
@@ -682,6 +683,8 @@ onMounted(async () => {
   border-radius: var(--radius);
   overflow: hidden;
   table-layout: fixed;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
 }
 
 .spec-row {
@@ -722,14 +725,18 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 
-.inquiry-btn {
+.action-buttons .btn {
   flex: 1;
-  min-width: 140px;
+  min-width: 120px;
+  justify-content: center;
 }
 
-.email-btn {
-  flex-shrink: 0;
+.inquiry-btn, .email-btn {
+  flex: 1;
+  min-width: 120px;
 }
+
+
 
 .btn-icon {
   width: 20px;
@@ -890,6 +897,48 @@ onMounted(async () => {
 
 .detail-content {
   padding: var(--spacing-xl);
+}
+
+/* ── Quill rendered content on frontend ─────────────────────── */
+.detail-content :deep(.ql-editor) {
+  padding: 0;
+}
+
+.detail-content :deep(.ql-editor) img {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+  vertical-align: top;
+}
+
+/* Two 50% images sit side by side automatically */
+.detail-content :deep(.ql-editor) p img {
+  max-width: 100%;
+}
+
+/* Tables render with visible borders */
+.detail-content :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--spacing-md) 0;
+}
+
+.detail-content :deep(td),
+.detail-content :deep(th) {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  word-break: break-word;
+}
+
+.detail-content :deep(th) {
+  background: var(--gray-50);
+  font-weight: 600;
+}
+
+/* Transparent background support */
+.detail-content :deep([style*="background-color: transparent"]),
+.detail-content :deep([style*="background: transparent"]) {
+  background: transparent !important;
 }
 
 /* Override Quill editor styles for display-only mode */
