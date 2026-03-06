@@ -29,7 +29,10 @@
       <div class="card-body">
         <div class="ssl-status" v-if="sslStatus">
           <span :class="['ssl-badge', sslStatus.hasCert && sslStatus.hasKey ? 'ssl-active' : 'ssl-none']">
-            {{ sslStatus.hasCert && sslStatus.hasKey ? '✓ SSL证书已配置' : '⚠ 未配置SSL证书' }}
+            {{ sslStatus.hasCert && sslStatus.hasKey ? '✓ SSL证书已上传' : '⚠ 未配置SSL证书' }}
+          </span>
+          <span :class="['ssl-badge', sslStatus.nginxConfigured ? 'ssl-active' : 'ssl-none']">
+            {{ sslStatus.nginxConfigured ? '✓ Nginx HTTPS已启用' : '⚠ Nginx未配置HTTPS' }}
           </span>
           <span class="ssl-hint" v-if="sslStatus.certInfo">
             上次更新: {{ new Date(sslStatus.certInfo.modified).toLocaleString('zh-CN') }}
@@ -37,31 +40,36 @@
         </div>
 
         <div class="ssl-info">
-          <h4>📋 操作步骤：</h4>
+          <h4>📋 操作说明：</h4>
           <ol>
-            <li>在下方粘贴您从SSL服务商获取的 <strong>证书文件（cert.pem）</strong> 和 <strong>私钥文件（key.pem）</strong> 内容</li>
-            <li>点击「保存证书」</li>
-            <li>通过SSH执行重启命令：<code>cd /www/wwwroot/steel-trader && bash server-update.sh</code></li>
+            <li>在下方粘贴 <strong>证书文件</strong> 和 <strong>私钥文件</strong> 内容</li>
+            <li>点击「保存并启用 HTTPS」</li>
+            <li>系统会自动配置 Nginx 并启用 HTTPS，<strong>无需手动操作服务器</strong></li>
           </ol>
           <div class="ssl-sources">
-            <strong>💡 免费SSL证书获取方式：</strong>
+            <strong>💡 免费SSL证书获取：</strong>
             <a href="https://www.sslforfree.com" target="_blank">SSL For Free</a> ·
-            <a href="https://letsencrypt.org" target="_blank">Let's Encrypt</a> ·
-            宝塔面板 → 网站 → SSL
+            <a href="https://letsencrypt.org" target="_blank">Let's Encrypt</a>
+          </div>
+        </div>
+
+        <div class="ssl-result" v-if="sslResult">
+          <div :class="['ssl-result-box', sslResult.success ? 'result-success' : 'result-error']">
+            <pre>{{ sslResult.message }}</pre>
           </div>
         </div>
 
         <div class="form-group">
-          <label>证书文件内容（cert.pem）<span class="hint">以 -----BEGIN CERTIFICATE----- 开头</span></label>
+          <label>证书文件内容（cert.pem / fullchain.pem）<span class="hint">以 -----BEGIN CERTIFICATE----- 开头</span></label>
           <textarea v-model="sslForm.cert" class="form-control ssl-textarea" rows="8" placeholder="-----BEGIN CERTIFICATE-----&#10;...证书内容...&#10;-----END CERTIFICATE-----" />
         </div>
         <div class="form-group">
-          <label>私钥文件内容（key.pem）<span class="hint">以 -----BEGIN PRIVATE KEY----- 开头</span></label>
-          <textarea v-model="sslForm.key" class="form-control ssl-textarea" rows="8" placeholder="-----BEGIN PRIVATE KEY-----&#10;...私钥内容...&#10;-----END PRIVATE KEY-----" />
+          <label>私钥文件内容（key.pem / privkey.pem）<span class="hint">以 -----BEGIN RSA PRIVATE KEY----- 或 -----BEGIN PRIVATE KEY----- 开头</span></label>
+          <textarea v-model="sslForm.key" class="form-control ssl-textarea" rows="8" placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...私钥内容...&#10;-----END RSA PRIVATE KEY-----" />
         </div>
         <div style="display:flex; gap:12px; align-items:center;">
           <button class="btn btn-primary" @click="saveSsl" :disabled="sslLoading">
-            {{ sslLoading ? '保存中...' : '💾 保存证书' }}
+            {{ sslLoading ? '保存配置中...' : '🔒 保存并启用 HTTPS' }}
           </button>
           <button v-if="sslStatus?.hasCert" class="btn btn-outline" @click="deleteSsl" style="color:#dc2626;border-color:#dc2626;">
             🗑 删除证书
@@ -109,6 +117,7 @@ const handleSubmit = async () => {
 // SSL section
 const sslLoading = ref(false)
 const sslStatus = ref(null)
+const sslResult = ref(null)
 const sslForm = reactive({ cert: '', key: '' })
 
 const loadSslStatus = async () => {
@@ -122,6 +131,7 @@ const loadSslStatus = async () => {
 const saveSsl = async () => {
   if (!sslForm.cert || !sslForm.key) { alert('请填写证书和私钥内容'); return }
   sslLoading.value = true
+  sslResult.value = null
   try {
     const token = localStorage.getItem('token')
     const res = await fetch('/api/ssl/upload', {
@@ -131,11 +141,12 @@ const saveSsl = async () => {
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error)
-    alert('✅ ' + data.message)
+    sslResult.value = { success: true, message: data.message + (data.nginxMessage ? '\n\n' + data.nginxMessage : '') }
     sslForm.cert = ''; sslForm.key = ''
     await loadSslStatus()
-  } catch (e) { alert('❌ ' + e.message) }
-  finally { sslLoading.value = false }
+  } catch (e) {
+    sslResult.value = { success: false, message: e.message }
+  } finally { sslLoading.value = false }
 }
 
 const deleteSsl = async () => {
@@ -221,4 +232,19 @@ onMounted(loadSslStatus)
   font-weight: 400;
   margin-left: 6px;
 }
+
+.ssl-result { margin-bottom: 16px; }
+.ssl-result-box {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.ssl-result-box pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+}
+.result-success { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+.result-error { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
 </style>
