@@ -24,7 +24,7 @@ router.get('/', (req, res) => {
         { loc: '/contact', priority: '0.7', changefreq: 'monthly' },
     ]
 
-    const products = getAll(`SELECT id, name_en, updated_at FROM products WHERE status = 1 ORDER BY id DESC`)
+    const products = getAll(`SELECT id, name_en, created_at FROM products WHERE status = 1 ORDER BY id DESC`)
     const news = getAll(`SELECT slug, id, title_en, updated_at FROM news WHERE status = 1 ORDER BY id DESC`)
 
     const now = new Date().toISOString().split('T')[0]
@@ -43,7 +43,7 @@ router.get('/', (req, res) => {
 
     // Products
     for (const p of products) {
-        const lastmod = p.updated_at ? p.updated_at.split(' ')[0] : now
+        const lastmod = p.created_at ? p.created_at.split(' ')[0] : now
         urls.push(`  <url>
     <loc>${escapeXml(baseUrl + '/products/' + p.id)}</loc>
     <lastmod>${lastmod}</lastmod>
