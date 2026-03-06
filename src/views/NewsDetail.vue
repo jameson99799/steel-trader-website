@@ -30,8 +30,15 @@
             <img :src="article.cover_image" :alt="localizedValue(article, 'title')" />
           </div>
 
-          <div class="article-body ql-snow" v-if="article.content">
-            <div class="ql-editor" v-html="article.content"></div>
+          <div class="article-body" v-if="article.content">
+            <iframe
+              ref="articleIframe"
+              class="article-iframe"
+              :srcdoc="iframeContent"
+              frameborder="0"
+              scrolling="no"
+              @load="resizeIframe"
+            ></iframe>
           </div>
 
           <div class="article-footer">
@@ -89,11 +96,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
-import 'quill/dist/quill.snow.css'
 
 const route = useRoute()
 const { localizedValue } = useLang()
@@ -102,6 +108,32 @@ const article = ref(null)
 const loading = ref(true)
 const allCategories = ref([])
 const pageTexts = ref(null)
+const articleIframe = ref(null)
+
+// Build iframe srcdoc — isolates all article HTML styles from main page
+const iframeContent = computed(() => {
+  const raw = article.value?.content || ''
+  if (!raw) return ''
+  let html = raw.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+  if (html.includes('<html') || html.includes('<body')) return html
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;line-height:1.8;color:#333;font-size:16px}img{max-width:100%;height:auto;display:block;margin:12px auto;border-radius:6px}p{margin:0 0 12px}h1,h2,h3,h4{margin:20px 0 10px;font-weight:700}ul,ol{padding-left:24px;margin:8px 0}table{width:100%;border-collapse:collapse;margin:16px 0}table th,table td{border:1px solid #ddd;padding:8px 12px}table th{background:#f5f5f5;font-weight:600}a{color:#1f4e79}</style></head><body>${html}</body></html>`
+})
+
+function resizeIframe() {
+  const iframe = articleIframe.value
+  if (!iframe) return
+  try {
+    const doc = iframe.contentDocument || iframe.contentWindow?.document
+    if (doc) {
+      iframe.style.height = doc.documentElement.scrollHeight + 'px'
+      doc.querySelectorAll('img').forEach(img => {
+        if (!img.complete) img.addEventListener('load', () => {
+          iframe.style.height = doc.documentElement.scrollHeight + 'px'
+        })
+      })
+    }
+  } catch (e) { /* srcdoc won't have cross-origin issues */ }
+}
 
 function formatDate(d) {
   if (!d) return ''
@@ -192,37 +224,15 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
 }
 
 .article-body {
-  padding: var(--spacing-2xl);
-}
-
-:deep(.ql-editor) {
   padding: 0;
-  font-size: 16px;
-  line-height: 1.8;
-  color: var(--text-primary);
 }
 
-:deep(.ql-editor) p { margin-bottom: 16px; font-size: 0; }
-:deep(.ql-editor) p > * { font-size: 16px; }
-:deep(.ql-editor h1), :deep(.ql-editor h2), :deep(.ql-editor h3) { margin: 24px 0 12px; font-weight: 700; font-size: revert; }
-:deep(.ql-editor img) {
-  max-width: 100%; border-radius: 8px;
-  display: inline-block; vertical-align: top; height: auto;
-}
-:deep(.ql-editor) figure,
-:deep(.ql-figure) {
+.article-iframe {
+  width: 100%;
+  min-height: 300px;
+  border: none;
   display: block;
-  text-align: center; margin: 16px auto;
 }
-:deep(.ql-figure) img { display: block; max-width: 100%; height: auto; margin: 0 auto; }
-:deep(.ql-editor) figcaption,
-:deep(.ql-figure) figcaption {
-  text-align: center; color: #666; font-size: 13px; margin-top: 6px;
-  font-style: italic; outline: none;
-}
-:deep(.ql-editor table) { width: 100%; border-collapse: collapse; margin: 16px 0; }
-:deep(.ql-editor td), :deep(.ql-editor th) { border: 1px solid #d1d5db; padding: 8px 12px; }
-:deep(.ql-editor th) { background: var(--gray-50); font-weight: 600; }
 
 .article-footer {
   padding: var(--spacing-xl) var(--spacing-2xl) var(--spacing-2xl);

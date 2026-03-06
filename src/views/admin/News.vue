@@ -87,22 +87,41 @@
 
           <!-- Content Tab -->
           <div v-show="activeTab === 'content'" class="tab-content">
-            <!-- Editor mode toolbar (Fullscreen only now) -->
+            <p class="form-hint">支持粘贴 HTML 代码、可视化编辑、点击图片替换、上传图片</p>
             <div class="editor-mode-bar">
               <div class="mode-tabs">
-                <span class="mode-tab active" style="cursor:default">✏️ 富文本编辑器</span>
+                <span :class="['mode-tab', newsEditorMode === 'visual' ? 'active' : '']" @click="switchNewsMode('visual')">✏️ 可视化编辑</span>
+                <span :class="['mode-tab', newsEditorMode === 'html' ? 'active' : '']" @click="switchNewsMode('html')">📝 HTML代码</span>
+                <span :class="['mode-tab', newsEditorMode === 'preview' ? 'active' : '']" @click="switchNewsMode('preview')">👁 预览</span>
               </div>
-              <button class="fullscreen-btn" @click="toggleFullscreen" :title="isFullscreen ? '退出全屏' : '全屏编辑'">
-                {{ isFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
-              </button>
+              <div class="editor-actions">
+                <button type="button" class="editor-btn" @click="insertNewsImage">📷 插入图片</button>
+                <button type="button" class="fullscreen-btn" @click="isFullscreen = !isFullscreen">
+                  {{ isFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
+                </button>
+              </div>
             </div>
 
-            <!-- Quill editor -->
             <div :class="['editor-wrap', isFullscreen ? 'is-fullscreen' : '']">
-              <div class="form-group">
-                <div class="quill-wrap" ref="quillEl"></div>
-              </div>
+              <textarea
+                v-if="newsEditorMode === 'html'"
+                v-model="form.content"
+                class="html-editor"
+                placeholder="<div>&#10;  <h2>文章内容</h2>&#10;  <p>在此处粘贴 HTML 内容...</p>&#10;</div>"
+                spellcheck="false"
+              ></textarea>
+              <div
+                v-else-if="newsEditorMode === 'visual'"
+                ref="newsVisualEl"
+                class="visual-editor"
+                contenteditable="true"
+                @input="onNewsVisualInput"
+                @click="onNewsVisualClick"
+                @paste="onNewsVisualPaste"
+              ></div>
+              <div v-else class="html-preview" v-html="form.content"></div>
             </div>
+            <input type="file" ref="newsImgInput" accept="image/*" style="display:none" @change="handleNewsImgUpload" />
           </div>
 
           <!-- SEO Tab -->
@@ -132,13 +151,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue'
-import Quill from 'quill'
-import 'quill/dist/quill.snow.css'
-import ImageResize from 'quill-resize-image'
-Quill.register('modules/imageResize', ImageResize)
-import { setupImageGrid, injectGridStyles } from '../../utils/quillImageGrid'
-import { registerFigureBlot } from '../../utils/quillImageBlot'
+import { ref, nextTick } from 'vue'
 import api from '../../api'
 
 const newsList = ref([])
@@ -146,22 +159,21 @@ const showModal = ref(false)
 const editId = ref(null)
 const saving = ref(false)
 const activeTab = ref('basic')
-const quillEl = ref(null)
-
 const isFullscreen = ref(false)
 
-function toggleFullscreen() {
-  isFullscreen.value = !isFullscreen.value
-}
-
-let quillInstance = null
+// ─── Editor state ────────────────────────────────────────────────────────────
+const newsEditorMode = ref('visual')
+const newsVisualEl = ref(null)
+const newsImgInput = ref(null)
+let newsReplacingImg = null
 
 const form = ref({
   title: '', title_en: '',
   summary: '', summary_en: '',
   cover_image: null, cover_preview: null,
   status: 1, sort_order: 0,
-  seo_title: '', seo_description: '', seo_keywords: ''
+  seo_title: '', seo_description: '', seo_keywords: '',
+  content: ''
 })
 
 async function loadNews() {
@@ -171,79 +183,99 @@ async function loadNews() {
   } catch(e) { console.error(e) }
 }
 
-// Watch activeTab: when user switches to content tab, mount Quill in the now-visible div
-watch(activeTab, async (tab) => {
-  if (tab === 'content') {
-    await nextTick()
-    if (!quillEl.value) return
-    if (!quillInstance) {
-      injectGridStyles()
-      registerFigureBlot()
-      quillInstance = new Quill(quillEl.value, {
-        theme: 'snow',
-        modules: {
-          toolbar: {
-            container: [
-              [{ header: [1, 2, 3, false] }],
-              ['bold', 'italic', 'underline', 'strike'],
-              [{ color: [] }, { background: [false, 'transparent', '#000000', '#e60000', '#ff9900', '#ffff00', '#008a00', '#0066cc', '#9933ff', '#ffffff', '#facccc', '#ffebcc', '#ffffcc', '#cce8cc', '#cce0f5', '#ebd6ff', '#bbbbbb', '#f06666', '#ffc266', '#ffff66', '#66b966', '#66a3e0', '#c285ff', '#888888', '#a10000', '#b26b00', '#b2b200', '#006100', '#0047b2', '#6b24b2', '#444444', '#5c0000', '#663d00', '#666600', '#003700', '#002966', '#3d1466'] }],
-              [{ list: 'ordered' }, { list: 'bullet' }],
-              [{ align: [] }],
-              ['link', 'image', 'video'],
-              ['blockquote', 'code-block'],
-              ['image-grid-2', 'image-grid-3', 'image-grid-4'],
-              ['clean']
-            ]
-          },
-          imageResize: { displaySize: true }
-        }
-      })
-      setupImageGrid(quillInstance)
-      // Custom image upload handler — uploads to server instead of base64/URL prompt
-      const toolbar = quillInstance.getModule('toolbar')
-      toolbar.addHandler('image', () => {
-        const input = document.createElement('input')
-        input.setAttribute('type', 'file')
-        input.setAttribute('accept', 'image/*')
-        input.click()
-        input.onchange = async () => {
-          const file = input.files[0]
-          if (!file) return
-          try {
-            const res = await api.upload(file)
-            const range = quillInstance.getSelection(true)
-            quillInstance.insertEmbed(range.index, 'figure', { src: res.url, caption: '' })
-            quillInstance.setSelection(range.index + 1)
-          } catch (e) {
-            alert('图片上传失败: ' + e.message)
-          }
-        }
-      })
-    }
-    // Set content from form
-    const currentContent = form.value.content || ''
-    if (quillInstance.root.innerHTML !== currentContent) {
-      quillInstance.root.innerHTML = currentContent
-    }
+// ─── Visual editor helpers ────────────────────────────────────────────────────
+function syncNewsToVisual() {
+  if (newsVisualEl.value) {
+    newsVisualEl.value.innerHTML = form.value.content || '<p>在此处编辑文章内容，或切换到 HTML 代码模式粘贴 HTML...</p>'
   }
-})
-
-function destroyQuill() {
-  // Reset Quill when modal closes so it re-mounts fresh on next open
-  quillInstance = null
-  if (quillEl.value) quillEl.value.innerHTML = ''
-  isFullscreen.value = false
 }
 
-function openCreate() {
+function syncNewsFromVisual() {
+  if (newsVisualEl.value) {
+    form.value.content = newsVisualEl.value.innerHTML
+  }
+}
+
+async function switchNewsMode(mode) {
+  if (newsEditorMode.value === 'visual') syncNewsFromVisual()
+  newsEditorMode.value = mode
+  if (mode === 'visual') {
+    await nextTick()
+    syncNewsToVisual()
+  }
+}
+
+function onNewsVisualInput() { syncNewsFromVisual() }
+
+function onNewsVisualClick(e) {
+  const img = e.target.closest('img')
+  if (img) {
+    e.preventDefault()
+    newsVisualEl.value.querySelectorAll('img').forEach(i => i.style.outline = '')
+    img.style.outline = '3px solid #3b82f6'
+    newsReplacingImg = img
+    newsImgInput.value?.click()
+  }
+}
+
+async function onNewsVisualPaste(e) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault()
+      const file = item.getAsFile()
+      if (file) {
+        try {
+          const res = await api.upload(file)
+          document.execCommand('insertImage', false, res.url)
+          syncNewsFromVisual()
+        } catch (err) { alert('图片上传失败: ' + err.message) }
+      }
+      return
+    }
+  }
+  setTimeout(() => syncNewsFromVisual(), 50)
+}
+
+function insertNewsImage() {
+  newsReplacingImg = null
+  newsImgInput.value?.click()
+}
+
+async function handleNewsImgUpload(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  try {
+    const res = await api.upload(file)
+    if (newsReplacingImg) {
+      newsReplacingImg.src = res.url
+      newsReplacingImg.style.outline = ''
+      newsReplacingImg = null
+      syncNewsFromVisual()
+    } else if (newsEditorMode.value === 'visual' && newsVisualEl.value) {
+      newsVisualEl.value.focus()
+      document.execCommand('insertImage', false, res.url)
+      syncNewsFromVisual()
+    } else {
+      form.value.content = (form.value.content || '') + `\n<img src="${res.url}" style="max-width:100%" />\n`
+    }
+  } catch (err) { alert('图片上传失败: ' + err.message) }
+  if (newsImgInput.value) newsImgInput.value.value = ''
+}
+
+// ─── Modal open/close ─────────────────────────────────────────────────────────
+async function openCreate() {
   editId.value = null
   form.value = { title: '', title_en: '', summary: '', summary_en: '', cover_image: null, cover_preview: null, status: 1, sort_order: 0, seo_title: '', seo_description: '', seo_keywords: '', content: '' }
   activeTab.value = 'basic'
-  destroyQuill()
+  newsEditorMode.value = 'visual'
+  newsReplacingImg = null
+  isFullscreen.value = false
   showModal.value = true
 }
 
-function openEdit(item) {
+async function openEdit(item) {
   editId.value = item.id
   form.value = {
     title: item.title || '', title_en: item.title_en || '',
@@ -254,7 +286,9 @@ function openEdit(item) {
     seo_keywords: item.seo_keywords || '', content: item.content || ''
   }
   activeTab.value = 'basic'
-  destroyQuill()
+  newsEditorMode.value = 'visual'
+  newsReplacingImg = null
+  isFullscreen.value = false
   showModal.value = true
 }
 
@@ -267,11 +301,10 @@ function handleCoverUpload(e) {
 
 async function save() {
   if (!form.value.title) return alert('请填写文章标题')
+  // Sync from visual editor if currently in that mode
+  if (newsEditorMode.value === 'visual') syncNewsFromVisual()
   saving.value = true
   try {
-    if (quillInstance) {
-      form.value.content = quillInstance.root.innerHTML
-    }
     const fd = new FormData()
     fd.append('title', form.value.title)
     fd.append('title_en', form.value.title_en || '')
