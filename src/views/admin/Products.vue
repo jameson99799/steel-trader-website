@@ -118,29 +118,50 @@
               </div>
             </div>
             <div class="form-group">
-              <label>产品详情（HTML源代码）</label>
-              <p class="form-hint">直接粘贴 HTML 代码，支持完整的 HTML 标签、图片、表格、样式等</p>
+              <label>产品详情</label>
+              <p class="form-hint">支持粘贴 HTML 代码、可视化编辑、点击图片替换、上传图片</p>
 
               <div class="editor-mode-bar">
                 <div class="mode-tabs">
-                  <span :class="['mode-tab', !htmlPreview ? 'active' : '']" @click="htmlPreview = false">📝 HTML代码</span>
-                  <span :class="['mode-tab', htmlPreview ? 'active' : '']" @click="htmlPreview = true">👁 预览</span>
+                  <span :class="['mode-tab', editorMode === 'visual' ? 'active' : '']" @click="switchMode('visual')">✏️ 可视化编辑</span>
+                  <span :class="['mode-tab', editorMode === 'html' ? 'active' : '']" @click="switchMode('html')">📝 HTML代码</span>
+                  <span :class="['mode-tab', editorMode === 'preview' ? 'active' : '']" @click="switchMode('preview')">👁 预览</span>
                 </div>
-                <button type="button" class="fullscreen-btn" @click="prodFullscreen = !prodFullscreen">
-                  {{ prodFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
-                </button>
+                <div class="editor-actions">
+                  <button type="button" class="editor-btn" @click="insertImage" title="上传图片">📷 插入图片</button>
+                  <button type="button" class="fullscreen-btn" @click="prodFullscreen = !prodFullscreen">
+                    {{ prodFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
+                  </button>
+                </div>
               </div>
 
               <div :class="['editor-wrap', prodFullscreen ? 'is-fullscreen' : '']">
+                <!-- HTML source code mode -->
                 <textarea
-                  v-if="!htmlPreview"
+                  v-if="editorMode === 'html'"
                   v-model="form.detail_content"
                   class="html-editor"
-                  placeholder='<div>\n  <h2>产品特点</h2>\n  <p>在此处粘贴您的 HTML 内容...</p>\n  <img src="/uploads/xxx.jpg" />\n</div>'
+                  placeholder='<div>&#10;  <h2>产品特点</h2>&#10;  <p>在此处粘贴 HTML 内容...</p>&#10;</div>'
                   spellcheck="false"
                 ></textarea>
+
+                <!-- Visual editing mode (contenteditable) -->
+                <div
+                  v-else-if="editorMode === 'visual'"
+                  ref="visualEditorEl"
+                  class="visual-editor"
+                  contenteditable="true"
+                  @input="onVisualInput"
+                  @click="onVisualClick"
+                  @paste="onVisualPaste"
+                ></div>
+
+                <!-- Preview mode (read-only) -->
                 <div v-else class="html-preview" v-html="form.detail_content"></div>
               </div>
+
+              <!-- Hidden file input for image upload -->
+              <input type="file" ref="imgUploadInput" accept="image/*" style="display:none" @change="handleImgUpload" />
             </div>
             <div class="grid grid-3">
               <div class="form-group">
@@ -204,7 +225,10 @@ const imageFiles = ref([])
 const existingImages = ref([])
 const specs = ref([])
 const prodFullscreen = ref(false)
-const htmlPreview = ref(false)
+const editorMode = ref('visual')  // 'visual' | 'html' | 'preview'
+const visualEditorEl = ref(null)
+const imgUploadInput = ref(null)
+let replacingImg = null  // track image being replaced
 
 const form = reactive({
   name: '',
@@ -272,9 +296,12 @@ const openModal = async (product = null) => {
   
   // Reset editor state
   prodFullscreen.value = false
-  htmlPreview.value = false
+  editorMode.value = 'visual'
+  replacingImg = null
 
   showModal.value = true
+  await nextTick()
+  syncToVisual()
 }
 
 let dragIndex = -1
@@ -367,7 +394,102 @@ async function duplicateProduct(product) {
     form.seo_keywords = original.seo_keywords || ''
     existingImages.value = original.images ? original.images.split(',').filter(Boolean) : []
     specs.value = original.specs ? JSON.parse(original.specs) : []
+    await nextTick()
+    syncToVisual()
   } catch(e) { alert('复制失败: ' + e.message) }
+}
+
+// ─── Visual editor helpers ────────────────────────────────────────────────────
+function syncToVisual() {
+  if (visualEditorEl.value) {
+    visualEditorEl.value.innerHTML = form.detail_content || '<p>在此处编辑产品详情，或切换到 HTML 代码模式粘贴 HTML...</p>'
+  }
+}
+
+function syncFromVisual() {
+  if (visualEditorEl.value) {
+    form.detail_content = visualEditorEl.value.innerHTML
+  }
+}
+
+async function switchMode(mode) {
+  // Sync content when switching
+  if (editorMode.value === 'visual') syncFromVisual()
+  editorMode.value = mode
+  if (mode === 'visual') {
+    await nextTick()
+    syncToVisual()
+  }
+}
+
+function onVisualInput() {
+  syncFromVisual()
+}
+
+function onVisualClick(e) {
+  const img = e.target.closest('img')
+  if (img) {
+    e.preventDefault()
+    // Highlight clicked image
+    visualEditorEl.value.querySelectorAll('img').forEach(i => i.style.outline = '')
+    img.style.outline = '3px solid #3b82f6'
+    replacingImg = img
+    imgUploadInput.value?.click()
+  }
+}
+
+async function onVisualPaste(e) {
+  // Handle pasted images from clipboard
+  const items = e.clipboardData?.items
+  if (!items) return
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault()
+      const file = item.getAsFile()
+      if (file) {
+        try {
+          const res = await api.upload(file)
+          document.execCommand('insertImage', false, res.url)
+          syncFromVisual()
+        } catch (err) { alert('图片上传失败: ' + err.message) }
+      }
+      return
+    }
+  }
+  // For HTML paste, let default behavior handle it, then sync
+  setTimeout(() => syncFromVisual(), 50)
+}
+
+function insertImage() {
+  replacingImg = null
+  imgUploadInput.value?.click()
+}
+
+async function handleImgUpload(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  try {
+    const res = await api.upload(file)
+    if (replacingImg) {
+      // Replace existing image src
+      replacingImg.src = res.url
+      replacingImg.style.outline = ''
+      replacingImg = null
+      syncFromVisual()
+    } else if (editorMode.value === 'visual' && visualEditorEl.value) {
+      // Insert new image at cursor
+      visualEditorEl.value.focus()
+      document.execCommand('insertImage', false, res.url)
+      syncFromVisual()
+    } else {
+      // Insert in HTML mode
+      form.detail_content = (form.detail_content || '') + `\n<img src="${res.url}" style="max-width:100%" />\n`
+    }
+  } catch (err) {
+    alert('图片上传失败: ' + err.message)
+  }
+  // Reset file input
+  if (imgUploadInput.value) imgUploadInput.value.value = ''
 }
 
 onMounted(() => {
@@ -688,5 +810,32 @@ onMounted(() => {
 .html-preview table td, .html-preview table th { border: 1px solid #e2e8f0; padding: 8px 12px; }
 
 .is-fullscreen .html-editor,
-.is-fullscreen .html-preview { min-height: calc(100vh - 60px); }
+.is-fullscreen .html-preview,
+.is-fullscreen .visual-editor { min-height: calc(100vh - 60px); }
+
+/* Visual editor (contenteditable) */
+.visual-editor {
+  min-height: 400px; padding: 20px;
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 0 0 8px 8px;
+  line-height: 1.8; font-size: 15px;
+  overflow-y: auto; outline: none;
+  word-wrap: break-word;
+}
+.visual-editor:focus { border-color: #93c5fd; }
+.visual-editor img {
+  max-width: 100%; height: auto; border-radius: 6px;
+  cursor: pointer; transition: outline 0.15s;
+}
+.visual-editor img:hover { outline: 3px dashed #3b82f6; }
+.visual-editor table { border-collapse: collapse; width: 100%; }
+.visual-editor table td, .visual-editor table th { border: 1px solid #e2e8f0; padding: 8px 12px; }
+
+/* Editor action buttons */
+.editor-actions { display: flex; gap: 8px; align-items: center; }
+.editor-btn {
+  padding: 4px 12px; border: 1px solid #d1d5db; border-radius: 6px;
+  background: #fff; font-size: 13px; cursor: pointer; color: #374151;
+}
+.editor-btn:hover { background: #eff6ff; border-color: #93c5fd; color: #1e40af; }
 </style>
