@@ -167,7 +167,6 @@
           </div>
         </div>
 
-        <!-- Full-width Rich Text Details Section -->
         <div class="detail-content-section" v-if="product.detail_content">
           <div class="detail-header">
             <svg class="detail-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -176,7 +175,14 @@
             <h2>Product Details</h2>
           </div>
           <div class="detail-content">
-            <div class="product-html-content" v-html="sanitizedDetailContent"></div>
+            <iframe
+              ref="detailIframe"
+              class="detail-iframe"
+              :srcdoc="iframeContent"
+              frameborder="0"
+              scrolling="no"
+              @load="resizeIframe"
+            ></iframe>
           </div>
         </div>
 
@@ -281,6 +287,7 @@ const company = ref(null)
 const pageTexts = ref(null)
 const lightboxImg = ref(null)
 const allCategories = ref([])
+const detailIframe = ref(null)
 
 // Grid: 3 cols with contact panel, 2 cols without
 const layoutColumns = computed(() =>
@@ -300,6 +307,40 @@ const specs = computed(() => {
     return []
   }
 })
+
+// Build iframe srcdoc — isolates all product HTML styles from main page
+const iframeContent = computed(() => {
+  const raw = product.value?.detail_content || ''
+  if (!raw) return ''
+  // Strip <script> tags for security, but keep <style>
+  let html = raw.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+  // If it's a full HTML document, use it directly
+  if (html.includes('<html') || html.includes('<body')) {
+    return html
+  }
+  // Otherwise wrap in a minimal HTML document
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;line-height:1.8;color:#333;font-size:16px}img{max-width:100%;height:auto;display:block;margin:12px auto;border-radius:6px}p{margin:0 0 12px}h1,h2,h3,h4{margin:20px 0 10px;font-weight:700}ul,ol{padding-left:24px;margin:8px 0}table{width:100%;border-collapse:collapse;margin:16px 0}table th,table td{border:1px solid #ddd;padding:8px 12px}table th{background:#f5f5f5;font-weight:600}a{color:#1f4e79}</style></head><body>${html}</body></html>`
+})
+
+function resizeIframe() {
+  const iframe = detailIframe.value
+  if (!iframe) return
+  try {
+    const doc = iframe.contentDocument || iframe.contentWindow?.document
+    if (doc) {
+      iframe.style.height = doc.documentElement.scrollHeight + 'px'
+      // Watch for images loading and resize again
+      const imgs = doc.querySelectorAll('img')
+      imgs.forEach(img => {
+        if (!img.complete) {
+          img.addEventListener('load', () => {
+            iframe.style.height = doc.documentElement.scrollHeight + 'px'
+          })
+        }
+      })
+    }
+  } catch (e) { /* cross-origin error won't happen with srcdoc */ }
+}
 
 const currentImageIndex = computed(() => {
   return images.value.indexOf(currentImage.value)
@@ -348,14 +389,6 @@ const copyToClipboard = (text) => {
     done()
   }
 }
-
-// Sanitize product HTML — strip <style> and <script> to prevent global CSS leakage
-const sanitizedDetailContent = computed(() => {
-  if (!product.value?.detail_content) return ''
-  return product.value.detail_content
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-})
 
 onMounted(async () => {
   try {
@@ -905,89 +938,15 @@ onMounted(async () => {
 }
 
 .detail-content {
-  padding: var(--spacing-xl);
+  padding: 0;
 }
 
-/* ── Product detail HTML content ─────────────────────── */
-.product-html-content {
-  line-height: 1.8;
-  font-size: 16px;
-  color: var(--text-primary);
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-}
-
-.product-html-content img {
-  max-width: 100%;
-  height: auto;
-  display: block;
-  margin: 12px auto;
-  border-radius: 6px;
-}
-
-.product-html-content p {
-  margin: 0 0 12px;
-}
-
-.product-html-content h1, .product-html-content h2,
-.product-html-content h3, .product-html-content h4 {
-  margin: 20px 0 10px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.product-html-content ul, .product-html-content ol {
-  padding-left: 24px;
-  margin: 8px 0;
-}
-
-.product-html-content a {
-  color: var(--primary);
-  text-decoration: underline;
-}
-
-.product-html-content figure {
-  display: block;
-  text-align: center;
-  margin: 16px auto;
-}
-.product-html-content figure img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin: 0 auto;
-}
-.product-html-content figcaption {
-  margin-top: 8px;
-  font-size: 13px;
-  color: #666;
-  font-style: italic;
-  text-align: center;
-}
-
-/* Tables render with visible borders */
-.detail-content :deep(table) {
+/* Iframe for isolated product detail HTML rendering */
+.detail-iframe {
   width: 100%;
-  border-collapse: collapse;
-  margin: var(--spacing-md) 0;
-}
-
-.detail-content :deep(td),
-.detail-content :deep(th) {
-  border: 1px solid var(--border);
-  padding: 8px 12px;
-  word-break: break-word;
-}
-
-.detail-content :deep(th) {
-  background: var(--gray-50);
-  font-weight: 600;
-}
-
-/* Transparent background support */
-.detail-content :deep([style*="background-color: transparent"]),
-.detail-content :deep([style*="background: transparent"]) {
-  background: transparent !important;
+  min-height: 400px;
+  border: none;
+  display: block;
 }
 
 /* Override Quill editor styles for display-only mode */
