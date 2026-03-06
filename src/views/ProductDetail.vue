@@ -176,7 +176,7 @@
             <h2>Product Details</h2>
           </div>
           <div class="detail-content">
-            <div class="product-html-content" v-html="product.detail_content"></div>
+            <div class="product-html-content" v-html="sanitizedDetailContent"></div>
           </div>
         </div>
 
@@ -349,6 +349,14 @@ const copyToClipboard = (text) => {
   }
 }
 
+// Sanitize product HTML — strip <style> and <script> to prevent global CSS leakage
+const sanitizedDetailContent = computed(() => {
+  if (!product.value?.detail_content) return ''
+  return product.value.detail_content
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+})
+
 onMounted(async () => {
   try {
     product.value = await api.getProduct(route.params.id)
@@ -370,8 +378,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* Import Quill snow theme for detail content rendering */
-@import 'quill/dist/quill.snow.css';
 
 .product-detail {
   min-height: 100vh;
