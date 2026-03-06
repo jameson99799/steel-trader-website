@@ -134,9 +134,11 @@
               <input v-model="form.inquiry_panel_title_en" type="text" class="form-control" />
             </div>
           </div>
-          <div class="grid grid-2" v-if="contactPanelOn">
+
+          <!-- Inquiry subtitle always visible regardless of contactPanel state -->
+          <div class="grid grid-2">
             <div class="form-group">
-              <label>询盘弹窗副标题（中文）<span class="hint">显示在询盘弹窗标题下方，如：Get a quote for your LED requirements</span></label>
+              <label>询盘弹窗副标题（中文）<span class="hint">显示在询盘弹窗标题下方</span></label>
               <input v-model="form.inquiry_subtitle" type="text" class="form-control" placeholder="Get a quote for your LED requirements" />
             </div>
             <div class="form-group">

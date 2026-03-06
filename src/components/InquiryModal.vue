@@ -11,7 +11,7 @@
           </div>
           <div class="header-text">
             <h3>{{ t('sendInquiry') }}</h3>
-            <p>{{ pageTexts?.inquiry_subtitle || 'Get a quote for your LED requirements' }}</p>
+            <p>{{ inquirySubtitle }}</p>
           </div>
         </div>
         <button class="modal-close" @click="$emit('close')">
@@ -126,7 +126,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
@@ -135,9 +135,18 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'success'])
-const { t } = useLang()
+const { t, lang } = useLang()
 const loading = ref(false)
 const pageTexts = ref(null)
+
+const inquirySubtitle = computed(() => {
+  if (!pageTexts.value) return 'Get a quote for your LED requirements'
+  const isEn = lang.value === 'en'
+  const txt = isEn
+    ? (pageTexts.value.inquiry_subtitle_en || pageTexts.value.inquiry_subtitle)
+    : (pageTexts.value.inquiry_subtitle)
+  return txt || 'Get a quote for your LED requirements'
+})
 
 onMounted(async () => {
   try { pageTexts.value = await api.getPageTexts() } catch (e) {}

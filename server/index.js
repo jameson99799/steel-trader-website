@@ -17,6 +17,7 @@ import seoRoutes from './routes/seo.js'
 import sitemapRoutes from './routes/sitemap.js'
 import languagesRoutes from './routes/languages.js'
 import translationRoutes from './routes/translation.js'
+import sslRoutes from './routes/ssl.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -79,6 +80,7 @@ async function startServer() {
     app.use('/sitemap.xml', sitemapRoutes)
     app.use('/api/languages', languagesRoutes)
     app.use('/api/translation', translationRoutes)
+    app.use('/api', sslRoutes)
 
     // 健康检查端点
     app.get('/health', (req, res) => {
