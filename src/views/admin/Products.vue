@@ -121,15 +121,10 @@
               <label>产品详情（富文本）</label>
               <p class="form-hint">支持文字格式、图片插入、表格、超链接、字体颜色等富文本编辑</p>
 
-              <!-- Editor mode bar -->
+              <!-- Editor mode bar (Fullscreen only now) -->
               <div class="editor-mode-bar">
                 <div class="mode-tabs">
-                  <button type="button" :class="['mode-tab', prodEditorMode === 'quill' ? 'active' : '']" @click="switchProdMode('quill')">
-                    ✏️ 富文本编辑器
-                  </button>
-                  <button type="button" :class="['mode-tab', prodEditorMode === 'block' ? 'active' : '']" @click="switchProdMode('block')">
-                    🔷 简洁编辑器
-                  </button>
+                  <span class="mode-tab active" style="cursor:default">✏️ 富文本编辑器</span>
                 </div>
                 <button type="button" class="fullscreen-btn" @click="prodFullscreen = !prodFullscreen">
                   {{ prodFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
@@ -137,59 +132,8 @@
               </div>
 
               <!-- Quill editor -->
-              <div v-show="prodEditorMode === 'quill'" :class="['editor-wrap', prodFullscreen ? 'is-fullscreen' : '']">
+              <div :class="['editor-wrap', prodFullscreen ? 'is-fullscreen' : '']">
                 <div ref="quillEditorEl" class="quill-editor-wrap"></div>
-              </div>
-
-              <!-- Block editor -->
-              <div v-show="prodEditorMode === 'block'" :class="['editor-wrap', prodFullscreen ? 'is-fullscreen' : '']">
-                <div class="block-editor">
-                  <div v-for="(block, i) in prodBlocks" :key="block.id" class="block-row" @click="prodActiveBlock = i">
-                    <div v-if="block.type === 'h1'" class="block-controls-row">
-                      <div class="block-handle">⋮⋮</div>
-                      <input v-model="block.content" placeholder="标题 H1" class="block-input block-h1" />
-                      <button type="button" class="block-del" @click.stop="prodBlocks.splice(i, 1)">×</button>
-                    </div>
-                    <div v-else-if="block.type === 'h2'" class="block-controls-row">
-                      <div class="block-handle">⋮⋮</div>
-                      <input v-model="block.content" placeholder="小标题 H2" class="block-input block-h2" />
-                      <button type="button" class="block-del" @click.stop="prodBlocks.splice(i, 1)">×</button>
-                    </div>
-                    <div v-else-if="block.type === 'p'" class="block-controls-row">
-                      <div class="block-handle">⋮⋮</div>
-                      <textarea v-model="block.content" placeholder="正文段落..." class="block-input block-p" rows="3" @input="autoResizeProd($event)" />
-                      <button type="button" class="block-del" @click.stop="prodBlocks.splice(i, 1)">×</button>
-                    </div>
-                    <div v-else-if="block.type === 'quote'" class="block-controls-row">
-                      <div class="block-handle">⋮⋮</div>
-                      <textarea v-model="block.content" placeholder="引用文字..." class="block-input block-quote" rows="2" />
-                      <button type="button" class="block-del" @click.stop="prodBlocks.splice(i, 1)">×</button>
-                    </div>
-                    <div v-else-if="block.type === 'hr'" class="block-controls-row">
-                      <div class="block-handle">⋮⋮</div>
-                      <hr class="block-hr" />
-                      <button type="button" class="block-del" @click.stop="prodBlocks.splice(i, 1)">×</button>
-                    </div>
-                    <div v-else-if="block.type === 'image'" class="block-controls-row block-image-row">
-                      <div class="block-handle">⋮⋮</div>
-                      <div class="block-image-wrap">
-                        <img :src="block.src" class="block-img" />
-                        <div class="block-img-caption-wrap">
-                          <input v-model="block.caption" placeholder="图片描述（点击添加）" class="block-caption-input" />
-                        </div>
-                      </div>
-                      <button type="button" class="block-del" @click.stop="prodBlocks.splice(i, 1)">×</button>
-                    </div>
-                  </div>
-                  <div class="add-block-row">
-                    <button type="button" @click="addProdBlock('p')" class="add-block-btn">&para; 段落</button>
-                    <button type="button" @click="addProdBlock('h1')" class="add-block-btn">H1 大标题</button>
-                    <button type="button" @click="addProdBlock('h2')" class="add-block-btn">H2 小标题</button>
-                    <button type="button" @click="addProdBlock('quote')" class="add-block-btn">“ 引用</button>
-                    <button type="button" @click="addProdBlock('hr')" class="add-block-btn">— 分割线</button>
-                    <button type="button" @click="addProdBlockImage()" class="add-block-btn">🖼️ 图片</button>
-                  </div>
-                </div>
               </div>
             </div>
             <div class="grid grid-3">
@@ -249,6 +193,7 @@ import 'quill/dist/quill.snow.css'
 import ImageResize from 'quill-resize-image'
 Quill.register('modules/imageResize', ImageResize)
 import { setupImageGrid, injectGridStyles } from '../../utils/quillImageGrid'
+import { registerFigureBlot } from '../../utils/quillImageBlot'
 
 const products = ref([])
 const categories = ref([])
@@ -260,81 +205,7 @@ const existingImages = ref([])
 const specs = ref([])
 const quillEditorEl = ref(null)
 let quillInstance = null
-
-// Block editor state for Products
-const prodEditorMode = ref('quill')
 const prodFullscreen = ref(false)
-const prodActiveBlock = ref(-1)
-let prodBlockIdSeq = 0
-const prodBlocks = ref([])
-
-function makeProdBlock(type, content = '', extra = {}) {
-  return { id: ++prodBlockIdSeq, type, content, ...extra }
-}
-function addProdBlock(type) {
-  prodBlocks.value.push(makeProdBlock(type))
-}
-async function addProdBlockImage() {
-  const input = document.createElement('input')
-  input.type = 'file'; input.accept = 'image/*'; input.click()
-  input.onchange = async () => {
-    const file = input.files[0]; if (!file) return
-    try {
-      const res = await api.upload(file)
-      prodBlocks.value.push({ id: ++prodBlockIdSeq, type: 'image', src: res.url, caption: '' })
-    } catch(e) { alert('图片上传失败: ' + e.message) }
-  }
-}
-function autoResizeProd(e) {
-  const el = e.target; el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'
-}
-function prodBlocksToHtml(bks) {
-  return bks.map(b => {
-    if (b.type === 'h1') return `<h1>${b.content}</h1>`
-    if (b.type === 'h2') return `<h2>${b.content}</h2>`
-    if (b.type === 'p') return `<p>${b.content.replace(/\n/g, '<br>')}</p>`
-    if (b.type === 'quote') return `<blockquote>${b.content}</blockquote>`
-    if (b.type === 'hr') return `<hr>`
-    if (b.type === 'image') {
-      const cap = b.caption ? `<figcaption style="text-align:center;color:#666;font-size:13px;margin-top:4px;">${b.caption}</figcaption>` : ''
-      return `<figure style="text-align:center;margin:16px 0;"><img src="${b.src}" style="max-width:100%;height:auto;"/>${cap}</figure>`
-    }
-    return ''
-  }).join('\n')
-}
-function parseProdBlocksFromHtml(html) {
-  if (!html) return []
-  const div = document.createElement('div'); div.innerHTML = html
-  const result = []
-  div.childNodes.forEach(node => {
-    if (node.nodeType !== 1) return
-    const tag = node.tagName.toLowerCase()
-    if (tag === 'h1') result.push(makeProdBlock('h1', node.textContent))
-    else if (tag === 'h2') result.push(makeProdBlock('h2', node.textContent))
-    else if (tag === 'p') result.push(makeProdBlock('p', node.textContent))
-    else if (tag === 'blockquote') result.push(makeProdBlock('quote', node.textContent))
-    else if (tag === 'hr') result.push(makeProdBlock('hr'))
-    else if (tag === 'figure') {
-      const img = node.querySelector('img')
-      const cap = node.querySelector('figcaption')
-      if (img) result.push({ id: ++prodBlockIdSeq, type: 'image', src: img.src, caption: cap?.textContent || '' })
-    } else result.push(makeProdBlock('p', node.textContent))
-  })
-  return result.length ? result : [makeProdBlock('p')]
-}
-function switchProdMode(mode) {
-  if (mode === prodEditorMode.value) return
-  if (prodEditorMode.value === 'quill' && mode === 'block') {
-    const html = quillInstance ? quillInstance.root.innerHTML : (form.detail_content || '')
-    prodBlocks.value = parseProdBlocksFromHtml(html)
-  } else if (prodEditorMode.value === 'block' && mode === 'quill') {
-    const html = prodBlocksToHtml(prodBlocks.value)
-    form.detail_content = html
-    if (quillInstance) quillInstance.root.innerHTML = html
-  }
-  prodEditorMode.value = mode
-}
-
 
 const form = reactive({
   name: '',
@@ -401,9 +272,7 @@ const openModal = async (product = null) => {
   imageFiles.value = []
   
   // Reset block editor state
-  prodEditorMode.value = 'quill'
   prodFullscreen.value = false
-  prodBlocks.value = []
 
   showModal.value = true
 
@@ -415,6 +284,7 @@ const openModal = async (product = null) => {
       quillEditorEl.value.innerHTML = ''
     }
     injectGridStyles()
+    registerFigureBlot()
     quillInstance = new Quill(quillEditorEl.value, {
       theme: 'snow',
       modules: {
@@ -449,7 +319,7 @@ const openModal = async (product = null) => {
         try {
           const res = await api.upload(file)
           const range = quillInstance.getSelection(true)
-          quillInstance.insertEmbed(range.index, 'image', res.url)
+          quillInstance.insertEmbed(range.index, 'figure', { src: res.url, caption: '' })
           quillInstance.setSelection(range.index + 1)
         } catch (e) {
           alert('图片上传失败: ' + e.message)
@@ -488,10 +358,8 @@ const handleSubmit = async () => {
   loading.value = true
   try {
     // Collect content before submit
-    if (prodEditorMode.value === 'quill') {
-      form.detail_content = quillInstance ? quillInstance.root.innerHTML : (form.detail_content || '')
-    } else {
-      form.detail_content = prodBlocksToHtml(prodBlocks.value)
+    if (quillInstance) {
+      form.detail_content = quillInstance.root.innerHTML
     }
     const formData = new FormData()
     formData.append('name', form.name)

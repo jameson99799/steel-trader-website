@@ -209,11 +209,16 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
   max-width: 100%; border-radius: 8px;
   display: inline-block; vertical-align: top; height: auto;
 }
-:deep(.ql-editor) figure {
-  text-align: center; margin: 16px 0;
+:deep(.ql-editor) figure,
+:deep(.ql-figure) {
+  display: block;
+  text-align: center; margin: 16px auto;
 }
-:deep(.ql-editor) figcaption {
-  text-align: center; color: #666; font-size: 13px; margin-top: 4px;
+:deep(.ql-figure) img { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+:deep(.ql-editor) figcaption,
+:deep(.ql-figure) figcaption {
+  text-align: center; color: #666; font-size: 13px; margin-top: 6px;
+  font-style: italic; outline: none;
 }
 :deep(.ql-editor table) { width: 100%; border-collapse: collapse; margin: 16px 0; }
 :deep(.ql-editor td), :deep(.ql-editor th) { border: 1px solid #d1d5db; padding: 8px 12px; }

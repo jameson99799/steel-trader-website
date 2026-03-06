@@ -87,15 +87,10 @@
 
           <!-- Content Tab -->
           <div v-show="activeTab === 'content'" class="tab-content">
-            <!-- Editor mode toolbar -->
+            <!-- Editor mode toolbar (Fullscreen only now) -->
             <div class="editor-mode-bar">
               <div class="mode-tabs">
-                <button :class="['mode-tab', editorMode === 'quill' ? 'active' : '']" @click="switchMode('quill')">
-                  ✏️ 富文本编辑器
-                </button>
-                <button :class="['mode-tab', editorMode === 'block' ? 'active' : '']" @click="switchMode('block')">
-                  🔷 简洁编辑器
-                </button>
+                <span class="mode-tab active" style="cursor:default">✏️ 富文本编辑器</span>
               </div>
               <button class="fullscreen-btn" @click="toggleFullscreen" :title="isFullscreen ? '退出全屏' : '全屏编辑'">
                 {{ isFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
@@ -103,73 +98,9 @@
             </div>
 
             <!-- Quill editor -->
-            <div v-show="editorMode === 'quill'" :class="['editor-wrap', isFullscreen ? 'is-fullscreen' : '']">
+            <div :class="['editor-wrap', isFullscreen ? 'is-fullscreen' : '']">
               <div class="form-group">
                 <div class="quill-wrap" ref="quillEl"></div>
-              </div>
-            </div>
-
-            <!-- LinkedIn-style block editor -->
-            <div v-show="editorMode === 'block'" :class="['editor-wrap', isFullscreen ? 'is-fullscreen' : '']">
-              <div class="block-editor" ref="blockEditorEl">
-                <div
-                  v-for="(block, i) in blocks"
-                  :key="block.id"
-                  class="block-row"
-                  @click="activeBlock = i"
-                >
-                  <!-- Heading 1 -->
-                  <div v-if="block.type === 'h1'" class="block-controls-row">
-                    <div class="block-handle" @mousedown.prevent>⋮⋮</div>
-                    <input v-model="block.content" placeholder="标题 H1" class="block-input block-h1" />
-                    <button class="block-del" @click.stop="blocks.splice(i, 1)">×</button>
-                  </div>
-                  <!-- Heading 2 -->
-                  <div v-else-if="block.type === 'h2'" class="block-controls-row">
-                    <div class="block-handle">⋮⋮</div>
-                    <input v-model="block.content" placeholder="小标题 H2" class="block-input block-h2" />
-                    <button class="block-del" @click.stop="blocks.splice(i, 1)">×</button>
-                  </div>
-                  <!-- Paragraph -->
-                  <div v-else-if="block.type === 'p'" class="block-controls-row">
-                    <div class="block-handle">⋮⋮</div>
-                    <textarea v-model="block.content" placeholder="正文段落..." class="block-input block-p" rows="3" @input="autoResize($event)" />
-                    <button class="block-del" @click.stop="blocks.splice(i, 1)">×</button>
-                  </div>
-                  <!-- Quote -->
-                  <div v-else-if="block.type === 'quote'" class="block-controls-row">
-                    <div class="block-handle">⋮⋮</div>
-                    <textarea v-model="block.content" placeholder="引用文字..." class="block-input block-quote" rows="2" />
-                    <button class="block-del" @click.stop="blocks.splice(i, 1)">×</button>
-                  </div>
-                  <!-- Divider -->
-                  <div v-else-if="block.type === 'hr'" class="block-controls-row">
-                    <div class="block-handle">⋮⋮</div>
-                    <hr class="block-hr" />
-                    <button class="block-del" @click.stop="blocks.splice(i, 1)">×</button>
-                  </div>
-                  <!-- Image -->
-                  <div v-else-if="block.type === 'image'" class="block-controls-row block-image-row">
-                    <div class="block-handle">⋮⋮</div>
-                    <div class="block-image-wrap">
-                      <img :src="block.src" class="block-img" @click.stop />
-                      <div class="block-img-caption-wrap">
-                        <input v-model="block.caption" placeholder="图片描述（点击添加）" class="block-caption-input" />
-                      </div>
-                    </div>
-                    <button class="block-del" @click.stop="blocks.splice(i, 1)">×</button>
-                  </div>
-                </div>
-
-                <!-- Add block buttons -->
-                <div class="add-block-row">
-                  <button @click="addBlock('p')" class="add-block-btn">&para; 段落</button>
-                  <button @click="addBlock('h1')" class="add-block-btn">H1 大标题</button>
-                  <button @click="addBlock('h2')" class="add-block-btn">H2 小标题</button>
-                  <button @click="addBlock('quote')" class="add-block-btn">“ 引用</button>
-                  <button @click="addBlock('hr')" class="add-block-btn">— 分割线</button>
-                  <button @click="addBlockImage()" class="add-block-btn">🖼️ 图片</button>
-                </div>
               </div>
             </div>
           </div>
@@ -207,6 +138,7 @@ import 'quill/dist/quill.snow.css'
 import ImageResize from 'quill-resize-image'
 Quill.register('modules/imageResize', ImageResize)
 import { setupImageGrid, injectGridStyles } from '../../utils/quillImageGrid'
+import { registerFigureBlot } from '../../utils/quillImageBlot'
 import api from '../../api'
 
 const newsList = ref([])
@@ -215,105 +147,12 @@ const editId = ref(null)
 const saving = ref(false)
 const activeTab = ref('basic')
 const quillEl = ref(null)
-const blockEditorEl = ref(null)
 
-// Editor mode: 'quill' or 'block'
-const editorMode = ref('quill')
 const isFullscreen = ref(false)
-const activeBlock = ref(-1)
-let blockIdSeq = 0
-
-const blocks = ref([])
-
-function makeBlock(type, content = '', extra = {}) {
-  return { id: ++blockIdSeq, type, content, ...extra }
-}
-
-function addBlock(type) {
-  blocks.value.push(makeBlock(type))
-}
-
-async function addBlockImage() {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/*'
-  input.click()
-  input.onchange = async () => {
-    const file = input.files[0]
-    if (!file) return
-    try {
-      const res = await api.upload(file)
-      blocks.value.push({ id: ++blockIdSeq, type: 'image', src: res.url, caption: '' })
-    } catch(e) { alert('图片上传失败: ' + e.message) }
-  }
-}
-
-function autoResize(e) {
-  const el = e.target
-  el.style.height = 'auto'
-  el.style.height = el.scrollHeight + 'px'
-}
 
 function toggleFullscreen() {
   isFullscreen.value = !isFullscreen.value
 }
-
-// Convert blocks array → HTML string (for saving)
-function blocksToHtml(bks) {
-  return bks.map(b => {
-    if (b.type === 'h1') return `<h1>${b.content}</h1>`
-    if (b.type === 'h2') return `<h2>${b.content}</h2>`
-    if (b.type === 'p') return `<p>${b.content.replace(/\n/g, '<br>')}</p>`
-    if (b.type === 'quote') return `<blockquote>${b.content}</blockquote>`
-    if (b.type === 'hr') return `<hr>`
-    if (b.type === 'image') {
-      const cap = b.caption ? `<figcaption style="text-align:center;color:#666;font-size:13px;margin-top:4px;">${b.caption}</figcaption>` : ''
-      return `<figure style="text-align:center;margin:16px 0;"><img src="${b.src}" style="max-width:100%;height:auto;" />${cap}</figure>`
-    }
-    return ''
-  }).join('\n')
-}
-
-// Minimal HTML → blocks parser (for edit round-trip)
-function parseBlocksFromHtml(html) {
-  if (!html) return []
-  const div = document.createElement('div')
-  div.innerHTML = html
-  const result = []
-  div.childNodes.forEach(node => {
-    if (node.nodeType !== 1) return
-    const tag = node.tagName.toLowerCase()
-    if (tag === 'h1') result.push(makeBlock('h1', node.textContent))
-    else if (tag === 'h2') result.push(makeBlock('h2', node.textContent))
-    else if (tag === 'p') result.push(makeBlock('p', node.textContent))
-    else if (tag === 'blockquote') result.push(makeBlock('quote', node.textContent))
-    else if (tag === 'hr') result.push(makeBlock('hr'))
-    else if (tag === 'figure') {
-      const img = node.querySelector('img')
-      const cap = node.querySelector('figcaption')
-      if (img) result.push({ id: ++blockIdSeq, type: 'image', src: img.src, caption: cap?.textContent || '' })
-    } else {
-      result.push(makeBlock('p', node.textContent))
-    }
-  })
-  return result.length ? result : [makeBlock('p')]
-}
-
-function switchMode(mode) {
-  if (mode === editorMode.value) return
-  if (editorMode.value === 'quill' && mode === 'block') {
-    // Sync Quill → blocks
-    const html = quillInstance ? quillInstance.root.innerHTML : (form.value.content || '')
-    blocks.value = parseBlocksFromHtml(html)
-  } else if (editorMode.value === 'block' && mode === 'quill') {
-    // Sync blocks → Quill
-    const html = blocksToHtml(blocks.value)
-    form.value.content = html
-    if (quillInstance) quillInstance.root.innerHTML = html
-  }
-  editorMode.value = mode
-}
-
 
 let quillInstance = null
 
@@ -339,6 +178,7 @@ watch(activeTab, async (tab) => {
     if (!quillEl.value) return
     if (!quillInstance) {
       injectGridStyles()
+      registerFigureBlot()
       quillInstance = new Quill(quillEl.value, {
         theme: 'snow',
         modules: {
@@ -372,7 +212,7 @@ watch(activeTab, async (tab) => {
           try {
             const res = await api.upload(file)
             const range = quillInstance.getSelection(true)
-            quillInstance.insertEmbed(range.index, 'image', res.url)
+            quillInstance.insertEmbed(range.index, 'figure', { src: res.url, caption: '' })
             quillInstance.setSelection(range.index + 1)
           } catch (e) {
             alert('图片上传失败: ' + e.message)
@@ -392,8 +232,6 @@ function destroyQuill() {
   // Reset Quill when modal closes so it re-mounts fresh on next open
   quillInstance = null
   if (quillEl.value) quillEl.value.innerHTML = ''
-  blocks.value = []
-  editorMode.value = 'quill'
   isFullscreen.value = false
 }
 
@@ -431,11 +269,8 @@ async function save() {
   if (!form.value.title) return alert('请填写文章标题')
   saving.value = true
   try {
-    let content
-    if (editorMode.value === 'quill') {
-      content = quillInstance ? quillInstance.root.innerHTML : (form.value.content || '')
-    } else {
-      content = blocksToHtml(blocks.value)
+    if (quillInstance) {
+      form.value.content = quillInstance.root.innerHTML
     }
     const fd = new FormData()
     fd.append('title', form.value.title)

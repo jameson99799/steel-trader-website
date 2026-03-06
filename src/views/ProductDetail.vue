@@ -925,6 +925,27 @@ onMounted(async () => {
   height: auto;
 }
 
+/* Figure (image + caption) blot */
+.detail-content :deep(.ql-figure) {
+  display: block;
+  text-align: center;
+  margin: 16px auto;
+}
+.detail-content :deep(.ql-figure) img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+.detail-content :deep(.ql-figure) figcaption {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+  text-align: center;
+  outline: none;
+}
+
 /* Tables render with visible borders */
 .detail-content :deep(table) {
   width: 100%;

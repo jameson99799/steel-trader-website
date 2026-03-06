@@ -261,11 +261,12 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--spacing-2xl);
-  align-items: center;
+  align-items: start;
 }
 
 .intro-image {
-  position: relative;
+  position: sticky;
+  top: 100px;
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-lg);
@@ -344,6 +345,7 @@ onMounted(async () => {
   color: var(--text-secondary);
   line-height: var(--leading-relaxed);
   font-size: var(--text-lg);
+  white-space: pre-wrap;
 }
 
 .company-highlights {
