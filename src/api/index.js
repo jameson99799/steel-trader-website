@@ -70,6 +70,8 @@ async function cachedGet(url) {
 
 // ─── API methods ──────────────────────────────────────────────────────────────
 export const api = {
+  // Base request (for custom endpoints)
+  request,
   // Auth
   login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
   changePassword: (data) => request('/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
