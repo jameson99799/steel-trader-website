@@ -277,7 +277,7 @@ async function save() {
     fd.append('title_en', form.value.title_en || '')
     fd.append('summary', form.value.summary || '')
     fd.append('summary_en', form.value.summary_en || '')
-    fd.append('content', content)
+    fd.append('content', form.value.content || '')
     fd.append('status', form.value.status)
     fd.append('sort_order', form.value.sort_order)
     fd.append('seo_title', form.value.seo_title || '')

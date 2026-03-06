@@ -440,14 +440,15 @@ onMounted(async () => {
 
 .main-image {
   position: relative;
-  aspect-ratio: 1;
-  max-height: 500px;
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--white);
   box-shadow: var(--shadow-lg);
   cursor: zoom-in;
   transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .main-image:hover {
@@ -456,8 +457,10 @@ onMounted(async () => {
 
 .main-image img {
   width: 100%;
-  height: 100%;
+  height: auto;
+  max-height: 500px;
   object-fit: contain;
+  display: block;
   transition: var(--transition-slow);
 }
 
