@@ -367,8 +367,6 @@ async function duplicateProduct(product) {
     form.seo_keywords = original.seo_keywords || ''
     existingImages.value = original.images ? original.images.split(',').filter(Boolean) : []
     specs.value = original.specs ? JSON.parse(original.specs) : []
-    // Load detail content into Quill if already mounted
-    if (quillInstance) quillInstance.root.innerHTML = form.detail_content || ''
   } catch(e) { alert('复制失败: ' + e.message) }
 }
 
