@@ -113,7 +113,7 @@ const sslForm = reactive({ cert: '', key: '' })
 
 const loadSslStatus = async () => {
   try {
-    const token = localStorage.getItem('admin_token')
+    const token = localStorage.getItem('token')
     const res = await fetch('/api/ssl/status', { headers: { Authorization: `Bearer ${token}` } })
     sslStatus.value = await res.json()
   } catch (e) { console.error(e) }
@@ -123,7 +123,7 @@ const saveSsl = async () => {
   if (!sslForm.cert || !sslForm.key) { alert('请填写证书和私钥内容'); return }
   sslLoading.value = true
   try {
-    const token = localStorage.getItem('admin_token')
+    const token = localStorage.getItem('token')
     const res = await fetch('/api/ssl/upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -141,7 +141,7 @@ const saveSsl = async () => {
 const deleteSsl = async () => {
   if (!confirm('确定删除SSL证书吗？删除后网站将不支持HTTPS')) return
   try {
-    const token = localStorage.getItem('admin_token')
+    const token = localStorage.getItem('token')
     await fetch('/api/ssl', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
     await loadSslStatus()
     alert('SSL证书已删除')
