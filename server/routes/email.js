@@ -31,16 +31,32 @@ router.put('/config', authMiddleware, express.json(), (req, res) => {
     res.json({ message: '邮件配置已保存' })
 })
 
-// POST /api/email/test — send test email
+// POST /api/email/test — send test email (works even if service not enabled)
 router.post('/test', authMiddleware, express.json(), async (req, res) => {
     try {
         const { to } = req.body
         const config = getEmailConfig()
-        if (!config.smtp_host || !config.smtp_user) {
-            return res.status(400).json({ error: '请先保存SMTP配置' })
+        if (!config.smtp_host || !config.smtp_user || !config.smtp_pass) {
+            return res.status(400).json({ error: '请先填写并保存 SMTP 服务器、账号和密码' })
         }
-        await sendMail({
-            to: to || config.to_email,
+        const recipient = to || config.to_email
+        if (!recipient) {
+            return res.status(400).json({ error: '请填写收件邮箱地址' })
+        }
+
+        // Create transporter directly — bypass enabled check for testing
+        const nodemailer = await import('nodemailer')
+        const transporter = nodemailer.default.createTransport({
+            host: config.smtp_host,
+            port: parseInt(config.smtp_port) || 465,
+            secure: parseInt(config.smtp_port) === 465,
+            auth: { user: config.smtp_user, pass: config.smtp_pass },
+            tls: { rejectUnauthorized: false }
+        })
+
+        await transporter.sendMail({
+            from: `"${config.from_name || 'SunSea Steel'}" <${config.smtp_user}>`,
+            to: recipient,
             subject: '✅ 邮件测试成功 - SunSea Steel',
             html: `
         <div style="font-family:Arial,sans-serif;padding:24px;max-width:500px">
@@ -50,9 +66,9 @@ router.post('/test', authMiddleware, express.json(), async (req, res) => {
         </div>
       `
         })
-        res.json({ success: true, message: `测试邮件已发送到 ${to || config.to_email}` })
+        res.json({ success: true, message: `测试邮件已发送到 ${recipient}` })
     } catch (e) {
-        res.status(500).json({ error: e.message })
+        res.status(500).json({ error: '发送失败: ' + e.message })
     }
 })
 
