@@ -30,7 +30,7 @@ onMounted(async () => {
     const company = await api.getCompany()
     if (company) {
       // 设置网站标题
-      document.title = localizedValue(company, 'name') || 'LED Trade'
+      document.title = localizedValue(company, 'name') || 'SunSea Steel'
       
       // 设置网站图标
       if (company.favicon) {
