@@ -2,7 +2,7 @@
   <div class="admin-layout">
     <aside class="admin-sidebar">
       <div class="sidebar-header">
-        <h2>LED Trade</h2>
+        <h2>SunSea Steel</h2>
       </div>
       <nav class="sidebar-nav">
         <router-link to="/admin/dashboard">📊 控制台</router-link>
@@ -19,6 +19,8 @@
         <router-link to="/admin/seo">🔍 SEO设置</router-link>
         <router-link to="/admin/languages">🌍 语言管理</router-link>
         <router-link to="/admin/translations">🤖 AI翻译</router-link>
+        <router-link to="/admin/email">📧 邮件通知</router-link>
+        <router-link to="/admin/google-index">🔍 Google收录</router-link>
         <router-link to="/admin/settings">⚙️ 系统设置</router-link>
       </nav>
       <div class="sidebar-footer">

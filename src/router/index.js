@@ -36,6 +36,8 @@ const routes = [
       { path: 'seo', name: 'AdminSeo', component: () => import('../views/admin/Seo.vue') },
       { path: 'languages', name: 'AdminLanguages', component: () => import('../views/admin/Languages.vue') },
       { path: 'translations', name: 'AdminTranslations', component: () => import('../views/admin/Translations.vue') },
+      { path: 'email', name: 'AdminEmail', component: () => import('../views/admin/Email.vue') },
+      { path: 'google-index', name: 'AdminGoogleIndex', component: () => import('../views/admin/GoogleIndex.vue') },
       { path: 'settings', name: 'AdminSettings', component: () => import('../views/admin/Settings.vue') }
     ]
   }

@@ -1,10 +1,11 @@
 import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
+import { sendInquiryNotification } from '../emailService.js'
 
 const router = Router()
 
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { name, email, phone, company, country, message, product_id } = req.body
 
   if (!name || !email) {
@@ -15,6 +16,10 @@ router.post('/', (req, res) => {
     INSERT INTO inquiries (name, email, phone, company, country, message, product_id)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `, [name, email, phone || null, company || null, country || null, message || null, product_id || null])
+
+  // Send email notification asynchronously (don't block response)
+  const product = product_id ? getOne('SELECT name, name_en FROM products WHERE id = ?', [product_id]) : null
+  sendInquiryNotification({ name, email, phone, company, country, message, product_name: product?.name_en || product?.name }).catch(() => { })
 
   res.json({ id: result.lastInsertRowid, message: '询盘提交成功' })
 })

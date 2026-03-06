@@ -28,7 +28,7 @@ router.put('/', authMiddleware, upload.fields([
 ]), (req, res) => {
   const company = getOne('SELECT * FROM company WHERE id = 1')
   const { name, name_en, description, description_en, phone, email, address, address_en, whatsapp, wechat,
-    facebook, linkedin, instagram, tiktok, twitter, advantages, advantages_en, map_embed_url } = req.body
+    facebook, linkedin, instagram, tiktok, twitter, youtube, advantages, advantages_en, map_embed_url } = req.body
 
   // Only update image paths when a new valid file was uploaded; otherwise keep existing value
   const logo = fileUrl(req.files, 'logo', company?.logo)
@@ -41,21 +41,21 @@ router.put('/', authMiddleware, upload.fields([
     run(`
       UPDATE company SET name=?, name_en=?, description=?, description_en=?, phone=?, email=?,
         address=?, address_en=?, whatsapp=?, wechat=?, facebook=?, linkedin=?, instagram=?,
-        tiktok=?, twitter=?, whatsapp_qr=?, wechat_qr=?, logo=?, favicon=?, about_image=?,
+        tiktok=?, twitter=?, youtube=?, whatsapp_qr=?, wechat_qr=?, logo=?, favicon=?, about_image=?,
         advantages=?, advantages_en=?, map_embed_url=?, updated_at=CURRENT_TIMESTAMP
       WHERE id=1
     `, [name, name_en, description, description_en, phone, email, address, address_en,
-      whatsapp, wechat, facebook, linkedin, instagram, tiktok, twitter,
+      whatsapp, wechat, facebook, linkedin, instagram, tiktok, twitter, youtube,
       whatsapp_qr, wechat_qr, logo, favicon, about_image,
       advantages, advantages_en, map_embed_url || null])
   } else {
     run(`
       INSERT INTO company (id, name, name_en, description, description_en, phone, email,
-        address, address_en, whatsapp, wechat, facebook, linkedin, instagram, tiktok, twitter,
+        address, address_en, whatsapp, wechat, facebook, linkedin, instagram, tiktok, twitter, youtube,
         whatsapp_qr, wechat_qr, logo, favicon, about_image, advantages, advantages_en, map_embed_url)
-      VALUES (1, ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (1, ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [name, name_en, description, description_en, phone, email, address, address_en,
-      whatsapp, wechat, facebook, linkedin, instagram, tiktok, twitter,
+      whatsapp, wechat, facebook, linkedin, instagram, tiktok, twitter, youtube,
       whatsapp_qr, wechat_qr, logo, favicon, about_image,
       advantages, advantages_en, map_embed_url || null])
   }

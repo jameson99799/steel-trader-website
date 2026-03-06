@@ -122,6 +122,7 @@ async function initDb() {
   try { db.exec('ALTER TABLE company ADD COLUMN instagram TEXT') } catch (e) { }
   try { db.exec('ALTER TABLE company ADD COLUMN tiktok TEXT') } catch (e) { }
   try { db.exec('ALTER TABLE company ADD COLUMN twitter TEXT') } catch (e) { }
+  try { db.exec('ALTER TABLE company ADD COLUMN youtube TEXT') } catch (e) { }
   try { db.exec('ALTER TABLE company ADD COLUMN whatsapp_qr TEXT') } catch (e) { }
   try { db.exec('ALTER TABLE company ADD COLUMN wechat_qr TEXT') } catch (e) { }
 
@@ -137,6 +138,21 @@ async function initDb() {
       product_id INTEGER,
       is_read INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // Email notification config table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_config (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      smtp_host TEXT,
+      smtp_port INTEGER DEFAULT 465,
+      smtp_user TEXT,
+      smtp_pass TEXT,
+      from_name TEXT DEFAULT 'SunSea Steel',
+      to_email TEXT,
+      ssl_warn_days INTEGER DEFAULT 30,
+      enabled INTEGER DEFAULT 0
     )
   `)
 

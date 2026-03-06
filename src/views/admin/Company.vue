@@ -101,6 +101,10 @@
               <label>X (Twitter) 链接</label>
               <input v-model="form.twitter" type="url" class="form-control" placeholder="https://x.com/..." />
             </div>
+            <div class="form-group">
+              <label>YouTube 链接</label>
+              <input v-model="form.youtube" type="url" class="form-control" placeholder="https://www.youtube.com/@yourchannel" />
+            </div>
           </div>
 
           <h3 class="section-title">图片设置</h3>
@@ -189,7 +193,7 @@ const form = reactive({
   phone: '', email: '',
   address: '', address_en: '',
   whatsapp: '', wechat: '',
-  facebook: '', linkedin: '', instagram: '', tiktok: '', twitter: '',
+  facebook: '', linkedin: '', instagram: '', tiktok: '', twitter: '', youtube: '',
   logo: '', favicon: '', about_image: '',
   whatsapp_qr: '', wechat_qr: '',
   advantages: '', advantages_en: '',
