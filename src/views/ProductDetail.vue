@@ -175,8 +175,8 @@
             </svg>
             <h2>Product Details</h2>
           </div>
-          <div class="detail-content ql-snow">
-            <div class="ql-editor" v-html="product.detail_content"></div>
+          <div class="detail-content">
+            <div class="product-html-content" v-html="product.detail_content"></div>
           </div>
         </div>
 
@@ -902,51 +902,61 @@ onMounted(async () => {
   padding: var(--spacing-xl);
 }
 
-/* ── Quill rendered content on frontend ─────────────────────── */
-.detail-content :deep(.ql-editor) {
-  padding: 0;
-}
-
-.detail-content :deep(.ql-editor) img {
-  max-width: 100%;
-  height: auto;
-  display: inline-block;
-  vertical-align: top;
-}
-
-/* Inline images (same paragraph) sit side by side - respect width set by imageResize */
-.detail-content :deep(.ql-editor) p {
-  font-size: 0; /* collapse whitespace between inline-block imgs */
-}
-.detail-content :deep(.ql-editor) p > * {
+/* ── Product detail HTML content ─────────────────────── */
+.product-html-content {
+  line-height: 1.8;
   font-size: 16px;
-}
-.detail-content :deep(.ql-editor) p img {
-  display: inline-block;
-  vertical-align: top;
-  max-width: 100%;
-  height: auto;
+  color: var(--text-primary);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
-/* Figure (image + caption) blot */
-.detail-content :deep(.ql-figure) {
+.product-html-content img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 12px auto;
+  border-radius: 6px;
+}
+
+.product-html-content p {
+  margin: 0 0 12px;
+}
+
+.product-html-content h1, .product-html-content h2,
+.product-html-content h3, .product-html-content h4 {
+  margin: 20px 0 10px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.product-html-content ul, .product-html-content ol {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+
+.product-html-content a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.product-html-content figure {
   display: block;
   text-align: center;
   margin: 16px auto;
 }
-.detail-content :deep(.ql-figure) img {
+.product-html-content figure img {
   display: block;
   max-width: 100%;
   height: auto;
   margin: 0 auto;
 }
-.detail-content :deep(.ql-figure) figcaption {
+.product-html-content figcaption {
   margin-top: 8px;
   font-size: 13px;
   color: #666;
   font-style: italic;
   text-align: center;
-  outline: none;
 }
 
 /* Tables render with visible borders */
