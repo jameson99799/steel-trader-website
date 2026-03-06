@@ -118,22 +118,28 @@
               </div>
             </div>
             <div class="form-group">
-              <label>产品详情（富文本）</label>
-              <p class="form-hint">支持文字格式、图片插入、表格、超链接、字体颜色等富文本编辑</p>
+              <label>产品详情（HTML源代码）</label>
+              <p class="form-hint">直接粘贴 HTML 代码，支持完整的 HTML 标签、图片、表格、样式等</p>
 
-              <!-- Editor mode bar (Fullscreen only now) -->
               <div class="editor-mode-bar">
                 <div class="mode-tabs">
-                  <span class="mode-tab active" style="cursor:default">✏️ 富文本编辑器</span>
+                  <span :class="['mode-tab', !htmlPreview ? 'active' : '']" @click="htmlPreview = false">📝 HTML代码</span>
+                  <span :class="['mode-tab', htmlPreview ? 'active' : '']" @click="htmlPreview = true">👁 预览</span>
                 </div>
                 <button type="button" class="fullscreen-btn" @click="prodFullscreen = !prodFullscreen">
                   {{ prodFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
                 </button>
               </div>
 
-              <!-- Quill editor -->
               <div :class="['editor-wrap', prodFullscreen ? 'is-fullscreen' : '']">
-                <div ref="quillEditorEl" class="quill-editor-wrap"></div>
+                <textarea
+                  v-if="!htmlPreview"
+                  v-model="form.detail_content"
+                  class="html-editor"
+                  placeholder='<div>\n  <h2>产品特点</h2>\n  <p>在此处粘贴您的 HTML 内容...</p>\n  <img src="/uploads/xxx.jpg" />\n</div>'
+                  spellcheck="false"
+                ></textarea>
+                <div v-else class="html-preview" v-html="form.detail_content"></div>
               </div>
             </div>
             <div class="grid grid-3">
@@ -188,12 +194,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import api from '../../api'
-import Quill from 'quill'
-import 'quill/dist/quill.snow.css'
-import ImageResize from 'quill-resize-image'
-Quill.register('modules/imageResize', ImageResize)
-import { setupImageGrid, injectGridStyles } from '../../utils/quillImageGrid'
-import { registerFigureBlot } from '../../utils/quillImageBlot'
 
 const products = ref([])
 const categories = ref([])
@@ -203,9 +203,8 @@ const loading = ref(false)
 const imageFiles = ref([])
 const existingImages = ref([])
 const specs = ref([])
-const quillEditorEl = ref(null)
-let quillInstance = null
 const prodFullscreen = ref(false)
+const htmlPreview = ref(false)
 
 const form = reactive({
   name: '',
@@ -271,64 +270,11 @@ const openModal = async (product = null) => {
   specs.value = product?.specs ? JSON.parse(product.specs) : []
   imageFiles.value = []
   
-  // Reset block editor state
+  // Reset editor state
   prodFullscreen.value = false
+  htmlPreview.value = false
 
   showModal.value = true
-
-  // Initialize Quill after modal DOM is rendered
-  await nextTick()
-    if (quillEditorEl.value) {
-    if (quillInstance) {
-      quillInstance = null
-      quillEditorEl.value.innerHTML = ''
-    }
-    injectGridStyles()
-    registerFigureBlot()
-    quillInstance = new Quill(quillEditorEl.value, {
-      theme: 'snow',
-      modules: {
-        toolbar: {
-          container: [
-            [{ header: [1, 2, 3, false] }],
-            ['bold', 'italic', 'underline', 'strike'],
-            [{ color: [] }, { background: [false, 'transparent', '#000000', '#e60000', '#ff9900', '#ffff00', '#008a00', '#0066cc', '#9933ff', '#ffffff', '#facccc', '#ffebcc', '#ffffcc', '#cce8cc', '#cce0f5', '#ebd6ff', '#bbbbbb', '#f06666', '#ffc266', '#ffff66', '#66b966', '#66a3e0', '#c285ff', '#888888', '#a10000', '#b26b00', '#b2b200', '#006100', '#0047b2', '#6b24b2', '#444444', '#5c0000', '#663d00', '#666600', '#003700', '#002966', '#3d1466'] }],
-            [{ list: 'ordered' }, { list: 'bullet' }],
-            [{ align: [] }],
-            ['link', 'image', 'video'],
-            ['blockquote', 'code-block'],
-            ['image-grid-2', 'image-grid-3', 'image-grid-4'],
-            ['clean']
-          ]
-        },
-        imageResize: { displaySize: true }
-      }
-    })
-    setupImageGrid(quillInstance)
-    // Custom image upload handler — uploads to server instead of base64/URL prompt
-    const toolbar = quillInstance.getModule('toolbar')
-    toolbar.addHandler('image', () => {
-      const input = document.createElement('input')
-      input.setAttribute('type', 'file')
-      input.setAttribute('accept', 'image/*')
-      input.click()
-      input.onchange = async () => {
-        const file = input.files[0]
-        if (!file) return
-        try {
-          const res = await api.upload(file)
-          const range = quillInstance.getSelection(true)
-          quillInstance.insertEmbed(range.index, 'figure', { src: res.url, caption: '' })
-          quillInstance.setSelection(range.index + 1)
-        } catch (e) {
-          alert('图片上传失败: ' + e.message)
-        }
-      }
-    })
-    if (form.detail_content) {
-      quillInstance.root.innerHTML = form.detail_content
-    }
-  }
 }
 
 let dragIndex = -1
@@ -356,10 +302,6 @@ const handleFileChange = (e) => {
 const handleSubmit = async () => {
   loading.value = true
   try {
-    // Collect content before submit
-    if (quillInstance) {
-      form.detail_content = quillInstance.root.innerHTML
-    }
     const formData = new FormData()
     formData.append('name', form.name)
     formData.append('name_en', form.name_en)
@@ -723,4 +665,30 @@ onMounted(() => {
   cursor: pointer; transition: all 0.15s; font-weight: 500;
 }
 .add-block-btn:hover { border-color: #0077b5; color: #0077b5; background: #eff8ff; }
+
+/* HTML source code editor */
+.html-editor {
+  width: 100%; min-height: 400px; padding: 16px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px; line-height: 1.7;
+  background: #1e293b; color: #e2e8f0;
+  border: none; border-radius: 0 0 8px 8px;
+  resize: vertical; outline: none;
+  tab-size: 2; white-space: pre-wrap;
+  box-sizing: border-box;
+}
+.html-editor::placeholder { color: #64748b; }
+.html-preview {
+  min-height: 400px; padding: 20px;
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 0 0 8px 8px;
+  line-height: 1.8; font-size: 15px;
+  overflow-y: auto;
+}
+.html-preview img { max-width: 100%; height: auto; border-radius: 6px; }
+.html-preview table { border-collapse: collapse; width: 100%; }
+.html-preview table td, .html-preview table th { border: 1px solid #e2e8f0; padding: 8px 12px; }
+
+.is-fullscreen .html-editor,
+.is-fullscreen .html-preview { min-height: calc(100vh - 60px); }
 </style>
