@@ -82,6 +82,17 @@
               <label>排序（数字越小越靠前）</label>
               <input v-model.number="form.sort_order" type="number" class="form-control" />
             </div>
+            <div class="form-group">
+              <label>前台渲染模式</label>
+              <select v-model="form.render_mode" class="form-control">
+                <option value="direct">📄 直接渲染（推荐 SEO）— 忽略文章内置 &lt;style&gt; 标签</option>
+                <option value="iframe">🖼 iframe 隔离（支持完整 HTML 页面样式）</option>
+              </select>
+              <p class="form-hint" style="margin-top:6px">
+                <strong>直接渲染</strong>：文章内容 HTML 直接输出到页面，Google 可完整收录，适合纯文字/图文内容。<br/>
+                <strong>iframe 隔离</strong>：如果你粘贴了带 &lt;style&gt; 标签的完整 HTML 页面，选此项，样式不影响网站其他部分，但 SEO 效果略低。
+              </p>
+            </div>
           </div>
 
 
@@ -173,7 +184,8 @@ const form = ref({
   cover_image: null, cover_preview: null,
   status: 1, sort_order: 0,
   seo_title: '', seo_description: '', seo_keywords: '',
-  content: ''
+  content: '',
+  render_mode: 'direct'
 })
 
 async function loadNews() {
@@ -267,7 +279,7 @@ async function handleNewsImgUpload(e) {
 // ─── Modal open/close ─────────────────────────────────────────────────────────
 async function openCreate() {
   editId.value = null
-  form.value = { title: '', title_en: '', summary: '', summary_en: '', cover_image: null, cover_preview: null, status: 1, sort_order: 0, seo_title: '', seo_description: '', seo_keywords: '', content: '' }
+  form.value = { title: '', title_en: '', summary: '', summary_en: '', cover_image: null, cover_preview: null, status: 1, sort_order: 0, seo_title: '', seo_description: '', seo_keywords: '', content: '', render_mode: 'direct' }
   activeTab.value = 'basic'
   newsEditorMode.value = 'visual'
   newsReplacingImg = null
@@ -283,7 +295,8 @@ async function openEdit(item) {
     cover_image: null, cover_preview: item.cover_image || null,
     status: item.status ?? 1, sort_order: item.sort_order || 0,
     seo_title: item.seo_title || '', seo_description: item.seo_description || '',
-    seo_keywords: item.seo_keywords || '', content: item.content || ''
+    seo_keywords: item.seo_keywords || '', content: item.content || '',
+    render_mode: item.render_mode || 'direct'
   }
   activeTab.value = 'basic'
   newsEditorMode.value = 'visual'
@@ -317,6 +330,7 @@ async function save() {
     fd.append('seo_description', form.value.seo_description || '')
     fd.append('seo_keywords', form.value.seo_keywords || '')
     if (form.value.cover_image) fd.append('cover_image', form.value.cover_image)
+    fd.append('render_mode', form.value.render_mode || 'direct')
 
     if (editId.value) {
       await api.updateNews(editId.value, fd)

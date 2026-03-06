@@ -246,6 +246,9 @@ async function initDb() {
     )
   `)
 
+  // Migration: add render_mode column to news (default 'direct' = v-html, 'iframe' = full isolation)
+  try { db.exec("ALTER TABLE news ADD COLUMN render_mode TEXT DEFAULT 'direct'") } catch (e) { }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS seo_settings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

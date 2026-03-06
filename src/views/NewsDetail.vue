@@ -30,7 +30,8 @@
             <img :src="article.cover_image" :alt="localizedValue(article, 'title')" />
           </div>
 
-          <div class="article-body" v-if="article.content">
+          <!-- iframe mode: full HTML isolation (supports <style> tags) -->
+          <div class="article-body" v-if="article.content && article.render_mode === 'iframe'">
             <iframe
               ref="articleIframe"
               class="article-iframe"
@@ -40,6 +41,9 @@
               @load="resizeIframe"
             ></iframe>
           </div>
+
+          <!-- direct mode: v-html (better SEO, strips only <style>/<script> tags) -->
+          <div class="article-body article-body-direct" v-else-if="article.content" v-html="sanitizedContent"></div>
 
           <div class="article-footer">
             <router-link to="/news" class="back-link">
@@ -117,6 +121,15 @@ const iframeContent = computed(() => {
   let html = raw.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
   if (html.includes('<html') || html.includes('<body')) return html
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;line-height:1.8;color:#333;font-size:16px}img{max-width:100%;height:auto;display:block;margin:12px auto;border-radius:6px}p{margin:0 0 12px}h1,h2,h3,h4{margin:20px 0 10px;font-weight:700}ul,ol{padding-left:24px;margin:8px 0}table{width:100%;border-collapse:collapse;margin:16px 0}table th,table td{border:1px solid #ddd;padding:8px 12px}table th{background:#f5f5f5;font-weight:600}a{color:#1f4e79}</style></head><body>${html}</body></html>`
+})
+
+// Sanitized content for direct render mode — strips <style>/<script> only, keeps inline styles for SEO
+const sanitizedContent = computed(() => {
+  const raw = article.value?.content || ''
+  if (!raw) return ''
+  return raw
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
 })
 
 function resizeIframe() {
@@ -233,6 +246,32 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
   border: none;
   display: block;
 }
+
+/* Direct render mode: clean HTML display */
+.article-body-direct {
+  padding: var(--spacing-2xl);
+  line-height: 1.8;
+  font-size: 16px;
+  color: var(--text-primary);
+  word-wrap: break-word;
+}
+
+.article-body-direct img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 12px auto;
+  border-radius: 6px;
+}
+
+.article-body-direct p { margin: 0 0 14px; }
+.article-body-direct h1, .article-body-direct h2,
+.article-body-direct h3, .article-body-direct h4 { margin: 20px 0 10px; font-weight: 700; }
+.article-body-direct ul, .article-body-direct ol { padding-left: 24px; margin: 8px 0; }
+.article-body-direct a { color: var(--primary); text-decoration: underline; }
+.article-body-direct table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+.article-body-direct td, .article-body-direct th { border: 1px solid var(--border); padding: 8px 12px; }
+.article-body-direct th { background: var(--gray-50); font-weight: 600; }
 
 .article-footer {
   padding: var(--spacing-xl) var(--spacing-2xl) var(--spacing-2xl);
