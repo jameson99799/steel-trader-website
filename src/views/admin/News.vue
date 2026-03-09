@@ -162,7 +162,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, nextTick, onMounted, watch } from 'vue'
 import api from '../../api'
 
 const newsList = ref([])
@@ -194,6 +194,14 @@ async function loadNews() {
     newsList.value = res.data
   } catch(e) { console.error(e) }
 }
+
+// When switching to content tab, sync the saved content into the visual editor
+watch(activeTab, async (tab) => {
+  if (tab === 'content' && newsEditorMode.value === 'visual') {
+    await nextTick()
+    syncNewsToVisual()
+  }
+})
 
 // ─── Visual editor helpers ────────────────────────────────────────────────────
 function syncNewsToVisual() {
@@ -391,9 +399,59 @@ onMounted(loadNews)
 .req { color: red; }
 .preview-img { width: 100%; max-height: 140px; object-fit: cover; margin-top: 8px; border-radius: 6px; }
 
-/* Quill wrapper */
+/* Quill wrapper — kept for backward compat but not actively used */
 .quill-wrap { min-height: 280px; }
 :deep(.ql-container) { min-height: 240px; font-size: 15px; }
+
+/* ── HTML source editor ──────────────────────────────────── */
+.html-editor {
+  width: 100%; box-sizing: border-box;
+  min-height: 480px; height: 480px;
+  padding: 14px; font-family: 'Fira Mono', 'Consolas', monospace;
+  font-size: 13px; line-height: 1.6; color: #e2e8f0;
+  background: #1e293b; border: none; border-radius: 0 0 8px 8px;
+  resize: vertical; outline: none;
+}
+
+/* ── Visual/contenteditable editor ──────────────────────── */
+.visual-editor {
+  min-height: 480px; max-height: 70vh; overflow-y: auto;
+  padding: 16px; outline: none;
+  font-size: 15px; line-height: 1.7; color: var(--text-primary);
+  background: #fff; border-radius: 0 0 8px 8px;
+}
+.visual-editor img { max-width: 100%; height: auto; cursor: pointer; }
+.visual-editor img:hover { outline: 2px dashed #3b82f6; }
+
+/* ── Preview ─────────────────────────────────────────────── */
+.html-preview {
+  min-height: 480px; max-height: 70vh; overflow-y: auto;
+  padding: 16px; background: #f8fafc;
+  border-radius: 0 0 8px 8px;
+  font-size: 15px; line-height: 1.7;
+}
+.html-preview img { max-width: 100%; height: auto; }
+
+/* ── Editor action buttons ───────────────────────────────── */
+.editor-actions { display: flex; align-items: center; gap: 8px; }
+.editor-btn {
+  padding: 5px 12px; border: 1.5px solid var(--border); border-radius: 6px;
+  background: white; font-size: 12px; font-weight: 600;
+  cursor: pointer; color: var(--text-muted); transition: all 0.18s;
+}
+.editor-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+/* Fullscreen: expand html-editor / visual-editor to fill screen */
+.editor-wrap.is-fullscreen .html-editor,
+.editor-wrap.is-fullscreen .visual-editor,
+.editor-wrap.is-fullscreen .html-preview {
+  height: calc(100vh - 60px);
+  max-height: none;
+  border-radius: 0;
+}
+
+/* Form hint text */
+.form-hint { font-size: 12px; color: var(--text-muted); margin: 0 0 8px; }
 
 /* ── Editor mode bar ──────────────────────────────────────── */
 .editor-mode-bar {
