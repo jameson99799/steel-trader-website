@@ -162,7 +162,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
 import api from '../../api'
 
 const newsList = ref([])
