@@ -69,6 +69,18 @@ async function initDb() {
   try { db.exec('ALTER TABLE products ADD COLUMN seo_title TEXT') } catch (e) { }
   try { db.exec('ALTER TABLE products ADD COLUMN seo_description TEXT') } catch (e) { }
   try { db.exec('ALTER TABLE products ADD COLUMN seo_keywords TEXT') } catch (e) { }
+  // Migration: add product slug for SEO-friendly URLs
+  try { db.exec('ALTER TABLE products ADD COLUMN slug TEXT') } catch (e) { }
+  // Auto-generate slugs for existing products that have none
+  try {
+    const noSlug = db.prepare('SELECT id, name, name_en FROM products WHERE slug IS NULL OR slug = ""').all()
+    const slugify = (text) => text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '')
+    const updateSlug = db.prepare('UPDATE products SET slug = ? WHERE id = ?')
+    for (const p of noSlug) {
+      const base = slugify(p.name_en || p.name || `product-${p.id}`)
+      updateSlug.run(`${base}-${p.id}`, p.id)
+    }
+  } catch (e) { }
   // Migration: add map_embed_url to company
   try { db.exec('ALTER TABLE company ADD COLUMN map_embed_url TEXT') } catch (e) { }
   // Migration: add show_contact_panel to page_texts

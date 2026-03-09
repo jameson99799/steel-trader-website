@@ -196,7 +196,13 @@ async function loadNews() {
 }
 
 // When switching to content tab, sync the saved content into the visual editor
-watch(activeTab, async (tab) => {
+// When switching AWAY from content tab, save visual editor content back to form
+watch(activeTab, async (tab, oldTab) => {
+  // Leaving content tab → save visual editor content first
+  if (oldTab === 'content' && newsEditorMode.value === 'visual') {
+    syncNewsFromVisual()
+  }
+  // Entering content tab → load content into visual editor
   if (tab === 'content' && newsEditorMode.value === 'visual') {
     await nextTick()
     syncNewsToVisual()

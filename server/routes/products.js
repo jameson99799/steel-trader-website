@@ -5,6 +5,14 @@ import { upload, compressImage } from '../middleware/upload.js'
 
 const router = Router()
 
+// Slugify helper for SEO-friendly URLs
+function slugify(text) {
+  return text.toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
 router.get('/', (req, res) => {
   const { category_id, featured, status, page = 1, limit = 20 } = req.query
   let sql = 'SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE 1=1'
@@ -44,13 +52,13 @@ router.get('/', (req, res) => {
   res.json({ data: products, total, page: parseInt(page), limit: parseInt(limit) })
 })
 
-router.get('/:id', (req, res) => {
-  const product = getOne(`
-    SELECT p.*, c.name as category_name, c.name_en as category_name_en 
-    FROM products p 
-    LEFT JOIN categories c ON p.category_id = c.id 
-    WHERE p.id = ?
-  `, [req.params.id])
+router.get('/:slug', (req, res) => {
+  const { slug } = req.params
+  // Support both numeric ID (legacy) and slug
+  const isId = /^\d+$/.test(slug)
+  const product = isId
+    ? getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`, [slug])
+    : getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.slug = ?`, [slug])
 
   if (!product) {
     return res.status(404).json({ error: '商品不存在' })
@@ -83,7 +91,12 @@ router.post('/', authMiddleware, upload.array('images', 10), async (req, res) =>
     req.body.detail_content || null, parseInt(is_featured), parseInt(sort_order), parseInt(status),
     seo_title || null, seo_description || null, seo_keywords || null])
 
-  res.json({ id: result.lastInsertRowid, message: '创建成功' })
+  // Auto-generate slug from name_en or name + id
+  const newId = result.lastInsertRowid
+  const base = slugify(name_en || name)
+  run('UPDATE products SET slug = ? WHERE id = ?', [`${base}-${newId}`, newId])
+
+  res.json({ id: newId, slug: `${base}-${newId}`, message: '创建成功' })
 })
 
 router.put('/:id', authMiddleware, upload.array('images', 10), async (req, res) => {
@@ -111,15 +124,19 @@ router.put('/:id', authMiddleware, upload.array('images', 10), async (req, res) 
     images = images ? `${images},${imageUrls.join(',')}` : imageUrls.join(',')
   }
 
+  // Regenerate slug if name changed (keeps ID suffix for uniqueness)
+  const newBase = slugify(name_en || name)
+  const newSlug = `${newBase}-${id}`
+
   run(`
     UPDATE products SET name=?, name_en=?, category_id=?, description=?, description_en=?, specs=?, images=?, detail_content=?,
-    is_featured=?, sort_order=?, status=?, seo_title=?, seo_description=?, seo_keywords=?
+    is_featured=?, sort_order=?, status=?, seo_title=?, seo_description=?, seo_keywords=?, slug=?
     WHERE id=?
   `, [name, name_en || null, category_id || null, description || null, description_en || null, specs || null, images,
     req.body.detail_content || null, parseInt(is_featured || 0), parseInt(sort_order || 0), parseInt(status || 1),
-    seo_title || null, seo_description || null, seo_keywords || null, id])
+    seo_title || null, seo_description || null, seo_keywords || null, newSlug, id])
 
-  res.json({ message: '更新成功' })
+  res.json({ message: '更新成功', slug: newSlug })
 })
 
 router.delete('/:id', authMiddleware, (req, res) => {

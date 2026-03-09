@@ -105,7 +105,7 @@
               <router-link 
                 v-for="product in products" 
                 :key="product.id" 
-                :to="`/products/${product.id}`"
+                :to="`/products/${product.slug || product.id}`"
                 class="product-card"
               >
                 <div class="product-image">

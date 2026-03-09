@@ -392,7 +392,7 @@ const copyToClipboard = (text) => {
 
 onMounted(async () => {
   try {
-    product.value = await api.getProduct(route.params.id)
+    product.value = await api.getProduct(route.params.slug)
     if (images.value.length) {
       currentImage.value = images.value[0]
     }
