@@ -61,7 +61,7 @@
               <h4 class="link-title">{{ t('products') }}</h4>
               <ul class="link-list">
                 <li v-for="cat in categories" :key="cat.id">
-                  <router-link :to="`/products?category=${cat.id}`" class="footer-link">
+                  <router-link :to="`/products?category=${cat.slug || cat.id}`" class="footer-link">
                     {{ localizedValue(cat, 'name') }}
                   </router-link>
                 </li>

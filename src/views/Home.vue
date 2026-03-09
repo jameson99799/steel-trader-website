@@ -107,7 +107,7 @@
           <router-link 
             v-for="cat in categories" 
             :key="cat.id" 
-            :to="`/products?category=${cat.id}`"
+            :to="`/products?category=${cat.slug || cat.id}`"
             class="category-card"
           >
             <div class="category-image">
