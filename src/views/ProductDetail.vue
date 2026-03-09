@@ -314,12 +314,41 @@ const iframeContent = computed(() => {
   if (!raw) return ''
   // Strip <script> tags for security, but keep <style>
   let html = raw.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-  // If it's a full HTML document, use it directly
+  // If it's a full HTML document, inject our helper script and return
   if (html.includes('<html') || html.includes('<body')) {
-    return html
+    // Inject anchor-click handler before </body>
+    const anchorScript = `<script>
+      document.addEventListener('click', function(e) {
+        var a = e.target.closest('a[href^="#"]');
+        if (!a) return;
+        e.preventDefault();
+        var id = a.getAttribute('href').slice(1);
+        var target = document.getElementById(id) || document.querySelector('[name="' + id + '"]');
+        if (target) {
+          var rect = target.getBoundingClientRect();
+          var iframeRect = window.frameElement ? window.frameElement.getBoundingClientRect() : {top:0};
+          window.parent.scrollTo({ top: iframeRect.top + window.parent.scrollY + rect.top - 80, behavior: 'smooth' });
+        }
+      });
+    <\/script>`
+    return html.replace(/<\/body>/i, anchorScript + '</body>')
   }
   // Otherwise wrap in a minimal HTML document
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;line-height:1.8;color:#333;font-size:16px}img{max-width:100%;height:auto;display:block;margin:12px auto;border-radius:6px}p{margin:0 0 12px}h1,h2,h3,h4{margin:20px 0 10px;font-weight:700}ul,ol{padding-left:24px;margin:8px 0}table{width:100%;border-collapse:collapse;margin:16px 0}table th,table td{border:1px solid #ddd;padding:8px 12px}table th{background:#f5f5f5;font-weight:600}a{color:#1f4e79}</style></head><body>${html}</body></html>`
+  // Use :where() for default table styles so they DON'T override original inline/embedded styles
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;line-height:1.8;color:#333;font-size:16px}img{max-width:100%;height:auto;display:block;margin:12px auto;border-radius:6px}p{margin:0 0 12px}h1,h2,h3,h4{margin:20px 0 10px;font-weight:700}ul,ol{padding-left:24px;margin:8px 0}:where(table){width:100%;border-collapse:collapse;margin:16px 0}:where(table th),:where(table td){border:1px solid #ddd;padding:8px 12px}:where(table th){background:#f5f5f5;font-weight:600}a{color:#1f4e79}</style></head><body>${html}<script>
+    document.addEventListener('click', function(e) {
+      var a = e.target.closest('a[href^="#"]');
+      if (!a) return;
+      e.preventDefault();
+      var id = a.getAttribute('href').slice(1);
+      var target = document.getElementById(id) || document.querySelector('[name="' + id + '"]');
+      if (target) {
+        var rect = target.getBoundingClientRect();
+        var iframeRect = window.frameElement ? window.frameElement.getBoundingClientRect() : {top:0};
+        window.parent.scrollTo({ top: iframeRect.top + window.parent.scrollY + rect.top - 80, behavior: 'smooth' });
+      }
+    });
+  <\/script></body></html>`
 })
 
 function resizeIframe() {
