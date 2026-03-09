@@ -217,8 +217,13 @@ function syncNewsToVisual() {
 }
 
 function syncNewsFromVisual() {
-  if (newsVisualEl.value) {
-    form.value.content = newsVisualEl.value.innerHTML
+  // Only sync back if we're on the content tab AND editor exists AND has real content
+  if (!newsVisualEl.value) return
+  const html = newsVisualEl.value.innerHTML
+  // Avoid overwriting with empty or placeholder text
+  const PLACEHOLDER = '<p>在此处编辑文章内容，或切换到 HTML 代码模式粘贴 HTML...</p>'
+  if (html && html.trim() !== '' && html !== '<br>' && html !== PLACEHOLDER) {
+    form.value.content = html
   }
 }
 
@@ -328,8 +333,8 @@ function handleCoverUpload(e) {
 
 async function save() {
   if (!form.value.title) return alert('请填写文章标题')
-  // Sync from visual editor if currently in that mode
-  if (newsEditorMode.value === 'visual') syncNewsFromVisual()
+  // Only sync from visual editor if content tab is currently active
+  if (newsEditorMode.value === 'visual' && activeTab.value === 'content') syncNewsFromVisual()
   saving.value = true
   try {
     const fd = new FormData()

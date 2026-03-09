@@ -260,6 +260,25 @@ async function initDb() {
 
   // Migration: add render_mode column to news (default 'direct' = v-html, 'iframe' = full isolation)
   try { db.exec("ALTER TABLE news ADD COLUMN render_mode TEXT DEFAULT 'direct'") } catch (e) { }
+  // Migration: regenerate news slugs that contain timestamp suffixes (13-digit numbers) with clean title+ID slugs
+  try {
+    const allNews = db.prepare('SELECT id, title, title_en, slug FROM news').all()
+    const slugifyNews = (text, id) => {
+      const base = text.toLowerCase()
+        .replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '')
+        .substring(0, 80)
+      return `${base}-${id}`
+    }
+    const updateNewsSlug = db.prepare('UPDATE news SET slug = ? WHERE id = ?')
+    for (const n of allNews) {
+      // Detect timestamp-style slug: ends with 13-digit number
+      const hasTimestamp = /\-\d{13}$/.test(n.slug || '')
+      if (hasTimestamp || !n.slug) {
+        const newSlug = slugifyNews(n.title_en || n.title || `article-${n.id}`, n.id)
+        updateNewsSlug.run(newSlug, n.id)
+      }
+    }
+  } catch (e) { }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS seo_settings (

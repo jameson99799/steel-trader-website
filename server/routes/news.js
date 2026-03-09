@@ -5,14 +5,15 @@ import { upload } from '../middleware/upload.js'
 
 const router = Router()
 
-// Generate slug from title
-function slugify(text) {
-    return text
+// Generate SEO-friendly slug: title words + article ID (no timestamps)
+function slugify(text, id) {
+    const base = text
         .toLowerCase()
         .replace(/[^\w\s-]/g, '')
         .replace(/[\s_-]+/g, '-')
         .replace(/^-+|-+$/g, '')
-        + '-' + Date.now()
+        .substring(0, 80) // max 80 chars for readability
+    return id ? `${base}-${id}` : base
 }
 
 // GET all news (public)
@@ -59,9 +60,13 @@ router.post('/', authMiddleware, upload.single('cover_image'), (req, res) => {
     const result = run(
         `INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status, sort_order, render_mode)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [title, title_en || null, slug, summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status), parseInt(sort_order), render_mode]
+        [title, title_en || null, 'temp', summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status), parseInt(sort_order), render_mode]
     )
-    res.json({ id: result.lastInsertRowid, message: '创建成功' })
+    // Generate clean SEO slug: title_en (preferred) or title + article ID
+    const newId = result.lastInsertRowid
+    const cleanSlug = slugify(title_en || title, newId)
+    run('UPDATE news SET slug = ? WHERE id = ?', [cleanSlug, newId])
+    res.json({ id: newId, message: '创建成功' })
 })
 
 // PUT update news (admin only)
@@ -72,13 +77,15 @@ router.put('/:id', authMiddleware, upload.single('cover_image'), (req, res) => {
 
     const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status, sort_order, render_mode } = req.body
     const cover_image = req.file ? `/uploads/${req.file.filename}` : existing.cover_image
+    // Regenerate clean SEO slug on update
+    const updatedSlug = slugify(title_en || title, id)
 
     run(
-        `UPDATE news SET title=?, title_en=?, summary=?, summary_en=?, content=?, cover_image=?, seo_title=?, seo_description=?, seo_keywords=?, status=?, sort_order=?, render_mode=?, updated_at=CURRENT_TIMESTAMP
+        `UPDATE news SET title=?, title_en=?, slug=?, summary=?, summary_en=?, content=?, cover_image=?, seo_title=?, seo_description=?, seo_keywords=?, status=?, sort_order=?, render_mode=?, updated_at=CURRENT_TIMESTAMP
      WHERE id=?`,
-        [title, title_en || null, summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status || 1), parseInt(sort_order || 0), render_mode || 'direct', id]
+        [title, title_en || null, updatedSlug, summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status || 1), parseInt(sort_order || 0), render_mode || 'direct', id]
     )
-    res.json({ message: '更新成功' })
+    res.json({ message: '更新成功', slug: updatedSlug })
 })
 
 // DELETE news (admin only)
