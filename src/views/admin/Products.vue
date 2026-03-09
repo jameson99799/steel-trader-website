@@ -121,6 +121,25 @@
               <label>产品详情</label>
               <p class="form-hint">支持粘贴 HTML 代码、可视化编辑、点击图片替换、上传图片</p>
 
+              <!-- Template Variables Hint Panel -->
+              <div class="vars-panel">
+                <div class="vars-panel-header" @click="showVarsPanel = !showVarsPanel">
+                  <span>🔗 模板变量（联系方式）</span>
+                  <span class="vars-toggle">{{ showVarsPanel ? '收起 ▲' : '展开 ▼' }}</span>
+                </div>
+                <div v-if="showVarsPanel" class="vars-panel-body">
+                  <p class="vars-desc">在 HTML 中使用以下变量，网站自动替换为后台设置的真实联系方式，修改后台后所有产品自动同步。</p>
+                  <div class="vars-grid">
+                    <div v-for="v in templateVars" :key="v.var" class="var-item" @click="copyVar(v.var)" :title="'点击复制: ' + v.var">
+                      <code class="var-code">{{ v.var }}</code>
+                      <span class="var-desc">{{ v.desc }}</span>
+                      <span class="var-value" v-if="v.preview">→ {{ v.preview }}</span>
+                    </div>
+                  </div>
+                  <p class="vars-example">例：<code>&lt;a href="mailto:{{email}}"&gt;发送邮件&lt;/a&gt;</code> &nbsp; <code>&lt;a href="{{whatsapp_link}}"&gt;WhatsApp联系&lt;/a&gt;</code></p>
+                </div>
+              </div>
+
               <div class="editor-mode-bar">
                 <div class="mode-tabs">
                   <span :class="['mode-tab', editorMode === 'visual' ? 'active' : '']" @click="switchMode('visual')">✏️ 可视化编辑</span>
@@ -214,6 +233,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { useLang } from '../../composables/useLang'
 import api from '../../api'
 
 const products = ref([])
@@ -259,6 +279,31 @@ const flatCategories = computed(() => {
   return result
 })
 
+const { t, localizedValue } = useLang()
+
+const showVarsPanel = ref(false)
+const companyInfo = ref(null)
+
+// Template variables list for the hint panel
+const templateVars = computed(() => {
+  const co = companyInfo.value || {}
+  const whatsapp = co.whatsapp || ''
+  const whatsappRaw = whatsapp.replace(/[^0-9+]/g, '')
+  const whatsappLink = whatsappRaw ? `https://wa.me/${whatsappRaw.replace(/^\+/, '')}` : 'https://wa.me/...'
+  return [
+    { var: '{{email}}',          desc: '邮箱地址',       preview: co.email || '(未设置)' },
+    { var: '{{phone}}',          desc: '电话号码',       preview: co.phone || '(未设置)' },
+    { var: '{{whatsapp}}',       desc: 'WhatsApp号码（显示用）', preview: whatsapp || '(未设置)' },
+    { var: '{{whatsapp_link}}',  desc: 'WhatsApp链接（用于 href）', preview: whatsappLink },
+    { var: '{{whatsapp_raw}}',   desc: 'WhatsApp纯数字', preview: whatsappRaw || '(未设置)' },
+    { var: '{{company_name}}',   desc: '公司名称',       preview: co.name_en || co.name || '(未设置)' },
+  ]
+})
+
+function copyVar(v) {
+  navigator.clipboard?.writeText(v).then(() => alert(`已复制: ${v}`))
+}
+
 const loadProducts = async () => {
   try {
     const res = await api.getProducts({ limit: 100 })
@@ -271,6 +316,8 @@ const loadProducts = async () => {
 const loadCategories = async () => {
   try {
     categories.value = await api.getCategoryTree()
+    // Also load company info for the template variables panel
+    try { companyInfo.value = await api.getCompany() } catch (e) {}
   } catch (e) {
     console.error(e)
   }
@@ -838,4 +885,36 @@ onMounted(() => {
   background: #fff; font-size: 13px; cursor: pointer; color: #374151;
 }
 .editor-btn:hover { background: #eff6ff; border-color: #93c5fd; color: #1e40af; }
+
+/* Template Variables Panel */
+.vars-panel {
+  border: 1px solid #e2e8f0; border-radius: 8px;
+  margin-bottom: 10px; overflow: hidden;
+}
+.vars-panel-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; background: #eff6ff; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: #1e40af;
+  user-select: none;
+}
+.vars-panel-header:hover { background: #dbeafe; }
+.vars-toggle { font-size: 12px; color: #3b82f6; }
+.vars-panel-body { padding: 14px; background: #fff; border-top: 1px solid #e2e8f0; }
+.vars-desc { margin: 0 0 12px; font-size: 12px; color: #64748b; line-height: 1.6; }
+.vars-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.var-item {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px;
+  cursor: pointer; transition: all 0.15s;
+}
+.var-item:hover { border-color: #3b82f6; background: #eff6ff; }
+.var-code {
+  background: #1e40af; color: #fff;
+  padding: 2px 7px; border-radius: 4px;
+  font-size: 12px; font-family: monospace; white-space: nowrap;
+}
+.var-desc { font-size: 12px; color: #374151; flex: 1; }
+.var-value { font-size: 11px; color: #6b7280; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vars-example { margin: 0; font-size: 12px; color: #6b7280; }
+.vars-example code { background: #f1f5f9; padding: 2px 5px; border-radius: 3px; }
 </style>
