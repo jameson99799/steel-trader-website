@@ -5,6 +5,11 @@ import { upload } from '../middleware/upload.js'
 
 const router = Router()
 
+function slugify(text, id) {
+  const base = text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 60)
+  return id ? `${base}-${id}` : base
+}
+
 router.get('/', (req, res) => {
   const categories = getAll('SELECT * FROM categories ORDER BY sort_order, id')
   res.json(categories)
@@ -13,7 +18,7 @@ router.get('/', (req, res) => {
 router.get('/tree', (req, res) => {
   const categories = getAll('SELECT * FROM categories ORDER BY sort_order, id')
   const products = getAll('SELECT category_id, COUNT(*) as count FROM products WHERE status = 1 GROUP BY category_id')
-  
+
   const productCountMap = {}
   products.forEach(p => { productCountMap[p.category_id] = p.count })
 
@@ -40,14 +45,15 @@ router.post('/', authMiddleware, upload.single('image'), (req, res) => {
 
   const result = run('INSERT INTO categories (name, name_en, parent_id, sort_order, image) VALUES (?, ?, ?, ?, ?)',
     [name, name_en || null, parseInt(parent_id), parseInt(sort_order), image])
-
-  res.json({ id: result.lastInsertRowid, message: '创建成功' })
+  const newId = result.lastInsertRowid
+  run('UPDATE categories SET slug = ? WHERE id = ?', [slugify(name_en || name, newId), newId])
+  res.json({ id: newId, message: '创建成功' })
 })
 
 router.put('/:id', authMiddleware, upload.single('image'), (req, res) => {
   const { id } = req.params
   const { name, name_en, parent_id, sort_order } = req.body
-  
+
   const category = getOne('SELECT * FROM categories WHERE id = ?', [id])
   if (!category) {
     return res.status(404).json({ error: '分类不存在' })
@@ -55,15 +61,15 @@ router.put('/:id', authMiddleware, upload.single('image'), (req, res) => {
 
   const image = req.file ? `/uploads/${req.file.filename}` : category.image
 
-  run('UPDATE categories SET name = ?, name_en = ?, parent_id = ?, sort_order = ?, image = ? WHERE id = ?',
-    [name, name_en || null, parseInt(parent_id || 0), parseInt(sort_order || 0), image, id])
+  run('UPDATE categories SET name = ?, name_en = ?, parent_id = ?, sort_order = ?, image = ?, slug = ? WHERE id = ?',
+    [name, name_en || null, parseInt(parent_id || 0), parseInt(sort_order || 0), image, slugify(name_en || name, id), id])
 
   res.json({ message: '更新成功' })
 })
 
 router.delete('/:id', authMiddleware, (req, res) => {
   const { id } = req.params
-  
+
   const hasChildren = getOne('SELECT COUNT(*) as count FROM categories WHERE parent_id = ?', [id])
   if (hasChildren.count > 0) {
     return res.status(400).json({ error: '该分类下有子分类，无法删除' })

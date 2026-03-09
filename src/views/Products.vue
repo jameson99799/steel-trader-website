@@ -28,9 +28,8 @@
               <div class="sidebar-content">
                 <ul class="category-tree">
                   <li class="category-item">
-                    <a 
-                      href="#" 
-                      @click.prevent="selectCategory(null)"
+                    <router-link
+                      to="/products"
                       :class="['category-link', { active: !selectedCategory }]"
                     >
                       <svg class="category-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -38,40 +37,37 @@
                       </svg>
                       <span class="category-name">{{ t('allProducts') }}</span>
                       <span class="category-count">{{ totalProductCount }}</span>
-                    </a>
+                    </router-link>
                   </li>
                   <li v-for="cat in categoryTree" :key="cat.id" class="category-item">
-                    <a 
-                      href="#" 
-                      @click.prevent="selectCategory(cat.id)"
-                      :class="['category-link', { active: selectedCategory === cat.id }]"
+                    <router-link
+                      :to="`/products?category=${cat.slug || cat.id}`"
+                      :class="['category-link', { active: selectedCategory === (cat.slug || String(cat.id)) }]"
                     >
                       <svg class="category-icon" viewBox="0 0 20 20" fill="currentColor">
                         <path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4l2 2h4a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" />
                       </svg>
                       <span class="category-name">{{ localizedValue(cat, 'name') }}</span>
                       <span class="category-count">{{ getTotalCount(cat) }}</span>
-                    </a>
+                    </router-link>
                     <ul v-if="cat.children?.length" class="subcategory-list">
                       <li v-for="child in cat.children" :key="child.id" class="category-item">
-                        <a 
-                          href="#" 
-                          @click.prevent="selectCategory(child.id)"
-                          :class="['category-link subcategory-link', { active: selectedCategory === child.id }]"
+                        <router-link
+                          :to="`/products?category=${child.slug || child.id}`"
+                          :class="['category-link subcategory-link', { active: selectedCategory === (child.slug || String(child.id)) }]"
                         >
                           <span class="category-name">{{ localizedValue(child, 'name') }}</span>
                           <span class="category-count">{{ getTotalCount(child) }}</span>
-                        </a>
+                        </router-link>
                         <ul v-if="child.children?.length" class="subcategory-list">
                           <li v-for="grandChild in child.children" :key="grandChild.id" class="category-item">
-                            <a 
-                              href="#" 
-                              @click.prevent="selectCategory(grandChild.id)"
-                              :class="['category-link subcategory-link', { active: selectedCategory === grandChild.id }]"
+                            <router-link
+                              :to="`/products?category=${grandChild.slug || grandChild.id}`"
+                              :class="['category-link subcategory-link', { active: selectedCategory === (grandChild.slug || String(grandChild.id)) }]"
                             >
                               <span class="category-name">{{ localizedValue(grandChild, 'name') }}</span>
                               <span class="category-count">{{ grandChild.product_count }}</span>
-                            </a>
+                            </router-link>
                           </li>
                         </ul>
                       </li>
@@ -172,13 +168,25 @@ const { t, localizedValue } = useLang()
 
 const categoryTree = ref([])
 const products = ref([])
-const selectedCategory = ref(null)
+const selectedCategory = ref(null) // holds slug string
+
+// Find category ID from slug or numeric string
+const findCategoryIdBySlugOrId = (slugOrId, cats) => {
+  for (const cat of cats) {
+    if (cat.slug === slugOrId || String(cat.id) === slugOrId) return cat.id
+    if (cat.children?.length) {
+      const found = findCategoryIdBySlugOrId(slugOrId, cat.children)
+      if (found) return found
+    }
+  }
+  return null
+}
 
 const currentCategoryName = computed(() => {
   if (!selectedCategory.value) return null
   const findCategory = (cats) => {
     for (const cat of cats) {
-      if (cat.id === selectedCategory.value) return localizedValue(cat, 'name')
+      if (cat.slug === selectedCategory.value || String(cat.id) === selectedCategory.value) return localizedValue(cat, 'name')
       if (cat.children?.length) {
         const found = findCategory(cat.children)
         if (found) return found
@@ -196,31 +204,29 @@ const totalProductCount = computed(() => {
 const getTotalCount = (cat) => {
   let count = cat.product_count || 0
   if (cat.children) {
-    cat.children.forEach(child => {
-      count += getTotalCount(child)
-    })
+    cat.children.forEach(child => { count += getTotalCount(child) })
   }
   return count
 }
 
-const selectCategory = (id) => {
-  selectedCategory.value = id
-  router.push({ query: id ? { category: id } : {} })
-}
-
+// Load products filtered by category ID resolved from slug
 const loadProducts = async () => {
   try {
-    const params = {}
+    const params = { status: 1 }
     if (selectedCategory.value) {
-      params.category_id = selectedCategory.value
+      // Resolve slug to numeric ID for API call
+      const catId = findCategoryIdBySlugOrId(selectedCategory.value, categoryTree.value)
+      if (catId) params.category_id = catId
     }
-    params.status = 1
     const res = await api.getProducts(params)
     products.value = res.data
-  } catch (e) {
-    console.error(e)
-  }
+  } catch (e) { console.error(e) }
 }
+
+// Watch route query changes (back/forward navigation)
+watch(() => route.query.category, (slug) => {
+  selectedCategory.value = slug || null
+})
 
 watch(selectedCategory, loadProducts)
 
@@ -228,12 +234,10 @@ onMounted(async () => {
   try {
     categoryTree.value = await api.getCategoryTree()
     if (route.query.category) {
-      selectedCategory.value = parseInt(route.query.category)
+      selectedCategory.value = route.query.category // use slug directly
     }
     await loadProducts()
-  } catch (e) {
-    console.error(e)
-  }
+  } catch (e) { console.error(e) }
 })
 </script>
 

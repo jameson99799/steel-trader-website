@@ -71,6 +71,15 @@ async function initDb() {
   try { db.exec('ALTER TABLE products ADD COLUMN seo_keywords TEXT') } catch (e) { }
   // Migration: add product slug for SEO-friendly URLs
   try { db.exec('ALTER TABLE products ADD COLUMN slug TEXT') } catch (e) { }
+  // Migration: add category slug for SEO-friendly filter URLs
+  try { db.exec('ALTER TABLE categories ADD COLUMN slug TEXT') } catch (e) { }
+  // Auto-generate slugs for categories without one
+  try {
+    const noCatSlug = db.prepare('SELECT id, name, name_en FROM categories WHERE slug IS NULL OR slug = ""').all()
+    const slugCat = (text, id) => text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 60) + '-' + id
+    const upCatSlug = db.prepare('UPDATE categories SET slug = ? WHERE id = ?')
+    for (const c of noCatSlug) { upCatSlug.run(slugCat(c.name_en || c.name || `cat-${c.id}`, c.id), c.id) }
+  } catch (e) { }
   // Auto-generate slugs for existing products that have none
   try {
     const noSlug = db.prepare('SELECT id, name, name_en FROM products WHERE slug IS NULL OR slug = ""').all()

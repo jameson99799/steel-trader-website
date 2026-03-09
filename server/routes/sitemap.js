@@ -24,8 +24,9 @@ router.get('/', (req, res) => {
         { loc: '/contact', priority: '0.7', changefreq: 'monthly' },
     ]
 
-    const products = getAll(`SELECT id, name_en, created_at FROM products WHERE status = 1 ORDER BY id DESC`)
+    const products = getAll(`SELECT id, slug, name_en, created_at FROM products WHERE status = 1 ORDER BY id DESC`)
     const news = getAll(`SELECT slug, id, title_en, updated_at FROM news WHERE status = 1 ORDER BY id DESC`)
+    const categories = getAll(`SELECT id, slug, name_en FROM categories ORDER BY sort_order, id`)
 
     const now = new Date().toISOString().split('T')[0]
 
@@ -41,11 +42,23 @@ router.get('/', (req, res) => {
   </url>`)
     }
 
-    // Products
+    // Category pages (crawlable filter URLs)
+    for (const c of categories) {
+        const catSlug = c.slug || c.id
+        urls.push(`  <url>
+    <loc>${escapeXml(baseUrl + '/products?category=' + catSlug)}</loc>
+    <lastmod>${now}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`)
+    }
+
+    // Products (use slug for SEO-friendly URLs)
     for (const p of products) {
+        const prodSlug = p.slug || p.id
         const lastmod = p.created_at ? p.created_at.split(' ')[0] : now
         urls.push(`  <url>
-    <loc>${escapeXml(baseUrl + '/products/' + p.id)}</loc>
+    <loc>${escapeXml(baseUrl + '/products/' + prodSlug)}</loc>
     <lastmod>${lastmod}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>

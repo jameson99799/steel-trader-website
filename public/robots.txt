@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://www.sunseasteel.com/sitemap.xml
+
+# Block admin area
+Disallow: /admin/
+Disallow: /api/
