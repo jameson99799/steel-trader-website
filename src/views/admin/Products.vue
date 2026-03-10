@@ -202,8 +202,8 @@
                 <div v-else class="html-preview" v-html="form.detail_content"></div>
               </div>
 
-              <!-- Hidden file input for single image upload -->
-              <input type="file" ref="imgUploadInput" accept="image/*" style="display:none" @change="handleImgUpload" />
+              <!-- Hidden file input for image upload (supports multi-select) -->
+              <input type="file" ref="imgUploadInput" accept="image/*" multiple style="display:none" @change="handleImgUpload" />
               <!-- Hidden file input for carousel (multi-select) -->
               <input type="file" ref="carouselUploadInput" accept="image/*" multiple style="display:none" @change="handleCarouselUpload" />
             </div>
@@ -647,29 +647,54 @@ async function handleCarouselUpload(e) {
 }
 
 async function handleImgUpload(e) {
-  const file = e.target.files?.[0]
-  if (!file) return
-  try {
-    const res = await api.upload(file)
-    if (replacingImg) {
-      // Replace existing image src
+  const files = Array.from(e.target.files || [])
+  if (!files.length) return
+
+  // If replacing an existing image in visual mode, just replace the single image
+  if (replacingImg && files.length >= 1) {
+    try {
+      const res = await api.upload(files[0])
       replacingImg.src = res.url
       replacingImg.style.outline = ''
       replacingImg = null
       syncFromVisual()
-    } else if (editorMode.value === 'visual' && visualEditorEl.value) {
-      // Insert new image at cursor
-      visualEditorEl.value.focus()
+    } catch (err) { alert('图片上传失败: ' + err.message) }
+    if (imgUploadInput.value) imgUploadInput.value.value = ''
+    return
+  }
+
+  // Multiple images selected → generate carousel
+  if (files.length > 1) {
+    try {
+      const results = await Promise.all(files.map(f => api.upload(f)))
+      const urls = results.map(r => r.url)
+      const carouselHtml = generateCarouselHtml(urls)
+      if (editorMode.value === 'visual' && visualEditorEl.value) {
+        visualEditorEl.value.innerHTML += carouselHtml
+        syncFromVisual()
+      } else {
+        form.detail_content = (form.detail_content || '') + carouselHtml
+      }
+      alert(`✅ 已插入包含 ${urls.length} 张图片的轮播图！`)
+    } catch (err) { alert('图片上传失败: ' + err.message) }
+    if (imgUploadInput.value) imgUploadInput.value.value = ''
+    return
+  }
+
+  // Single image selected → insert as <img>
+  const file = files[0]
+  try {
+    const res = await api.upload(file)
+    if (editorMode.value === 'visual' && visualEditorEl.value) {
       document.execCommand('insertImage', false, res.url)
       syncFromVisual()
     } else {
-      // Insert in HTML mode
-      form.detail_content = (form.detail_content || '') + `\n<img src="${res.url}" style="max-width:100%" />\n`
+      const imgTag = `<img src="${res.url}" style="max-width:100%;height:auto;border-radius:8px;" alt="" />`
+      form.detail_content = (form.detail_content || '') + imgTag
     }
   } catch (err) {
     alert('图片上传失败: ' + err.message)
   }
-  // Reset file input
   if (imgUploadInput.value) imgUploadInput.value.value = ''
 }
 
