@@ -94,6 +94,15 @@ async function initDb() {
   try { db.exec('ALTER TABLE company ADD COLUMN map_embed_url TEXT') } catch (e) { }
   // Migration: add show_contact_panel to page_texts
   try { db.exec('ALTER TABLE page_texts ADD COLUMN show_contact_panel INTEGER DEFAULT 0') } catch (e) { }
+  // Migration: add GEO SEO fields to seo_settings
+  try { db.exec("ALTER TABLE seo_settings ADD COLUMN geo_region TEXT DEFAULT ''") } catch (e) { }
+  try { db.exec("ALTER TABLE seo_settings ADD COLUMN geo_placename TEXT DEFAULT ''") } catch (e) { }
+  try { db.exec("ALTER TABLE seo_settings ADD COLUMN geo_lat TEXT DEFAULT ''") } catch (e) { }
+  try { db.exec("ALTER TABLE seo_settings ADD COLUMN geo_lng TEXT DEFAULT ''") } catch (e) { }
+  try { db.exec("ALTER TABLE seo_settings ADD COLUMN hreflang_en TEXT DEFAULT 'en'") } catch (e) { }
+  try { db.exec("ALTER TABLE seo_settings ADD COLUMN hreflang_zh TEXT DEFAULT 'zh-CN'") } catch (e) { }
+  try { db.exec("ALTER TABLE seo_settings ADD COLUMN local_business_type TEXT DEFAULT 'Manufacturer'") } catch (e) { }
+  try { db.exec("ALTER TABLE seo_settings ADD COLUMN local_business_address TEXT DEFAULT ''") } catch (e) { }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS banners (

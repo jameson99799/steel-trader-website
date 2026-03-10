@@ -104,6 +104,73 @@
           <small>设置搜索引擎爬虫访问规则。默认允许所有爬虫。</small>
         </div>
       </div>
+
+      <!-- GEO SEO Card -->
+      <div class="seo-card geo-card" style="grid-column: 1 / -1;">
+        <h3>🌐 GEO地理定向优化（Google本地搜索 SEO）</h3>
+        <p style="color:#64748b;font-size:13px;margin-bottom:16px;">GEO优化帮助 Google 了解您的业务所在地区，提升特定地区用户的搜索重要性。页面源码将自动注入 geo.region、geo.position、hreflang 和 LocalBusiness JSON-LD。</p>
+        <div class="grid grid-3">
+          <div class="form-group">
+            <label>🏳 地区代码（geo.region）</label>
+            <input v-model="form.geo_region" class="form-control" placeholder="CN-GD" />
+            <small>格式：国家代码-省份代码，如 CN-GD（广东）、US-CA（加州）、GB（英国）</small>
+          </div>
+          <div class="form-group">
+            <label>🏙 城市名称（geo.placename）</label>
+            <input v-model="form.geo_placename" class="form-control" placeholder="Guangzhou, China" />
+            <small>英文城市名，如 Guangzhou, China</small>
+          </div>
+          <div class="form-group">
+            <label>🏭 业务类型</label>
+            <select v-model="form.local_business_type" class="form-control">
+              <option value="Manufacturer">制造商（Manufacturer）</option>
+              <option value="WholesaleStore">批发商（WholesaleStore）</option>
+              <option value="Store">零售商（Store）</option>
+              <option value="LocalBusiness">本地业务（LocalBusiness）</option>
+              <option value="Organization">组织机构（Organization）</option>
+              <option value="Corporation">公司（Corporation）</option>
+            </select>
+            <small>用于 Google LocalBusiness 结构化数据</small>
+          </div>
+        </div>
+        <div class="grid grid-3">
+          <div class="form-group">
+            <label>📍 纬度（Latitude）</label>
+            <input v-model="form.geo_lat" class="form-control" placeholder="23.1291" />
+            <small>如：23.1291（可在 Google Maps 查询）</small>
+          </div>
+          <div class="form-group">
+            <label>📍 经度（Longitude）</label>
+            <input v-model="form.geo_lng" class="form-control" placeholder="113.2644" />
+            <small>如：113.2644</small>
+          </div>
+          <div class="form-group">
+            <label>📍 完整地址（英文）</label>
+            <input v-model="form.local_business_address" class="form-control" placeholder="123 Steel Road, Guangzhou, Guangdong, China" />
+            <small>详细英文地址，用于 LocalBusiness JSON-LD</small>
+          </div>
+        </div>
+        <div class="grid grid-2">
+          <div class="form-group">
+            <label>🇴🌐 hreflang 英文代码</label>
+            <input v-model="form.hreflang_en" class="form-control" placeholder="en" />
+            <small>英文语言标签，如 en、en-US、en-GB（默认 en）</small>
+          </div>
+          <div class="form-group">
+            <label>🇨🇳 hreflang 中文代码</label>
+            <input v-model="form.hreflang_zh" class="form-control" placeholder="zh-CN" />
+            <small>中文语言标签，如 zh-CN、zh-TW（默认 zh-CN）</small>
+          </div>
+        </div>
+        <div class="geo-preview" v-if="form.geo_lat && form.geo_lng">
+          <p>✅ 预览将注入的 Meta 标签：</p>
+          <code>&lt;meta name="geo.region" content="{{ form.geo_region }}" /&gt;</code><br/>
+          <code>&lt;meta name="geo.placename" content="{{ form.geo_placename }}" /&gt;</code><br/>
+          <code>&lt;meta name="geo.position" content="{{ form.geo_lat }};{{ form.geo_lng }}" /&gt;</code><br/>
+          <code>&lt;meta name="ICBM" content="{{ form.geo_lat }}, {{ form.geo_lng }}" /&gt;</code><br/>
+          <code>&lt;link rel="alternate" hreflang="{{ form.hreflang_en }}" href="..." /&gt;</code>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -124,7 +191,16 @@ const form = ref({
   site_keywords: '',
   google_analytics: '',
   google_search_console: '',
-  robots_txt: 'User-agent: *\nAllow: /\n'
+  robots_txt: 'User-agent: *\nAllow: /\n',
+  // GEO SEO fields
+  geo_region: '',
+  geo_placename: '',
+  geo_lat: '',
+  geo_lng: '',
+  hreflang_en: 'en',
+  hreflang_zh: 'zh-CN',
+  local_business_type: 'Manufacturer',
+  local_business_address: ''
 })
 
 const scoreClass = computed(() => {
@@ -161,7 +237,16 @@ async function load() {
         site_keywords: data.site_keywords || '',
         google_analytics: data.google_analytics || '',
         google_search_console: data.google_search_console || '',
-        robots_txt: data.robots_txt || 'User-agent: *\nAllow: /\n'
+        robots_txt: data.robots_txt || 'User-agent: *\nAllow: /\n',
+        // GEO fields
+        geo_region: data.geo_region || '',
+        geo_placename: data.geo_placename || '',
+        geo_lat: data.geo_lat || '',
+        geo_lng: data.geo_lng || '',
+        hreflang_en: data.hreflang_en || 'en',
+        hreflang_zh: data.hreflang_zh || 'zh-CN',
+        local_business_type: data.local_business_type || 'Manufacturer',
+        local_business_address: data.local_business_address || ''
       }
       if (data.og_image) ogPreview.value = data.og_image
     }

@@ -140,6 +140,28 @@
                 </div>
               </div>
 
+              <!-- HTML Code Hints Panel -->
+              <div class="vars-panel" style="border-color:#d1fae5;">
+                <div class="vars-panel-header" style="background:#f0fdf4;color:#065f46;" @click="showHtmlHints = !showHtmlHints">
+                  <span>📋 HTML代码提示（单图 / 轮播图）</span>
+                  <span class="vars-toggle">{{ showHtmlHints ? '收起 ▲' : '展开 ▼' }}</span>
+                </div>
+                <div v-if="showHtmlHints" class="vars-panel-body">
+                  <div class="html-hints-grid">
+                    <div class="hint-block">
+                      <p class="hint-title">🖼️ 单张图片</p>
+                      <pre class="hint-code" @click="copyHint(singleImgCode)">{{ singleImgCode }}</pre>
+                      <p class="hint-note">将 src 换成图片URL，也可点击「插入图片」按钮自动插入</p>
+                    </div>
+                    <div class="hint-block">
+                      <p class="hint-title">🎠 轮播图（多图）</p>
+                      <pre class="hint-code" @click="copyHint(carouselCode)">{{ carouselCode }}</pre>
+                      <p class="hint-note">复制后替换 src 为真实图片URL，或点击「插入轮播图」按钮自动生成</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div class="editor-mode-bar">
                 <div class="mode-tabs">
                   <span :class="['mode-tab', editorMode === 'visual' ? 'active' : '']" @click="switchMode('visual')">✏️ 可视化编辑</span>
@@ -147,7 +169,8 @@
                   <span :class="['mode-tab', editorMode === 'preview' ? 'active' : '']" @click="switchMode('preview')">👁 预览</span>
                 </div>
                 <div class="editor-actions">
-                  <button type="button" class="editor-btn" @click="insertImage" title="上传图片">📷 插入图片</button>
+                  <button type="button" class="editor-btn" @click="insertImage" title="插入单张图片">📷 插入图片</button>
+                  <button type="button" class="editor-btn carousel-btn" @click="insertCarousel" title="上传多张图片生成轮播图">🎠 插入轮播图</button>
                   <button type="button" class="fullscreen-btn" @click="prodFullscreen = !prodFullscreen">
                     {{ prodFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
                   </button>
@@ -179,8 +202,10 @@
                 <div v-else class="html-preview" v-html="form.detail_content"></div>
               </div>
 
-              <!-- Hidden file input for image upload -->
+              <!-- Hidden file input for single image upload -->
               <input type="file" ref="imgUploadInput" accept="image/*" style="display:none" @change="handleImgUpload" />
+              <!-- Hidden file input for carousel (multi-select) -->
+              <input type="file" ref="carouselUploadInput" accept="image/*" multiple style="display:none" @change="handleCarouselUpload" />
             </div>
             <div class="grid grid-3">
               <div class="form-group">
@@ -282,7 +307,28 @@ const flatCategories = computed(() => {
 const { t, localizedValue } = useLang()
 
 const showVarsPanel = ref(false)
+const showHtmlHints = ref(false)
 const companyInfo = ref(null)
+
+// HTML code hint strings
+const singleImgCode = `<img src="https://your-image-url.jpg"
+     alt="product image"
+     style="max-width:100%;height:auto;display:block;margin:0 auto;" />`
+
+const carouselCode = `<div class="ps-slider">
+  <div class="ps-slides">
+    <div class="ps-slide"><img src="https://img1.jpg" /></div>
+    <div class="ps-slide"><img src="https://img2.jpg" /></div>
+    <div class="ps-slide"><img src="https://img3.jpg" /></div>
+  </div>
+  <button class="ps-prev">&#8249;</button>
+  <button class="ps-next">&#8250;</button>
+  <div class="ps-dots"></div>
+</div>`
+
+function copyHint(code) {
+  navigator.clipboard?.writeText(code).then(() => alert('已复制到剪贴板'))
+}
 
 // Template variables list for the hint panel
 const templateVars = computed(() => {
@@ -510,6 +556,76 @@ async function onVisualPaste(e) {
 function insertImage() {
   replacingImg = null
   imgUploadInput.value?.click()
+}
+
+function insertCarousel() {
+  carouselUploadInput.value?.click()
+}
+
+// Generate self-contained carousel HTML (pure HTML/CSS/JS, works inside iframe)
+function generateCarouselHtml(urls) {
+  const slides = urls.map(u => `<div class="ps-slide"><img src="${u}" /></div>`).join('\n    ')
+  const dots = urls.map((_, i) => `<span class="ps-dot${i === 0 ? ' active' : ''}" data-i="${i}"></span>`).join('')
+  return `
+<div class="ps-slider">
+  <div class="ps-slides">
+    ${slides}
+  </div>
+  <button class="ps-prev">&#8249;</button>
+  <button class="ps-next">&#8250;</button>
+  <div class="ps-dots">${dots}</div>
+</div>
+<style>
+.ps-slider{position:relative;overflow:hidden;border-radius:8px;background:#000;user-select:none}
+.ps-slides{display:flex;transition:transform .4s ease}
+.ps-slide{min-width:100%;text-align:center}
+.ps-slide img{max-width:100%;max-height:520px;height:auto;object-fit:contain;display:block;margin:0 auto}
+.ps-prev,.ps-next{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.45);color:#fff;border:none;font-size:32px;line-height:1;padding:4px 14px;cursor:pointer;border-radius:4px;z-index:10;transition:background .2s}
+.ps-prev{left:8px}.ps-next{right:8px}
+.ps-prev:hover,.ps-next:hover{background:rgba(0,0,0,.75)}
+.ps-dots{text-align:center;padding:10px 0;background:rgba(0,0,0,.3)}
+.ps-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#fff;opacity:.45;margin:0 4px;cursor:pointer;transition:opacity .2s}
+.ps-dot.active{opacity:1}
+</style>
+<script>
+(function(){
+  var sliders=document.querySelectorAll('.ps-slider');
+  sliders.forEach(function(box){
+    var slides=box.querySelector('.ps-slides');
+    var dots=box.querySelectorAll('.ps-dot');
+    var total=box.querySelectorAll('.ps-slide').length;
+    var cur=0;
+    function go(n){cur=(n+total)%total;slides.style.transform='translateX(-'+cur*100+'%)';dots.forEach(function(d,i){d.classList.toggle('active',i===cur);});}
+    box.querySelector('.ps-prev').addEventListener('click',function(){go(cur-1);});
+    box.querySelector('.ps-next').addEventListener('click',function(){go(cur+1);});
+    dots.forEach(function(d,i){d.addEventListener('click',function(){go(i);});});
+  });
+})();
+<\/script>
+`
+}
+
+async function handleCarouselUpload(e) {
+  const files = Array.from(e.target.files || [])
+  if (!files.length) return
+  try {
+    // Upload all images in parallel
+    const results = await Promise.all(files.map(f => api.upload(f)))
+    const urls = results.map(r => r.url)
+    const carouselHtml = generateCarouselHtml(urls)
+    if (editorMode.value === 'visual' && visualEditorEl.value) {
+      // In visual mode: append to editor
+      visualEditorEl.value.innerHTML += carouselHtml
+      syncFromVisual()
+    } else {
+      // In HTML/preview mode: append to content
+      form.detail_content = (form.detail_content || '') + carouselHtml
+    }
+    alert(`✅ 已插入包含 ${urls.length} 张图片的轮播图！`)
+  } catch (err) {
+    alert('图片上传失败: ' + err.message)
+  }
+  if (carouselUploadInput.value) carouselUploadInput.value.value = ''
 }
 
 async function handleImgUpload(e) {
@@ -834,6 +950,22 @@ onMounted(() => {
 .add-block-btn:hover { border-color: #0077b5; color: #0077b5; background: #eff8ff; }
 
 /* HTML source code editor */
+.carousel-btn { background: #ecfdf5 !important; border-color: #6ee7b7 !important; color: #065f46 !important; }
+.carousel-btn:hover { background: #d1fae5 !important; border-color: #34d399 !important; }
+
+/* HTML hints panel */
+.html-hints-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 700px) { .html-hints-grid { grid-template-columns: 1fr; } }
+.hint-block { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; }
+.hint-title { margin: 0 0 6px; font-size: 12px; font-weight: 700; color: #374151; }
+.hint-code {
+  font-family: monospace; font-size: 11px; background: #1e293b; color: #7dd3fc;
+  padding: 8px; border-radius: 4px; overflow-x: auto; white-space: pre; cursor: pointer;
+  margin: 0 0 6px; line-height: 1.5;
+}
+.hint-code:hover { background: #0f172a; }
+.hint-note { margin: 0; font-size: 11px; color: #6b7280; }
+
 .html-editor {
   width: 100%; min-height: 400px; padding: 16px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;

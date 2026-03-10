@@ -12,18 +12,35 @@ router.get('/', (req, res) => {
 
 router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
     const existing = getOne('SELECT * FROM seo_settings WHERE id = 1')
-    const { site_title, site_description, site_keywords, google_analytics, google_search_console, robots_txt } = req.body
+    const {
+        site_title, site_description, site_keywords, google_analytics, google_search_console, robots_txt,
+        geo_region, geo_placename, geo_lat, geo_lng, hreflang_en, hreflang_zh,
+        local_business_type, local_business_address
+    } = req.body
     const og_image = req.file ? `/uploads/${req.file.filename}` : existing?.og_image
 
     if (existing) {
         run(
-            'UPDATE seo_settings SET site_title=?, site_description=?, site_keywords=?, og_image=?, google_analytics=?, google_search_console=?, robots_txt=?, updated_at=CURRENT_TIMESTAMP WHERE id=1',
-            [site_title, site_description, site_keywords, og_image, google_analytics, google_search_console, robots_txt]
+            `UPDATE seo_settings SET site_title=?, site_description=?, site_keywords=?, og_image=?,
+            google_analytics=?, google_search_console=?, robots_txt=?,
+            geo_region=?, geo_placename=?, geo_lat=?, geo_lng=?,
+            hreflang_en=?, hreflang_zh=?, local_business_type=?, local_business_address=?,
+            updated_at=CURRENT_TIMESTAMP WHERE id=1`,
+            [site_title, site_description, site_keywords, og_image,
+                google_analytics, google_search_console, robots_txt,
+                geo_region, geo_placename, geo_lat, geo_lng,
+                hreflang_en, hreflang_zh, local_business_type, local_business_address]
         )
     } else {
         run(
-            'INSERT INTO seo_settings (id, site_title, site_description, site_keywords, og_image, google_analytics, google_search_console, robots_txt) VALUES (1,?,?,?,?,?,?,?)',
-            [site_title, site_description, site_keywords, og_image, google_analytics, google_search_console, robots_txt]
+            `INSERT INTO seo_settings
+            (id, site_title, site_description, site_keywords, og_image, google_analytics, google_search_console, robots_txt,
+             geo_region, geo_placename, geo_lat, geo_lng, hreflang_en, hreflang_zh, local_business_type, local_business_address)
+            VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [site_title, site_description, site_keywords, og_image,
+                google_analytics, google_search_console, robots_txt,
+                geo_region, geo_placename, geo_lat, geo_lng,
+                hreflang_en, hreflang_zh, local_business_type, local_business_address]
         )
     }
     res.json({ message: '保存成功' })
