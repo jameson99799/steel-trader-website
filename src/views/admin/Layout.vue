@@ -21,6 +21,7 @@
         <router-link to="/admin/translations">🤖 AI翻译</router-link>
         <router-link to="/admin/email">📧 邮件通知</router-link>
         <router-link to="/admin/google-index">🔍 Google收录</router-link>
+        <router-link to="/admin/ai-settings">🤖 AI设置</router-link>
         <router-link to="/admin/settings">⚙️ 系统设置</router-link>
       </nav>
       <div class="sidebar-footer">

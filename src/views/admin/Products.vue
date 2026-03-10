@@ -39,6 +39,7 @@
                 <button class="btn btn-sm btn-secondary" @click="openModal(product)">编辑</button>
                 <button class="btn btn-sm btn-outline" @click="duplicateProduct(product)" style="color:#0077b5;border-color:#0077b5;">复制</button>
                 <button class="btn btn-sm btn-danger" @click="handleDelete(product)">删除</button>
+                <button class="btn btn-sm btn-outline" @click="$router.push(`/admin/products/ai/${product.id}`)" style="color:#7c3aed;border-color:#7c3aed;">🤖 AI</button>
               </td>
             </tr>
           </tbody>

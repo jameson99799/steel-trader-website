@@ -107,6 +107,19 @@ async function initDb() {
   try { db.exec("ALTER TABLE products ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }
   try { db.exec("ALTER TABLE news ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }
 
+  // AI Channels table for AI product generation
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_channels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      api_url TEXT NOT NULL DEFAULT 'https://api.openai.com/v1',
+      api_key TEXT NOT NULL DEFAULT '',
+      models TEXT DEFAULT '[]',
+      is_default INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS banners (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

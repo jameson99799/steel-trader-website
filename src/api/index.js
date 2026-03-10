@@ -173,7 +173,14 @@ export const api = {
     Object.keys(localStorage).filter(k => k.startsWith('_api_cache_')).forEach(k => localStorage.removeItem(k))
     return request('/translation/override', { method: 'POST', body: JSON.stringify(data) })
   },
-  getTranslations: (lang) => request(`/translation/${lang}`)
+  getTranslations: (lang) => request(`/translation/${lang}`),
+
+  // AI Channels
+  getAIChannels: () => request('/ai/channels'),
+  createAIChannel: (data) => request('/ai/channels', { method: 'POST', body: JSON.stringify(data) }),
+  updateAIChannel: (id, data) => request(`/ai/channels/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAIChannel: (id) => request(`/ai/channels/${id}`, { method: 'DELETE' }),
+  getAIModels: (id) => request(`/ai/channels/${id}/models`),
 }
 
 export default api
