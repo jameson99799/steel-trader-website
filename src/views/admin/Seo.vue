@@ -107,8 +107,8 @@
 
       <!-- GEO SEO Card -->
       <div class="seo-card geo-card" style="grid-column: 1 / -1;">
-        <h3>🌐 GEO地理定向优化（Google本地搜索 SEO）</h3>
-        <p style="color:#64748b;font-size:13px;margin-bottom:16px;">GEO优化帮助 Google 了解您的业务所在地区，提升特定地区用户的搜索重要性。页面源码将自动注入 geo.region、geo.position、hreflang 和 LocalBusiness JSON-LD。</p>
+        <h3>🤖 GEO 生成式引擎优化（Generative Engine Optimization）</h3>
+        <p style="color:#64748b;font-size:13px;margin-bottom:16px;">GEO 优化让 AI 搜索引擎（Google AI Overviews、Bing Copilot、ChatGPT Search、Perplexity 等）更好地理解和引用您的网站内容。系统自动注入 Product / Article / FAQ 结构化数据（JSON-LD）以及地理信号（geo.region、hreflang、LocalBusiness），帮助 AI 搜索引擎生成更权威的回答并引用您的网站。<br/><strong>产品页还可单独添加 FAQ 问答数据</strong>（编辑产品 → GEO FAQ 区域），AI 引擎会优先引用包含 FAQ 的内容。</p>
         <div class="grid grid-3">
           <div class="form-group">
             <label>🏳 地区代码（geo.region）</label>

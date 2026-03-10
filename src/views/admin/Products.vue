@@ -245,6 +245,20 @@
                 <input v-model="form.seo_keywords" type="text" class="form-control" placeholder="关键词1, 关键词2, 关键词3" />
               </div>
             </div>
+
+            <!-- GEO FAQ Section -->
+            <div class="seo-section" style="border-color: #c7d2fe;">
+              <h4 class="seo-section-title" style="color: #4338ca;">🤖 GEO优化 — FAQ结构化数据（可选）</h4>
+              <p style="font-size:12px;color:#6b7280;margin:-8px 0 12px;">Generative Engine Optimization：添加常见问答，AI搜索引擎（Google AI、Bing Copilot、Perplexity等）会优先引用包含 FAQ 结构化数据的内容。</p>
+              <div v-for="(faq, index) in faqItems" :key="index" class="faq-row">
+                <div class="faq-fields">
+                  <input v-model="faq.question" class="form-control" placeholder="问题（英文），如：What is the MOQ for this product?" />
+                  <textarea v-model="faq.answer" class="form-control" rows="2" placeholder="回答（英文），如：Our minimum order quantity is 1 ton..."></textarea>
+                </div>
+                <button type="button" class="btn btn-sm btn-danger" @click="faqItems.splice(index, 1)">删除</button>
+              </div>
+              <button type="button" class="btn btn-sm btn-secondary" @click="faqItems.push({ question: '', answer: '' })">➕ 添加FAQ</button>
+            </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" @click="showModal = false">取消</button>
@@ -273,6 +287,8 @@ const prodFullscreen = ref(false)
 const editorMode = ref('visual')  // 'visual' | 'html' | 'preview'
 const visualEditorEl = ref(null)
 const imgUploadInput = ref(null)
+const carouselUploadInput = ref(null)
+const faqItems = ref([])
 let replacingImg = null  // track image being replaced
 
 const form = reactive({
@@ -385,6 +401,7 @@ const openModal = async (product = null) => {
   form.seo_keywords = product?.seo_keywords || ''
   existingImages.value = product?.images?.split(',').filter(Boolean) || []
   specs.value = product?.specs ? JSON.parse(product.specs) : []
+  faqItems.value = product?.faq_items ? (typeof product.faq_items === 'string' ? JSON.parse(product.faq_items) : product.faq_items) : []
   imageFiles.value = []
   
   // Reset editor state
@@ -436,6 +453,7 @@ const handleSubmit = async () => {
     formData.append('seo_title', form.seo_title || '')
     formData.append('seo_description', form.seo_description || '')
     formData.append('seo_keywords', form.seo_keywords || '')
+    formData.append('faq_items', JSON.stringify(faqItems.value.filter(f => f.question && f.answer)))
     formData.append('existing_images', existingImages.value.join(','))
     
     imageFiles.value.forEach(file => {
@@ -938,6 +956,11 @@ onMounted(() => {
 .block-caption-input::placeholder { color: #cbd5e1; }
 
 /* Add block row */
+
+/* FAQ editor */
+.faq-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+.faq-fields { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.faq-fields input, .faq-fields textarea { font-size: 13px; }
 .add-block-row {
   display: flex; flex-wrap: wrap; gap: 8px;
   padding: 12px 0; border-top: 1px dashed #e2e8f0; margin-top: 8px;

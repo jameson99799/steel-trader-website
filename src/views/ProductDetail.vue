@@ -442,6 +442,80 @@ onMounted(async () => {
     company.value = comp
     pageTexts.value = texts
     allCategories.value = cats || []
+
+    // ── GEO: Inject Product JSON-LD structured data ──────────────────
+    if (product.value) {
+      const p = product.value
+      const siteUrl = window.location.origin
+      const productUrl = `${siteUrl}/products/${p.slug || p.id}`
+      const productName = p.name_en || p.name || ''
+      const productDesc = p.seo_description || p.description_en || p.description || ''
+      const productImages = (p.images || '').split(',').filter(Boolean).map(img => img.startsWith('http') ? img : siteUrl + img)
+
+      // Product schema
+      const productSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        'name': productName,
+        'description': productDesc,
+        'url': productUrl,
+        ...(productImages.length && { 'image': productImages }),
+        ...(p.category_name && { 'category': p.category_name }),
+        ...(comp?.name_en && {
+          'brand': { '@type': 'Brand', 'name': comp.name_en || comp.name },
+          'manufacturer': { '@type': 'Organization', 'name': comp.name_en || comp.name }
+        })
+      }
+
+      // Add specs as additionalProperty for AI engines
+      if (p.specs) {
+        try {
+          const specsList = JSON.parse(p.specs)
+          if (specsList.length) {
+            productSchema.additionalProperty = specsList.map(s => ({
+              '@type': 'PropertyValue',
+              'name': s.name,
+              'value': s.value
+            }))
+          }
+        } catch (e) {}
+      }
+
+      // Remove existing and inject
+      document.getElementById('product-jsonld')?.remove()
+      const script = document.createElement('script')
+      script.id = 'product-jsonld'
+      script.type = 'application/ld+json'
+      script.textContent = JSON.stringify(productSchema, null, 2)
+      document.head.appendChild(script)
+
+      // FAQ schema (if product has faq_items)
+      if (p.faq_items) {
+        try {
+          const faqs = JSON.parse(p.faq_items)
+          if (faqs.length) {
+            const faqSchema = {
+              '@context': 'https://schema.org',
+              '@type': 'FAQPage',
+              'mainEntity': faqs.map(f => ({
+                '@type': 'Question',
+                'name': f.question,
+                'acceptedAnswer': {
+                  '@type': 'Answer',
+                  'text': f.answer
+                }
+              }))
+            }
+            document.getElementById('faq-jsonld')?.remove()
+            const faqScript = document.createElement('script')
+            faqScript.id = 'faq-jsonld'
+            faqScript.type = 'application/ld+json'
+            faqScript.textContent = JSON.stringify(faqSchema, null, 2)
+            document.head.appendChild(faqScript)
+          }
+        } catch (e) {}
+      }
+    }
   } catch (e) {
     console.error(e)
   }

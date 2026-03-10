@@ -167,6 +167,60 @@ async function loadArticle(slug) {
     pageTexts.value = texts
     if (article.value) {
       document.title = article.value.seo_title || localizedValue(article.value, 'title')
+
+      // ── GEO: Inject Article JSON-LD ──────────────────────────
+      const a = article.value
+      const siteUrl = window.location.origin
+      const articleUrl = `${siteUrl}/news/${a.slug || a.id}`
+      const articleTitle = a.seo_title || a.title_en || a.title || ''
+      const articleDesc = a.seo_description || a.summary_en || a.summary || ''
+
+      const articleSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        'headline': articleTitle,
+        'description': articleDesc,
+        'url': articleUrl,
+        'datePublished': a.created_at,
+        ...(a.updated_at && { 'dateModified': a.updated_at }),
+        ...(a.cover_image && { 'image': a.cover_image.startsWith('http') ? a.cover_image : siteUrl + a.cover_image }),
+        'publisher': {
+          '@type': 'Organization',
+          'name': document.title || 'SunSea Steel'
+        },
+        'mainEntityOfPage': { '@type': 'WebPage', '@id': articleUrl }
+      }
+
+      document.getElementById('article-jsonld')?.remove()
+      const script = document.createElement('script')
+      script.id = 'article-jsonld'
+      script.type = 'application/ld+json'
+      script.textContent = JSON.stringify(articleSchema, null, 2)
+      document.head.appendChild(script)
+
+      // FAQ schema (if article has faq_items)
+      if (a.faq_items) {
+        try {
+          const faqs = JSON.parse(a.faq_items)
+          if (faqs.length) {
+            const faqSchema = {
+              '@context': 'https://schema.org',
+              '@type': 'FAQPage',
+              'mainEntity': faqs.map(f => ({
+                '@type': 'Question',
+                'name': f.question,
+                'acceptedAnswer': { '@type': 'Answer', 'text': f.answer }
+              }))
+            }
+            document.getElementById('faq-jsonld')?.remove()
+            const faqScript = document.createElement('script')
+            faqScript.id = 'faq-jsonld'
+            faqScript.type = 'application/ld+json'
+            faqScript.textContent = JSON.stringify(faqSchema, null, 2)
+            document.head.appendChild(faqScript)
+          }
+        } catch (e) {}
+      }
     }
   } catch (e) {
     console.error(e)
