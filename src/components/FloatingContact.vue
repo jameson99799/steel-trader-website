@@ -27,7 +27,7 @@
     </div>
 
     <!-- WeChat -->
-    <div class="panel-item" v-if="company.wechat || company.wechat_qr">
+    <div class="panel-item wechat-item" v-if="company.wechat || company.wechat_qr">
       <div class="panel-qr-wrap" v-if="company.wechat_qr">
         <img
           :src="company.wechat_qr"
@@ -284,6 +284,8 @@ onMounted(async () => {
   }
   .panel-header { display: none; }
   .panel-qr-wrap { display: none; }
+  /* Hide WeChat on mobile — only show WhatsApp, Tel, Email */
+  .wechat-item { display: none !important; }
   .panel-item { flex: 1; border-bottom: none; border-right: 1px solid #f1f5f9; }
   .panel-row { flex-direction: column; gap: 2px; padding: 8px 4px; justify-content: center; align-items: center; text-align: center; }
   .row-num { font-size: 11px; max-width: 80px; }

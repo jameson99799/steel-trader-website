@@ -487,27 +487,31 @@ onUnmounted(() => {
   .logo-text {
     display: none;
   }
+
+  .header-main {
+    position: relative;
+  }
   
   .main-nav {
-    position: fixed;
+    position: absolute;
     top: 100%;
     left: 0;
     right: 0;
     background: var(--white);
     flex-direction: column;
-    padding: var(--spacing-md);
+    padding: 0;
     gap: 0;
-    box-shadow: var(--shadow-lg);
-    transform: translateY(-100%);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    z-index: 200;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease, opacity 0.3s ease;
     opacity: 0;
-    visibility: hidden;
-    transition: var(--transition-slow);
   }
 
   .main-nav.active {
-    transform: translateY(0);
+    max-height: 400px;
     opacity: 1;
-    visibility: visible;
   }
 
   .nav-link {
