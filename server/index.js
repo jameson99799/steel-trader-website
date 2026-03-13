@@ -64,9 +64,18 @@ async function startServer() {
 
     // 生产环境静态文件
     if (NODE_ENV === 'production') {
+      // Hashed asset files get long cache (JS/CSS/images with hash in filename)
       app.use(express.static(join(__dirname, '..', 'dist'), {
         maxAge: '1y',
-        etag: true
+        etag: true,
+        setHeaders(res, path) {
+          // index.html must NOT be cached — it references hashed JS/CSS
+          if (path.endsWith('.html') || path.endsWith('/')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+            res.setHeader('Pragma', 'no-cache')
+            res.setHeader('Expires', '0')
+          }
+        }
       }))
     }
 
