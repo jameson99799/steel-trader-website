@@ -41,6 +41,18 @@ const request = async (url, options = {}) => {
   }
 
   const response = await fetch(`${BASE_URL}${url}`, { ...options, headers })
+
+  // Auto-redirect to login on 401 (expired/invalid token)
+  if (response.status === 401) {
+    // Only auto-redirect for admin API calls, not public ones
+    const isAdminPage = window.location.pathname.startsWith('/admin')
+    if (isAdminPage) {
+      localStorage.removeItem('token')
+      window.location.href = '/admin/login'
+      throw new Error('登录已过期，请重新登录')
+    }
+  }
+
   const data = await response.json()
 
   if (!response.ok) {
