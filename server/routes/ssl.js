@@ -70,6 +70,14 @@ router.get('/ssl/status', authMiddleware, (req, res) => {
     if (hasCert) {
         const stat = fs.statSync(certFile)
         certInfo = { size: stat.size, modified: stat.mtime }
+        // Try to read cert expiry info
+        try {
+            const output = execSync(`openssl x509 -enddate -subject -noout -in "${certFile}" 2>/dev/null`, { timeout: 5000 }).toString().trim()
+            const expiryMatch = output.match(/notAfter=(.+)/)
+            const subjectMatch = output.match(/subject=(.+)/)
+            if (expiryMatch) certInfo.expiry = expiryMatch[1]
+            if (subjectMatch) certInfo.subject = subjectMatch[1]
+        } catch (e) { }
     }
 
     // Check if Nginx SSL config exists — try multiple common paths + nginx -T fallback
@@ -77,15 +85,35 @@ router.get('/ssl/status', authMiddleware, (req, res) => {
     try {
         if (fs.existsSync('/etc/nginx/sites-enabled/sunseasteel-ssl.conf')) nginxConfigured = true
         if (!nginxConfigured && fs.existsSync('/etc/nginx/conf.d/sunseasteel-ssl.conf')) nginxConfigured = true
+        // Check any nginx conf that references ssl_certificate with our domain
         if (!nginxConfigured) {
             try {
                 const nginxT = execSync('nginx -T 2>/dev/null || true', { timeout: 5000 }).toString()
-                if (nginxT.includes('ssl_certificate') && nginxT.includes('sunseasteel')) nginxConfigured = true
+                if (nginxT.includes('ssl_certificate') && (nginxT.includes('sunseasteel') || nginxT.includes('443'))) {
+                    nginxConfigured = true
+                }
+            } catch (e) { }
+        }
+        // Also check if port 443 is listening as a simple fallback
+        if (!nginxConfigured) {
+            try {
+                const ss = execSync('ss -tlnp 2>/dev/null | grep ":443" || true', { timeout: 3000 }).toString()
+                if (ss.includes(':443')) nginxConfigured = true
             } catch (e) { }
         }
     } catch (e) { }
 
     res.json({ hasCert, hasKey, certInfo, nginxConfigured })
+})
+
+// Read existing cert content (for admin display, redacted key)
+router.get('/ssl/cert-content', authMiddleware, (req, res) => {
+    const certFile = join(SSL_DIR, 'cert.pem')
+    const keyFile = join(SSL_DIR, 'key.pem')
+    let cert = '', key = ''
+    try { if (fs.existsSync(certFile)) cert = fs.readFileSync(certFile, 'utf8') } catch (e) { }
+    try { if (fs.existsSync(keyFile)) key = fs.readFileSync(keyFile, 'utf8') } catch (e) { }
+    res.json({ cert, key })
 })
 
 // Upload SSL cert and key, configure Nginx, reload

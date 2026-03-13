@@ -123,8 +123,17 @@ const sslForm = reactive({ cert: '', key: '' })
 const loadSslStatus = async () => {
   try {
     const token = localStorage.getItem('token')
-    const res = await fetch('/api/ssl/status', { headers: { Authorization: `Bearer ${token}` } })
-    sslStatus.value = await res.json()
+    const [statusRes, contentRes] = await Promise.all([
+      fetch('/api/ssl/status', { headers: { Authorization: `Bearer ${token}` } }),
+      fetch('/api/ssl/cert-content', { headers: { Authorization: `Bearer ${token}` } })
+    ])
+    sslStatus.value = await statusRes.json()
+    // Auto-fill existing cert/key so user can see what's configured
+    if (contentRes.ok) {
+      const content = await contentRes.json()
+      if (content.cert) sslForm.cert = content.cert
+      if (content.key) sslForm.key = content.key
+    }
   } catch (e) { console.error(e) }
 }
 
@@ -142,7 +151,6 @@ const saveSsl = async () => {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error)
     sslResult.value = { success: true, message: data.message + (data.nginxMessage ? '\n\n' + data.nginxMessage : '') }
-    sslForm.cert = ''; sslForm.key = ''
     await loadSslStatus()
   } catch (e) {
     sslResult.value = { success: false, message: e.message }
@@ -154,6 +162,7 @@ const deleteSsl = async () => {
   try {
     const token = localStorage.getItem('token')
     await fetch('/api/ssl', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+    sslForm.cert = ''; sslForm.key = ''
     await loadSslStatus()
     alert('SSL证书已删除')
   } catch (e) { alert(e.message) }

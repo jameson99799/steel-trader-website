@@ -146,7 +146,7 @@ router.get('/tasks', authMiddleware, (req, res) => {
 router.post('/tasks', authMiddleware, (req, res) => {
     const { name, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt } = req.body
     const r = run(`INSERT INTO mail_tasks (name, status, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt)
-        VALUES ('pending',?,?,?,?,?,?,?,?)`,
+        VALUES (?,'pending',?,?,?,?,?,?,?)`,
         [name || 'New Task',
          JSON.stringify(template_ids || []), JSON.stringify(contact_ids || []),
          JSON.stringify(account_ids || []),
