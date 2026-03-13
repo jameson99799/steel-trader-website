@@ -202,6 +202,106 @@ async function initDb() {
     )
   `)
 
+  // Multi-account SMTP accounts
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS smtp_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL DEFAULT '',
+      smtp_host TEXT NOT NULL DEFAULT '',
+      smtp_port INTEGER DEFAULT 465,
+      smtp_user TEXT NOT NULL DEFAULT '',
+      smtp_pass TEXT NOT NULL DEFAULT '',
+      from_name TEXT DEFAULT 'SunSea Steel',
+      is_default INTEGER DEFAULT 0,
+      enabled INTEGER DEFAULT 1,
+      send_count INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // Global email settings (single row id=1)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_settings (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      to_emails TEXT DEFAULT '',
+      ssl_warn_days INTEGER DEFAULT 30,
+      round_robin INTEGER DEFAULT 0
+    )
+  `)
+
+  // Auto-migrate old single smtp_account to smtp_accounts on first run
+  try {
+    const oldCfg = db.prepare('SELECT * FROM email_config WHERE id = 1').get()
+    const existing = db.prepare('SELECT COUNT(*) as cnt FROM smtp_accounts').get()
+    if (oldCfg && oldCfg.smtp_host && existing.cnt === 0) {
+      db.prepare('INSERT INTO smtp_accounts (name, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, is_default, enabled) VALUES (?,?,?,?,?,?,1,1)')
+        .run('Default (migrated)', oldCfg.smtp_host, oldCfg.smtp_port || 465, oldCfg.smtp_user || '', oldCfg.smtp_pass || '', oldCfg.from_name || 'SunSea Steel')
+      db.prepare("INSERT OR IGNORE INTO email_settings (id, to_emails, ssl_warn_days) VALUES (1,?,?)").run(oldCfg.to_email || '', oldCfg.ssl_warn_days || 30)
+    } else {
+      db.prepare("INSERT OR IGNORE INTO email_settings (id, to_emails, ssl_warn_days) VALUES (1,'',30)").run()
+    }
+  } catch (e) { }
+
+  // Bulk email: templates
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mail_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL DEFAULT '',
+      subject TEXT NOT NULL DEFAULT '',
+      html_body TEXT NOT NULL DEFAULT '',
+      note TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // Bulk email: contacts
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mail_contacts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      name TEXT DEFAULT '',
+      company TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // Bulk email: tasks
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mail_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL DEFAULT '',
+      status TEXT DEFAULT 'pending',
+      template_ids TEXT DEFAULT '[]',
+      contact_ids TEXT DEFAULT '[]',
+      account_ids TEXT DEFAULT '[]',
+      interval_min INTEGER DEFAULT 10,
+      interval_max INTEGER DEFAULT 60,
+      cc TEXT DEFAULT '',
+      read_receipt INTEGER DEFAULT 1,
+      total_count INTEGER DEFAULT 0,
+      sent_count INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // Bulk email: send logs
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mail_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER,
+      contact_email TEXT,
+      contact_name TEXT DEFAULT '',
+      account_id INTEGER,
+      template_id INTEGER,
+      subject TEXT DEFAULT '',
+      status TEXT DEFAULT 'sent',
+      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      opened_at DATETIME,
+      tracking_id TEXT UNIQUE
+    )
+  `)
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS hero_content (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

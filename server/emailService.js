@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer'
-import { getOne } from './db.js'
+import { getAll, getOne, run } from './db.js'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { execSync } from 'child_process'
@@ -7,34 +7,77 @@ import fs from 'fs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+// ─── Backward compat: old single-account config ──────────────────────────────
 export function getEmailConfig() {
     return getOne('SELECT * FROM email_config WHERE id = 1') || {}
 }
 
-export async function sendMail({ to, subject, html, text }) {
-    const config = getEmailConfig()
-    if (!config.enabled || !config.smtp_host || !config.smtp_user || !config.smtp_pass) {
-        throw new Error('邮件服务未配置或未启用')
+// ─── Get next account for sending (round-robin or default) ───────────────────
+let _rrIndex = 0
+export function getNextSmtpAccount() {
+    const accounts = getAll('SELECT * FROM smtp_accounts WHERE enabled=1 ORDER BY id ASC')
+    if (!accounts.length) return null
+    const settings = getOne('SELECT round_robin FROM email_settings WHERE id=1') || {}
+    if (settings.round_robin) {
+        const acct = accounts[_rrIndex % accounts.length]
+        _rrIndex++
+        return acct
     }
+    return accounts.find(a => a.is_default) || accounts[0]
+}
 
-    const transporter = nodemailer.createTransport({
-        host: config.smtp_host,
-        port: parseInt(config.smtp_port) || 465,
-        secure: parseInt(config.smtp_port) === 465,
-        auth: { user: config.smtp_user, pass: config.smtp_pass },
+// ─── Create transporter from an smtp_account row ─────────────────────────────
+function makeTransporter(acct) {
+    return nodemailer.createTransport({
+        host: acct.smtp_host,
+        port: parseInt(acct.smtp_port) || 465,
+        secure: parseInt(acct.smtp_port) === 465,
+        auth: { user: acct.smtp_user, pass: acct.smtp_pass },
         tls: { rejectUnauthorized: false }
-    })
-
-    await transporter.sendMail({
-        from: `"${config.from_name || 'SunSea Steel'}" <${config.smtp_user}>`,
-        to: to || config.to_email,
-        subject, html, text
     })
 }
 
+// ─── Generic send using multi-account ────────────────────────────────────────
+export async function sendMail({ to, subject, html, text, accountId, cc, readReceipt }) {
+    let acct = accountId
+        ? getOne('SELECT * FROM smtp_accounts WHERE id=?', [accountId])
+        : getNextSmtpAccount()
+
+    // Fallback to old email_config if no smtp_accounts configured
+    if (!acct) {
+        const old = getEmailConfig()
+        if (!old.enabled || !old.smtp_host || !old.smtp_user || !old.smtp_pass)
+            throw new Error('邮件服务未配置或未启用')
+        acct = { smtp_host: old.smtp_host, smtp_port: old.smtp_port, smtp_user: old.smtp_user, smtp_pass: old.smtp_pass, from_name: old.from_name }
+    }
+
+    const transporter = makeTransporter(acct)
+    const mailOptions = {
+        from: `"${acct.from_name || 'SunSea Steel'}" <${acct.smtp_user}>`,
+        to,
+        subject,
+        html,
+        text
+    }
+    if (cc) mailOptions.cc = cc
+    if (readReceipt) mailOptions.headers = { 'Disposition-Notification-To': acct.smtp_user }
+
+    await transporter.sendMail(mailOptions)
+    // Update send count
+    if (acct.id) {
+        try { run('UPDATE smtp_accounts SET send_count = send_count + 1 WHERE id=?', [acct.id]) } catch (e) {}
+    }
+}
+
+// ─── Inquiry notification ─────────────────────────────────────────────────────
 export async function sendInquiryNotification(inquiry) {
-    const config = getEmailConfig()
-    if (!config.enabled || !config.to_email) return
+    const settings = getOne('SELECT * FROM email_settings WHERE id=1') || {}
+    const toEmails = settings.to_emails || ''
+    if (!toEmails) {
+        // Fallback to old config
+        const old = getEmailConfig()
+        if (!old.enabled || !old.to_email) return
+    }
 
     const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
@@ -65,7 +108,7 @@ export async function sendInquiryNotification(inquiry) {
 
     try {
         await sendMail({
-            to: config.to_email,
+            to: toEmails || (getEmailConfig().to_email),
             subject: `【新询盘】${inquiry.name} - ${inquiry.company || '未填写公司'}`,
             html
         })
@@ -74,6 +117,7 @@ export async function sendInquiryNotification(inquiry) {
     }
 }
 
+// ─── SSL cert info ─────────────────────────────────────────────────────────────
 export function getSslDaysRemaining() {
     const SSL_DIR = join(__dirname, '..', 'ssl')
     const certFile = join(SSL_DIR, 'cert.pem')
@@ -91,11 +135,12 @@ export function getSslDaysRemaining() {
 }
 
 export async function checkAndSendSslWarning() {
-    const config = getEmailConfig()
-    if (!config.enabled || !config.to_email) return
+    const settings = getOne('SELECT * FROM email_settings WHERE id=1') || {}
+    const toEmails = settings.to_emails || getEmailConfig().to_email || ''
+    if (!toEmails) return
     const ssl = getSslDaysRemaining()
     if (!ssl) return
-    const warnDays = parseInt(config.ssl_warn_days) || 30
+    const warnDays = parseInt(settings.ssl_warn_days) || 30
     if (ssl.days > warnDays) return
 
     const html = `
@@ -107,15 +152,12 @@ export async function checkAndSendSslWarning() {
         <p>您的网站 <strong>www.sunseasteel.com</strong> 的 SSL 证书${ssl.expired ? '已过期。' : `将在 <strong>${ssl.days} 天</strong>后到期。`}</p>
         <p>到期时间：${new Date(ssl.expiry).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
         <p>请及时在后台「系统设置」→「SSL证书配置」中更新证书，避免影响网站正常访问。</p>
-        <div style="margin-top:20px;font-size:12px;color:#94a3b8">
-          此邮件由 SunSea Steel 系统自动发送 · ${new Date().toLocaleString('zh-CN')}
-        </div>
       </div>
-    </div>
-  `
+    </div>`
+
     try {
         await sendMail({
-            to: config.to_email,
+            to: toEmails,
             subject: `【SSL提醒】证书${ssl.expired ? '已过期' : `还有 ${ssl.days} 天到期`} - www.sunseasteel.com`,
             html
         })

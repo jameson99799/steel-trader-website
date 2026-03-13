@@ -1,85 +1,118 @@
 import express from 'express'
-import { getOne, run } from '../db.js'
+import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
-import { sendMail, getEmailConfig, getSslDaysRemaining } from '../emailService.js'
+import { getSslDaysRemaining } from '../emailService.js'
+import nodemailer from 'nodemailer'
 
 const router = express.Router()
 
-// GET /api/email/config
-router.get('/config', authMiddleware, (req, res) => {
-    const config = getEmailConfig()
-    // Mask password
-    res.json({ ...config, smtp_pass: config.smtp_pass ? '••••••••' : '' })
+// ─── SMTP Accounts CRUD ─────────────────────────────────────────────────────
+
+// GET all accounts (plaintext passwords for admin editing)
+router.get('/accounts', authMiddleware, (req, res) => {
+    const accounts = getAll('SELECT * FROM smtp_accounts ORDER BY is_default DESC, id ASC')
+    res.json(accounts)
 })
 
-// PUT /api/email/config
-router.put('/config', authMiddleware, express.json(), (req, res) => {
-    const { smtp_host, smtp_port, smtp_user, smtp_pass, from_name, to_email, ssl_warn_days, enabled } = req.body
-    const existing = getOne('SELECT id FROM email_config WHERE id = 1')
-
-    if (existing) {
-        // Only update password if a real value was provided (not masked)
-        const passUpdate = smtp_pass && smtp_pass !== '••••••••' ? smtp_pass : getOne('SELECT smtp_pass FROM email_config WHERE id = 1')?.smtp_pass
-        run(`UPDATE email_config SET smtp_host=?, smtp_port=?, smtp_user=?, smtp_pass=?,
-         from_name=?, to_email=?, ssl_warn_days=?, enabled=? WHERE id=1`,
-            [smtp_host, smtp_port || 465, smtp_user, passUpdate, from_name, to_email, ssl_warn_days || 30, enabled ? 1 : 0])
-    } else {
-        run(`INSERT INTO email_config (id, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, to_email, ssl_warn_days, enabled)
-         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [smtp_host, smtp_port || 465, smtp_user, smtp_pass, from_name, to_email, ssl_warn_days || 30, enabled ? 1 : 0])
-    }
-    res.json({ message: '邮件配置已保存' })
+// POST create account
+router.post('/accounts', authMiddleware, express.json(), (req, res) => {
+    const { name, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, is_default, enabled } = req.body
+    if (!smtp_host || !smtp_user || !smtp_pass) return res.status(400).json({ error: '请填写SMTP服务器、账号和密码' })
+    if (is_default) run('UPDATE smtp_accounts SET is_default = 0')
+    const result = run(
+        `INSERT INTO smtp_accounts (name, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, is_default, enabled) VALUES (?,?,?,?,?,?,?,?)`,
+        [name || smtp_user, smtp_host, smtp_port || 465, smtp_user, smtp_pass, from_name || 'SunSea Steel', is_default ? 1 : 0, enabled !== false ? 1 : 0]
+    )
+    res.json({ id: result.lastInsertRowid, message: '账号已添加' })
 })
 
-// POST /api/email/test — send test email (works even if service not enabled)
-router.post('/test', authMiddleware, express.json(), async (req, res) => {
+// PUT update account
+router.put('/accounts/:id', authMiddleware, express.json(), (req, res) => {
+    const { name, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, is_default, enabled } = req.body
+    if (is_default) run('UPDATE smtp_accounts SET is_default = 0')
+    run(
+        `UPDATE smtp_accounts SET name=?, smtp_host=?, smtp_port=?, smtp_user=?, smtp_pass=?, from_name=?, is_default=?, enabled=? WHERE id=?`,
+        [name, smtp_host, smtp_port || 465, smtp_user, smtp_pass, from_name || 'SunSea Steel', is_default ? 1 : 0, enabled ? 1 : 0, req.params.id]
+    )
+    res.json({ message: '账号已更新' })
+})
+
+// DELETE account
+router.delete('/accounts/:id', authMiddleware, (req, res) => {
+    run('DELETE FROM smtp_accounts WHERE id=?', [req.params.id])
+    res.json({ message: '账号已删除' })
+})
+
+// POST test single account
+router.post('/accounts/:id/test', authMiddleware, express.json(), async (req, res) => {
     try {
-        const { to } = req.body
-        const config = getEmailConfig()
-        if (!config.smtp_host || !config.smtp_user || !config.smtp_pass) {
-            return res.status(400).json({ error: '请先填写并保存 SMTP 服务器、账号和密码' })
-        }
-        const recipient = to || config.to_email
-        if (!recipient) {
-            return res.status(400).json({ error: '请填写收件邮箱地址' })
-        }
-
-        // Create transporter directly — bypass enabled check for testing
-        const nodemailer = await import('nodemailer')
-        const transporter = nodemailer.default.createTransport({
-            host: config.smtp_host,
-            port: parseInt(config.smtp_port) || 465,
-            secure: parseInt(config.smtp_port) === 465,
-            auth: { user: config.smtp_user, pass: config.smtp_pass },
+        const acct = getOne('SELECT * FROM smtp_accounts WHERE id=?', [req.params.id])
+        if (!acct) return res.status(404).json({ error: '账号不存在' })
+        const to = req.body.to
+        if (!to) return res.status(400).json({ error: '请填写测试收件邮箱' })
+        const transporter = nodemailer.createTransport({
+            host: acct.smtp_host,
+            port: parseInt(acct.smtp_port) || 465,
+            secure: parseInt(acct.smtp_port) === 465,
+            auth: { user: acct.smtp_user, pass: acct.smtp_pass },
             tls: { rejectUnauthorized: false }
         })
-
         await transporter.sendMail({
-            from: `"${config.from_name || 'SunSea Steel'}" <${config.smtp_user}>`,
-            to: recipient,
+            from: `"${acct.from_name || 'SunSea Steel'}" <${acct.smtp_user}>`,
+            to,
             subject: '✅ 邮件测试成功 - SunSea Steel',
-            html: `
-        <div style="font-family:Arial,sans-serif;padding:24px;max-width:500px">
-          <h2 style="color:#1e40af">✅ 邮件发送测试成功</h2>
-          <p>这是来自 SunSea Steel 后台的测试邮件，说明您的邮件配置正常。</p>
-          <p style="color:#64748b;font-size:13px">发送时间：${new Date().toLocaleString('zh-CN')}</p>
-        </div>
-      `
+            html: `<div style="font-family:Arial,sans-serif;padding:24px;max-width:500px">
+              <h2 style="color:#1e40af">✅ 邮件发送测试成功</h2>
+              <p>账号：<strong>${acct.smtp_user}</strong></p>
+              <p>SMTP：${acct.smtp_host}:${acct.smtp_port}</p>
+              <p style="color:#64748b;font-size:13px">发送时间：${new Date().toLocaleString('zh-CN')}</p>
+            </div>`
         })
-        res.json({ success: true, message: `测试邮件已发送到 ${recipient}` })
+        res.json({ success: true, message: `测试邮件已发送到 ${to}` })
     } catch (e) {
         res.status(500).json({ error: '发送失败: ' + e.message })
     }
 })
 
-// GET /api/email/ssl-status — get SSL cert expiry info
+// ─── Email Settings (global, single row) ────────────────────────────────────
+
+router.get('/settings', authMiddleware, (req, res) => {
+    const s = getOne('SELECT * FROM email_settings WHERE id=1') || {}
+    res.json(s)
+})
+
+router.put('/settings', authMiddleware, express.json(), (req, res) => {
+    const { to_emails, ssl_warn_days, round_robin } = req.body
+    const existing = getOne('SELECT id FROM email_settings WHERE id=1')
+    if (existing) {
+        run(`UPDATE email_settings SET to_emails=?, ssl_warn_days=?, round_robin=? WHERE id=1`,
+            [to_emails || '', ssl_warn_days || 30, round_robin ? 1 : 0])
+    } else {
+        run(`INSERT INTO email_settings (id, to_emails, ssl_warn_days, round_robin) VALUES (1,?,?,?)`,
+            [to_emails || '', ssl_warn_days || 30, round_robin ? 1 : 0])
+    }
+    res.json({ message: '设置已保存' })
+})
+
+// ─── SSL status ──────────────────────────────────────────────────────────────
 router.get('/ssl-status', authMiddleware, (req, res) => {
     const ssl = getSslDaysRemaining()
-    const config = getEmailConfig()
+    const settings = getOne('SELECT ssl_warn_days FROM email_settings WHERE id=1') || {}
+    const warnDays = settings.ssl_warn_days || 30
+    res.json({ ssl, warn_days: warnDays, will_warn: ssl ? ssl.days <= warnDays : false })
+})
+
+// ─── Legacy config endpoint (kept for backward compat) ───────────────────────
+router.get('/config', authMiddleware, (req, res) => {
+    const accounts = getAll('SELECT * FROM smtp_accounts WHERE is_default=1 LIMIT 1')
+    const acct = accounts[0] || {}
+    const settings = getOne('SELECT * FROM email_settings WHERE id=1') || {}
     res.json({
-        ssl,
-        warn_days: config.ssl_warn_days || 30,
-        will_warn: ssl ? ssl.days <= (config.ssl_warn_days || 30) : false
+        smtp_host: acct.smtp_host || '', smtp_port: acct.smtp_port || 465,
+        smtp_user: acct.smtp_user || '', smtp_pass: acct.smtp_pass ? '••••••••' : '',
+        from_name: acct.from_name || 'SunSea Steel',
+        to_email: settings.to_emails || '', ssl_warn_days: settings.ssl_warn_days || 30,
+        enabled: !!acct.enabled
     })
 })
 

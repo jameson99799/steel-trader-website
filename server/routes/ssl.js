@@ -72,10 +72,17 @@ router.get('/ssl/status', authMiddleware, (req, res) => {
         certInfo = { size: stat.size, modified: stat.mtime }
     }
 
-    // Check if Nginx SSL config exists
+    // Check if Nginx SSL config exists — try multiple common paths + nginx -T fallback
     let nginxConfigured = false
     try {
-        nginxConfigured = fs.existsSync('/etc/nginx/sites-enabled/sunseasteel-ssl.conf')
+        if (fs.existsSync('/etc/nginx/sites-enabled/sunseasteel-ssl.conf')) nginxConfigured = true
+        if (!nginxConfigured && fs.existsSync('/etc/nginx/conf.d/sunseasteel-ssl.conf')) nginxConfigured = true
+        if (!nginxConfigured) {
+            try {
+                const nginxT = execSync('nginx -T 2>/dev/null || true', { timeout: 5000 }).toString()
+                if (nginxT.includes('ssl_certificate') && nginxT.includes('sunseasteel')) nginxConfigured = true
+            } catch (e) { }
+        }
     } catch (e) { }
 
     res.json({ hasCert, hasKey, certInfo, nginxConfigured })
