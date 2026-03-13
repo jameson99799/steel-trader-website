@@ -14,7 +14,7 @@ function cancelTask(taskId) {
     if (t) { clearTimeout(t.timer); t.cancelled = true; activeTasks.delete(taskId) }
 }
 
-async function runTask(taskId) {
+async function runTask(taskId, isResume = false) {
     const task = getOne('SELECT * FROM mail_tasks WHERE id=?', [taskId])
     if (!task) return
     run("UPDATE mail_tasks SET status='running' WHERE id=?", [taskId])
@@ -34,13 +34,21 @@ async function runTask(taskId) {
         return
     }
 
-    run('UPDATE mail_tasks SET total_count=?, sent_count=0 WHERE id=?', [contacts.length, taskId])
-    const ctx = { cancelled: false }
+    let startIndex = 0
+    if (isResume && task.sent_count > 0) {
+        startIndex = task.sent_count
+    } else {
+        run('UPDATE mail_tasks SET total_count=?, sent_count=0 WHERE id=?', [contacts.length, taskId])
+    }
+    
+    const ctx = { cancelled: false, paused: false }
     activeTasks.set(taskId, ctx)
 
-    let tplIdx = 0; let acctIdx = 0
-    for (let i = 0; i < contacts.length; i++) {
-        if (ctx.cancelled) break
+    let tplIdx = startIndex % templates.length
+    let acctIdx = startIndex % accounts.length
+    
+    for (let i = startIndex; i < contacts.length; i++) {
+        if (ctx.cancelled || ctx.paused) break
         const contact = contacts[i]
         const template = templates[tplIdx % templates.length]
         const account = accounts[acctIdx % accounts.length]
@@ -76,15 +84,15 @@ async function runTask(taskId) {
                 [taskId, contact.email, contact.name || '', account.id, template.id, template.subject])
         }
 
-        // Wait for next send if not last
-        if (i < contacts.length - 1 && !ctx.cancelled) {
+    // Wait for next send if not last
+        if (i < contacts.length - 1 && !ctx.cancelled && !ctx.paused) {
             const delay = (Math.floor(Math.random() * (task.interval_max - task.interval_min + 1)) + task.interval_min) * 1000
             await new Promise(resolve => { ctx.timer = setTimeout(resolve, delay) })
         }
     }
 
     activeTasks.delete(taskId)
-    run("UPDATE mail_tasks SET status=? WHERE id=?", [ctx.cancelled ? 'cancelled' : 'done', taskId])
+    run("UPDATE mail_tasks SET status=? WHERE id=?", [ctx.paused ? 'paused' : (ctx.cancelled ? 'cancelled' : 'done'), taskId])
 }
 
 // ─── Templates ───────────────────────────────────────────────────────────────
@@ -153,6 +161,19 @@ router.post('/tasks', authMiddleware, (req, res) => {
          interval_min || 10, interval_max || 60, cc || '', read_receipt !== false ? 1 : 0])
     res.json({ id: r.lastInsertRowid, message: '任务已创建' })
 })
+router.put('/tasks/:id', authMiddleware, (req, res) => {
+    const task = getOne('SELECT status FROM mail_tasks WHERE id=?', [req.params.id])
+    if (!task) return res.status(404).json({ error: '任务不存在' })
+    if (task.status === 'running') return res.status(400).json({ error: '运行中的任务无法直接修改，请先暂停' })
+    
+    const { name, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt } = req.body
+    run(`UPDATE mail_tasks SET name=?, template_ids=?, contact_ids=?, account_ids=?, interval_min=?, interval_max=?, cc=?, read_receipt=? WHERE id=?`,
+        [name || 'Updated Task',
+         JSON.stringify(template_ids || []), JSON.stringify(contact_ids || []),
+         JSON.stringify(account_ids || []),
+         interval_min || 10, interval_max || 60, cc || '', read_receipt !== false ? 1 : 0, req.params.id])
+    res.json({ message: '任务已更新' })
+})
 router.post('/tasks/:id/start', authMiddleware, async (req, res) => {
     const task = getOne('SELECT * FROM mail_tasks WHERE id=?', [req.params.id])
     if (!task) return res.status(404).json({ error: '任务不存在' })
@@ -162,12 +183,30 @@ router.post('/tasks/:id/start', authMiddleware, async (req, res) => {
     runTask(+req.params.id).catch(e => console.error('Task error:', e))
     res.json({ message: '任务已开始' })
 })
+router.post('/tasks/:id/resume', authMiddleware, async (req, res) => {
+    const task = getOne('SELECT * FROM mail_tasks WHERE id=?', [req.params.id])
+    if (!task) return res.status(404).json({ error: '任务不存在' })
+    if (activeTasks.has(+req.params.id)) return res.status(400).json({ error: '任务正在运行中' })
+    if (task.status !== 'paused' && task.status !== 'failed') return res.status(400).json({ error: '只有暂停或失败的任务才能续发' })
+    
+    run("UPDATE mail_tasks SET status='running' WHERE id=?", [req.params.id])
+    // Fire and forget (runTask will skip the first block if it's resuming, wait I need to pass resume flag)
+    runTask(+req.params.id, true).catch(e => console.error('Task error:', e))
+    res.json({ message: '任务已继续运行' })
+})
 router.post('/tasks/:id/stop', authMiddleware, (req, res) => {
-    cancelTask(+req.params.id)
-    res.json({ message: '任务已停止' })
+    const t = activeTasks.get(+req.params.id)
+    if (t) {
+        clearTimeout(t.timer)
+        t.paused = true
+        activeTasks.delete(+req.params.id)
+    }
+    run("UPDATE mail_tasks SET status='paused' WHERE id=?", [req.params.id])
+    res.json({ message: '任务已暂停' })
 })
 router.delete('/tasks/:id', authMiddleware, (req, res) => {
-    cancelTask(+req.params.id)
+    const t = activeTasks.get(+req.params.id)
+    if (t) { clearTimeout(t.timer); t.cancelled = true; activeTasks.delete(+req.params.id) }
     run('DELETE FROM mail_tasks WHERE id=?', [req.params.id])
     run('DELETE FROM mail_logs WHERE task_id=?', [req.params.id])
     res.json({ message: '已删除' })

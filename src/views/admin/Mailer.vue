@@ -50,7 +50,7 @@
 
     <!-- ═══ Tasks Tab ═══ -->
     <div v-if="tab === 'tasks'" class="tab-body">
-      <div class="toolbar"><button class="btn btn-primary" @click="openTaskCreator">+ 创建发送任务</button></div>
+      <div class="toolbar"><button class="btn btn-primary" @click="openTaskCreator()">+ 创建发送任务</button></div>
       <div v-if="!tasks.length" class="empty">暂无任务</div>
       <div v-for="t in tasks" :key="t.id" class="list-card">
         <div class="lc-main">
@@ -59,10 +59,23 @@
           <span class="lc-note">{{ new Date(t.created_at).toLocaleString('zh-CN') }}</span>
         </div>
         <div class="lc-actions">
-          <button v-if="t.status==='pending'||t.status==='cancelled'" class="btn btn-sm btn-primary" @click="startTask(t.id)">▶ 开始</button>
-          <button v-if="t.status==='running'" class="btn btn-sm btn-outline" style="color:#f59e0b" @click="stopTask(t.id)">⏸ 停止</button>
+          <!-- Pending: Start, Edit, Delete -->
+          <button v-if="t.status==='pending'" class="btn btn-sm btn-primary" @click="startTask(t.id)">▶ 启动</button>
+          
+          <!-- Running: Pause, Logs -->
+          <button v-if="t.status==='running'" class="btn btn-sm btn-outline" style="color:#f59e0b; border-color:#fcd34d" @click="pauseTask(t.id)">⏸ 暂停</button>
+          
+          <!-- Paused/Failed: Resume, Start (Restart), Edit, Logs, Delete -->
+          <button v-if="t.status==='paused' || t.status==='failed'" class="btn btn-sm btn-primary" @click="resumeTask(t.id)">▶ 续发</button>
+          <button v-if="t.status==='paused' || t.status==='failed'" class="btn btn-sm btn-outline" @click="startTask(t.id)" title="从头开始发送">↺ 重新启动</button>
+          
+          <button v-if="['pending', 'paused', 'failed', 'cancelled'].includes(t.status)" class="btn btn-sm btn-outline" @click="openTaskCreator(t)">编辑</button>
+
+          <!-- Done/Cancelled: Logs, Delete, Follow-up -->
+          <button v-if="t.status==='done'" class="btn btn-sm btn-outline" style="color:#3b82f6; border-color:#93c5fd" @click="followUpTask(t)" title="对这些收件人发送跟进邮件">💬 跟进</button>
+
           <button class="btn btn-sm btn-outline" @click="viewLogs(t.id)">查看记录</button>
-          <button class="btn btn-sm btn-outline err-btn" @click="deleteTask(t.id)">删除</button>
+          <button v-if="t.status !== 'running'" class="btn btn-sm btn-outline err-btn" @click="deleteTask(t.id)">删除</button>
         </div>
       </div>
     </div>
@@ -102,25 +115,8 @@
         </div>
         <div class="form-group"><label>备注</label><input v-model="editTpl.note" class="form-control" placeholder="选填" /></div>
         <div class="form-group">
-          <label>正文内容</label>
-          <div class="editor-toolbar">
-            <button @click="edCmd('bold')" title="粗体"><b>B</b></button>
-            <button @click="edCmd('italic')" title="斜体"><i>I</i></button>
-            <button @click="edCmd('underline')" title="下划线"><u>U</u></button>
-            <span class="sep"></span>
-            <button @click="edCmd('insertUnorderedList')" title="列表">•列表</button>
-            <button @click="edCmd('insertOrderedList')" title="编号列表">1.列表</button>
-            <span class="sep"></span>
-            <button @click="insertLink" title="超链接">🔗</button>
-            <button @click="insertImg" title="插入图片">🖼</button>
-            <button @click="insertHr" title="签名分割线">─ 签名线</button>
-            <span class="sep"></span>
-            <button @click="edCmd('fontSize','5')" title="大字">A+</button>
-            <button @click="edCmd('fontSize','2')" title="小字">A-</button>
-            <button @click="edCmd('foreColor','#1e40af')" title="蓝色">🔵</button>
-            <button @click="edCmd('foreColor','#dc2626')" title="红色">🔴</button>
-          </div>
-          <div ref="editorRef" class="rich-editor" contenteditable="true" @input="onEditorInput" @paste="onEditorPaste"></div>
+          <label>正文内容 (支持直接粘贴截图、拖拽调整图片大小)</label>
+          <div ref="editorRef" class="rich-editor"></div>
         </div>
         <div class="modal-actions">
           <button class="btn btn-primary" @click="saveTpl" :disabled="savingTpl">{{ savingTpl ? '保存中...' : '💾 保存' }}</button>
@@ -163,7 +159,7 @@
     <!-- ═══ Task Creator Modal ═══ -->
     <div class="modal-overlay" v-if="showTaskCreator" @click.self="showTaskCreator=false">
       <div class="modal-box modal-lg">
-        <h3>🚀 创建发送任务</h3>
+        <h3>🚀 {{ newTask.id ? '编辑发送任务' : '创建发送任务' }}</h3>
         <div class="form-group"><label>任务名称</label><input v-model="newTask.name" class="form-control" placeholder="如：3月产品推广" /></div>
 
         <div class="form-group">
@@ -230,6 +226,15 @@
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import api from '../../api'
 
+// Import Quill and Image Resize
+import Quill from 'quill'
+import { ImageResize } from 'quill-image-resize-module'
+import 'quill/dist/quill.snow.css'
+
+// Required by image-resize module
+window.Quill = Quill
+window.ImageResize = ImageResize
+
 const tab = ref('templates')
 const templates = ref([])
 const contacts = ref([])
@@ -282,26 +287,91 @@ async function loadLogs() {
 onMounted(() => { loadAll(); loadLogs() })
 
 // ─── Template ────────────────────────────────────────────────────────────────
+let quillInstance = null
+
+function initQuill() {
+  if (quillInstance) return
+  const Quill = window.Quill
+  if (!Quill) return setTimeout(initQuill, 100) // retry if script not loaded yet
+  
+  // Register ImageResize if available
+  if (window.ImageResize && !Quill.imports['modules/imageResize']) {
+    Quill.register('modules/imageResize', window.ImageResize)
+  }
+
+  quillInstance = new Quill(editorRef.value, {
+    theme: 'snow',
+    modules: {
+      toolbar: {
+        container: [
+          [{ 'header': [1, 2, 3, false] }],
+          ['bold', 'italic', 'underline', 'strike'],
+          [{ 'color': [] }, { 'background': [] }],
+          [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+          ['link', 'image'],
+          ['clean']
+        ],
+        handlers: {
+          image: imageHandler
+        }
+      },
+      imageResize: {} // Enable drag-to-resize
+    }
+  })
+  
+  quillInstance.on('text-change', () => {
+    editTpl.html_body = quillInstance.root.innerHTML
+  })
+}
+
+function imageHandler() {
+  const input = document.createElement('input')
+  input.setAttribute('type', 'file')
+  input.setAttribute('accept', 'image/*')
+  input.click()
+
+  input.onchange = async () => {
+    const file = input.files[0]
+    if (!file) return
+    const formData = new FormData()
+    formData.append('image', file)
+
+    try {
+      savingTpl.value = true // Show loading
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+
+      // Insert full URL image into editor
+      const url = `https://${window.location.host}${data.url}`
+      const range = quillInstance.getSelection(true)
+      quillInstance.insertEmbed(range.index, 'image', url)
+      quillInstance.setSelection(range.index + 1)
+    } catch (e) {
+      alert('图片上传失败: ' + e.message)
+    } finally {
+      savingTpl.value = false
+    }
+  }
+}
+
 function openTplEditor(t) {
   Object.assign(editTpl, t || { id: null, name: '', subject: '', html_body: '', note: '' })
   showTplEditor.value = true
-  nextTick(() => { if (editorRef.value) editorRef.value.innerHTML = editTpl.html_body || '' })
+  // Let DOM render, then init quill and set content
+  nextTick(() => {
+    initQuill()
+    if (quillInstance) {
+      quillInstance.root.innerHTML = editTpl.html_body || ''
+    }
+  })
 }
-function onEditorInput() { editTpl.html_body = editorRef.value?.innerHTML || '' }
-function onEditorPaste(e) {
-  // Allow rich paste by default (like Foxmail)
-  setTimeout(() => { editTpl.html_body = editorRef.value?.innerHTML || '' }, 50)
-}
-function edCmd(cmd, val) { document.execCommand(cmd, false, val || null); editorRef.value?.focus() }
-function insertLink() {
-  const url = prompt('输入链接地址：', 'https://'); if (url) edCmd('createLink', url)
-}
-function insertImg() {
-  const url = prompt('输入图片URL：', 'https://'); if (url) edCmd('insertImage', url)
-}
-function insertHr() {
-  edCmd('insertHTML', '<hr style="border:none;border-top:1px solid #ccc;margin:16px 0" />')
-}
+
 async function saveTpl() {
   savingTpl.value = true
   try {
@@ -341,22 +411,50 @@ async function doImport() {
 }
 
 // ─── Tasks ─────────────────────────────────────────────────────────────────
-function openTaskCreator() {
-  Object.assign(newTask, { name: '', template_ids: [], contact_ids: selectedContacts.value.slice(), account_ids: [], interval_min: 10, interval_max: 120, cc: '', read_receipt: true })
+function openTaskCreator(existingTask = null) {
+  if (existingTask) {
+    // Edit mode
+    Object.assign(newTask, existingTask)
+    newTask.template_ids = JSON.parse(existingTask.template_ids || '[]')
+    newTask.contact_ids = JSON.parse(existingTask.contact_ids || '[]')
+    newTask.account_ids = JSON.parse(existingTask.account_ids || '[]')
+  } else {
+    // Create mode
+    Object.assign(newTask, { id: null, name: '', template_ids: [], contact_ids: selectedContacts.value.slice(), account_ids: [], interval_min: 10, interval_max: 120, cc: '', read_receipt: true })
+  }
   showTaskCreator.value = true
 }
+
 async function createTask() {
   if (!newTask.template_ids.length) return alert('请选择至少一个模板')
   if (!newTask.contact_ids.length) return alert('请选择至少一个联系人')
   try {
-    await api.request('/mailer/tasks', { method: 'POST', body: JSON.stringify(newTask) })
+    if (newTask.id) {
+      await api.request(`/mailer/tasks/${newTask.id}`, { method: 'PUT', body: JSON.stringify(newTask) })
+    } else {
+      await api.request('/mailer/tasks', { method: 'POST', body: JSON.stringify(newTask) })
+    }
     showTaskCreator.value = false; await loadAll()
-  } catch (e) { alert('创建失败: ' + e.message) }
+  } catch (e) { alert('保存失败: ' + e.message) }
 }
+
 async function startTask(id) { await api.request(`/mailer/tasks/${id}/start`, { method: 'POST' }); await loadAll() }
-async function stopTask(id) { await api.request(`/mailer/tasks/${id}/stop`, { method: 'POST' }); await loadAll() }
-async function deleteTask(id) { if (!confirm('确认删除？')) return; await api.request(`/mailer/tasks/${id}`, { method: 'DELETE' }); await loadAll() }
+async function pauseTask(id) { await api.request(`/mailer/tasks/${id}/stop`, { method: 'POST' }); await loadAll() }
+async function resumeTask(id) { await api.request(`/mailer/tasks/${id}/resume`, { method: 'POST' }); await loadAll() }
+// stopTask is removed (replaced by pauseTask)
+async function deleteTask(id) { if (!confirm('确认删除？对应的发送记录也将被删除')) return; await api.request(`/mailer/tasks/${id}`, { method: 'DELETE' }); await loadAll() }
 function viewLogs(taskId) { logTaskFilter.value = taskId; tab.value = 'logs'; loadLogs() }
+
+async function followUpTask(t) {
+  // Create a new task targeted at the same users as the old task
+  openTaskCreator()
+  newTask.name = (t.name || '未命名').replace(' 的跟进', '') + ' 的跟进'
+  newTask.contact_ids = JSON.parse(t.contact_ids || '[]')
+  newTask.account_ids = JSON.parse(t.account_ids || '[]')
+  // We don't prefill template, user must choose a new template for the follow-up
+  alert('已为您创建跟进任务，联系人和发件账号已从原任务复制。\n请选择您要发送的跟进模板。')
+}
+
 </script>
 
 <style scoped>
