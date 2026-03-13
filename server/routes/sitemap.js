@@ -14,7 +14,7 @@ function escapeXml(str) {
 }
 
 router.get('/', (req, res) => {
-    const baseUrl = process.env.SITE_URL || `${req.protocol}://${req.get('host')}`
+    const baseUrl = (process.env.SITE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '')
 
     const staticPages = [
         { loc: '/', priority: '1.0', changefreq: 'daily' },

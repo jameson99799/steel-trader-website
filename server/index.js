@@ -24,6 +24,7 @@ import aiRoutes from './routes/ai.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
+app.set('trust proxy', 1) // Trust reverse proxy to correctly report HTTP/HTTPS proto
 const PORT = process.env.PORT || 3001
 const NODE_ENV = process.env.NODE_ENV || 'development'
 
