@@ -54,15 +54,26 @@ async function runTask(taskId, isResume = false) {
     const ctx = { cancelled: false, paused: false, timer: null }
     activeTasks.set(taskId, ctx)
 
-    // If this is a follow-up task, gather original message-ids keyed by email
-    const parentMessageIds = {} // email -> message_id
+    // If this is a follow-up task, gather original message-ids + body keyed by email
+    const parentLogData = {} // email -> { messageId, subject, html_body, from, sent_at }
     if (task.parent_task_id) {
         const parentLogs = getAll(
-            'SELECT contact_email, message_id, subject FROM mail_logs WHERE task_id=? AND status=? AND message_id IS NOT NULL',
-            [task.parent_task_id, 'sent']
+            `SELECT ml.contact_email, ml.message_id, ml.subject, ml.sent_at,
+                    mt.html_body, sa.from_name, sa.smtp_user
+             FROM mail_logs ml
+             LEFT JOIN mail_templates mt ON mt.id = ml.template_id
+             LEFT JOIN smtp_accounts sa ON sa.id = ml.account_id
+             WHERE ml.task_id=? AND ml.status='sent'`,
+            [task.parent_task_id]
         )
         for (const l of parentLogs) {
-            if (l.message_id) parentMessageIds[l.contact_email] = { messageId: l.message_id, subject: l.subject }
+            parentLogData[l.contact_email] = {
+                messageId: l.message_id,
+                subject: l.subject,
+                html_body: l.html_body || '',
+                from: l.from_name ? `"${l.from_name}" <${l.smtp_user}>` : l.smtp_user,
+                sent_at: l.sent_at
+            }
         }
     }
 
@@ -116,16 +127,27 @@ async function runTask(taskId, isResume = false) {
                 mailOpts.headers['X-Priority'] = '1'
                 mailOpts.headers['Importance'] = 'High'
             }
-            // Follow-up: set In-Reply-To / References headers
-            const orig = parentMessageIds[contact.email]
+            // Follow-up: set In-Reply-To + append quoted original email body
+            const orig = parentLogData[contact.email]
             if (orig?.messageId) {
                 if (!mailOpts.headers) mailOpts.headers = {}
                 mailOpts.headers['In-Reply-To'] = orig.messageId
                 mailOpts.headers['References']  = orig.messageId
-                // Prefix subject with Re: if not already
                 if (!mailOpts.subject.startsWith('Re:')) {
                     mailOpts.subject = `Re: ${orig.subject || mailOpts.subject}`
                 }
+                // Append quoted original body (like Gmail / Outlook reply style)
+                const sentDate = orig.sent_at ? new Date(orig.sent_at).toLocaleString('zh-CN') : ''
+                const quotedBlock = `
+<br/><br/>
+<div style="border-left:3px solid #c0c0c0;padding-left:14px;margin-left:0;color:#555;font-size:13px">
+  <p style="margin:0 0 6px">-------- 原始邮件 --------<br/>
+  发件人: ${orig.from}<br/>
+  时间: ${sentDate}<br/>
+  主题: ${orig.subject}</p>
+  ${orig.html_body || ''}
+</div>`
+                mailOpts.html = mailOpts.html + quotedBlock
             }
 
             const info = await transport.sendMail(mailOpts)
@@ -361,9 +383,70 @@ router.get('/tasks/realtime', authMiddleware, (req, res) => {
 router.get('/logs', authMiddleware, (req, res) => {
     const taskId = req.query.task_id
     const logs = taskId
-        ? getAll('SELECT * FROM mail_logs WHERE task_id=? ORDER BY id DESC', [taskId])
+        ? getAll('SELECT * FROM mail_logs WHERE task_id=? ORDER BY id ASC', [taskId])
         : getAll('SELECT * FROM mail_logs ORDER BY id DESC LIMIT 500')
     res.json(logs)
 })
 
+// Grouped view: one row per contact_email, with follow-up counts
+router.get('/logs/grouped', authMiddleware, (req, res) => {
+    const taskId = req.query.task_id
+    // Get all logs for this task (or all tasks)
+    const where = taskId ? `WHERE ml.task_id=${+taskId}` : ''
+    const rows = getAll(
+        `SELECT ml.*, mt.name AS task_name, mt2.name AS template_name
+         FROM mail_logs ml
+         LEFT JOIN mail_tasks mt ON mt.id = ml.task_id
+         LEFT JOIN mail_templates mt2 ON mt2.id = ml.template_id
+         ${where ? where.replace('ml.task_id', 'ml.task_id') : ''}
+         ORDER BY ml.contact_email, ml.id ASC`
+    )
+
+    // Group by contact_email
+    const grouped = {}
+    for (const r of rows) {
+        if (!grouped[r.contact_email]) {
+            grouped[r.contact_email] = {
+                contact_email: r.contact_email,
+                contact_name:  r.contact_name || '',
+                records: []
+            }
+        }
+        grouped[r.contact_email].records.push(r)
+    }
+
+    // Build summary row for each email
+    const result = Object.values(grouped).map(g => {
+        const total = g.records.length
+        // Follow-up = records from tasks that have a parent_task_id
+        // We detect this from task name containing "跟进" or by checking parent_task_id
+        let sendCount = 0; let followCount = 0
+        for (const r of g.records) {
+            if (r.task_name && r.task_name.includes('跟进')) followCount++
+            else sendCount++
+        }
+        return {
+            contact_email: g.contact_email,
+            contact_name:  g.contact_name,
+            send_count:    sendCount,
+            follow_count:  followCount,
+            total:         total,
+            last_sent_at:  g.records[g.records.length - 1]?.sent_at,
+            records:       g.records
+        }
+    })
+
+    res.json(result)
+})
+
+// Bulk delete selected log records
+router.post('/logs/bulk-delete', authMiddleware, express.json(), (req, res) => {
+    const ids = req.body?.ids
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: '未选择记录' })
+    const placeholders = ids.map(() => '?').join(',')
+    run(`DELETE FROM mail_logs WHERE id IN (${placeholders})`, ids)
+    res.json({ message: `已删除 ${ids.length} 条记录` })
+})
+
 export default router
+

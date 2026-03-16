@@ -96,27 +96,48 @@
 
     <!-- ═══ Logs Tab ═══ -->
     <div v-if="tab === 'logs'" class="tab-body">
-      <div class="toolbar">
-        <select v-model="logTaskFilter" class="form-control" style="width:250px" @change="loadLogs">
+      <div class="toolbar" style="flex-wrap:wrap;gap:10px">
+        <select v-model="logTaskFilter" class="form-control" style="width:240px" @change="loadLogs">
           <option value="">所有记录</option>
           <option v-for="t in tasks" :key="t.id" :value="t.id">{{ t.name || '任务#'+t.id }}</option>
         </select>
+        <button v-if="selectedLogIds.length" class="btn btn-outline err-btn" @click="bulkDeleteLogs">
+          🗑️ 批量删除 ({{ selectedLogIds.length }})
+        </button>
       </div>
-      <div v-if="!logs.length" class="empty">暂无记录</div>
-      <table v-else class="data-table">
-        <thead><tr><th>收件人</th><th>主题</th><th>状态</th><th>发送时间</th></tr></thead>
-        <tbody><tr v-for="l in logs" :key="l.id">
-          <td>{{ l.contact_name ? l.contact_name+' <'+l.contact_email+'>' : l.contact_email }}</td>
-          <td>{{ l.subject }}</td>
-          <td>
-            <span v-if="l.status==='sent' && !l.opened_at" class="check gray">✓✓</span>
-            <span v-else-if="l.opened_at" class="check blue">✓✓</span>
-            <span v-else-if="l.status==='failed'" class="check red">✗</span>
-            <span v-else class="check gray">✓</span>
-          </td>
-          <td>{{ l.sent_at ? new Date(l.sent_at).toLocaleString('zh-CN') : '-' }}</td>
-        </tr></tbody>
-      </table>
+
+      <div v-if="!groupedLogs.length" class="empty">暂无记录</div>
+
+      <!-- Grouped by contact_email -->
+      <div v-for="g in groupedLogs" :key="g.contact_email" class="log-group">
+        <div class="log-group-header" @click="toggleLogGroup(g.contact_email)">
+          <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+            <input type="checkbox" @click.stop @change="toggleGroupCheck(g, $event)" :checked="groupAllChecked(g)" />
+            <span class="log-email">{{ g.contact_name ? g.contact_name+'<'+g.contact_email+'>' : g.contact_email }}</span>
+            <span class="log-badge">发送 {{ g.send_count }} 次</span>
+            <span v-if="g.follow_count" class="log-badge follow">跟进 {{ g.follow_count }} 次</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+            <span class="log-time">{{ g.last_sent_at ? new Date(g.last_sent_at).toLocaleString('zh-CN') : '' }}</span>
+            <span>{{ expandedGroups.has(g.contact_email) ? '▲' : '▼' }}</span>
+          </div>
+        </div>
+
+        <!-- Expanded: per-send history -->
+        <div v-if="expandedGroups.has(g.contact_email)" class="log-records">
+          <div v-for="(r, idx) in g.records" :key="r.id" class="log-record">
+            <input type="checkbox" v-model="selectedLogIds" :value="r.id" style="margin-right:8px" />
+            <div class="log-record-body">
+              <span class="log-round">{{ followLabel(g, idx) }}</span>
+              <span class="log-subj">{{ r.subject }}</span>
+              <span :class="'check '+(r.status==='sent'?'gray':'red')">
+                {{ r.status === 'sent' ? '✓✓ 已发送' : '✗ 失败' }}
+              </span>
+              <span class="log-time">{{ r.sent_at ? new Date(r.sent_at).toLocaleString('zh-CN') : '' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ═══ Template Editor Modal ═══ -->
@@ -317,10 +338,8 @@ const tab = ref('templates')
 const templates = ref([])
 const contacts = ref([])
 const tasks = ref([])
-const logs = ref([])
 const smtpAccounts = ref([])
 const selectedContacts = ref([])
-const logTaskFilter = ref('')
 
 // Template editor
 const showTplEditor = ref(false)
@@ -352,6 +371,51 @@ const rtData = ref({}) // taskId -> { nextEmail, countdownMs, remaining }
 const showPreview = ref(false)
 const previewHtml = ref('')
 
+// Logs grouped view
+const groupedLogs = ref([])
+const selectedLogIds = ref([])
+const expandedGroups = ref(new Set())
+const logTaskFilter = ref('')
+
+function toggleLogGroup(email) {
+  const s = new Set(expandedGroups.value)
+  if (s.has(email)) s.delete(email)
+  else s.add(email)
+  expandedGroups.value = s
+}
+function groupAllChecked(g) {
+  return g.records.every(r => selectedLogIds.value.includes(r.id))
+}
+function toggleGroupCheck(g, e) {
+  const ids = g.records.map(r => r.id)
+  if (e.target.checked) {
+    selectedLogIds.value = [...new Set([...selectedLogIds.value, ...ids])]
+  } else {
+    selectedLogIds.value = selectedLogIds.value.filter(id => !ids.includes(id))
+  }
+}
+function followLabel(g, idx) {
+  // Count how many follow-ups appear before this record
+  let followCount = 0
+  for (let i = 0; i <= idx; i++) {
+    const r = g.records[i]
+    if (r.task_name && r.task_name.includes('跟进')) {
+      if (i === idx) return `第${followCount + 1}次跟进`
+      followCount++
+    }
+  }
+  return '第一次发送'
+}
+async function bulkDeleteLogs() {
+  if (!selectedLogIds.value.length) return
+  if (!confirm(`确认删除 ${selectedLogIds.value.length} 条记录？`)) return
+  try {
+    await api.request('/mailer/logs/bulk-delete', { method: 'POST', body: JSON.stringify({ ids: selectedLogIds.value }) })
+    selectedLogIds.value = []
+    await loadLogs()
+  } catch (e) { alert('删除失败: ' + e.message) }
+}
+
 const allContactsSelected = computed(() => contacts.value.length > 0 && selectedContacts.value.length === contacts.value.length)
 const newTaskAllContactsSel = computed(() => contacts.value.length > 0 && newTask.contact_ids.length === contacts.value.length)
 
@@ -368,7 +432,7 @@ async function loadAll() {
 }
 async function loadLogs() {
   const q = logTaskFilter.value ? `?task_id=${logTaskFilter.value}` : ''
-  logs.value = await api.request('/mailer/logs' + q) || []
+  groupedLogs.value = await api.request('/mailer/logs/grouped' + q) || []
 }
 let rtInterval = null
 let taskPollInterval = null
@@ -441,14 +505,17 @@ function initQuill() {
     editTpl.html_body = quillInstance.root.innerHTML
   })
 
-  // Intercept paste to preserve rich formatting (HR, tables, etc.)
+  // Fix paste: bypass Quill's HTML sanitizer entirely with execCommand
+  // This preserves HR, font styles, signatures etc. exactly as copied from Foxmail/Outlook
   quillInstance.root.addEventListener('paste', (e) => {
     const clipHtml = e.clipboardData?.getData('text/html')
-    if (clipHtml && clipHtml.includes('<')) {
+    if (clipHtml && clipHtml.length > 10) {
       e.preventDefault()
       e.stopPropagation()
-      const range = quillInstance.getSelection(true)
-      quillInstance.clipboard.dangerouslyPasteHTML(range?.index ?? 0, clipHtml, 'user')
+      // Use the native browser insertHTML command which bypasses Quill's delta sanitization
+      document.execCommand('insertHTML', false, clipHtml)
+      // Sync back to reactive model
+      editTpl.html_body = quillInstance.root.innerHTML
     }
   }, true)
 
@@ -722,5 +789,20 @@ textarea.form-control { resize: vertical; font-family: inherit }
 :deep(.ql-editor) { min-height: 200px; max-height: 500px; overflow-y: auto }
 :deep(.ql-editor img) { cursor: pointer; max-width: 100% }
 :deep(.ql-editor hr) { border: none; border-top: 1px solid #cbd5e1; margin: 12px 0 }
+
+/* Grouped logs */
+.log-group { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; overflow: hidden }
+.log-group-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: #f8fafc; cursor: pointer; user-select: none; gap: 8px }
+.log-group-header:hover { background: #f0f4ff }
+.log-email { font-size: 13px; font-weight: 600; color: #1e293b; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.log-badge { font-size: 11px; font-weight: 700; color: #3b82f6; background: #eff6ff; border: 1px solid #93c5fd; border-radius: 4px; padding: 1px 7px; white-space: nowrap }
+.log-badge.follow { color: #7c3aed; background: #f5f3ff; border-color: #c4b5fd }
+.log-time { font-size: 11px; color: #94a3b8 }
+.log-records { border-top: 1px solid #e2e8f0; padding: 6px 0 }
+.log-record { display: flex; align-items: center; padding: 7px 16px; font-size: 12px; border-bottom: 1px solid #f8fafc; gap: 4px }
+.log-record:last-child { border-bottom: none }
+.log-record-body { display: flex; align-items: center; gap: 10px; flex: 1; flex-wrap: wrap }
+.log-round { font-weight: 700; color: #1e293b; min-width: 72px }
+.log-subj { color: #64748b; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0 }
 
 </style>
