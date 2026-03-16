@@ -71,11 +71,19 @@
             <strong>{{ dg.domain }}</strong>
             <span class="domain-count">({{ dg.contacts.length }})</span>
           </div>
-          <table v-if="domainExpanded.has(dg.domain)" class="data-table" style="margin-bottom:0">
-            <thead><tr><th style="width:30px"><input type="checkbox" @change="toggleDomainAll(dg, $event)" :checked="dg.contacts.every(c=>selectedContacts.includes(c.id))" /></th><th>邮箱</th><th>姓名</th><th>公司</th><th>分组</th><th>操作</th></tr></thead>
+          <table v-if="domainExpanded.has(dg.domain)" class="data-table domain-table">
+            <colgroup>
+              <col style="width:40px">
+              <col style="width:30%">
+              <col style="width:15%">
+              <col style="width:20%">
+              <col style="width:12%">
+              <col style="width:120px">
+            </colgroup>
+            <thead><tr><th><input type="checkbox" @change="toggleDomainAll(dg, $event)" :checked="dg.contacts.every(c=>selectedContacts.includes(c.id))" /></th><th>邮箱</th><th>姓名</th><th>公司</th><th>分组</th><th>操作</th></tr></thead>
             <tbody><tr v-for="c in dg.contacts" :key="c.id">
               <td><input type="checkbox" v-model="selectedContacts" :value="c.id" /></td>
-              <td>{{ c.email }}</td><td>{{ c.name }}</td><td>{{ c.company }}</td>
+              <td class="td-ellipsis">{{ c.email }}</td><td class="td-ellipsis">{{ c.name }}</td><td class="td-ellipsis">{{ c.company }}</td>
               <td><span v-if="c.group_name" class="log-badge" style="font-size:11px">{{ c.group_name }}</span><span v-else style="color:#94a3b8;font-size:11px">—</span></td>
               <td class="row-actions">
                 <button class="btn btn-sm btn-outline" @click="openContactEditor(c)">编辑</button>
@@ -580,13 +588,7 @@ const domainGroupedContacts = computed(() => {
     if (!map[domain]) map[domain] = []
     map[domain].push(c)
   }
-  // Auto-expand all domains
   const allDomains = Object.keys(map).sort()
-  // Ensure new domains are auto-expanded
-  const expanded = domainExpanded.value
-  if (expanded.size === 0 || filteredContacts.value.length <= 50) {
-    allDomains.forEach(d => expanded.add(d))
-  }
   return allDomains.map(domain => ({ domain, contacts: map[domain] }))
 })
 function toggleDomain(domain) {
@@ -965,11 +967,13 @@ h1 { font-size: 24px; font-weight: 700; margin-bottom: 24px; color: #1e293b }
 .group-del:hover { color:#ef4444 }
 
 /* Domain groups */
-.domain-group { margin-bottom:2px }
-.domain-header { display:flex; align-items:center; gap:8px; padding:8px 12px; background:#f1f5f9; border-radius:6px; cursor:pointer; user-select:none; font-size:13px }
+.domain-group { margin-bottom:4px }
+.domain-header { display:flex; align-items:center; gap:8px; padding:10px 12px; background:#f1f5f9; border-radius:6px; cursor:pointer; user-select:none; font-size:13px; border:1px solid #e2e8f0 }
 .domain-header:hover { background:#e2e8f0 }
 .domain-header strong { color:#1e293b }
 .domain-count { color:#64748b; font-size:12px }
+.domain-table { table-layout:fixed; margin-bottom:0 }
+.td-ellipsis { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:0 }
 
 /* Table */
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px }
