@@ -52,27 +52,41 @@
     <div v-if="tab === 'tasks'" class="tab-body">
       <div class="toolbar"><button class="btn btn-primary" @click="openTaskCreator()">+ 创建发送任务</button></div>
       <div v-if="!tasks.length" class="empty">暂无任务</div>
-      <div v-for="t in tasks" :key="t.id" class="list-card">
+      <div v-for="t in tasks" :key="t.id" class="list-card task-card">
         <div class="lc-main">
-          <strong>{{ t.name || '未命名任务' }}</strong>
-          <span class="lc-sub">状态：<span :class="'status-'+t.status">{{ statusLabel(t.status) }}</span> | 进度：{{ t.sent_count }}/{{ t.total_count }}</span>
-          <span class="lc-note">{{ new Date(t.created_at).toLocaleString('zh-CN') }}</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <strong>{{ t.name || '未命名任务' }}</strong>
+            <span v-if="t.priority" class="tag-urgent">⚡ 紧急</span>
+            <span v-if="t.schedule_at && t.status==='pending'" class="tag-sched">⏰ 定时中</span>
+          </div>
+          <span class="lc-sub">状态：<span :class="'status-'+t.status">{{ statusLabel(t.status) }}</span> | 进度：<b>{{ t.sent_count }}</b>/{{ t.total_count }}</span>
+          <!-- Real-time countdown -->
+          <div v-if="rtData[t.id]" class="rt-info">
+            <span>📬 即将发送：{{ rtData[t.id].nextEmail }}</span>
+            <span v-if="rtData[t.id].countdownMs > 0"> | ⏱ {{ Math.ceil(rtData[t.id].countdownMs/1000) }}秒后</span>
+            <span> | 剩余 {{ rtData[t.id].remaining }} 封</span>
+          </div>
+          <span class="lc-note">
+            创建：{{ new Date(t.created_at).toLocaleString('zh-CN') }}
+            <span v-if="t.schedule_at"> · 定时：{{ new Date(t.schedule_at).toLocaleString('zh-CN') }}</span>
+          </span>
         </div>
         <div class="lc-actions">
-          <!-- Pending: Start, Edit, Delete -->
+          <!-- Pending: Start, Schedule, Edit, Delete -->
           <button v-if="t.status==='pending'" class="btn btn-sm btn-primary" @click="startTask(t.id)">▶ 启动</button>
-          
-          <!-- Running: Pause, Logs -->
-          <button v-if="t.status==='running'" class="btn btn-sm btn-outline" style="color:#f59e0b; border-color:#fcd34d" @click="pauseTask(t.id)">⏸ 暂停</button>
-          
-          <!-- Paused/Failed: Resume, Start (Restart), Edit, Logs, Delete -->
-          <button v-if="t.status==='paused' || t.status==='failed'" class="btn btn-sm btn-primary" @click="resumeTask(t.id)">▶ 续发</button>
-          <button v-if="t.status==='paused' || t.status==='failed'" class="btn btn-sm btn-outline" @click="startTask(t.id)" title="从头开始发送">↺ 重新启动</button>
-          
-          <button v-if="['pending', 'paused', 'failed', 'cancelled'].includes(t.status)" class="btn btn-sm btn-outline" @click="openTaskCreator(t)">编辑</button>
+          <button v-if="['pending','paused','failed','cancelled'].includes(t.status)" class="btn btn-sm btn-outline" style="color:#6366f1;border-color:#a5b4fc" @click="openSchedule(t)">⏰ 定时</button>
 
-          <!-- Done/Cancelled: Logs, Delete, Follow-up -->
-          <button v-if="t.status==='done'" class="btn btn-sm btn-outline" style="color:#3b82f6; border-color:#93c5fd" @click="followUpTask(t)" title="对这些收件人发送跟进邮件">💬 跟进</button>
+          <!-- Running: Pause -->
+          <button v-if="t.status==='running'" class="btn btn-sm btn-outline" style="color:#f59e0b;border-color:#fcd34d" @click="pauseTask(t.id)">⏸ 暂停</button>
+
+          <!-- Paused/Failed: Resume, Restart -->
+          <button v-if="t.status==='paused' || t.status==='failed'" class="btn btn-sm btn-primary" @click="resumeTask(t.id)">▶ 续发</button>
+          <button v-if="t.status==='paused' || t.status==='failed'" class="btn btn-sm btn-outline" @click="startTask(t.id)" title="从头开始">↺ 重发</button>
+
+          <button v-if="['pending','paused','failed','cancelled'].includes(t.status)" class="btn btn-sm btn-outline" @click="openTaskCreator(t)">编辑</button>
+
+          <!-- Done: Follow-up -->
+          <button v-if="t.status==='done'" class="btn btn-sm btn-outline" style="color:#3b82f6;border-color:#93c5fd" @click="followUpTask(t)">💬 跟进</button>
 
           <button class="btn btn-sm btn-outline" @click="viewLogs(t.id)">查看记录</button>
           <button v-if="t.status !== 'running'" class="btn btn-sm btn-outline err-btn" @click="deleteTask(t.id)">删除</button>
@@ -199,14 +213,36 @@
 
         <div class="form-group"><label>抄送（CC，留空则不抄送）</label><input v-model="newTask.cc" class="form-control" placeholder="boss@company.com" /></div>
 
-        <div class="form-group">
-          <label class="toggle-label"><input type="checkbox" v-model="newTask.read_receipt" /><span>请求已读回执（Disposition-Notification-To）</span></label>
-          <p class="form-hint">对方邮件客户端会提示发送阅读回执，可被用户拒绝</p>
+        <div class="grid grid-2">
+          <div class="form-group">
+            <label class="toggle-label"><input type="checkbox" v-model="newTask.read_receipt" /><span>请求已读回执</span></label>
+            <p class="form-hint">对方邮件客户端提示发送阅读回执</p>
+          </div>
+          <div class="form-group">
+            <label class="toggle-label"><input type="checkbox" v-model="newTask.priority" /><span>⚡ 紧急邮件（高优先级）</span></label>
+            <p class="form-hint">设置 X-Priority:1 / Importance:High 标头</p>
+          </div>
         </div>
 
         <div class="modal-actions">
-          <button class="btn btn-primary" @click="createTask">🚀 创建任务</button>
+          <button class="btn btn-primary" @click="createTask">🚀 {{ newTask.id ? '保存修改' : '创建任务' }}</button>
           <button class="btn btn-outline" @click="showTaskCreator=false">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Schedule Modal ═══ -->
+    <div class="modal-overlay" v-if="showSchedule" @click.self="showSchedule=false">
+      <div class="modal-box">
+        <h3>⏰ 定时发送任务</h3>
+        <p class="form-hint" style="margin-bottom:14px">任务：{{ scheduleTask_.name }}</p>
+        <div class="form-group">
+          <label>选择发送时间</label>
+          <input type="datetime-local" v-model="scheduleTime" class="form-control" />
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" @click="confirmSchedule">✅ 确认定时</button>
+          <button class="btn btn-outline" @click="showSchedule=false">取消</button>
         </div>
       </div>
     </div>
@@ -333,7 +369,15 @@ const importText = ref('')
 
 // Task creator
 const showTaskCreator = ref(false)
-const newTask = reactive({ name: '', template_ids: [], contact_ids: [], account_ids: [], interval_min: 10, interval_max: 120, cc: '', read_receipt: true })
+const newTask = reactive({ id: null, name: '', template_ids: [], contact_ids: [], account_ids: [], interval_min: 10, interval_max: 120, cc: '', read_receipt: true, priority: false, schedule_at: null, parent_task_id: null })
+
+// Schedule modal
+const showSchedule = ref(false)
+const scheduleTask_ = ref({})
+const scheduleTime = ref('')
+
+// Real-time polling
+const rtData = ref({}) // taskId -> { nextEmail, countdownMs, remaining }
 
 // Preview
 const showPreview = ref(false)
@@ -357,13 +401,45 @@ async function loadLogs() {
   const q = logTaskFilter.value ? `?task_id=${logTaskFilter.value}` : ''
   logs.value = await api.request('/mailer/logs' + q) || []
 }
-onMounted(() => { loadAll(); loadLogs() })
+let rtInterval = null
+async function pollRealtime() {
+  try {
+    const data = await api.request('/mailer/tasks/realtime')
+    rtData.value = data || {}
+    // Also refresh task list if any running tasks detected
+    if (Object.keys(rtData.value).length > 0) {
+      const freshTasks = await api.request('/mailer/tasks')
+      if (freshTasks) tasks.value = freshTasks
+    }
+  } catch (e) {}
+}
+onMounted(() => {
+  loadAll()
+  loadLogs()
+  rtInterval = setInterval(pollRealtime, 2000)
+})
+import { onUnmounted } from 'vue'
+onUnmounted(() => { clearInterval(rtInterval) })
 
 // ─── Template ────────────────────────────────────────────────────────────────
 let quillInstance = null
 
+function destroyQuill() {
+  if (quillInstance) {
+    try { quillInstance.off('text-change') } catch (e) {}
+    quillInstance = null
+    // Remove the ql-toolbar element Quill injected above the editor
+    const container = editorRef.value?.parentElement
+    if (container) {
+      const toolbar = container.querySelector('.ql-toolbar')
+      if (toolbar) toolbar.remove()
+    }
+    if (editorRef.value) editorRef.value.innerHTML = ''
+  }
+}
+
 function initQuill() {
-  if (quillInstance) return
+  destroyQuill()
   
   quillInstance = new Quill(editorRef.value, {
     theme: 'snow',
@@ -479,14 +555,14 @@ async function doImport() {
 // ─── Tasks ─────────────────────────────────────────────────────────────────
 function openTaskCreator(existingTask = null) {
   if (existingTask) {
-    // Edit mode
     Object.assign(newTask, existingTask)
     newTask.template_ids = JSON.parse(existingTask.template_ids || '[]')
     newTask.contact_ids = JSON.parse(existingTask.contact_ids || '[]')
     newTask.account_ids = JSON.parse(existingTask.account_ids || '[]')
+    newTask.priority = !!existingTask.priority
+    newTask.parent_task_id = existingTask.parent_task_id || null
   } else {
-    // Create mode
-    Object.assign(newTask, { id: null, name: '', template_ids: [], contact_ids: selectedContacts.value.slice(), account_ids: [], interval_min: 10, interval_max: 120, cc: '', read_receipt: true })
+    Object.assign(newTask, { id: null, name: '', template_ids: [], contact_ids: selectedContacts.value.slice(), account_ids: [], interval_min: 10, interval_max: 120, cc: '', read_receipt: true, priority: false, schedule_at: null, parent_task_id: null })
   }
   showTaskCreator.value = true
 }
@@ -512,13 +588,36 @@ async function deleteTask(id) { if (!confirm('确认删除？对应的发送记�
 function viewLogs(taskId) { logTaskFilter.value = taskId; tab.value = 'logs'; loadLogs() }
 
 async function followUpTask(t) {
-  // Create a new task targeted at the same users as the old task
   openTaskCreator()
   newTask.name = (t.name || '未命名').replace(' 的跟进', '') + ' 的跟进'
   newTask.contact_ids = JSON.parse(t.contact_ids || '[]')
   newTask.account_ids = JSON.parse(t.account_ids || '[]')
-  // We don't prefill template, user must choose a new template for the follow-up
-  alert('已为您创建跟进任务，联系人和发件账号已从原任务复制。\n请选择您要发送的跟进模板。')
+  newTask.parent_task_id = t.id  // link to parent → backend uses In-Reply-To header
+  alert('已为您创建跟进任务，联系人和发件账号已从原任务复制。\n请选择跟进模板后点击创建。\n\nℹ️ 跟进邮件将内嵌上次发送的邮件，收件人能看到上次消息记录。')
+}
+
+function openSchedule(t) {
+  scheduleTask_.value = t
+  if (t.schedule_at) {
+    const d = new Date(t.schedule_at)
+    scheduleTime.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+  } else {
+    const d = new Date(Date.now() + 3600000)
+    scheduleTime.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+  }
+  showSchedule.value = true
+}
+async function confirmSchedule() {
+  if (!scheduleTime.value) return alert('请选择时间')
+  try {
+    await api.request(`/mailer/tasks/${scheduleTask_.value.id}/schedule`, {
+      method: 'POST',
+      body: JSON.stringify({ schedule_at: new Date(scheduleTime.value).toISOString() })
+    })
+    showSchedule.value = false
+    await loadAll()
+    alert(`定时已设置！将于 ${new Date(scheduleTime.value).toLocaleString('zh-CN')} 自动开始发送`)
+  } catch (e) { alert('设置失败: ' + e.message) }
 }
 
 </script>
@@ -543,7 +642,13 @@ h1 { font-size: 24px; font-weight: 700; margin-bottom: 24px; color: #1e293b }
 .lc-main strong { font-size: 14px; color: #1e293b }
 .lc-sub { font-size: 12px; color: #64748b }
 .lc-note { font-size: 11px; color: #94a3b8 }
-.lc-actions { display: flex; gap: 6px; flex-shrink: 0 }
+.lc-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end }
+
+/* Task card extras */
+.task-card { align-items: flex-start }
+.rt-info { font-size: 12px; color: #059669; font-weight: 500; padding: 3px 8px; background: #f0fdf4; border-radius: 6px; margin-top: 2px }
+.tag-urgent { font-size: 11px; font-weight: 700; color: #dc2626; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 4px; padding: 1px 6px }
+.tag-sched { font-size: 11px; font-weight: 700; color: #6366f1; background: #eff6ff; border: 1px solid #a5b4fc; border-radius: 4px; padding: 1px 6px }
 
 /* Table */
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px }
