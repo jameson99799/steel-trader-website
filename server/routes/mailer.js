@@ -313,6 +313,13 @@ router.post('/contacts/bulk-delete', authMiddleware, (req, res) => {
     run(`DELETE FROM mail_contacts WHERE id IN (${placeholders})`, ids)
     res.json({ message: `已删除 ${ids.length} 个联系人` })
 })
+router.post('/contacts/move-group', authMiddleware, (req, res) => {
+    const { ids, group_id } = req.body
+    if (!ids?.length) return res.status(400).json({ error: '无选中项' })
+    const placeholders = ids.map(() => '?').join(',')
+    run(`UPDATE mail_contacts SET group_id=? WHERE id IN (${placeholders})`, [group_id || null, ...ids])
+    res.json({ message: `已移动 ${ids.length} 个联系人` })
+})
 
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 router.get('/tasks', authMiddleware, (req, res) => {

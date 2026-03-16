@@ -37,6 +37,12 @@ router.get('/', authMiddleware, (req, res) => {
   res.json({ data: inquiries, unread_count: unreadCount.count })
 })
 
+// Lightweight endpoint for sidebar badge polling
+router.get('/unread-count', authMiddleware, (req, res) => {
+  const row = getOne('SELECT COUNT(*) as count FROM inquiries WHERE is_read = 0')
+  res.json({ count: row.count })
+})
+
 router.put('/:id/read', authMiddleware, (req, res) => {
   run('UPDATE inquiries SET is_read = 1 WHERE id = ?', [req.params.id])
   res.json({ message: '已标记为已读' })

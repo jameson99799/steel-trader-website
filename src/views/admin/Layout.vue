@@ -37,17 +37,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../../api'
 
 const router = useRouter()
 const unreadCount = ref(0)
+let pollTimer = null
 
 const loadUnreadCount = async () => {
   try {
-    const res = await api.getInquiries()
-    unreadCount.value = res.unread_count
+    const res = await api.request('/inquiries/unread-count')
+    unreadCount.value = res?.count || 0
   } catch (e) {}
 }
 
@@ -56,7 +57,11 @@ const handleLogout = () => {
   router.push('/admin/login')
 }
 
-onMounted(loadUnreadCount)
+onMounted(() => {
+  loadUnreadCount()
+  pollTimer = setInterval(loadUnreadCount, 30000) // poll every 30s
+})
+onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 </script>
 
 <style scoped>

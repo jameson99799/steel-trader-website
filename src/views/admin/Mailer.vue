@@ -34,6 +34,13 @@
         <button class="btn btn-primary" @click="openContactEditor()">+ 添加联系人</button>
         <button class="btn btn-outline" @click="showImport = true">📥 批量导入</button>
         <button v-if="selectedContacts.length" class="btn btn-outline err-btn" @click="bulkDeleteContacts">🗑️ 删除选中 ({{ selectedContacts.length }})</button>
+        <!-- Move to group -->
+        <select v-if="selectedContacts.length" v-model="moveTargetGroup" class="form-control" style="width:auto;min-width:120px;font-size:12px;padding:4px 8px">
+          <option :value="null">移动到分组...</option>
+          <option :value="0">— 未分组 —</option>
+          <option v-for="g in contactGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+        </select>
+        <button v-if="selectedContacts.length && moveTargetGroup !== null" class="btn btn-sm btn-outline" style="color:#7c3aed;border-color:#c4b5fd" @click="moveToGroup">✅ 确认移动</button>
         <div style="flex:1"></div>
         <!-- Group management -->
         <button class="btn btn-sm btn-outline" @click="addGroup" style="color:#7c3aed;border-color:#c4b5fd">📁 新建分组</button>
@@ -529,6 +536,7 @@ const contactGroupFilter = ref('')
 const contactSearch = ref('')
 const taskContactSearch = ref('')
 const importGroupId = ref(null)
+const moveTargetGroup = ref(null)
 
 // Fuzzy search helper
 function fuzzyMatch(text, query) {
@@ -600,6 +608,16 @@ async function bulkDeleteContacts() {
     selectedContacts.value = []
     await loadAll(); await loadGroups()
   } catch (e) { alert('删除失败: ' + e.message) }
+}
+async function moveToGroup() {
+  if (!selectedContacts.value.length || moveTargetGroup.value === null) return
+  const gid = moveTargetGroup.value === 0 ? null : moveTargetGroup.value
+  try {
+    await api.request('/mailer/contacts/move-group', { method: 'POST', body: JSON.stringify({ ids: selectedContacts.value, group_id: gid }) })
+    selectedContacts.value = []
+    moveTargetGroup.value = null
+    await loadAll()
+  } catch (e) { alert('移动失败: ' + e.message) }
 }
 
 // Contact editor
