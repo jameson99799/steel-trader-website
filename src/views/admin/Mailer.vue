@@ -226,14 +226,87 @@
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import api from '../../api'
 
-// Import Quill and Image Resize
+// Import Quill
 import Quill from 'quill'
-import { ImageResize } from 'quill-image-resize-module'
 import 'quill/dist/quill.snow.css'
 
-// Required by image-resize module
-window.Quill = Quill
-window.ImageResize = ImageResize
+// ─── Custom Image Resize Module (Vite-compatible, no external deps) ──────────
+class ImageResizeModule {
+  constructor(quill) {
+    this.quill = quill
+    this.img = null
+    this.overlay = null
+    quill.root.addEventListener('click', this.onImgClick.bind(this))
+    document.addEventListener('mousedown', this.onDocMouseDown.bind(this))
+  }
+  onImgClick(e) {
+    if (e.target.tagName !== 'IMG') return
+    this.img = e.target
+    this.showOverlay()
+  }
+  onDocMouseDown(e) {
+    if (this.overlay && !this.overlay.contains(e.target) && e.target !== this.img) {
+      this.hideOverlay()
+    }
+  }
+  showOverlay() {
+    this.hideOverlay()
+    this.overlay = document.createElement('div')
+    Object.assign(this.overlay.style, {
+      position: 'absolute', border: '2px solid #3b82f6', pointerEvents: 'none', boxSizing: 'border-box'
+    })
+    this.quill.root.parentNode.style.position = 'relative'
+    this.quill.root.parentNode.appendChild(this.overlay)
+    this.positionOverlay()
+    ;['nw','ne','sw','se'].forEach(dir => {
+      const handle = document.createElement('div')
+      Object.assign(handle.style, {
+        position: 'absolute', width: '10px', height: '10px', background: '#3b82f6',
+        borderRadius: '50%', pointerEvents: 'all', cursor: dir + '-resize'
+      })
+      if (dir.includes('n')) { handle.style.top = '-5px' } else { handle.style.bottom = '-5px' }
+      if (dir.includes('w')) { handle.style.left = '-5px' } else { handle.style.right = '-5px' }
+      handle.addEventListener('mousedown', this.onHandleMouseDown.bind(this, dir))
+      this.overlay.appendChild(handle)
+    })
+  }
+  positionOverlay() {
+    if (!this.img || !this.overlay) return
+    const r = this.img.getBoundingClientRect()
+    const pr = this.quill.root.parentNode.getBoundingClientRect()
+    Object.assign(this.overlay.style, {
+      left: (r.left - pr.left) + 'px', top: (r.top - pr.top) + 'px',
+      width: r.width + 'px', height: r.height + 'px'
+    })
+  }
+  hideOverlay() {
+    if (this.overlay) { this.overlay.remove(); this.overlay = null }
+    this.img = null
+  }
+  onHandleMouseDown(dir, e) {
+    e.preventDefault()
+    const startX = e.clientX, startY = e.clientY
+    const startW = this.img.offsetWidth || this.img.naturalWidth
+    const startH = this.img.offsetHeight || this.img.naturalHeight
+    const img = this.img
+    const move = (ev) => {
+      const dx = ev.clientX - startX, dy = ev.clientY - startY
+      let w = dir.includes('e') ? startW + dx : startW - dx
+      let h = dir.includes('s') ? startH + dy : startH - dy
+      w = Math.max(50, w); h = Math.max(50, h)
+      img.style.width = w + 'px'; img.style.height = h + 'px'
+      this.positionOverlay()
+    }
+    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up) }
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+  }
+  destroy() {
+    this.hideOverlay()
+    document.removeEventListener('mousedown', this.onDocMouseDown)
+  }
+}
+Quill.register('modules/imageResize', ImageResizeModule)
 
 const tab = ref('templates')
 const templates = ref([])
@@ -291,14 +364,7 @@ let quillInstance = null
 
 function initQuill() {
   if (quillInstance) return
-  const Quill = window.Quill
-  if (!Quill) return setTimeout(initQuill, 100) // retry if script not loaded yet
   
-  // Register ImageResize if available
-  if (window.ImageResize && !Quill.imports['modules/imageResize']) {
-    Quill.register('modules/imageResize', window.ImageResize)
-  }
-
   quillInstance = new Quill(editorRef.value, {
     theme: 'snow',
     modules: {
