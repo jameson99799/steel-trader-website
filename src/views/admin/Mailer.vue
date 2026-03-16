@@ -321,7 +321,6 @@
               <label v-for="c in taskFilteredContacts" :key="c.id" class="check-item">
                 <input type="checkbox" v-model="newTask.contact_ids" :value="c.id" /> {{ c.email }} {{ c.name ? '('+c.name+')' : '' }}
                 <span v-if="c.group_name" class="log-badge" style="font-size:10px;margin-left:4px">{{ c.group_name }}</span>
-                <span v-if="c.domain_group" class="log-badge" style="font-size:10px;margin-left:4px;background-color:#e0f2fe;color:#0284c7">{{ c.domain_group }}</span>
               </label>
             </div>
           </div>
@@ -353,6 +352,11 @@
             <input v-model.number="newTask.skip_days" class="form-control" type="number" min="0" placeholder="0 = 不跳过" />
             <p class="form-hint">填 0 不过滤。如填 7，则自动跳过 7 天内已发送过的邮箱，跟进任务不受影响。</p>
           </div>
+        </div>
+
+        <div class="form-group">
+          <label class="toggle-label"><input type="checkbox" v-model="newTask.priority" /><span>⚡ 紧急邮件（高优先级）</span></label>
+          <p class="form-hint">设置 X-Priority:1 / Importance:High 标头</p>
         </div>
 
         <div class="modal-actions">
