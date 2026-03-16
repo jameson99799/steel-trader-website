@@ -54,11 +54,11 @@ async function runTask(taskId, isResume = false) {
     const ctx = { cancelled: false, paused: false, timer: null }
     activeTasks.set(taskId, ctx)
 
-    // If this is a follow-up task, gather original message-ids + body keyed by email
-    const parentLogData = {} // email -> { messageId, subject, html_body, from, sent_at }
+    // If this is a follow-up task, gather original sent content keyed by email
+    const parentLogData = {} // email -> { messageId, subject, sent_html, from, from_email, sent_at }
     if (task.parent_task_id) {
         const parentLogs = getAll(
-            `SELECT ml.contact_email, ml.message_id, ml.subject, ml.sent_at,
+            `SELECT ml.contact_email, ml.message_id, ml.subject, ml.sent_at, ml.sent_html,
                     mt.html_body, sa.from_name, sa.smtp_user
              FROM mail_logs ml
              LEFT JOIN mail_templates mt ON mt.id = ml.template_id
@@ -70,8 +70,10 @@ async function runTask(taskId, isResume = false) {
             parentLogData[l.contact_email] = {
                 messageId: l.message_id,
                 subject: l.subject,
-                html_body: l.html_body || '',
+                // Use sent_html (full email with previous quotes) if available, fall back to template body
+                html_body: l.sent_html || l.html_body || '',
                 from: l.from_name ? `"${l.from_name}" <${l.smtp_user}>` : l.smtp_user,
+                from_email: l.smtp_user,
                 sent_at: l.sent_at
             }
         }
@@ -141,16 +143,17 @@ async function runTask(taskId, isResume = false) {
                 const fmtDate = d
                     ? `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
                     : ''
-                const toAddr = contact.name ? `'${contact.name}'<${contact.email}>` : contact.email
-                // Foxmail-style inline reply: original email always fully visible
+                const fromEmail = orig.from_email || ''
+                const toEmail = contact.email
+                // Foxmail-style inline reply with clickable mailto links
                 const quotedBlock = `
 <br/><br/>
 <div style="font-family:Arial,sans-serif;font-size:13px;color:#555">
   <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #ccc;font-size:12px;color:#888">
     ---- Replied Message ----<br/>
-    <b>From</b>&nbsp;&nbsp;&nbsp;&nbsp;${orig.from}<br/>
+    <b>From</b>&nbsp;&nbsp;&nbsp;&nbsp;<a href="mailto:${fromEmail}" style="color:#0563c1">${fromEmail}</a><br/>
     <b>Date</b>&nbsp;&nbsp;&nbsp;&nbsp;${fmtDate}<br/>
-    <b>To</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${toAddr}<br/>
+    <b>To</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="mailto:${toEmail}" style="color:#0563c1">${toEmail}</a><br/>
     <b>Subject</b>&nbsp;${orig.subject}
   </div>
   <div style="border-left:2px solid #bebebe;padding-left:12px">
@@ -163,9 +166,9 @@ async function runTask(taskId, isResume = false) {
             const info = await transport.sendMail(mailOpts)
             const msgId = (info.messageId || '').replace(/[<>]/g, '')
 
-            run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, account_id, template_id, subject, status, message_id)
-                 VALUES (?,?,?,?,?,?,'sent',?)`,
-                [taskId, contact.email, contact.name || '', account.id, template.id, subj, msgId])
+            run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, account_id, template_id, subject, status, message_id, sent_html)
+                 VALUES (?,?,?,?,?,?,'sent',?,?)`,
+                [taskId, contact.email, contact.name || '', account.id, template.id, subj, msgId, mailOpts.html])
             run('UPDATE smtp_accounts SET send_count = send_count + 1 WHERE id=?', [account.id])
             run('UPDATE mail_tasks SET sent_count = sent_count + 1 WHERE id=?', [taskId])
         } catch (e) {

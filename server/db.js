@@ -307,6 +307,7 @@ async function initDb() {
   try { db.exec("ALTER TABLE mail_tasks ADD COLUMN priority INTEGER DEFAULT 0") } catch (e) { }
   try { db.exec("ALTER TABLE mail_tasks ADD COLUMN parent_task_id INTEGER") } catch (e) { }
   try { db.exec("ALTER TABLE mail_logs ADD COLUMN message_id TEXT") } catch (e) { }
+  try { db.exec("ALTER TABLE mail_logs ADD COLUMN sent_html TEXT") } catch (e) { }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS hero_content (
