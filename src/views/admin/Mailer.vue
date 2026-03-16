@@ -22,6 +22,7 @@
         </div>
         <div class="lc-actions">
           <button class="btn btn-sm btn-outline" @click="openTplEditor(t)">编辑</button>
+          <button class="btn btn-sm btn-outline" @click="duplicateTemplate(t.id)">📋 复制</button>
           <button class="btn btn-sm btn-outline" @click="previewTpl(t)">预览</button>
           <button class="btn btn-sm btn-outline err-btn" @click="deleteTpl(t.id)">删除</button>
         </div>
@@ -32,7 +33,7 @@
     <div v-if="tab === 'contacts'" class="tab-body">
       <div class="toolbar" style="flex-wrap:wrap;gap:8px">
         <button class="btn btn-primary" @click="openContactEditor()">+ 添加联系人</button>
-        <button class="btn btn-outline" @click="showImport = true">📥 批量导入</button>
+        <button class="btn btn-outline" @click="openImportModal">📥 批量导入</button>
         <button v-if="selectedContacts.length" class="btn btn-outline err-btn" @click="bulkDeleteContacts">🗑️ 删除选中 ({{ selectedContacts.length }})</button>
         <!-- Move to group -->
         <select v-if="selectedContacts.length" v-model="moveTargetGroup" class="form-control" style="width:auto;min-width:120px;font-size:12px;padding:4px 8px">
@@ -63,18 +64,27 @@
       </div>
 
       <div v-if="!filteredContacts.length" class="empty">{{ contactSearch ? '无匹配结果' : '暂无联系人' }}</div>
-      <table v-else class="data-table">
-        <thead><tr><th><input type="checkbox" @change="toggleAllContacts" :checked="allContactsSelected" /></th><th>邮箱</th><th>姓名</th><th>公司</th><th>分组</th><th>操作</th></tr></thead>
-        <tbody><tr v-for="c in filteredContacts" :key="c.id">
-          <td><input type="checkbox" v-model="selectedContacts" :value="c.id" /></td>
-          <td>{{ c.email }}</td><td>{{ c.name }}</td><td>{{ c.company }}</td>
-          <td><span v-if="c.group_name" class="log-badge" style="font-size:11px">{{ c.group_name }}</span><span v-else style="color:#94a3b8;font-size:11px">—</span></td>
-          <td class="row-actions">
-            <button class="btn btn-sm btn-outline" @click="openContactEditor(c)">编辑</button>
-            <button class="btn btn-sm btn-outline err-btn" @click="deleteContact(c.id)">删除</button>
-          </td>
-        </tr></tbody>
-      </table>
+      <template v-else>
+        <div v-for="dg in domainGroupedContacts" :key="dg.domain" class="domain-group">
+          <div class="domain-header" @click="toggleDomain(dg.domain)">
+            <span>{{ domainExpanded.has(dg.domain) ? '▼' : '▶' }}</span>
+            <strong>{{ dg.domain }}</strong>
+            <span class="domain-count">({{ dg.contacts.length }})</span>
+          </div>
+          <table v-if="domainExpanded.has(dg.domain)" class="data-table" style="margin-bottom:0">
+            <thead><tr><th style="width:30px"><input type="checkbox" @change="toggleDomainAll(dg, $event)" :checked="dg.contacts.every(c=>selectedContacts.includes(c.id))" /></th><th>邮箱</th><th>姓名</th><th>公司</th><th>分组</th><th>操作</th></tr></thead>
+            <tbody><tr v-for="c in dg.contacts" :key="c.id">
+              <td><input type="checkbox" v-model="selectedContacts" :value="c.id" /></td>
+              <td>{{ c.email }}</td><td>{{ c.name }}</td><td>{{ c.company }}</td>
+              <td><span v-if="c.group_name" class="log-badge" style="font-size:11px">{{ c.group_name }}</span><span v-else style="color:#94a3b8;font-size:11px">—</span></td>
+              <td class="row-actions">
+                <button class="btn btn-sm btn-outline" @click="openContactEditor(c)">编辑</button>
+                <button class="btn btn-sm btn-outline err-btn" @click="deleteContact(c.id)">删除</button>
+              </td>
+            </tr></tbody>
+          </table>
+        </div>
+      </template>
     </div>
 
     <!-- ═══ Tasks Tab ═══ -->
@@ -303,6 +313,7 @@
               <label v-for="c in taskFilteredContacts" :key="c.id" class="check-item">
                 <input type="checkbox" v-model="newTask.contact_ids" :value="c.id" /> {{ c.email }} {{ c.name ? '('+c.name+')' : '' }}
                 <span v-if="c.group_name" class="log-badge" style="font-size:10px;margin-left:4px">{{ c.group_name }}</span>
+                <span v-if="c.domain_group" class="log-badge" style="font-size:10px;margin-left:4px;background-color:#e0f2fe;color:#0284c7">{{ c.domain_group }}</span>
               </label>
             </div>
           </div>
@@ -330,8 +341,9 @@
             <p class="form-hint">对方邮件客户端提示发送阅读回执</p>
           </div>
           <div class="form-group">
-            <label class="toggle-label"><input type="checkbox" v-model="newTask.priority" /><span>⚡ 紧急邮件（高优先级）</span></label>
-            <p class="form-hint">设置 X-Priority:1 / Importance:High 标头</p>
+            <label>跳过X天内发送过的邮箱</label>
+            <input v-model.number="newTask.skip_days" class="form-control" type="number" min="0" placeholder="0 = 不跳过" />
+            <p class="form-hint">填 0 不过滤。如填 7，则自动跳过 7 天内已发送过的邮箱，跟进任务不受影响。</p>
           </div>
         </div>
 
@@ -559,6 +571,39 @@ const filteredContacts = computed(() => {
   return list
 })
 
+// Domain-grouped contacts for display
+const domainExpanded = ref(new Set())
+const domainGroupedContacts = computed(() => {
+  const map = {}
+  for (const c of filteredContacts.value) {
+    const domain = (c.email || '').split('@')[1] || 'unknown'
+    if (!map[domain]) map[domain] = []
+    map[domain].push(c)
+  }
+  // Auto-expand all domains
+  const allDomains = Object.keys(map).sort()
+  // Ensure new domains are auto-expanded
+  const expanded = domainExpanded.value
+  if (expanded.size === 0 || filteredContacts.value.length <= 50) {
+    allDomains.forEach(d => expanded.add(d))
+  }
+  return allDomains.map(domain => ({ domain, contacts: map[domain] }))
+})
+function toggleDomain(domain) {
+  const s = new Set(domainExpanded.value)
+  if (s.has(domain)) s.delete(domain)
+  else s.add(domain)
+  domainExpanded.value = s
+}
+function toggleDomainAll(dg, e) {
+  const ids = dg.contacts.map(c => c.id)
+  if (e.target.checked) {
+    selectedContacts.value = [...new Set([...selectedContacts.value, ...ids])]
+  } else {
+    selectedContacts.value = selectedContacts.value.filter(id => !ids.includes(id))
+  }
+}
+
 // Filtered contacts for task creator (fuzzy search only)
 const taskFilteredContacts = computed(() => {
   if (!taskContactSearch.value) return contacts.value
@@ -628,9 +673,20 @@ const editContact = reactive({ id: null, email: '', name: '', company: '', group
 const showImport = ref(false)
 const importText = ref('')
 
+function openContactEditor(c) {
+  const defaultGroup = (contactGroupFilter.value && contactGroupFilter.value !== '' && contactGroupFilter.value !== 'none') ? contactGroupFilter.value : null
+  Object.assign(editContact, c || { id: null, email: '', name: '', company: '', group_id: defaultGroup })
+  showContactEditor.value = true
+}
+function openImportModal() {
+  importGroupId.value = (contactGroupFilter.value && contactGroupFilter.value !== '' && contactGroupFilter.value !== 'none') ? contactGroupFilter.value : null
+  showImport.value = true
+}
+
+
 // Task creator
 const showTaskCreator = ref(false)
-const newTask = reactive({ id: null, name: '', template_ids: [], contact_ids: [], account_ids: [], interval_min: 10, interval_max: 120, cc: '', read_receipt: true, priority: false, schedule_at: null, parent_task_id: null })
+const newTask = reactive({ id: null, name: '', template_ids: [], contact_ids: [], account_ids: [], interval_min: 10, interval_max: 120, cc: '', read_receipt: true, priority: false, schedule_at: null, parent_task_id: null, skip_days: 0 })
 
 // Schedule modal
 const showSchedule = ref(false)
@@ -772,14 +828,16 @@ async function saveTpl() {
 }
 async function deleteTpl(id) { if (!confirm('确认删除？')) return; await api.request(`/mailer/templates/${id}`, { method: 'DELETE' }); await loadAll() }
 function previewTpl(t) { previewHtml.value = t.html_body; showPreview.value = true }
+async function duplicateTemplate(id) {
+  try {
+    await api.request(`/mailer/templates/${id}/duplicate`, { method: 'POST' })
+    await loadAll()
+  } catch (e) { alert('复制失败: ' + e.message) }
+}
 
 
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────
-function openContactEditor(c) {
-  Object.assign(editContact, c || { id: null, email: '', name: '', company: '', group_id: null })
-  showContactEditor.value = true
-}
 async function saveContact() {
   try {
     if (editContact.id) {
@@ -905,6 +963,13 @@ h1 { font-size: 24px; font-weight: 700; margin-bottom: 24px; color: #1e293b }
 .group-pill.small:hover { background:#ede9fe }
 .group-del { font-size:14px; color:#94a3b8; cursor:pointer; line-height:1; margin-left:2px }
 .group-del:hover { color:#ef4444 }
+
+/* Domain groups */
+.domain-group { margin-bottom:2px }
+.domain-header { display:flex; align-items:center; gap:8px; padding:8px 12px; background:#f1f5f9; border-radius:6px; cursor:pointer; user-select:none; font-size:13px }
+.domain-header:hover { background:#e2e8f0 }
+.domain-header strong { color:#1e293b }
+.domain-count { color:#64748b; font-size:12px }
 
 /* Table */
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px }

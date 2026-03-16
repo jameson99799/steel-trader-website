@@ -34,10 +34,25 @@ async function runTask(taskId, isResume = false) {
     const accountIds  = JSON.parse(task.account_ids  || '[]')
 
     const templates = templateIds.map(id => getOne('SELECT * FROM mail_templates WHERE id=?', [id])).filter(Boolean)
-    const contacts  = contactIds.map(id => getOne('SELECT * FROM mail_contacts WHERE id=?', [id])).filter(Boolean)
+    let   contacts  = contactIds.map(id => getOne('SELECT * FROM mail_contacts WHERE id=?', [id])).filter(Boolean)
     let   accounts  = accountIds.length
         ? accountIds.map(id => getOne('SELECT * FROM smtp_accounts WHERE id=?', [id])).filter(Boolean)
         : getAll('SELECT * FROM smtp_accounts WHERE enabled=1 ORDER BY id ASC')
+
+    // Skip contacts emailed within X days (only for first-time sends, not follow-ups)
+    const skipDays = task.skip_days || 0
+    if (skipDays > 0 && !task.parent_task_id) {
+        const cutoff = new Date(Date.now() - skipDays * 86400000).toISOString()
+        const recentlySent = getAll(
+            `SELECT DISTINCT contact_email FROM mail_logs WHERE status='sent' AND sent_at > ?`, [cutoff]
+        )
+        const recentEmails = new Set(recentlySent.map(r => r.contact_email.toLowerCase()))
+        const before = contacts.length
+        contacts = contacts.filter(c => !recentEmails.has(c.email.toLowerCase()))
+        if (before !== contacts.length) {
+            console.log(`[skip_days] Skipped ${before - contacts.length} contacts emailed within ${skipDays} days`)
+        }
+    }
 
     if (!templates.length || !contacts.length || !accounts.length) {
         run("UPDATE mail_tasks SET status='failed' WHERE id=?", [taskId])
@@ -243,6 +258,13 @@ router.delete('/templates/:id', authMiddleware, (req, res) => {
     run('DELETE FROM mail_templates WHERE id=?', [req.params.id])
     res.json({ message: '已删除' })
 })
+router.post('/templates/:id/duplicate', authMiddleware, (req, res) => {
+    const orig = getOne('SELECT * FROM mail_templates WHERE id=?', [req.params.id])
+    if (!orig) return res.status(404).json({ error: '模板不存在' })
+    const r = run('INSERT INTO mail_templates (name, subject, html_body, note) VALUES (?,?,?,?)',
+        [orig.name + ' (副本)', orig.subject, orig.html_body, orig.note || ''])
+    res.json({ id: r.lastInsertRowid, message: '模板已复制' })
+})
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────
 // ─── Contact Groups ──────────────────────────────────────────────────────────
@@ -288,14 +310,17 @@ router.post('/contacts', authMiddleware, (req, res) => {
 })
 router.post('/contacts/import', authMiddleware, (req, res) => {
     const { lines, group_id } = req.body
-    let added = 0
+    let added = 0, skipped = 0
     for (const line of (lines || [])) {
         const [email, name, company] = line.split(',').map(s => s.trim())
         if (email && email.includes('@')) {
-            try { run('INSERT INTO mail_contacts (email, name, company, group_id) VALUES (?,?,?,?)', [email, name || '', company || '', group_id || null]); added++ } catch (e) {}
+            // Check if email already exists
+            const exists = getOne('SELECT id FROM mail_contacts WHERE email=?', [email.toLowerCase()])
+            if (exists) { skipped++; continue }
+            try { run('INSERT INTO mail_contacts (email, name, company, group_id) VALUES (?,?,?,?)', [email.toLowerCase(), name || '', company || '', group_id || null]); added++ } catch (e) { skipped++ }
         }
     }
-    res.json({ message: `已导入 ${added} 个联系人` })
+    res.json({ message: `已导入 ${added} 个联系人` + (skipped ? `，跳过 ${skipped} 个已存在邮箱` : '') })
 })
 router.put('/contacts/:id', authMiddleware, (req, res) => {
     const { email, name, company, group_id } = req.body
@@ -333,10 +358,10 @@ router.get('/tasks', authMiddleware, (req, res) => {
 })
 
 router.post('/tasks', authMiddleware, (req, res) => {
-    const { name, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id } = req.body
+    const { name, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id, skip_days } = req.body
     const r = run(
-        `INSERT INTO mail_tasks (name, status, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id)
-         VALUES (?,'pending',?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO mail_tasks (name, status, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id, skip_days)
+         VALUES (?,'pending',?,?,?,?,?,?,?,?,?,?,?)`,
         [name || 'New Task',
          JSON.stringify(template_ids || []), JSON.stringify(contact_ids || []),
          JSON.stringify(account_ids || []),
@@ -344,7 +369,8 @@ router.post('/tasks', authMiddleware, (req, res) => {
          read_receipt !== false ? 1 : 0,
          schedule_at || null,
          priority ? 1 : 0,
-         parent_task_id || null]
+         parent_task_id || null,
+         skip_days || 0]
     )
     const newId = r.lastInsertRowid
     // Auto-schedule if schedule_at given

@@ -319,6 +319,7 @@ async function initDb() {
   try { db.exec("ALTER TABLE mail_logs ADD COLUMN message_id TEXT") } catch (e) { }
   try { db.exec("ALTER TABLE mail_logs ADD COLUMN sent_html TEXT") } catch (e) { }
   try { db.exec("ALTER TABLE mail_contacts ADD COLUMN group_id INTEGER") } catch (e) { }
+  try { db.exec("ALTER TABLE mail_tasks ADD COLUMN skip_days INTEGER DEFAULT 0") } catch (e) { }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS hero_content (
