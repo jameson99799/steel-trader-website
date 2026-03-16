@@ -129,9 +129,17 @@
         </div>
         <div class="form-group"><label>备注</label><input v-model="editTpl.note" class="form-control" placeholder="选填" /></div>
         <div class="form-group">
-          <label>正文内容 (支持直接粘贴截图、拖拽调整图片大小)</label>
+          <label>正文内容 (支持直接粘贴截图、点击图片可设置大小比例)</label>
           <div ref="editorRef" class="rich-editor"></div>
         </div>
+
+    <!-- Image resize dialog (shown when clicking an image in editor) -->
+    <div class="img-resize-popup" v-if="imgResizeTarget" :style="imgResizePos">
+      <span>图片大小：</span>
+      <input type="number" v-model.number="imgResizePct" min="10" max="500" step="10" style="width:70px" /> %
+      <button class="btn btn-sm btn-primary" @click="applyImgResize">确定</button>
+      <button class="btn btn-sm btn-outline" @click="imgResizeTarget=null">✕</button>
+    </div>
         <div class="modal-actions">
           <button class="btn btn-primary" @click="saveTpl" :disabled="savingTpl">{{ savingTpl ? '保存中...' : '💾 保存' }}</button>
           <button class="btn btn-outline" @click="showTplEditor=false">取消</button>
@@ -187,7 +195,12 @@
 
         <div class="form-group">
           <label>选择联系人</label>
-          <div class="check-list" style="max-height:200px">
+          <!-- Follow-up: contacts locked to parent task -->
+          <div v-if="newTask.parent_task_id" class="followup-contacts-locked">
+            <span>🔒 跟进邮件自动发送给上次任务的相同收件人 ({{ newTask.contact_ids.length }} 人)</span>
+            <p class="form-hint">跟进邮件收件人与上次任务相同，无需重新选择，确保不会搞错跟进对象。</p>
+          </div>
+          <div v-else class="check-list" style="max-height:200px">
             <div class="check-item-header">
               <label><input type="checkbox" @change="toggleAllNewTaskContacts" :checked="newTaskAllContactsSel" /> 全选</label>
             </div>
@@ -266,84 +279,40 @@ import api from '../../api'
 import Quill from 'quill'
 import 'quill/dist/quill.snow.css'
 
-// ─── Custom Image Resize Module (Vite-compatible, no external deps) ──────────
-class ImageResizeModule {
-  constructor(quill) {
-    this.quill = quill
-    this.img = null
-    this.overlay = null
-    quill.root.addEventListener('click', this.onImgClick.bind(this))
-    document.addEventListener('mousedown', this.onDocMouseDown.bind(this))
-  }
-  onImgClick(e) {
-    if (e.target.tagName !== 'IMG') return
-    this.img = e.target
-    this.showOverlay()
-  }
-  onDocMouseDown(e) {
-    if (this.overlay && !this.overlay.contains(e.target) && e.target !== this.img) {
-      this.hideOverlay()
-    }
-  }
-  showOverlay() {
-    this.hideOverlay()
-    this.overlay = document.createElement('div')
-    Object.assign(this.overlay.style, {
-      position: 'absolute', border: '2px solid #3b82f6', pointerEvents: 'none', boxSizing: 'border-box'
-    })
-    this.quill.root.parentNode.style.position = 'relative'
-    this.quill.root.parentNode.appendChild(this.overlay)
-    this.positionOverlay()
-    ;['nw','ne','sw','se'].forEach(dir => {
-      const handle = document.createElement('div')
-      Object.assign(handle.style, {
-        position: 'absolute', width: '10px', height: '10px', background: '#3b82f6',
-        borderRadius: '50%', pointerEvents: 'all', cursor: dir + '-resize'
-      })
-      if (dir.includes('n')) { handle.style.top = '-5px' } else { handle.style.bottom = '-5px' }
-      if (dir.includes('w')) { handle.style.left = '-5px' } else { handle.style.right = '-5px' }
-      handle.addEventListener('mousedown', this.onHandleMouseDown.bind(this, dir))
-      this.overlay.appendChild(handle)
-    })
-  }
-  positionOverlay() {
-    if (!this.img || !this.overlay) return
-    const r = this.img.getBoundingClientRect()
-    const pr = this.quill.root.parentNode.getBoundingClientRect()
-    Object.assign(this.overlay.style, {
-      left: (r.left - pr.left) + 'px', top: (r.top - pr.top) + 'px',
-      width: r.width + 'px', height: r.height + 'px'
-    })
-  }
-  hideOverlay() {
-    if (this.overlay) { this.overlay.remove(); this.overlay = null }
-    this.img = null
-  }
-  onHandleMouseDown(dir, e) {
-    e.preventDefault()
-    const startX = e.clientX, startY = e.clientY
-    const startW = this.img.offsetWidth || this.img.naturalWidth
-    const startH = this.img.offsetHeight || this.img.naturalHeight
-    const img = this.img
-    const move = (ev) => {
-      const dx = ev.clientX - startX, dy = ev.clientY - startY
-      let w = dir.includes('e') ? startW + dx : startW - dx
-      let h = dir.includes('s') ? startH + dy : startH - dy
-      w = Math.max(50, w); h = Math.max(50, h)
-      img.style.width = w + 'px'; img.style.height = h + 'px'
-      this.positionOverlay()
-    }
-    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up) }
-    document.addEventListener('mousemove', move)
-    document.addEventListener('mouseup', up)
-  }
-  destroy() {
-    this.hideOverlay()
-    document.removeEventListener('mousedown', this.onDocMouseDown)
-  }
+// ─── Image resize via % popup (replaces drag handles, more precise) ──────────
+const imgResizeTarget = ref(null)
+const imgResizePct = ref(100)
+const imgResizePos = ref({})
+function applyImgResize() {
+  if (!imgResizeTarget.value || !quillInstance) return
+  const el = imgResizeTarget.value
+  const naturalW = el.naturalWidth || el.offsetWidth
+  const w = Math.round(naturalW * imgResizePct.value / 100)
+  el.style.width = w + 'px'
+  el.style.height = 'auto'
+  imgResizeTarget.value = null
+  // Trigger quill change
+  editTpl.html_body = quillInstance.root.innerHTML
 }
-Quill.register('modules/imageResize', ImageResizeModule)
-
+// Attach image click listener after quill is created
+function attachImgClickHandler() {
+  if (!quillInstance) return
+  quillInstance.root.addEventListener('click', (e) => {
+    if (e.target.tagName !== 'IMG') { imgResizeTarget.value = null; return }
+    const rect = e.target.getBoundingClientRect()
+    const parentRect = quillInstance.root.getBoundingClientRect()
+    imgResizeTarget.value = e.target
+    imgResizePct.value = e.target.style.width
+      ? Math.round((parseInt(e.target.style.width) / (e.target.naturalWidth || e.target.offsetWidth)) * 100)
+      : 100
+    imgResizePos.value = {
+      position: 'absolute',
+      top: (rect.bottom - parentRect.top + 6) + 'px',
+      left: (rect.left - parentRect.left) + 'px',
+      zIndex: 9999
+    }
+  })
+}
 const tab = ref('templates')
 const templates = ref([])
 const contacts = ref([])
@@ -402,24 +371,28 @@ async function loadLogs() {
   logs.value = await api.request('/mailer/logs' + q) || []
 }
 let rtInterval = null
+let taskPollInterval = null
 async function pollRealtime() {
   try {
     const data = await api.request('/mailer/tasks/realtime')
     rtData.value = data || {}
-    // Also refresh task list if any running tasks detected
-    if (Object.keys(rtData.value).length > 0) {
-      const freshTasks = await api.request('/mailer/tasks')
-      if (freshTasks) tasks.value = freshTasks
-    }
+  } catch (e) {}
+}
+async function pollTasks() {
+  // Always refresh task list so status changes (running→done) are picked up
+  try {
+    const freshTasks = await api.request('/mailer/tasks')
+    if (freshTasks) tasks.value = freshTasks
   } catch (e) {}
 }
 onMounted(() => {
   loadAll()
   loadLogs()
-  rtInterval = setInterval(pollRealtime, 2000)
+  rtInterval = setInterval(pollRealtime, 1500)    // realtime countdown every 1.5s
+  taskPollInterval = setInterval(pollTasks, 3000) // task status every 3s always
 })
 import { onUnmounted } from 'vue'
-onUnmounted(() => { clearInterval(rtInterval) })
+onUnmounted(() => { clearInterval(rtInterval); clearInterval(taskPollInterval) })
 
 // ─── Template ────────────────────────────────────────────────────────────────
 let quillInstance = null
@@ -440,30 +413,46 @@ function destroyQuill() {
 
 function initQuill() {
   destroyQuill()
-  
+
   quillInstance = new Quill(editorRef.value, {
     theme: 'snow',
     modules: {
       toolbar: {
         container: [
-          [{ 'header': [1, 2, 3, false] }],
+          [{ header: [1, 2, 3, false] }],
           ['bold', 'italic', 'underline', 'strike'],
-          [{ 'color': [] }, { 'background': [] }],
-          [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+          [{ color: [] }, { background: [] }],
+          ['blockquote'],
+          [{ list: 'ordered' }, { list: 'bullet' }],
           ['link', 'image'],
           ['clean']
         ],
-        handlers: {
-          image: imageHandler
-        }
+        handlers: { image: imageHandler }
       },
-      imageResize: {} // Enable drag-to-resize
+      clipboard: {
+        // Preserve ALL HTML including <hr>, images, tables etc.
+        // matchVisual: false keeps Quill from stripping unknown elements
+        matchVisual: false
+      }
     }
   })
-  
+
   quillInstance.on('text-change', () => {
     editTpl.html_body = quillInstance.root.innerHTML
   })
+
+  // Intercept paste to preserve rich formatting (HR, tables, etc.)
+  quillInstance.root.addEventListener('paste', (e) => {
+    const clipHtml = e.clipboardData?.getData('text/html')
+    if (clipHtml && clipHtml.includes('<')) {
+      e.preventDefault()
+      e.stopPropagation()
+      const range = quillInstance.getSelection(true)
+      quillInstance.clipboard.dangerouslyPasteHTML(range?.index ?? 0, clipHtml, 'user')
+    }
+  }, true)
+
+  attachImgClickHandler()
 }
 
 function imageHandler() {
@@ -476,21 +465,20 @@ function imageHandler() {
     const file = input.files[0]
     if (!file) return
     const formData = new FormData()
-    formData.append('image', file)
+    formData.append('image', file) // field name matches /api/upload/image endpoint
 
     try {
-      savingTpl.value = true // Show loading
+      savingTpl.value = true
       const token = localStorage.getItem('token')
-      const res = await fetch('/api/upload', {
+      const res = await fetch('/api/upload/image', { // use dedicated image endpoint
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
+      if (!res.ok) throw new Error(data.error || '服务器错误')
 
-      // Insert full URL image into editor
-      const url = `https://${window.location.host}${data.url}`
+      const url = `${window.location.origin}${data.url}`
       const range = quillInstance.getSelection(true)
       quillInstance.insertEmbed(range.index, 'image', url)
       quillInstance.setSelection(range.index + 1)
@@ -714,4 +702,25 @@ textarea.form-control { resize: vertical; font-family: inherit }
 
 /* Preview */
 .preview-frame { border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; max-height: 500px; overflow-y: auto }
+
+/* Image resize popup */
+.img-resize-popup { background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); padding: 8px 12px; display: flex; align-items: center; gap: 8px; font-size: 13px; white-space: nowrap }
+
+/* Follow-up contact lock */
+.followup-contacts-locked { background: #fefce8; border: 1px solid #fde047; border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #854d0e }
+.followup-contacts-locked p { margin: 4px 0 0; color: #78350f; opacity: 0.8 }
+
+/* Realtime countdown */
+.rt-info { font-size: 12px; color: #059669; font-weight: 500; padding: 3px 8px; background: #f0fdf4; border-radius: 6px; margin-top: 2px }
+.tag-urgent { font-size: 11px; font-weight: 700; color: #dc2626; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 4px; padding: 1px 6px }
+.tag-sched { font-size: 11px; font-weight: 700; color: #6366f1; background: #eff6ff; border: 1px solid #a5b4fc; border-radius: 4px; padding: 1px 6px }
+
+/* Rich editor */
+.rich-editor-wrap { position: relative }
+:deep(.ql-container) { font-size: 14px; min-height: 220px; border-radius: 0 0 8px 8px }
+:deep(.ql-toolbar) { border-radius: 8px 8px 0 0 }
+:deep(.ql-editor) { min-height: 200px; max-height: 500px; overflow-y: auto }
+:deep(.ql-editor img) { cursor: pointer; max-width: 100% }
+:deep(.ql-editor hr) { border: none; border-top: 1px solid #cbd5e1; margin: 12px 0 }
+
 </style>
