@@ -245,34 +245,73 @@ router.delete('/templates/:id', authMiddleware, (req, res) => {
 })
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────
+// ─── Contact Groups ──────────────────────────────────────────────────────────
+router.get('/contact-groups', authMiddleware, (req, res) => {
+    const groups = getAll(`SELECT cg.*, COUNT(mc.id) as contact_count
+                           FROM contact_groups cg
+                           LEFT JOIN mail_contacts mc ON mc.group_id = cg.id
+                           GROUP BY cg.id ORDER BY cg.name`)
+    res.json(groups)
+})
+router.post('/contact-groups', authMiddleware, (req, res) => {
+    const { name } = req.body
+    if (!name) return res.status(400).json({ error: '请填写分组名称' })
+    try {
+        const r = run('INSERT INTO contact_groups (name) VALUES (?)', [name.trim()])
+        res.json({ id: r.lastInsertRowid, message: '分组已创建' })
+    } catch (e) { res.status(400).json({ error: '分组名已存在' }) }
+})
+router.put('/contact-groups/:id', authMiddleware, (req, res) => {
+    const { name } = req.body
+    run('UPDATE contact_groups SET name=? WHERE id=?', [name.trim(), req.params.id])
+    res.json({ message: '分组已更新' })
+})
+router.delete('/contact-groups/:id', authMiddleware, (req, res) => {
+    // Set contacts in this group to no group
+    run('UPDATE mail_contacts SET group_id=NULL WHERE group_id=?', [req.params.id])
+    run('DELETE FROM contact_groups WHERE id=?', [req.params.id])
+    res.json({ message: '分组已删除' })
+})
+
+// ─── Contacts ────────────────────────────────────────────────────────────────
 router.get('/contacts', authMiddleware, (req, res) => {
-    res.json(getAll('SELECT * FROM mail_contacts ORDER BY id DESC'))
+    res.json(getAll(`SELECT mc.*, cg.name as group_name
+                     FROM mail_contacts mc
+                     LEFT JOIN contact_groups cg ON cg.id = mc.group_id
+                     ORDER BY mc.id DESC`))
 })
 router.post('/contacts', authMiddleware, (req, res) => {
-    const { email, name, company } = req.body
+    const { email, name, company, group_id } = req.body
     if (!email) return res.status(400).json({ error: '请填写邮箱' })
-    const r = run('INSERT INTO mail_contacts (email, name, company) VALUES (?,?,?)', [email, name || '', company || ''])
+    const r = run('INSERT INTO mail_contacts (email, name, company, group_id) VALUES (?,?,?,?)', [email, name || '', company || '', group_id || null])
     res.json({ id: r.lastInsertRowid, message: '联系人已添加' })
 })
 router.post('/contacts/import', authMiddleware, (req, res) => {
-    const { lines } = req.body
+    const { lines, group_id } = req.body
     let added = 0
     for (const line of (lines || [])) {
         const [email, name, company] = line.split(',').map(s => s.trim())
         if (email && email.includes('@')) {
-            try { run('INSERT INTO mail_contacts (email, name, company) VALUES (?,?,?)', [email, name || '', company || '']); added++ } catch (e) {}
+            try { run('INSERT INTO mail_contacts (email, name, company, group_id) VALUES (?,?,?,?)', [email, name || '', company || '', group_id || null]); added++ } catch (e) {}
         }
     }
     res.json({ message: `已导入 ${added} 个联系人` })
 })
 router.put('/contacts/:id', authMiddleware, (req, res) => {
-    const { email, name, company } = req.body
-    run('UPDATE mail_contacts SET email=?, name=?, company=? WHERE id=?', [email, name || '', company || '', req.params.id])
+    const { email, name, company, group_id } = req.body
+    run('UPDATE mail_contacts SET email=?, name=?, company=?, group_id=? WHERE id=?', [email, name || '', company || '', group_id || null, req.params.id])
     res.json({ message: '联系人已更新' })
 })
 router.delete('/contacts/:id', authMiddleware, (req, res) => {
     run('DELETE FROM mail_contacts WHERE id=?', [req.params.id])
     res.json({ message: '已删除' })
+})
+router.post('/contacts/bulk-delete', authMiddleware, (req, res) => {
+    const { ids } = req.body
+    if (!ids?.length) return res.status(400).json({ error: '无选中项' })
+    const placeholders = ids.map(() => '?').join(',')
+    run(`DELETE FROM mail_contacts WHERE id IN (${placeholders})`, ids)
+    res.json({ message: `已删除 ${ids.length} 个联系人` })
 })
 
 // ─── Tasks ────────────────────────────────────────────────────────────────────

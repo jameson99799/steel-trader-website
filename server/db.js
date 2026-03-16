@@ -262,6 +262,16 @@ async function initDb() {
       email TEXT NOT NULL,
       name TEXT DEFAULT '',
       company TEXT DEFAULT '',
+      group_id INTEGER DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // Contact groups
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS contact_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
@@ -308,6 +318,7 @@ async function initDb() {
   try { db.exec("ALTER TABLE mail_tasks ADD COLUMN parent_task_id INTEGER") } catch (e) { }
   try { db.exec("ALTER TABLE mail_logs ADD COLUMN message_id TEXT") } catch (e) { }
   try { db.exec("ALTER TABLE mail_logs ADD COLUMN sent_html TEXT") } catch (e) { }
+  try { db.exec("ALTER TABLE mail_contacts ADD COLUMN group_id INTEGER") } catch (e) { }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS hero_content (

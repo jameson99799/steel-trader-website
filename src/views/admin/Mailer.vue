@@ -30,16 +30,38 @@
 
     <!-- ═══ Contacts Tab ═══ -->
     <div v-if="tab === 'contacts'" class="tab-body">
-      <div class="toolbar">
+      <div class="toolbar" style="flex-wrap:wrap;gap:8px">
         <button class="btn btn-primary" @click="openContactEditor()">+ 添加联系人</button>
         <button class="btn btn-outline" @click="showImport = true">📥 批量导入</button>
+        <button v-if="selectedContacts.length" class="btn btn-outline err-btn" @click="bulkDeleteContacts">🗑️ 删除选中 ({{ selectedContacts.length }})</button>
+        <div style="flex:1"></div>
+        <!-- Group management -->
+        <button class="btn btn-sm btn-outline" @click="addGroup" style="color:#7c3aed;border-color:#c4b5fd">📁 新建分组</button>
       </div>
-      <div v-if="!contacts.length" class="empty">暂无联系人</div>
+
+      <!-- Group filter pills -->
+      <div class="group-bar" v-if="contactGroups.length">
+        <span class="group-pill" :class="{ active: contactGroupFilter === '' }" @click="contactGroupFilter=''">全部 ({{ contacts.length }})</span>
+        <span class="group-pill" :class="{ active: contactGroupFilter === 'none' }" @click="contactGroupFilter='none'">未分组 ({{ contacts.filter(c=>!c.group_id).length }})</span>
+        <span v-for="g in contactGroups" :key="g.id" class="group-pill" :class="{ active: contactGroupFilter === g.id }"
+              @click="contactGroupFilter=g.id" @dblclick="renameGroup(g)">
+          {{ g.name }} ({{ g.contact_count }})
+          <span class="group-del" @click.stop="deleteGroup(g.id)" title="删除分组">×</span>
+        </span>
+      </div>
+
+      <!-- Fuzzy search -->
+      <div style="margin-bottom:12px">
+        <input v-model="contactSearch" class="form-control" placeholder="🔍 搜索邮箱、姓名、公司、分组..." style="max-width:400px" />
+      </div>
+
+      <div v-if="!filteredContacts.length" class="empty">{{ contactSearch ? '无匹配结果' : '暂无联系人' }}</div>
       <table v-else class="data-table">
-        <thead><tr><th><input type="checkbox" @change="toggleAllContacts" :checked="allContactsSelected" /></th><th>邮箱</th><th>姓名</th><th>公司</th><th>操作</th></tr></thead>
-        <tbody><tr v-for="c in contacts" :key="c.id">
+        <thead><tr><th><input type="checkbox" @change="toggleAllContacts" :checked="allContactsSelected" /></th><th>邮箱</th><th>姓名</th><th>公司</th><th>分组</th><th>操作</th></tr></thead>
+        <tbody><tr v-for="c in filteredContacts" :key="c.id">
           <td><input type="checkbox" v-model="selectedContacts" :value="c.id" /></td>
           <td>{{ c.email }}</td><td>{{ c.name }}</td><td>{{ c.company }}</td>
+          <td><span v-if="c.group_name" class="log-badge" style="font-size:11px">{{ c.group_name }}</span><span v-else style="color:#94a3b8;font-size:11px">—</span></td>
           <td class="row-actions">
             <button class="btn btn-sm btn-outline" @click="openContactEditor(c)">编辑</button>
             <button class="btn btn-sm btn-outline err-btn" @click="deleteContact(c.id)">删除</button>
@@ -202,6 +224,13 @@
           <div class="form-group"><label>姓名</label><input v-model="editContact.name" class="form-control" /></div>
           <div class="form-group"><label>公司</label><input v-model="editContact.company" class="form-control" /></div>
         </div>
+        <div class="form-group">
+          <label>分组</label>
+          <select v-model="editContact.group_id" class="form-control">
+            <option :value="null">— 不分组 —</option>
+            <option v-for="g in contactGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+          </select>
+        </div>
         <div class="modal-actions">
           <button class="btn btn-primary" @click="saveContact">💾 保存</button>
           <button class="btn btn-outline" @click="showContactEditor=false">取消</button>
@@ -213,6 +242,13 @@
     <div class="modal-overlay" v-if="showImport" @click.self="showImport=false">
       <div class="modal-box">
         <h3>📥 批量导入联系人</h3>
+        <div class="form-group">
+          <label>导入到分组</label>
+          <select v-model="importGroupId" class="form-control">
+            <option :value="null">— 不分组 —</option>
+            <option v-for="g in contactGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+          </select>
+        </div>
         <div class="form-group">
           <label>每行一个，格式：邮箱,姓名,公司</label>
           <textarea v-model="importText" class="form-control" rows="8" placeholder="john@example.com,John,ACME Corp&#10;jane@example.com,Jane,XYZ Inc"></textarea>
@@ -246,13 +282,22 @@
             <span>🔒 跟进邮件自动发送给上次任务的相同收件人 ({{ newTask.contact_ids.length }} 人)</span>
             <p class="form-hint">跟进邮件收件人与上次任务相同，无需重新选择，确保不会搞错跟进对象。</p>
           </div>
-          <div v-else class="check-list" style="max-height:200px">
-            <div class="check-item-header">
-              <label><input type="checkbox" @change="toggleAllNewTaskContacts" :checked="newTaskAllContactsSel" /> 全选</label>
+          <div v-else>
+            <!-- Group quick select + search -->
+            <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+              <span v-for="g in contactGroups" :key="g.id" class="group-pill small" @click="selectGroupContacts(g.id)"
+                    :title="'点击选择'+g.name+'下所有联系人'">📁 {{ g.name }}</span>
+              <input v-model="taskContactSearch" class="form-control" placeholder="🔍 搜索联系人..." style="flex:1;min-width:150px;max-width:250px" />
             </div>
-            <label v-for="c in contacts" :key="c.id" class="check-item">
-              <input type="checkbox" v-model="newTask.contact_ids" :value="c.id" /> {{ c.email }} {{ c.name ? '('+c.name+')' : '' }}
-            </label>
+            <div class="check-list" style="max-height:200px">
+              <div class="check-item-header">
+                <label><input type="checkbox" @change="toggleAllNewTaskContacts" :checked="newTaskAllContactsSel" /> 全选</label>
+              </div>
+              <label v-for="c in taskFilteredContacts" :key="c.id" class="check-item">
+                <input type="checkbox" v-model="newTask.contact_ids" :value="c.id" /> {{ c.email }} {{ c.name ? '('+c.name+')' : '' }}
+                <span v-if="c.group_name" class="log-badge" style="font-size:10px;margin-left:4px">{{ c.group_name }}</span>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -478,9 +523,88 @@ const tasks = ref([])
 const smtpAccounts = ref([])
 const selectedContacts = ref([])
 
+// Contact groups & search
+const contactGroups = ref([])
+const contactGroupFilter = ref('')
+const contactSearch = ref('')
+const taskContactSearch = ref('')
+const importGroupId = ref(null)
+
+// Fuzzy search helper
+function fuzzyMatch(text, query) {
+  if (!query) return true
+  const q = query.toLowerCase()
+  return (text || '').toLowerCase().includes(q)
+}
+
+// Filtered contacts for contacts tab (group filter + fuzzy search)
+const filteredContacts = computed(() => {
+  let list = contacts.value
+  // Group filter
+  if (contactGroupFilter.value === 'none') list = list.filter(c => !c.group_id)
+  else if (contactGroupFilter.value) list = list.filter(c => c.group_id === contactGroupFilter.value)
+  // Fuzzy search
+  if (contactSearch.value) {
+    const q = contactSearch.value.toLowerCase()
+    list = list.filter(c => fuzzyMatch(c.email, q) || fuzzyMatch(c.name, q) || fuzzyMatch(c.company, q) || fuzzyMatch(c.group_name, q))
+  }
+  return list
+})
+
+// Filtered contacts for task creator (fuzzy search only)
+const taskFilteredContacts = computed(() => {
+  if (!taskContactSearch.value) return contacts.value
+  const q = taskContactSearch.value.toLowerCase()
+  return contacts.value.filter(c => fuzzyMatch(c.email, q) || fuzzyMatch(c.name, q) || fuzzyMatch(c.company, q) || fuzzyMatch(c.group_name, q))
+})
+
+// Group CRUD
+async function addGroup() {
+  const name = prompt('请输入分组名称：')
+  if (!name) return
+  try {
+    await api.request('/mailer/contact-groups', { method: 'POST', body: JSON.stringify({ name }) })
+    await loadGroups()
+  } catch (e) { alert('创建失败: ' + e.message) }
+}
+async function renameGroup(g) {
+  const name = prompt('修改分组名称：', g.name)
+  if (!name || name === g.name) return
+  await api.request(`/mailer/contact-groups/${g.id}`, { method: 'PUT', body: JSON.stringify({ name }) })
+  await loadGroups(); await loadAll()
+}
+async function deleteGroup(id) {
+  if (!confirm('删除分组？分组内的联系人将变为未分组。')) return
+  await api.request(`/mailer/contact-groups/${id}`, { method: 'DELETE' })
+  contactGroupFilter.value = ''
+  await loadGroups(); await loadAll()
+}
+async function loadGroups() {
+  contactGroups.value = await api.request('/mailer/contact-groups') || []
+}
+function selectGroupContacts(gid) {
+  const ids = contacts.value.filter(c => c.group_id === gid).map(c => c.id)
+  // Toggle: if all already selected, deselect; otherwise select
+  const allIn = ids.every(id => newTask.contact_ids.includes(id))
+  if (allIn) {
+    newTask.contact_ids = newTask.contact_ids.filter(id => !ids.includes(id))
+  } else {
+    newTask.contact_ids = [...new Set([...newTask.contact_ids, ...ids])]
+  }
+}
+async function bulkDeleteContacts() {
+  if (!selectedContacts.value.length) return
+  if (!confirm(`确认删除 ${selectedContacts.value.length} 个联系人？`)) return
+  try {
+    await api.request('/mailer/contacts/bulk-delete', { method: 'POST', body: JSON.stringify({ ids: selectedContacts.value }) })
+    selectedContacts.value = []
+    await loadAll(); await loadGroups()
+  } catch (e) { alert('删除失败: ' + e.message) }
+}
+
 // Contact editor
 const showContactEditor = ref(false)
-const editContact = reactive({ id: null, email: '', name: '', company: '' })
+const editContact = reactive({ id: null, email: '', name: '', company: '', group_id: null })
 
 // Import
 const showImport = ref(false)
@@ -547,19 +671,30 @@ async function bulkDeleteLogs() {
   } catch (e) { alert('删除失败: ' + e.message) }
 }
 
-const allContactsSelected = computed(() => contacts.value.length > 0 && selectedContacts.value.length === contacts.value.length)
-const newTaskAllContactsSel = computed(() => contacts.value.length > 0 && newTask.contact_ids.length === contacts.value.length)
+const allContactsSelected = computed(() => filteredContacts.value.length > 0 && filteredContacts.value.every(c => selectedContacts.value.includes(c.id)))
+const newTaskAllContactsSel = computed(() => taskFilteredContacts.value.length > 0 && taskFilteredContacts.value.every(c => newTask.contact_ids.includes(c.id)))
 
 function statusLabel(s) { return { pending: '待发送', running: '发送中', done: '已完成', cancelled: '已取消', failed: '失败' }[s] || s }
-function toggleAllContacts(e) { selectedContacts.value = e.target.checked ? contacts.value.map(c => c.id) : [] }
-function toggleAllNewTaskContacts(e) { newTask.contact_ids = e.target.checked ? contacts.value.map(c => c.id) : [] }
+function toggleAllContacts(e) {
+  const ids = filteredContacts.value.map(c => c.id)
+  selectedContacts.value = e.target.checked ? ids : []
+}
+function toggleAllNewTaskContacts(e) {
+  const ids = taskFilteredContacts.value.map(c => c.id)
+  if (e.target.checked) {
+    newTask.contact_ids = [...new Set([...newTask.contact_ids, ...ids])]
+  } else {
+    newTask.contact_ids = newTask.contact_ids.filter(id => !ids.includes(id))
+  }
+}
 
 async function loadAll() {
-  const [tpl, ct, tk, accts] = await Promise.all([
+  const [tpl, ct, tk, accts, grps] = await Promise.all([
     api.request('/mailer/templates'), api.request('/mailer/contacts'),
-    api.request('/mailer/tasks'), api.request('/email/accounts')
+    api.request('/mailer/tasks'), api.request('/email/accounts'),
+    api.request('/mailer/contact-groups')
   ])
-  templates.value = tpl || []; contacts.value = ct || []; tasks.value = tk || []; smtpAccounts.value = accts || []
+  templates.value = tpl || []; contacts.value = ct || []; tasks.value = tk || []; smtpAccounts.value = accts || []; contactGroups.value = grps || []
 }
 async function loadLogs() {
   const q = logTaskFilter.value ? `?task_id=${logTaskFilter.value}` : ''
@@ -624,7 +759,7 @@ function previewTpl(t) { previewHtml.value = t.html_body; showPreview.value = tr
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────
 function openContactEditor(c) {
-  Object.assign(editContact, c || { id: null, email: '', name: '', company: '' })
+  Object.assign(editContact, c || { id: null, email: '', name: '', company: '', group_id: null })
   showContactEditor.value = true
 }
 async function saveContact() {
@@ -641,8 +776,8 @@ async function deleteContact(id) { if (!confirm('确认删除？')) return; awai
 async function doImport() {
   const lines = importText.value.split('\n').map(l => l.trim()).filter(Boolean)
   if (!lines.length) return
-  await api.request('/mailer/contacts/import', { method: 'POST', body: JSON.stringify({ lines }) })
-  importText.value = ''; showImport.value = false; await loadAll()
+  await api.request('/mailer/contacts/import', { method: 'POST', body: JSON.stringify({ lines, group_id: importGroupId.value }) })
+  importText.value = ''; importGroupId.value = null; showImport.value = false; await loadAll()
 }
 
 // ─── Tasks ─────────────────────────────────────────────────────────────────
@@ -742,6 +877,16 @@ h1 { font-size: 24px; font-weight: 700; margin-bottom: 24px; color: #1e293b }
 .rt-info { font-size: 12px; color: #059669; font-weight: 500; padding: 3px 8px; background: #f0fdf4; border-radius: 6px; margin-top: 2px }
 .tag-urgent { font-size: 11px; font-weight: 700; color: #dc2626; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 4px; padding: 1px 6px }
 .tag-sched { font-size: 11px; font-weight: 700; color: #6366f1; background: #eff6ff; border: 1px solid #a5b4fc; border-radius: 4px; padding: 1px 6px }
+
+/* Contact groups */
+.group-bar { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; padding:8px 0 }
+.group-pill { font-size:12px; padding:4px 12px; border-radius:16px; border:1px solid #e2e8f0; background:#f8fafc; color:#475569; cursor:pointer; user-select:none; transition:all 0.15s; display:inline-flex; align-items:center; gap:4px }
+.group-pill:hover { background:#e5e7eb; border-color:#94a3b8 }
+.group-pill.active { background:#3b82f6; color:#fff; border-color:#3b82f6 }
+.group-pill.small { font-size:11px; padding:2px 8px; border-radius:12px; border-color:#c4b5fd; color:#7c3aed; background:#f5f3ff }
+.group-pill.small:hover { background:#ede9fe }
+.group-del { font-size:14px; color:#94a3b8; cursor:pointer; line-height:1; margin-left:2px }
+.group-del:hover { color:#ef4444 }
 
 /* Table */
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px }
