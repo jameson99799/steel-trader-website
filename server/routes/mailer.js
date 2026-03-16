@@ -136,16 +136,30 @@ async function runTask(taskId, isResume = false) {
                 if (!mailOpts.subject.startsWith('Re:')) {
                     mailOpts.subject = `Re: ${orig.subject || mailOpts.subject}`
                 }
-                // Append quoted original body (like Gmail / Outlook reply style)
-                const sentDate = orig.sent_at ? new Date(orig.sent_at).toLocaleString('zh-CN') : ''
+                // Format date: 3/16/2026 10:12
+                const d = orig.sent_at ? new Date(orig.sent_at) : null
+                const fmtDate = d
+                    ? `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+                    : ''
+                const toAddr = contact.name ? `'${contact.name}'<${contact.email}>` : contact.email
+                const uid = `q${Date.now()}`
                 const quotedBlock = `
 <br/><br/>
-<div style="border-left:3px solid #c0c0c0;padding-left:14px;margin-left:0;color:#555;font-size:13px">
-  <p style="margin:0 0 6px">-------- 原始邮件 --------<br/>
-  发件人: ${orig.from}<br/>
-  时间: ${sentDate}<br/>
-  主题: ${orig.subject}</p>
-  ${orig.html_body || ''}
+<div style="font-family:Arial,sans-serif;font-size:13px">
+  <button onclick="var e=document.getElementById('${uid}');e.style.display=e.style.display==='none'?'':'none';this.textContent=e.style.display===''?'▲ Hide quoted message':'▼ Show quoted message'"
+    style="background:none;border:1px solid #aaa;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;color:#555;margin-bottom:6px">
+    ▼ Show quoted message
+  </button>
+  <div id="${uid}" style="display:none;border-left:3px solid #bebebe;padding-left:12px;color:#555;margin-top:4px">
+    <p style="margin:0 0 8px;font-size:12px;color:#888">
+      ---- Replied Message ----<br/>
+      <b>From</b>&nbsp;&nbsp;&nbsp;&nbsp;${orig.from}<br/>
+      <b>Date</b>&nbsp;&nbsp;&nbsp;&nbsp;${fmtDate}<br/>
+      <b>To</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${toAddr}<br/>
+      <b>Subject</b>&nbsp;${orig.subject}
+    </p>
+    ${orig.html_body || ''}
+  </div>
 </div>`
                 mailOpts.html = mailOpts.html + quotedBlock
             }

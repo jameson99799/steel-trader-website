@@ -141,7 +141,7 @@
     </div>
 
     <!-- ═══ Template Editor Modal ═══ -->
-    <div class="modal-overlay" v-if="showTplEditor" @click.self="showTplEditor=false">
+    <div class="modal-overlay" v-if="showTplEditor" @click.self="closeTplEditor">
       <div class="modal-box modal-lg">
         <h3>{{ editTpl.id ? '编辑模板' : '新建模板' }}</h3>
         <div class="grid grid-2">
@@ -150,23 +150,48 @@
         </div>
         <div class="form-group"><label>备注</label><input v-model="editTpl.note" class="form-control" placeholder="选填" /></div>
         <div class="form-group">
-          <label>正文内容 (支持直接粘贴截图、点击图片可设置大小比例)</label>
-          <div ref="editorRef" class="rich-editor"></div>
+          <label>正文内容（支持直接粘贴截图、复制Foxmail内容格式完整保留）</label>
+          <!-- Native rich-text toolbar -->
+          <div class="rte-toolbar">
+            <select @change="rteCmd('fontName', $event.target.value);$event.target.value=''" style="width:100px">
+              <option value="">字体</option>
+              <option>Arial</option><option>Times New Roman</option><option>Verdana</option><option>Courier New</option>
+            </select>
+            <select @change="rteCmd('fontSize', $event.target.value);$event.target.value=''" style="width:60px">
+              <option value="">号</option>
+              <option value="1">10</option><option value="2">12</option><option value="3">14</option>
+              <option value="4">16</option><option value="5">18</option><option value="6">24</option><option value="7">36</option>
+            </select>
+            <button class="rte-btn" @click.prevent="rteCmd('bold')" title="粗体"><b>B</b></button>
+            <button class="rte-btn" @click.prevent="rteCmd('italic')" title="斜体"><i>I</i></button>
+            <button class="rte-btn" @click.prevent="rteCmd('underline')" title="下划线"><u>U</u></button>
+            <button class="rte-btn" @click.prevent="rteCmd('strikeThrough')" title="删除线"><s>S</s></button>
+            <span class="rte-sep"></span>
+            <label class="rte-btn" title="字体颜色">A <input type="color" @input="rteCmd('foreColor', $event.target.value)" style="opacity:0;position:absolute;width:1px;height:1px" /></label>
+            <label class="rte-btn" title="背景色">🖊<input type="color" @input="rteCmd('backColor', $event.target.value)" style="opacity:0;position:absolute;width:1px;height:1px" /></label>
+            <span class="rte-sep"></span>
+            <button class="rte-btn" @click.prevent="rteCmd('justifyLeft')" title="左对齐">≡</button>
+            <button class="rte-btn" @click.prevent="rteCmd('justifyCenter')" title="居中">≡</button>
+            <button class="rte-btn" @click.prevent="rteCmd('justifyRight')" title="右对齐">≡</button>
+            <span class="rte-sep"></span>
+            <button class="rte-btn" @click.prevent="rteCmd('insertUnorderedList')" title="无序列表">≡</button>
+            <button class="rte-btn" @click.prevent="rteCmd('insertOrderedList')" title="有序列表">1.</button>
+            <button class="rte-btn" @click.prevent="rteCmd('insertHorizontalRule')" title="插入横线">—</button>
+            <span class="rte-sep"></span>
+            <button class="rte-btn" @click.prevent="rteInsertLink" title="插入链接">🔗</button>
+            <button class="rte-btn" @click.prevent="rteUploadImage" title="插入图片">🖼</button>
+            <button class="rte-btn" @click.prevent="rteCmd('removeFormat')" title="清除格式">✖</button>
+          </div>
+          <!-- iframe: designMode='on' = Foxmail-like native editing, zero sanitization -->
+          <iframe ref="editorFrame" class="rte-frame" @load="onFrameLoad"></iframe>
         </div>
-
-    <!-- Image resize dialog (shown when clicking an image in editor) -->
-    <div class="img-resize-popup" v-if="imgResizeTarget" :style="imgResizePos">
-      <span>图片大小：</span>
-      <input type="number" v-model.number="imgResizePct" min="10" max="500" step="10" style="width:70px" /> %
-      <button class="btn btn-sm btn-primary" @click="applyImgResize">确定</button>
-      <button class="btn btn-sm btn-outline" @click="imgResizeTarget=null">✕</button>
-    </div>
         <div class="modal-actions">
           <button class="btn btn-primary" @click="saveTpl" :disabled="savingTpl">{{ savingTpl ? '保存中...' : '💾 保存' }}</button>
-          <button class="btn btn-outline" @click="showTplEditor=false">取消</button>
+          <button class="btn btn-outline" @click="closeTplEditor">取消</button>
         </div>
       </div>
     </div>
+
 
     <!-- ═══ Contact Editor Modal ═══ -->
     <div class="modal-overlay" v-if="showContactEditor" @click.self="showContactEditor=false">
@@ -293,59 +318,81 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, onUnmounted } from 'vue'
 import api from '../../api'
 
-// Import Quill
-import Quill from 'quill'
-import 'quill/dist/quill.snow.css'
+// ─── iframe-based native editor (Foxmail-style) ───────────────────────────────
+const editorFrame = ref(null)
+const savingTpl = ref(false)
 
-// ─── Image resize via % popup (replaces drag handles, more precise) ──────────
-const imgResizeTarget = ref(null)
-const imgResizePct = ref(100)
-const imgResizePos = ref({})
-function applyImgResize() {
-  if (!imgResizeTarget.value || !quillInstance) return
-  const el = imgResizeTarget.value
-  const naturalW = el.naturalWidth || el.offsetWidth
-  const w = Math.round(naturalW * imgResizePct.value / 100)
-  el.style.width = w + 'px'
-  el.style.height = 'auto'
-  imgResizeTarget.value = null
-  // Trigger quill change
-  editTpl.html_body = quillInstance.root.innerHTML
+function getFrameDoc() {
+  return editorFrame.value?.contentDocument || editorFrame.value?.contentWindow?.document
 }
-// Attach image click listener after quill is created
-function attachImgClickHandler() {
-  if (!quillInstance) return
-  quillInstance.root.addEventListener('click', (e) => {
-    if (e.target.tagName !== 'IMG') { imgResizeTarget.value = null; return }
-    const rect = e.target.getBoundingClientRect()
-    const parentRect = quillInstance.root.getBoundingClientRect()
-    imgResizeTarget.value = e.target
-    imgResizePct.value = e.target.style.width
-      ? Math.round((parseInt(e.target.style.width) / (e.target.naturalWidth || e.target.offsetWidth)) * 100)
-      : 100
-    imgResizePos.value = {
-      position: 'absolute',
-      top: (rect.bottom - parentRect.top + 6) + 'px',
-      left: (rect.left - parentRect.left) + 'px',
-      zIndex: 9999
-    }
-  })
+
+function rteCmd(cmd, val = null) {
+  const doc = getFrameDoc()
+  if (!doc) return
+  doc.execCommand(cmd, false, val)
+  editorFrame.value?.contentWindow?.focus()
+  syncFrameContent()
 }
+
+function syncFrameContent() {
+  const doc = getFrameDoc()
+  if (doc) editTpl.html_body = doc.body?.innerHTML || ''
+}
+
+function onFrameLoad() {
+  const doc = getFrameDoc()
+  if (!doc) return
+  doc.open(); doc.write(`<!DOCTYPE html><html><head>
+<style>
+  body { margin:8px; font-family:Arial,sans-serif; font-size:13px; line-height:1.6;
+         min-height:240px; outline:none; word-wrap:break-word; }
+  img { max-width:100%; cursor:pointer; }
+  hr { border:none; border-top:1px solid #aaa; margin:12px 0; }
+  a { color:#0563c1; }
+</style></head><body></body></html>`); doc.close()
+  doc.designMode = 'on'
+  // Monitor input to sync back
+  doc.addEventListener('input', syncFrameContent)
+  doc.addEventListener('keyup', syncFrameContent)
+  // Load existing content if editing
+  if (editTpl.html_body) doc.body.innerHTML = editTpl.html_body
+}
+
+function rteInsertLink() {
+  const url = prompt('请输入链接地址：', 'https://')
+  if (url) rteCmd('createLink', url)
+}
+
+async function rteUploadImage() {
+  const input = document.createElement('input')
+  input.type = 'file'; input.accept = 'image/*'; input.click()
+  input.onchange = async () => {
+    const file = input.files[0]; if (!file) return
+    const fd = new FormData(); fd.append('image', file)
+    try {
+      savingTpl.value = true
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/upload/image', {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '服务器错误')
+      const url = `${window.location.origin}${data.url}`
+      rteCmd('insertImage', url)
+    } catch (e) { alert('图片上传失败: ' + e.message) }
+    finally { savingTpl.value = false }
+  }
+}
+
 const tab = ref('templates')
 const templates = ref([])
 const contacts = ref([])
 const tasks = ref([])
 const smtpAccounts = ref([])
 const selectedContacts = ref([])
-
-// Template editor
-const showTplEditor = ref(false)
-const editTpl = reactive({ id: null, name: '', subject: '', html_body: '', note: '' })
-const editorRef = ref(null)
-const savingTpl = ref(false)
 
 // Contact editor
 const showContactEditor = ref(false)
@@ -455,121 +502,26 @@ onMounted(() => {
   rtInterval = setInterval(pollRealtime, 1500)    // realtime countdown every 1.5s
   taskPollInterval = setInterval(pollTasks, 3000) // task status every 3s always
 })
-import { onUnmounted } from 'vue'
 onUnmounted(() => { clearInterval(rtInterval); clearInterval(taskPollInterval) })
 
-// ─── Template ────────────────────────────────────────────────────────────────
-let quillInstance = null
-
-function destroyQuill() {
-  if (quillInstance) {
-    try { quillInstance.off('text-change') } catch (e) {}
-    quillInstance = null
-    // Remove the ql-toolbar element Quill injected above the editor
-    const container = editorRef.value?.parentElement
-    if (container) {
-      const toolbar = container.querySelector('.ql-toolbar')
-      if (toolbar) toolbar.remove()
-    }
-    if (editorRef.value) editorRef.value.innerHTML = ''
-  }
-}
-
-function initQuill() {
-  destroyQuill()
-
-  quillInstance = new Quill(editorRef.value, {
-    theme: 'snow',
-    modules: {
-      toolbar: {
-        container: [
-          [{ header: [1, 2, 3, false] }],
-          ['bold', 'italic', 'underline', 'strike'],
-          [{ color: [] }, { background: [] }],
-          ['blockquote'],
-          [{ list: 'ordered' }, { list: 'bullet' }],
-          ['link', 'image'],
-          ['clean']
-        ],
-        handlers: { image: imageHandler }
-      },
-      clipboard: {
-        // Preserve ALL HTML including <hr>, images, tables etc.
-        // matchVisual: false keeps Quill from stripping unknown elements
-        matchVisual: false
-      }
-    }
-  })
-
-  quillInstance.on('text-change', () => {
-    editTpl.html_body = quillInstance.root.innerHTML
-  })
-
-  // Fix paste: bypass Quill's HTML sanitizer entirely with execCommand
-  // This preserves HR, font styles, signatures etc. exactly as copied from Foxmail/Outlook
-  quillInstance.root.addEventListener('paste', (e) => {
-    const clipHtml = e.clipboardData?.getData('text/html')
-    if (clipHtml && clipHtml.length > 10) {
-      e.preventDefault()
-      e.stopPropagation()
-      // Use the native browser insertHTML command which bypasses Quill's delta sanitization
-      document.execCommand('insertHTML', false, clipHtml)
-      // Sync back to reactive model
-      editTpl.html_body = quillInstance.root.innerHTML
-    }
-  }, true)
-
-  attachImgClickHandler()
-}
-
-function imageHandler() {
-  const input = document.createElement('input')
-  input.setAttribute('type', 'file')
-  input.setAttribute('accept', 'image/*')
-  input.click()
-
-  input.onchange = async () => {
-    const file = input.files[0]
-    if (!file) return
-    const formData = new FormData()
-    formData.append('image', file) // field name matches /api/upload/image endpoint
-
-    try {
-      savingTpl.value = true
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/upload/image', { // use dedicated image endpoint
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || '服务器错误')
-
-      const url = `${window.location.origin}${data.url}`
-      const range = quillInstance.getSelection(true)
-      quillInstance.insertEmbed(range.index, 'image', url)
-      quillInstance.setSelection(range.index + 1)
-    } catch (e) {
-      alert('图片上传失败: ' + e.message)
-    } finally {
-      savingTpl.value = false
-    }
-  }
-}
+// ─── Template editor (iframe-based) ──────────────────────────────────────────
+const showTplEditor = ref(false)
+const editTpl = reactive({ id: null, name: '', subject: '', html_body: '', note: '' })
+const editorRef = ref(null) // kept for backward compat, not used
 
 function openTplEditor(t) {
   Object.assign(editTpl, t || { id: null, name: '', subject: '', html_body: '', note: '' })
   showTplEditor.value = true
-  // Let DOM render, then init quill and set content
-  nextTick(() => {
-    initQuill()
-    if (quillInstance) {
-      quillInstance.root.innerHTML = editTpl.html_body || ''
-    }
-  })
+  // iframe @load handles injecting content
+}
+
+function closeTplEditor() {
+  syncFrameContent()
+  showTplEditor.value = false
 }
 
 async function saveTpl() {
+  syncFrameContent() // make sure latest iframe HTML is captured
   savingTpl.value = true
   try {
     if (editTpl.id) {
@@ -583,6 +535,8 @@ async function saveTpl() {
 }
 async function deleteTpl(id) { if (!confirm('确认删除？')) return; await api.request(`/mailer/templates/${id}`, { method: 'DELETE' }); await loadAll() }
 function previewTpl(t) { previewHtml.value = t.html_body; showPreview.value = true }
+
+
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────
 function openContactEditor(c) {
@@ -783,12 +737,12 @@ textarea.form-control { resize: vertical; font-family: inherit }
 .tag-sched { font-size: 11px; font-weight: 700; color: #6366f1; background: #eff6ff; border: 1px solid #a5b4fc; border-radius: 4px; padding: 1px 6px }
 
 /* Rich editor */
-.rich-editor-wrap { position: relative }
-:deep(.ql-container) { font-size: 14px; min-height: 220px; border-radius: 0 0 8px 8px }
-:deep(.ql-toolbar) { border-radius: 8px 8px 0 0 }
-:deep(.ql-editor) { min-height: 200px; max-height: 500px; overflow-y: auto }
-:deep(.ql-editor img) { cursor: pointer; max-width: 100% }
-:deep(.ql-editor hr) { border: none; border-top: 1px solid #cbd5e1; margin: 12px 0 }
+/* Native RTE (iframe editor) */
+.rte-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:2px; padding:6px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-bottom:none; border-radius:8px 8px 0 0 }
+.rte-btn { background:none; border:1px solid transparent; border-radius:4px; cursor:pointer; padding:3px 7px; font-size:13px; color:#374151; position:relative; transition:background 0.1s }
+.rte-btn:hover { background:#e5e7eb; border-color:#d1d5db }
+.rte-sep { width:1px; height:18px; background:#d1d5db; margin:0 4px; align-self:center }
+.rte-frame { width:100%; height:320px; border:1px solid #e2e8f0; border-radius:0 0 8px 8px; background:#fff; display:block }
 
 /* Grouped logs */
 .log-group { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; overflow: hidden }
