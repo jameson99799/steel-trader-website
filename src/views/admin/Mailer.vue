@@ -350,9 +350,93 @@ function onFrameLoad() {
   body { margin:8px; font-family:Arial,sans-serif; font-size:13px; line-height:1.6;
          min-height:240px; outline:none; word-wrap:break-word; }
   img { max-width:100%; cursor:pointer; }
+  img.img-selected { outline:2px solid #3b82f6; outline-offset:2px; }
   hr { border:none; border-top:1px solid #aaa; margin:12px 0; }
   a { color:#0563c1; }
-</style></head><body></body></html>`); doc.close()
+  .img-handle { position:absolute; width:10px; height:10px; background:#3b82f6; border:1px solid #fff;
+                border-radius:2px; cursor:nwse-resize; z-index:999; }
+</style>
+<script>
+(function(){
+  var activeImg = null, overlay = null, handles = [];
+  function clearOverlay() {
+    if (overlay) { overlay.remove(); overlay = null; }
+    handles = [];
+    document.querySelectorAll('img.img-selected').forEach(function(i){ i.classList.remove('img-selected'); });
+    activeImg = null;
+  }
+  function showHandles(img) {
+    clearOverlay();
+    activeImg = img;
+    img.classList.add('img-selected');
+    overlay = document.createElement('div');
+    overlay.style.cssText = 'position:absolute;pointer-events:none;z-index:998';
+    document.body.appendChild(overlay);
+    var corners = ['nw','ne','sw','se'];
+    corners.forEach(function(dir) {
+      var h = document.createElement('div');
+      h.className = 'img-handle';
+      h.style.pointerEvents = 'all';
+      if (dir[1]==='w') h.style.cursor = dir==='nw' ? 'nwse-resize' : 'nesw-resize';
+      else h.style.cursor = dir==='ne' ? 'nesw-resize' : 'nwse-resize';
+      document.body.appendChild(h);
+      handles.push(h);
+      h.addEventListener('mousedown', function(e) { startDrag(e, img, dir); });
+    });
+    positionHandles(img);
+  }
+  function positionHandles(img) {
+    var r = img.getBoundingClientRect();
+    var sx = window.scrollX, sy = window.scrollY;
+    var positions = [
+      [r.left+sx-5, r.top+sy-5],
+      [r.right+sx-5, r.top+sy-5],
+      [r.left+sx-5, r.bottom+sy-5],
+      [r.right+sx-5, r.bottom+sy-5]
+    ];
+    handles.forEach(function(h, i) {
+      h.style.position = 'absolute';
+      h.style.left = positions[i][0]+'px';
+      h.style.top = positions[i][1]+'px';
+    });
+  }
+  function startDrag(e, img, dir) {
+    e.preventDefault(); e.stopPropagation();
+    var startX = e.clientX, startW = img.offsetWidth, ratio = img.offsetHeight / img.offsetWidth;
+    function onMove(ev) {
+      var dx = (dir.indexOf('e')>=0) ? ev.clientX - startX : startX - ev.clientX;
+      var newW = Math.max(30, startW + dx);
+      img.style.width = newW + 'px';
+      img.style.height = Math.round(newW * ratio) + 'px';
+      positionHandles(img);
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      positionHandles(img);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+  document.addEventListener('click', function(e) {
+    if (e.target.tagName === 'IMG') { showHandles(e.target); }
+    else if (!e.target.classList.contains('img-handle')) { clearOverlay(); }
+  });
+  document.addEventListener('dblclick', function(e) {
+    if (e.target.tagName !== 'IMG') return;
+    var img = e.target;
+    var natW = img.naturalWidth || img.offsetWidth;
+    var curPct = img.style.width ? Math.round(parseInt(img.style.width) / natW * 100) : 100;
+    var pct = prompt('设置图片大小比例 (当前: '+curPct+'%)：', curPct);
+    if (pct && !isNaN(+pct)) {
+      var newW = Math.round(natW * (+pct) / 100);
+      img.style.width = newW + 'px';
+      img.style.height = 'auto';
+      if (activeImg === img) positionHandles(img);
+    }
+  });
+})();
+<\/script></head><body></body></html>`); doc.close()
   doc.designMode = 'on'
   // Monitor input to sync back
   doc.addEventListener('input', syncFrameContent)

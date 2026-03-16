@@ -127,7 +127,7 @@ async function runTask(taskId, isResume = false) {
                 mailOpts.headers['X-Priority'] = '1'
                 mailOpts.headers['Importance'] = 'High'
             }
-            // Follow-up: set In-Reply-To + append quoted original email body
+            // Follow-up: set In-Reply-To + append quoted original email body (Foxmail reply style)
             const orig = parentLogData[contact.email]
             if (orig?.messageId) {
                 if (!mailOpts.headers) mailOpts.headers = {}
@@ -136,28 +136,24 @@ async function runTask(taskId, isResume = false) {
                 if (!mailOpts.subject.startsWith('Re:')) {
                     mailOpts.subject = `Re: ${orig.subject || mailOpts.subject}`
                 }
-                // Format date: 3/16/2026 10:12
+                // Format date like Foxmail: 3/16/2026 10:12
                 const d = orig.sent_at ? new Date(orig.sent_at) : null
                 const fmtDate = d
                     ? `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
                     : ''
                 const toAddr = contact.name ? `'${contact.name}'<${contact.email}>` : contact.email
-                const uid = `q${Date.now()}`
+                // Foxmail-style inline reply: original email always fully visible
                 const quotedBlock = `
 <br/><br/>
-<div style="font-family:Arial,sans-serif;font-size:13px">
-  <button onclick="var e=document.getElementById('${uid}');e.style.display=e.style.display==='none'?'':'none';this.textContent=e.style.display===''?'▲ Hide quoted message':'▼ Show quoted message'"
-    style="background:none;border:1px solid #aaa;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;color:#555;margin-bottom:6px">
-    ▼ Show quoted message
-  </button>
-  <div id="${uid}" style="display:none;border-left:3px solid #bebebe;padding-left:12px;color:#555;margin-top:4px">
-    <p style="margin:0 0 8px;font-size:12px;color:#888">
-      ---- Replied Message ----<br/>
-      <b>From</b>&nbsp;&nbsp;&nbsp;&nbsp;${orig.from}<br/>
-      <b>Date</b>&nbsp;&nbsp;&nbsp;&nbsp;${fmtDate}<br/>
-      <b>To</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${toAddr}<br/>
-      <b>Subject</b>&nbsp;${orig.subject}
-    </p>
+<div style="font-family:Arial,sans-serif;font-size:13px;color:#555">
+  <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #ccc;font-size:12px;color:#888">
+    ---- Replied Message ----<br/>
+    <b>From</b>&nbsp;&nbsp;&nbsp;&nbsp;${orig.from}<br/>
+    <b>Date</b>&nbsp;&nbsp;&nbsp;&nbsp;${fmtDate}<br/>
+    <b>To</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${toAddr}<br/>
+    <b>Subject</b>&nbsp;${orig.subject}
+  </div>
+  <div style="border-left:2px solid #bebebe;padding-left:12px">
     ${orig.html_body || ''}
   </div>
 </div>`
