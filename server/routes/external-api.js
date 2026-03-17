@@ -189,83 +189,211 @@ router.delete('/news/:id', apiKeyMiddleware, (req, res) => {
     res.json({ success: true, message: 'News deleted' })
 })
 
-// ─── API Documentation endpoint ─────────────────────────────────────────────
 router.get('/docs', (req, res) => {
+    // Dynamically load categories from DB
+    const cats = getAll('SELECT id, name, name_en, slug FROM categories ORDER BY sort_order')
+    const catList = cats.map(c => ({ id: c.id, name: c.name_en || c.name, slug: c.slug }))
+
     res.json({
-        info: 'SunSea Steel External API — 用于AI和外部系统自动上传产品和文章',
-        auth: '所有写入接口需要在Header中携带 X-API-Key',
-        categories: {
-            description: '分类ID映射（category_id字段使用）',
-            list: [
-                { id: 1, name: 'Galvanized Steel Coil' },
-                { id: 2, name: 'Galvalume Steel Coil' },
-                { id: 3, name: 'Prepainted Galvalume Steel Coil' },
-                { id: 4, name: 'Prepainted Galvanized Steel Coil' },
-                { id: 5, name: 'Corrugated Roofing Sheet' },
-                { id: 6, name: 'Cold Rolled Coil' }
-            ]
+        info: 'SunSea Steel External API — Content Creation Guide for AI Systems',
+        version: '2.0',
+        base_url: req.protocol + '://' + req.get('host') + '/api/external',
+        auth: {
+            method: 'Header: X-API-Key',
+            description: '所有写入接口需要在 HTTP Header 中携带 X-API-Key'
         },
+
+        // ═══ Categories ═══
+        categories: {
+            description: 'Product category_id mapping. Use these IDs when creating products.',
+            list: catList
+        },
+
+        // ═══ Template Variables ═══
         template_variables: {
-            description: '在detail_content和news content中可用的模板变量，前端会自动替换为网站后台设置的值',
+            description: 'Available in detail_content and news content. Frontend auto-replaces with backend settings.',
             variables: {
-                '{{email}}': '公司邮箱',
-                '{{phone}}': '公司电话',
-                '{{whatsapp}}': 'WhatsApp号码',
-                '{{whatsapp_link}}': 'WhatsApp链接 (https://wa.me/xxx)',
-                '{{company_name}}': '公司英文名'
+                '{{email}}': 'Company email address',
+                '{{phone}}': 'Company phone number',
+                '{{whatsapp}}': 'WhatsApp number',
+                '{{whatsapp_link}}': 'WhatsApp click-to-chat URL (https://wa.me/xxx)',
+                '{{company_name}}': 'Company English name'
+            },
+            usage_example: '<a href="mailto:{{email}}">{{email}}</a> or <a href="{{whatsapp_link}}">WhatsApp Us</a>'
+        },
+
+        // ═══ Content Generation Guide ═══
+        content_generation: {
+            description: 'Complete guide for generating product detail_content and news content HTML',
+
+            // ── Image Placeholder Rules ──
+            image_rules: {
+                description: 'How to handle images in generated content',
+                placeholder_image: 'Use a 1x1 transparent placeholder: data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+                replace_tip: {
+                    description: 'Add a <span class="replace-tip">提示文字</span> AFTER each placeholder image to tell admin what image to upload',
+                    example: '<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="PPGI coil" />\n<span class="replace-tip">📷 请上传PPGI钢卷产品图片（建议尺寸：800x600px）</span>',
+                    behavior: 'Frontend automatically hides .replace-tip. Admin backend shows it as yellow clickable prompt — clicking triggers image upload and auto-removes the tip after upload.',
+                    important: 'The .replace-tip span MUST be placed AFTER or inside the same parent as the <img> tag it references.'
+                },
+                side_by_side_images: {
+                    description: 'For 2+ images displayed side-by-side, use a flex container with fixed-size frames',
+                    html_pattern: '<div style="display:flex;gap:16px;margin:20px 0">\n  <div class="fixed-image-frame" style="flex:1">\n    <img src="placeholder" alt="desc1" />\n    <span class="replace-tip">📷 上传左侧图片</span>\n  </div>\n  <div class="fixed-image-frame" style="flex:1">\n    <img src="placeholder" alt="desc2" />\n    <span class="replace-tip">📷 上传右侧图片</span>\n  </div>\n</div>',
+                    css_for_fixed_frame: '.fixed-image-frame { position:relative; aspect-ratio:4/3; overflow:hidden; border-radius:12px; background:#f0f4f8; } .fixed-image-frame img { width:100%; height:100%; object-fit:cover; }'
+                }
+            },
+
+            // ── Product Detail Content Structure ──
+            product_detail_structure: {
+                description: 'Recommended HTML structure for detail_content field (full HTML page with embedded CSS)',
+                sections: [
+                    '1. <style> — Complete CSS with variables (--primary:#1f4e79, --secondary:#2980b9, --accent:#e67e22, etc.)',
+                    '2. Hero Banner — Full-width gradient background + product title + subtitle + key features badges',
+                    '3. Quick Navigation — Anchor links to page sections',
+                    '4. Product Overview — Left text + right image layout, 2-3 paragraphs',
+                    '5. Technical Specifications Table — Styled <table> with parameters (thickness, width, coating, etc.)',
+                    '6. Applications Section — 2-column card grid with icons + descriptions',
+                    '7. Product Comparison Table — vs competing products, highlight advantages',
+                    '8. Advantages Section — Icon cards or checklist items with descriptions',
+                    '9. Why Choose Us — 4-column card grid (Experience, Quality, Price, Service)',
+                    '10. Factory/Production — Image + text showcasing manufacturing capability',
+                    '11. Quality Control — Process description + certification badges',
+                    '12. Packaging & Shipping — Standard packaging specs + logistics info',
+                    '13. FAQ Section — Card-style Q&A list (also use faq_items field for JSON-LD)',
+                    '14. CTA Section — Gradient background + contact buttons using {{email}} and {{whatsapp_link}}'
+                ],
+                css_variables: {
+                    '--primary': '#1f4e79 (main brand color)',
+                    '--secondary': '#2980b9 (links, accents)',
+                    '--accent': '#e67e22 (highlights, CTA buttons)',
+                    '--bg-light': '#f8f9fa',
+                    '--bg-dark': '#1a1a2e',
+                    '--text-dark': '#2c3e50',
+                    '--text-light': '#ecf0f1',
+                    '--border': '#e0e6ed',
+                    '--radius': '12px',
+                    '--shadow': '0 4px 20px rgba(0,0,0,0.08)'
+                },
+                important_css_classes: [
+                    '.hero — Full-width hero section with gradient background',
+                    '.section — Standard content section with padding',
+                    '.section-title — Section heading (h2)',
+                    '.overview-grid — 2-column text+image layout',
+                    '.spec-table — Styled specification table',
+                    '.app-grid — Application cards grid',
+                    '.image-box — Single image container with rounded corners',
+                    '.fixed-image-frame — Fixed aspect-ratio image container for side-by-side',
+                    '.dual-images — Flex container for 2 side-by-side images',
+                    '.card-grid — Multi-column card layout',
+                    '.faq-item — FAQ question/answer card',
+                    '.cta-section — Call-to-action with gradient background',
+                    '.replace-tip — Image upload prompt (auto-hidden on frontend)'
+                ]
+            },
+
+            // ── News Article Content Structure ──
+            news_article_structure: {
+                description: 'Structure for news content field',
+                format: 'Can be plain HTML (recommended for SEO) or full HTML page with <style> tags (use render_mode=iframe)',
+                sections: [
+                    '1. Introduction paragraph — Hook + context',
+                    '2. Main content — Multiple H2/H3 sections with paragraphs',
+                    '3. Images — Use placeholder imgs with .replace-tip prompts',
+                    '4. Key points — Bullet lists or numbered lists',
+                    '5. Conclusion — Summary + CTA with {{email}}/{{whatsapp_link}}',
+                    '6. FAQ (optional) — Also set faq_items field for JSON-LD schema'
+                ],
+                render_mode: {
+                    'direct': 'Default. HTML rendered directly on page. Best SEO. <style> tags are stripped.',
+                    'iframe': 'HTML rendered in isolated iframe. Use when content has its own <style> tags.'
+                }
             }
         },
-        content_requirements: {
-            description: '产品详情和文章内容生成要求',
-            structure: [
-                '1. Hero Banner区 — 全宽背景图+标题+描述（使用.hero类）',
-                '2. Quick Links导航 — 页面内锚点链接',
-                '3. 产品概述（Overview）— 左文右图布局',
-                '4. 技术规格表（Specifications）— 标准table格式',
-                '5. 应用领域（Applications）— 双列图文卡片',
-                '6. 同类产品对比（Comparison）— 详细对比表格+双栏图片',
-                '7. 产品优势（Advantages）— 图文并排+check list',
-                '8. 为何选择（Why Choose Us）— 4列card grid',
-                '9. 工厂实力（Factory Strength）— 图文并排',
-                '10. 质量控制（Quality Control）— 双栏图片+4列cards',
-                '11. 包装（Packaging）— 带背景的图文section',
-                '12. 发运（Shipping）— 双栏图片+info box',
-                '13. FAQ — 卡片式FAQ列表',
-                '14. CTA区 — 渐变背景+Email和WhatsApp按钮（使用{{email}}和{{whatsapp_link}}变量）'
-            ],
-            image_placeholders: '图片位置使用 .image-box 或 .fixed-image-frame 容器，内含可点击上传的img标签。中文提示使用 .replace-tip 类（display:none），添加图片后自动隐藏',
-            seo_requirements: [
-                'seo_title: 包含产品关键词 + 公司名 (60字符内)',
-                'seo_description: 包含产品特性 + 使用场景 + CTA (160字符内)',
-                'seo_keywords: 8-12个关键词，逗号分隔',
-                'faq_items: 7-10个FAQ，覆盖常见采购问题'
-            ],
-            css_styling: '使用参考模板的CSS变量系统（--primary, --secondary等），完整CSS包含在detail_content的<style>标签中'
-        },
-        specs_format: {
-            description: 'specs字段格式 — JSON数组，每项包含name和value',
-            example: '[{"name":"Thickness","value":"0.12mm - 1.2mm"},{"name":"Width","value":"600mm - 1250mm"}]',
-            recommended_count: '5-6个核心规格参数'
-        },
-        faq_format: {
-            description: 'faq_items字段格式 — JSON数组，每项包含question和answer',
-            example: '[{"question":"What is PPGI?","answer":"PPGI stands for..."}]',
-            recommended_count: '7-10个FAQ'
-        },
-        endpoints: [
-            {
-                method: 'POST', path: '/api/external/products', description: '创建产品',
-                body: { name: '中文名(必填)', name_en: '英文名(推荐)', category_id: '分类ID', description: '中文描述', description_en: '英文描述', specs: '规格JSON数组', detail_content: '详情页HTML(含CSS)', images: '图片URL逗号分隔', is_featured: '0/1推荐', seo_title: 'SEO标题', seo_description: 'SEO描述', seo_keywords: 'SEO关键词', faq_items: 'FAQ JSON数组', status: '0草稿/1发布' }
+
+        // ═══ Field Formats ═══
+        field_formats: {
+            specs: {
+                description: 'Product specifications — JSON array string',
+                format: '[{"name":"Parameter Name","value":"Parameter Value"}, ...]',
+                example: '[{"name":"Thickness","value":"0.12mm - 1.2mm"},{"name":"Width","value":"600mm - 1250mm"},{"name":"Zinc Coating","value":"40-275 g/m²"},{"name":"Surface Treatment","value":"Chromated / Oiled / Passivated"},{"name":"Standard","value":"ASTM A653, EN 10346, JIS G3302"}]',
+                recommended_count: '5-6 key specifications'
             },
-            { method: 'PUT', path: '/api/external/products/:id', description: '更新产品（只传需要更新的字段）' },
-            { method: 'DELETE', path: '/api/external/products/:id', description: '删除产品' },
-            {
-                method: 'POST', path: '/api/external/news', description: '创建文章',
-                body: { title: '中文标题(必填)', title_en: '英文标题', summary: '中文摘要', summary_en: '英文摘要', content: '内容HTML', cover_image: '封面图URL', seo_title: 'SEO标题', seo_description: 'SEO描述', seo_keywords: 'SEO关键词', status: '0草稿/1发布' }
+            faq_items: {
+                description: 'FAQ items — JSON array string (used for GEO/SEO structured data)',
+                format: '[{"question":"Q text","answer":"A text"}, ...]',
+                example: '[{"question":"What is the MOQ for PPGI steel coils?","answer":"Our minimum order quantity is typically 25 metric tons per color/specification."},{"question":"Do you provide free samples?","answer":"Yes, we offer free samples up to 300x300mm for quality evaluation."}]',
+                recommended_count: '7-10 FAQs covering: MOQ, pricing, delivery, quality, customization, payment, warranty'
             },
-            { method: 'PUT', path: '/api/external/news/:id', description: '更新文章（只传需要更新的字段）' },
-            { method: 'DELETE', path: '/api/external/news/:id', description: '删除文章' }
-        ]
+            images: {
+                description: 'Product card images — comma-separated URLs or paths',
+                example: '/uploads/product1.webp,/uploads/product2.webp'
+            }
+        },
+
+        // ═══ SEO & GEO Requirements ═══
+        seo_geo_requirements: {
+            seo_title: 'Product keyword + Brand name, ≤60 chars. Example: "PPGI Steel Coil - Prepainted Galvanized Steel | SunSea Steel"',
+            seo_description: 'Product features + use cases + CTA, ≤160 chars. Example: "Premium PPGI steel coils with RAL color coating. Custom thickness 0.12-1.2mm. Factory direct pricing. Get quote now."',
+            seo_keywords: '8-12 relevant keywords, comma-separated. Include: product name, variations, applications, industry terms',
+            faq_for_geo: 'FAQ items are automatically rendered as JSON-LD FAQPage schema for AI search engines (Google SGE, Bing Chat, Perplexity)',
+            content_best_practices: [
+                'Use natural product keywords in H2/H3 headings',
+                'Include specific numbers (thickness ranges, MOQ, delivery days)',
+                'Add comparison with alternatives for featured snippets',
+                'Use schema-friendly structure (tables for specs, Q&A for FAQ)',
+                'Include CTA with {{email}} and {{whatsapp_link}} template variables'
+            ]
+        },
+
+        // ═══ API Endpoints ═══
+        endpoints: {
+            products: {
+                create: {
+                    method: 'POST',
+                    path: '/api/external/products',
+                    body: {
+                        name: '(required) 产品名称中文',
+                        name_en: '(recommended) 产品名称英文',
+                        category_id: '(integer) 分类ID，参考categories.list',
+                        description: '(string) 中文描述',
+                        description_en: '(string) 英文描述',
+                        specs: '(JSON string) 规格参数数组，参考field_formats.specs',
+                        detail_content: '(HTML string) 完整产品详情页HTML（含<style>标签+所有sections）',
+                        images: '(string) 产品卡片图片URL，逗号分隔',
+                        is_featured: '(0/1) 是否推荐',
+                        sort_order: '(integer) 排序',
+                        status: '(0/1) 0=草稿 1=发布',
+                        seo_title: '(string) SEO标题',
+                        seo_description: '(string) SEO描述',
+                        seo_keywords: '(string) SEO关键词',
+                        faq_items: '(JSON string) FAQ数组，参考field_formats.faq_items'
+                    }
+                },
+                update: { method: 'PUT', path: '/api/external/products/:id', note: '只传需要更新的字段' },
+                delete: { method: 'DELETE', path: '/api/external/products/:id' }
+            },
+            news: {
+                create: {
+                    method: 'POST',
+                    path: '/api/external/news',
+                    body: {
+                        title: '(required) 文章标题中文',
+                        title_en: '(recommended) 文章标题英文',
+                        summary: '(string) 中文摘要',
+                        summary_en: '(string) 英文摘要',
+                        content: '(HTML string) 文章内容HTML',
+                        cover_image: '(string) 封面图URL',
+                        seo_title: '(string) SEO标题',
+                        seo_description: '(string) SEO描述',
+                        seo_keywords: '(string) SEO关键词',
+                        status: '(0/1) 0=草稿 1=发布',
+                        render_mode: '(string) direct(默认) 或 iframe'
+                    }
+                },
+                update: { method: 'PUT', path: '/api/external/news/:id', note: '只传需要更新的字段' },
+                delete: { method: 'DELETE', path: '/api/external/news/:id' }
+            }
+        }
     })
 })
 

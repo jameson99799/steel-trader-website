@@ -240,6 +240,20 @@ function onNewsVisualInput() { syncNewsFromVisual() }
 
 function onNewsVisualClick(e) {
   const img = e.target.closest('img')
+  const tip = e.target.closest('.replace-tip')
+  if (tip) {
+    e.preventDefault()
+    const parent = tip.parentElement
+    const nearImg = parent ? parent.querySelector('img') : null
+    if (nearImg) {
+      newsVisualEl.value.querySelectorAll('img').forEach(i => i.style.outline = '')
+      nearImg.style.outline = '3px solid #3b82f6'
+      newsReplacingImg = nearImg
+      newsReplacingImg._replaceTipEl = tip
+      newsImgInput.value?.click()
+    }
+    return
+  }
   if (img) {
     e.preventDefault()
     newsVisualEl.value.querySelectorAll('img').forEach(i => i.style.outline = '')
@@ -282,6 +296,15 @@ async function handleNewsImgUpload(e) {
     if (newsReplacingImg) {
       newsReplacingImg.src = res.url
       newsReplacingImg.style.outline = ''
+      // Auto-remove the associated replace-tip span
+      if (newsReplacingImg._replaceTipEl) {
+        newsReplacingImg._replaceTipEl.remove()
+        delete newsReplacingImg._replaceTipEl
+      } else {
+        let nextEl = newsReplacingImg.nextElementSibling
+        if (!nextEl && newsReplacingImg.parentElement) nextEl = newsReplacingImg.parentElement.querySelector('.replace-tip')
+        if (nextEl && nextEl.classList?.contains('replace-tip')) nextEl.remove()
+      }
       newsReplacingImg = null
       syncNewsFromVisual()
     } else if (newsEditorMode.value === 'visual' && newsVisualEl.value) {
@@ -433,6 +456,18 @@ onMounted(loadNews)
 }
 .visual-editor img { max-width: 100%; height: auto; cursor: pointer; }
 .visual-editor img:hover { outline: 2px dashed #3b82f6; }
+
+/* Replace-tip: clickable yellow prompt in admin visual editor */
+.visual-editor .replace-tip {
+  display: block; background: #fffbeb; color: #d97706; font-weight: bold;
+  padding: 10px; margin-top: 8px; border-radius: 6px;
+  border: 1px dashed #fbbf24; font-size: 13px; cursor: pointer;
+  transition: all 0.15s;
+}
+.visual-editor .replace-tip:hover { background: #fef3c7; border-color: #f59e0b; }
+
+/* Hide replace-tip in preview mode */
+.html-preview .replace-tip { display: none !important; }
 
 /* ── Preview ─────────────────────────────────────────────── */
 .html-preview {

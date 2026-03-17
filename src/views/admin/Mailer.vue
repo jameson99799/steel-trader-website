@@ -259,6 +259,8 @@
               <button :class="['tab-btn', htmlEditorTab==='visual'&&'active']" @click="htmlEditorTab='visual';initHtmlVisual()">🖊 可视化编辑</button>
               <button :class="['tab-btn', htmlEditorTab==='preview'&&'active']" @click="htmlEditorTab='preview'">👁 预览</button>
               <span style="flex:1"></span>
+              <button class="btn btn-sm btn-outline" @click="htmlInsertImageGrid(2)" title="插入2张并排图片">🖼 2列并排</button>
+              <button class="btn btn-sm btn-outline" @click="htmlInsertImageGrid(3)" title="插入3张并排图片">🖼 3列并排</button>
               <button class="btn btn-sm btn-outline" @click="htmlInsertImage" title="插入本地图片">🖼 插入图片</button>
             </div>
             <!-- Code tab -->
@@ -879,6 +881,10 @@ function initHtmlVisual() {
         img { max-width:100%; cursor:nwse-resize; }
         img:hover { outline:2px solid #3b82f6; }
         img.resizing { outline:2px dashed #ef4444; }
+        .replace-tip { display:block; background:#fffbeb; color:#d97706; font-weight:bold; padding:10px; margin-top:8px; border-radius:6px; border:1px dashed #fbbf24; font-size:13px; cursor:pointer; }
+        .replace-tip:hover { background:#fef3c7; border-color:#f59e0b; }
+        .image-grid { display:flex; gap:10px; margin:12px 0; }
+        .image-grid img { flex:1; min-width:0; object-fit:cover; border-radius:6px; }
       </style></head><body>${editTpl.html_body || '<p>在此编辑内容...</p>'}</body></html>`)
       doc.close()
       doc.designMode = 'on'
@@ -907,6 +913,58 @@ function initHtmlVisual() {
           doc.addEventListener('mouseup', onUp)
         }
       })
+      // Double-click image to replace
+      doc.addEventListener('dblclick', (e) => {
+        if (e.target.tagName === 'IMG') {
+          e.preventDefault()
+          const imgEl = e.target
+          const input = document.createElement('input')
+          input.type = 'file'; input.accept = 'image/*'; input.click()
+          input.onchange = async () => {
+            const file = input.files[0]; if (!file) return
+            const fd = new FormData(); fd.append('image', file)
+            try {
+              const token = localStorage.getItem('token')
+              const res = await fetch('/api/upload/image', { method:'POST', headers:{Authorization:`Bearer ${token}`}, body:fd })
+              const data = await res.json()
+              if (data.url || data.path) {
+                imgEl.src = data.url || data.path
+                // Remove adjacent replace-tip
+                const nextEl = imgEl.nextElementSibling
+                if (nextEl && nextEl.classList?.contains('replace-tip')) nextEl.remove()
+                syncHtmlVisual()
+              }
+            } catch(err) { alert('图片上传失败: ' + err.message) }
+          }
+        }
+      })
+      // Click replace-tip to upload image for nearest img
+      doc.addEventListener('click', (e) => {
+        const tip = e.target.closest('.replace-tip')
+        if (tip) {
+          e.preventDefault()
+          const parent = tip.parentElement
+          const nearImg = parent ? parent.querySelector('img') : null
+          if (nearImg) {
+            const input = document.createElement('input')
+            input.type = 'file'; input.accept = 'image/*'; input.click()
+            input.onchange = async () => {
+              const file = input.files[0]; if (!file) return
+              const fd = new FormData(); fd.append('image', file)
+              try {
+                const token = localStorage.getItem('token')
+                const res = await fetch('/api/upload/image', { method:'POST', headers:{Authorization:`Bearer ${token}`}, body:fd })
+                const data = await res.json()
+                if (data.url || data.path) {
+                  nearImg.src = data.url || data.path
+                  tip.remove()
+                  syncHtmlVisual()
+                }
+              } catch(err) { alert('图片上传失败: ' + err.message) }
+            }
+          }
+        }
+      })
     } catch (e) { console.error('initHtmlVisual error', e) }
   })
 }
@@ -922,29 +980,63 @@ function syncHtmlVisual() {
 }
 function htmlInsertImage() {
   const input = document.createElement('input')
-  input.type = 'file'; input.accept = 'image/*'; input.click()
+  input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.click()
   input.onchange = async () => {
-    const file = input.files[0]; if (!file) return
-    // Upload to server
-    const fd = new FormData(); fd.append('image', file)
-    try {
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/upload/image', {
-        method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd
-      })
-      const data = await res.json()
-      const imgUrl = data.url || data.path
-      if (!imgUrl) { alert('上传失败'); return }
-      const imgTag = `<img src="${imgUrl}" style="max-width:100%;height:auto" />`
-      if (htmlEditorTab.value === 'visual') {
-        try {
-          const doc = htmlVisualFrame.value.contentDocument
-          doc.execCommand('insertHTML', false, imgTag)
-        } catch (e) { editTpl.html_body += imgTag }
-      } else {
-        editTpl.html_body += '\n' + imgTag
-      }
-    } catch (e) { alert('图片上传失败: ' + e.message) }
+    const files = Array.from(input.files); if (!files.length) return
+    for (const file of files) {
+      const fd = new FormData(); fd.append('image', file)
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch('/api/upload/image', {
+          method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd
+        })
+        const data = await res.json()
+        const imgUrl = data.url || data.path
+        if (!imgUrl) { alert('上传失败'); return }
+        const imgTag = `<img src="${imgUrl}" style="max-width:100%;height:auto" />`
+        if (htmlEditorTab.value === 'visual') {
+          try {
+            const doc = htmlVisualFrame.value.contentDocument
+            doc.execCommand('insertHTML', false, imgTag)
+          } catch (e) { editTpl.html_body += imgTag }
+        } else {
+          editTpl.html_body += '\n' + imgTag
+        }
+      } catch (e) { alert('图片上传失败: ' + e.message) }
+    }
+  }
+}
+
+function htmlInsertImageGrid(cols) {
+  const input = document.createElement('input')
+  input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.click()
+  input.onchange = async () => {
+    const files = Array.from(input.files).slice(0, cols)
+    if (!files.length) return
+    const urls = []
+    for (const file of files) {
+      const fd = new FormData(); fd.append('image', file)
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch('/api/upload/image', {
+          method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd
+        })
+        const data = await res.json()
+        const imgUrl = data.url || data.path
+        if (imgUrl) urls.push(imgUrl)
+      } catch (e) { alert('图片上传失败: ' + e.message) }
+    }
+    if (!urls.length) return
+    const imgTags = urls.map(u => `<img src="${u}" style="flex:1;min-width:0;object-fit:cover;border-radius:6px;max-width:${Math.floor(100/urls.length)}%" />`).join('')
+    const gridHtml = `<div style="display:flex;gap:10px;margin:12px 0">${imgTags}</div>`
+    if (htmlEditorTab.value === 'visual') {
+      try {
+        const doc = htmlVisualFrame.value.contentDocument
+        doc.execCommand('insertHTML', false, gridHtml)
+      } catch (e) { editTpl.html_body += gridHtml }
+    } else {
+      editTpl.html_body += '\n' + gridHtml
+    }
   }
 }
 
