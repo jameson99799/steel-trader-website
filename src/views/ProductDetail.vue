@@ -353,13 +353,21 @@ const iframeContent = computed(() => {
 
   // If it's a full HTML document, inject helper script before </body>
   if (html.includes('<html') || html.includes('<body')) {
-    // Inject a style to hide replace-tip in full HTML documents
-    const hideTip = '<style>.replace-tip{display:none!important}</style>'
-    return html.replace(/<\/head>/i, hideTip + '</head>').replace(/<\/body>/i, anchorScript + '</body>')
+    // Inject CSS to hide replace-tip + fix image overflow + consistent table styling
+    const fixCss = `<style>
+      .replace-tip{display:none!important}
+      body{overflow-x:hidden;box-sizing:border-box}
+      *,*::before,*::after{box-sizing:inherit}
+      img{max-width:100%!important;height:auto!important}
+      table{width:100%!important;border-collapse:collapse!important;margin:16px 0;table-layout:fixed}
+      table th,table td{border:1px solid #ddd!important;padding:8px 12px!important;word-wrap:break-word}
+      table th{background:#f5f5f5;font-weight:600}
+    </style>`
+    return html.replace(/<\/head>/i, fixCss + '</head>').replace(/<\/body>/i, anchorScript + '</body>')
   }
   // Otherwise wrap in a minimal HTML document
   // Use :where() for default table styles so they DON'T override original inline/embedded styles
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;line-height:1.8;color:#333;font-size:16px}img{max-width:100%;height:auto;display:block;margin:12px auto;border-radius:6px}p{margin:0 0 12px}h1,h2,h3,h4{margin:20px 0 10px;font-weight:700}ul,ol{padding-left:24px;margin:8px 0}:where(table){width:100%;border-collapse:collapse;margin:16px 0}:where(table th),:where(table td){padding:8px 12px}:where(table th){font-weight:600}a{color:#1f4e79}.replace-tip{display:none!important}</style></head><body>${html}${anchorScript}</body></html>`
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;line-height:1.8;color:#333;font-size:16px;overflow-x:hidden;box-sizing:border-box}*,*::before,*::after{box-sizing:inherit}img{max-width:100%!important;height:auto!important;display:block;margin:12px auto;border-radius:6px}p{margin:0 0 12px}h1,h2,h3,h4{margin:20px 0 10px;font-weight:700}ul,ol{padding-left:24px;margin:8px 0}table{width:100%!important;border-collapse:collapse;margin:16px 0;table-layout:fixed}table th,table td{border:1px solid #ddd;padding:8px 12px;word-wrap:break-word}table th{background:#f5f5f5;font-weight:600}a{color:#1f4e79}.replace-tip{display:none!important}</style></head><body>${html}${anchorScript}</body></html>`
 })
 
 function resizeIframe() {

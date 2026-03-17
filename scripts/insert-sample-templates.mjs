@@ -10,14 +10,25 @@ const dbPath = join(__dirname, '..', 'data', 'database.db')
 const db = new Database(dbPath)
 
 const LOGO_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+const IMG_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
 
-// ─── Standard Signature Block ─────────────────────────────────────────────────
+// Hardcoded contact info — CTA buttons reference these same values
+const CONTACT = {
+  name: 'Mr Jameson',
+  title: 'Sales Manager / International Dept.',
+  email: 'jameson@fadasteel.com',
+  phone: '+8615553478959',
+  whatsapp_link: 'https://wa.me/8615553478959',
+  website: 'https://www.fadasteel.com'
+}
+
+// ─── Standard Signature Block (hardcoded, not using template variables) ───────
 const signature = `
 <div style="margin-top:30px;padding-top:20px;border-top:2px solid #e0e6ed;font-family:Arial,sans-serif;font-size:13px;color:#555;line-height:1.8">
   <p style="margin:0 0 4px"><strong>Best Regards</strong></p>
-  <p style="margin:0 0 12px;font-size:15px;font-weight:700;color:#1f4e79">Mr Jameson / Sales Manager / International Dept.</p>
-  <p style="margin:0 0 4px">📱 Mobile / WhatsApp / Wechat: <a href="{{whatsapp_link}}" style="color:#25d366;text-decoration:none">{{phone}}</a></p>
-  <p style="margin:0 0 12px">📧 Email: <a href="mailto:{{email}}" style="color:#0563c1;text-decoration:none">{{email}}</a></p>
+  <p style="margin:0 0 12px;font-size:15px;font-weight:700;color:#1f4e79">${CONTACT.name} / ${CONTACT.title}</p>
+  <p style="margin:0 0 4px">📱 Mobile / WhatsApp / Wechat: <a href="${CONTACT.whatsapp_link}" style="color:#25d366;text-decoration:none">${CONTACT.phone}</a></p>
+  <p style="margin:0 0 12px">📧 Email: <a href="mailto:${CONTACT.email}" style="color:#0563c1;text-decoration:none">${CONTACT.email}</a></p>
   <div style="margin:12px 0">
     <img src="${LOGO_PLACEHOLDER}" alt="FADA Steel Logo" style="max-height:60px;display:block" />
     <span class="replace-tip">📷 请上传公司LOGO图片（建议高度60px）</span>
@@ -26,7 +37,7 @@ const signature = `
   <p style="margin:0;font-size:12px;color:#777">SHANDONG YANGGU NEW GLOBAL STEEL CO., LTD</p>
   <p style="margin:0;font-size:12px;color:#777">FADA STEEL PTE. LTD. (SINGAPORE BRANCH)</p>
   <p style="margin:4px 0 0;font-size:12px;color:#777">📍 ADD: YANGGU, LIAOCHENG CITY, SHANDONG PROVINCE, CHINA</p>
-  <p style="margin:2px 0 0">🌐 <a href="https://www.fadasteel.com" style="color:#0563c1;text-decoration:none;font-weight:600">WWW.FADASTEEL.COM</a></p>
+  <p style="margin:2px 0 0">🌐 <a href="${CONTACT.website}" style="color:#0563c1;text-decoration:none;font-weight:600">WWW.FADASTEEL.COM</a></p>
 </div>`
 
 // ─── English Cold Email Template ──────────────────────────────────────────────
@@ -49,11 +60,11 @@ const englishTemplate = {
 
   <div style="display:flex;gap:10px;margin:16px 0">
     <div style="flex:1;aspect-ratio:4/3;overflow:hidden;border-radius:8px;background:#f0f4f8">
-      <img src="${LOGO_PLACEHOLDER}" alt="Steel coils" style="width:100%;height:100%;object-fit:cover" />
+      <img src="${IMG_PLACEHOLDER}" alt="Steel coils" style="width:100%;height:100%;object-fit:cover" />
       <span class="replace-tip">📷 上传产品图片1（钢卷产品照片）</span>
     </div>
     <div style="flex:1;aspect-ratio:4/3;overflow:hidden;border-radius:8px;background:#f0f4f8">
-      <img src="${LOGO_PLACEHOLDER}" alt="Factory" style="width:100%;height:100%;object-fit:cover" />
+      <img src="${IMG_PLACEHOLDER}" alt="Factory" style="width:100%;height:100%;object-fit:cover" />
       <span class="replace-tip">📷 上传产品图片2（工厂/仓库照片）</span>
     </div>
   </div>
@@ -71,8 +82,8 @@ const englishTemplate = {
   <div style="background:linear-gradient(135deg,#1f4e79,#2980b9);border-radius:10px;padding:20px;text-align:center;margin:20px 0">
     <p style="color:white;font-size:16px;font-weight:700;margin:0 0 12px">📩 Get Your Free Quote Today!</p>
     <p style="margin:0">
-      <a href="mailto:{{email}}" style="display:inline-block;background:#fff;color:#1f4e79;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:700;margin:0 8px">✉️ Email Us</a>
-      <a href="{{whatsapp_link}}" style="display:inline-block;background:#25d366;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:700;margin:0 8px">💬 WhatsApp</a>
+      <a href="mailto:${CONTACT.email}" style="display:inline-block;background:#fff;color:#1f4e79;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:700;margin:0 8px">✉️ Email Us</a>
+      <a href="${CONTACT.whatsapp_link}" style="display:inline-block;background:#25d366;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:700;margin:0 8px">💬 WhatsApp</a>
     </p>
   </div>
 
@@ -82,7 +93,7 @@ const englishTemplate = {
 
 ${signature}
 </div>`,
-  note: 'English cold email for steel product introduction with product images and CTA',
+  note: 'English cold email — CTA buttons and signature use same hardcoded contact info',
   template_type: 'html'
 }
 
@@ -106,11 +117,11 @@ const thaiTemplate = {
 
   <div style="display:flex;gap:10px;margin:16px 0">
     <div style="flex:1;aspect-ratio:4/3;overflow:hidden;border-radius:8px;background:#f0f4f8">
-      <img src="${LOGO_PLACEHOLDER}" alt="เหล็กม้วน" style="width:100%;height:100%;object-fit:cover" />
+      <img src="${IMG_PLACEHOLDER}" alt="เหล็กม้วน" style="width:100%;height:100%;object-fit:cover" />
       <span class="replace-tip">📷 上传产品图片1（钢卷产品照片）</span>
     </div>
     <div style="flex:1;aspect-ratio:4/3;overflow:hidden;border-radius:8px;background:#f0f4f8">
-      <img src="${LOGO_PLACEHOLDER}" alt="โรงงาน" style="width:100%;height:100%;object-fit:cover" />
+      <img src="${IMG_PLACEHOLDER}" alt="โรงงาน" style="width:100%;height:100%;object-fit:cover" />
       <span class="replace-tip">📷 上传产品图片2（工厂/仓库照片）</span>
     </div>
   </div>
@@ -128,8 +139,8 @@ const thaiTemplate = {
   <div style="background:linear-gradient(135deg,#1f4e79,#2980b9);border-radius:10px;padding:20px;text-align:center;margin:20px 0">
     <p style="color:white;font-size:16px;font-weight:700;margin:0 0 12px">📩 รับใบเสนอราคาฟรีวันนี้!</p>
     <p style="margin:0">
-      <a href="mailto:{{email}}" style="display:inline-block;background:#fff;color:#1f4e79;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:700;margin:0 8px">✉️ อีเมลหาเรา</a>
-      <a href="{{whatsapp_link}}" style="display:inline-block;background:#25d366;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:700;margin:0 8px">💬 WhatsApp</a>
+      <a href="mailto:${CONTACT.email}" style="display:inline-block;background:#fff;color:#1f4e79;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:700;margin:0 8px">✉️ อีเมลหาเรา</a>
+      <a href="${CONTACT.whatsapp_link}" style="display:inline-block;background:#25d366;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:700;margin:0 8px">💬 WhatsApp</a>
     </p>
   </div>
 
@@ -139,7 +150,7 @@ const thaiTemplate = {
 
 ${signature}
 </div>`,
-  note: 'Thai cold email for steel product introduction — ภาษาไทย',
+  note: 'Thai cold email — ภาษาไทย — CTA buttons and signature use same hardcoded contact info',
   template_type: 'html'
 }
 
@@ -153,4 +164,7 @@ const r2 = insert.run(thaiTemplate.name, thaiTemplate.subject, thaiTemplate.html
 console.log(`✅ Thai template created: id=${r2.lastInsertRowid}`)
 
 db.close()
-console.log('🎉 Done! Both templates inserted successfully.')
+console.log('🎉 Done! Both templates inserted with hardcoded contact info.')
+console.log(`   Email: ${CONTACT.email}`)
+console.log(`   Phone: ${CONTACT.phone}`)
+console.log(`   WhatsApp: ${CONTACT.whatsapp_link}`)

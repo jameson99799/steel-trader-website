@@ -119,12 +119,20 @@ const iframeContent = computed(() => {
   const raw = article.value?.content || ''
   if (!raw) return ''
   let html = raw.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+  // CSS fix for full-HTML documents: prevent image overflow + consistent table styling
+  const fixCss = `<style>
+    .replace-tip{display:none!important}
+    body{overflow-x:hidden;box-sizing:border-box}
+    *,*::before,*::after{box-sizing:inherit}
+    img{max-width:100%!important;height:auto!important}
+    table{width:100%!important;border-collapse:collapse!important;margin:16px 0;table-layout:fixed}
+    table th,table td{border:1px solid #ddd!important;padding:8px 12px!important;word-wrap:break-word}
+    table th{background:#f5f5f5;font-weight:600}
+  </style>`
   if (html.includes('<html') || html.includes('<body')) {
-    // Inject style to hide replace-tip in full HTML documents
-    const hideTip = '<style>.replace-tip{display:none!important}</style>'
-    return html.replace(/<\/head>/i, hideTip + '</head>')
+    return html.replace(/<\/head>/i, fixCss + '</head>')
   }
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;line-height:1.8;color:#333;font-size:16px}img{max-width:100%;height:auto;display:block;margin:12px auto;border-radius:6px}p{margin:0 0 12px}h1,h2,h3,h4{margin:20px 0 10px;font-weight:700}ul,ol{padding-left:24px;margin:8px 0}table{width:100%;border-collapse:collapse;margin:16px 0}table th,table td{border:1px solid #ddd;padding:8px 12px}table th{background:#f5f5f5;font-weight:600}a{color:#1f4e79}.replace-tip{display:none!important}</style></head><body>${html}</body></html>`
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;line-height:1.8;color:#333;font-size:16px;overflow-x:hidden;box-sizing:border-box}*,*::before,*::after{box-sizing:inherit}img{max-width:100%!important;height:auto!important;display:block;margin:12px auto;border-radius:6px}p{margin:0 0 12px}h1,h2,h3,h4{margin:20px 0 10px;font-weight:700}ul,ol{padding-left:24px;margin:8px 0}table{width:100%!important;border-collapse:collapse;margin:16px 0;table-layout:fixed}table th,table td{border:1px solid #ddd;padding:8px 12px;word-wrap:break-word}table th{background:#f5f5f5;font-weight:600}a{color:#1f4e79}.replace-tip{display:none!important}</style></head><body>${html}</body></html>`
 })
 
 // Sanitized content for direct render mode — strips <style>/<script> only, keeps inline styles for SEO
