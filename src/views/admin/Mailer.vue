@@ -12,11 +12,31 @@
 
     <!-- ═══ Templates Tab ═══ -->
     <div v-if="tab === 'templates'" class="tab-body">
-      <div class="toolbar"><button class="btn btn-primary" @click="openTplEditor()">+ 新建模板</button></div>
+      <div class="toolbar">
+        <button class="btn btn-primary" @click="showTplTypeSelector=true">+ 新建模板</button>
+      </div>
+      <!-- Template type selector dialog -->
+      <div class="modal-overlay" v-if="showTplTypeSelector" @click.self="showTplTypeSelector=false">
+        <div class="modal-box" style="max-width:400px">
+          <h3>选择模板类型</h3>
+          <div style="display:flex;gap:12px;margin:20px 0">
+            <button class="btn btn-primary" style="flex:1;padding:16px" @click="chooseTplType('rich')">
+              ✍️ 富文本编辑器
+              <p class="form-hint" style="color:inherit;opacity:0.8;margin-top:4px">类似Foxmail的可视化编辑</p>
+            </button>
+            <button class="btn btn-outline" style="flex:1;padding:16px" @click="chooseTplType('html')">
+              &lt;/&gt; HTML 代码
+              <p class="form-hint" style="margin-top:4px">直接编写HTML源代码</p>
+            </button>
+          </div>
+          <button class="btn btn-outline" @click="showTplTypeSelector=false" style="width:100%">取消</button>
+        </div>
+      </div>
       <div v-if="!templates.length" class="empty">暂无模板</div>
       <div v-for="t in templates" :key="t.id" class="list-card">
         <div class="lc-main">
           <strong>{{ t.name }}</strong>
+          <span class="log-badge" :style="t.template_type==='html' ? 'background:#fef3c7;color:#92400e' : 'background:#e0f2fe;color:#0369a1'" style="font-size:10px;margin-left:6px">{{ t.template_type === 'html' ? 'HTML' : '富文本' }}</span>
           <span class="lc-sub">主题：{{ t.subject }}</span>
           <span v-if="t.note" class="lc-note">{{ t.note }}</span>
         </div>
@@ -197,40 +217,51 @@
         </div>
         <div class="form-group"><label>备注</label><input v-model="editTpl.note" class="form-control" placeholder="选填" /></div>
         <div class="form-group">
-          <label>正文内容（支持直接粘贴截图、复制Foxmail内容格式完整保留）</label>
-          <!-- Native rich-text toolbar -->
-          <div class="rte-toolbar">
-            <select @change="rteCmd('fontName', $event.target.value);$event.target.value=''" style="width:100px">
-              <option value="">字体</option>
-              <option>Arial</option><option>Times New Roman</option><option>Verdana</option><option>Courier New</option>
-            </select>
-            <select @change="rteCmd('fontSize', $event.target.value);$event.target.value=''" style="width:60px">
-              <option value="">号</option>
-              <option value="1">10</option><option value="2">12</option><option value="3">14</option>
-              <option value="4">16</option><option value="5">18</option><option value="6">24</option><option value="7">36</option>
-            </select>
-            <button class="rte-btn" @click.prevent="rteCmd('bold')" title="粗体"><b>B</b></button>
-            <button class="rte-btn" @click.prevent="rteCmd('italic')" title="斜体"><i>I</i></button>
-            <button class="rte-btn" @click.prevent="rteCmd('underline')" title="下划线"><u>U</u></button>
-            <button class="rte-btn" @click.prevent="rteCmd('strikeThrough')" title="删除线"><s>S</s></button>
-            <span class="rte-sep"></span>
-            <label class="rte-btn" title="字体颜色">A <input type="color" @input="rteCmd('foreColor', $event.target.value)" style="opacity:0;position:absolute;width:1px;height:1px" /></label>
-            <label class="rte-btn" title="背景色">🖊<input type="color" @input="rteCmd('backColor', $event.target.value)" style="opacity:0;position:absolute;width:1px;height:1px" /></label>
-            <span class="rte-sep"></span>
-            <button class="rte-btn" @click.prevent="rteCmd('justifyLeft')" title="左对齐">≡</button>
-            <button class="rte-btn" @click.prevent="rteCmd('justifyCenter')" title="居中">≡</button>
-            <button class="rte-btn" @click.prevent="rteCmd('justifyRight')" title="右对齐">≡</button>
-            <span class="rte-sep"></span>
-            <button class="rte-btn" @click.prevent="rteCmd('insertUnorderedList')" title="无序列表">≡</button>
-            <button class="rte-btn" @click.prevent="rteCmd('insertOrderedList')" title="有序列表">1.</button>
-            <button class="rte-btn" @click.prevent="rteCmd('insertHorizontalRule')" title="插入横线">—</button>
-            <span class="rte-sep"></span>
-            <button class="rte-btn" @click.prevent="rteInsertLink" title="插入链接">🔗</button>
-            <button class="rte-btn" @click.prevent="rteUploadImage" title="插入图片">🖼</button>
-            <button class="rte-btn" @click.prevent="rteCmd('removeFormat')" title="清除格式">✖</button>
-          </div>
-          <!-- iframe: designMode='on' = Foxmail-like native editing, zero sanitization -->
-          <iframe ref="editorFrame" class="rte-frame" @load="onFrameLoad"></iframe>
+          <label>正文内容 <span class="log-badge" :style="editTpl.template_type==='html' ? 'background:#fef3c7;color:#92400e' : 'background:#e0f2fe;color:#0369a1'" style="font-size:10px;margin-left:4px">{{ editTpl.template_type === 'html' ? 'HTML 代码' : '富文本编辑器' }}</span></label>
+          <!-- Rich text editor (for 'rich' type) -->
+          <template v-if="editTpl.template_type !== 'html'">
+            <div class="rte-toolbar">
+              <select @change="rteCmd('fontName', $event.target.value);$event.target.value=''" style="width:100px">
+                <option value="">字体</option>
+                <option>Arial</option><option>Times New Roman</option><option>Verdana</option><option>Courier New</option>
+              </select>
+              <select @change="rteCmd('fontSize', $event.target.value);$event.target.value=''" style="width:60px">
+                <option value="">号</option>
+                <option value="1">10</option><option value="2">12</option><option value="3">14</option>
+                <option value="4">16</option><option value="5">18</option><option value="6">24</option><option value="7">36</option>
+              </select>
+              <button class="rte-btn" @click.prevent="rteCmd('bold')" title="粗体"><b>B</b></button>
+              <button class="rte-btn" @click.prevent="rteCmd('italic')" title="斜体"><i>I</i></button>
+              <button class="rte-btn" @click.prevent="rteCmd('underline')" title="下划线"><u>U</u></button>
+              <button class="rte-btn" @click.prevent="rteCmd('strikeThrough')" title="删除线"><s>S</s></button>
+              <span class="rte-sep"></span>
+              <label class="rte-btn" title="字体颜色">A <input type="color" @input="rteCmd('foreColor', $event.target.value)" style="opacity:0;position:absolute;width:1px;height:1px" /></label>
+              <label class="rte-btn" title="背景色">🖊<input type="color" @input="rteCmd('backColor', $event.target.value)" style="opacity:0;position:absolute;width:1px;height:1px" /></label>
+              <span class="rte-sep"></span>
+              <button class="rte-btn" @click.prevent="rteCmd('justifyLeft')" title="左对齐">≡</button>
+              <button class="rte-btn" @click.prevent="rteCmd('justifyCenter')" title="居中">≡</button>
+              <button class="rte-btn" @click.prevent="rteCmd('justifyRight')" title="右对齐">≡</button>
+              <span class="rte-sep"></span>
+              <button class="rte-btn" @click.prevent="rteCmd('insertUnorderedList')" title="无序列表">≡</button>
+              <button class="rte-btn" @click.prevent="rteCmd('insertOrderedList')" title="有序列表">1.</button>
+              <button class="rte-btn" @click.prevent="rteCmd('insertHorizontalRule')" title="插入横线">—</button>
+              <span class="rte-sep"></span>
+              <button class="rte-btn" @click.prevent="rteInsertLink" title="插入链接">🔗</button>
+              <button class="rte-btn" @click.prevent="rteUploadImage" title="插入图片">🖼</button>
+              <button class="rte-btn" @click.prevent="rteCmd('removeFormat')" title="清除格式">✖</button>
+            </div>
+            <iframe ref="editorFrame" class="rte-frame" @load="onFrameLoad"></iframe>
+          </template>
+          <!-- HTML code editor (for 'html' type) -->
+          <template v-else>
+            <textarea v-model="editTpl.html_body" class="html-code-editor" placeholder="在此粘贴或编写 HTML 代码...
+
+例如：
+<div style='font-family:Arial;padding:20px'>
+  <h2>标题</h2>
+  <p>正文内容</p>
+</div>"></textarea>
+          </template>
         </div>
         <div class="modal-actions">
           <button class="btn btn-primary" @click="saveTpl" :disabled="savingTpl">{{ savingTpl ? '保存中...' : '💾 保存' }}</button>
@@ -805,13 +836,18 @@ onUnmounted(() => { clearInterval(rtInterval); clearInterval(taskPollInterval) }
 
 // ─── Template editor (iframe-based) ──────────────────────────────────────────
 const showTplEditor = ref(false)
-const editTpl = reactive({ id: null, name: '', subject: '', html_body: '', note: '' })
-const editorRef = ref(null) // kept for backward compat, not used
+const showTplTypeSelector = ref(false)
+const editTpl = reactive({ id: null, name: '', subject: '', html_body: '', note: '', template_type: 'rich' })
+const editorRef = ref(null)
 
-function openTplEditor(t) {
-  Object.assign(editTpl, t || { id: null, name: '', subject: '', html_body: '', note: '' })
+function chooseTplType(type) {
+  showTplTypeSelector.value = false
+  Object.assign(editTpl, { id: null, name: '', subject: '', html_body: '', note: '', template_type: type })
   showTplEditor.value = true
-  // iframe @load handles injecting content
+}
+function openTplEditor(t) {
+  Object.assign(editTpl, t || { id: null, name: '', subject: '', html_body: '', note: '', template_type: 'rich' })
+  showTplEditor.value = true
 }
 
 function closeTplEditor() {
@@ -820,7 +856,7 @@ function closeTplEditor() {
 }
 
 async function saveTpl() {
-  syncFrameContent() // make sure latest iframe HTML is captured
+  if (editTpl.template_type !== 'html') syncFrameContent() // only sync iframe for rich type
   savingTpl.value = true
   try {
     if (editTpl.id) {
@@ -1027,6 +1063,11 @@ textarea.form-control { resize: vertical; font-family: inherit }
 .rich-editor { min-height: 250px; max-height: 500px; overflow-y: auto; padding: 14px; border: 1px solid #e2e8f0; border-radius: 0 0 8px 8px; font-size: 14px; line-height: 1.7; outline: none }
 .rich-editor:focus { border-color: #93c5fd }
 .rich-editor img { max-width: 100%; cursor: pointer }
+
+/* HTML code editor */
+.html-code-editor { width:100%; min-height:350px; max-height:500px; font-family:'Courier New',monospace; font-size:13px; line-height:1.6; padding:14px; border:1px solid #e2e8f0; border-radius:8px; background:#1e293b; color:#e2e8f0; resize:vertical; tab-size:2; white-space:pre-wrap }
+.html-code-editor:focus { outline:none; border-color:#60a5fa; box-shadow:0 0 0 3px rgba(96,165,250,0.2) }
+.html-code-editor::placeholder { color:#64748b }
 
 /* Modals */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000 }

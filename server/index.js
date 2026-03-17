@@ -22,6 +22,7 @@ import emailRoutes from './routes/email.js'
 import indexingRoutes from './routes/indexing.js'
 import aiRoutes from './routes/ai.js'
 import mailerRoutes from './routes/mailer.js'
+import externalApiRoutes from './routes/external-api.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -99,6 +100,7 @@ async function startServer() {
     app.use('/api/indexing', indexingRoutes)
     app.use('/api/ai', aiRoutes)
     app.use('/api/mailer', mailerRoutes)
+    app.use('/api/external', externalApiRoutes)
 
     // 健康检查端点
     app.get('/health', (req, res) => {

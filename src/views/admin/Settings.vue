@@ -77,6 +77,27 @@
         </div>
       </div>
     </div>
+
+    <!-- External API Key Section -->
+    <div class="card ssl-card">
+      <div class="card-header">🔑 外部 API 密钥</div>
+      <div class="card-body">
+        <div class="ssl-info">
+          <h4>📋 说明：</h4>
+          <p>外部 API 允许通过 HTTP 接口提交产品和新闻文章，适合 AI 或外部系统自动上传内容。</p>
+          <p>请求时在 Header 中携带 <code>X-API-Key: your-key</code> 进行认证。</p>
+          <p>接口文档：<a :href="apiDocsUrl" target="_blank">{{ apiDocsUrl }}</a></p>
+        </div>
+        <div class="form-group" style="margin-top:12px">
+          <label>API Key</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input :value="externalApiKey" class="form-control" readonly style="font-family:monospace;font-size:13px" />
+            <button class="btn btn-outline" @click="copyApiKey" v-if="externalApiKey">📋 复制</button>
+            <button class="btn btn-primary" @click="generateApiKey">{{ externalApiKey ? '🔄 重新生成' : '✨ 生成密钥' }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -168,7 +189,33 @@ const deleteSsl = async () => {
   } catch (e) { alert(e.message) }
 }
 
-onMounted(loadSslStatus)
+onMounted(() => {
+  loadSslStatus()
+  loadApiKey()
+})
+
+// External API Key
+const externalApiKey = ref('')
+const apiDocsUrl = window.location.origin + '/api/external/docs'
+
+const loadApiKey = async () => {
+  try {
+    const data = await api.request('/external/key')
+    externalApiKey.value = data?.key || ''
+  } catch (e) { console.error(e) }
+}
+const generateApiKey = async () => {
+  if (externalApiKey.value && !confirm('重新生成将使旧密钥失效，确定继续？')) return
+  try {
+    const data = await api.request('/external/key/generate', { method: 'POST' })
+    externalApiKey.value = data?.key || ''
+    alert('API Key 已生成')
+  } catch (e) { alert(e.message) }
+}
+const copyApiKey = () => {
+  navigator.clipboard.writeText(externalApiKey.value)
+  alert('API Key 已复制到剪贴板')
+}
 </script>
 
 <style scoped>

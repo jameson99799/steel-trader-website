@@ -320,6 +320,17 @@ async function initDb() {
   try { db.exec("ALTER TABLE mail_logs ADD COLUMN sent_html TEXT") } catch (e) { }
   try { db.exec("ALTER TABLE mail_contacts ADD COLUMN group_id INTEGER") } catch (e) { }
   try { db.exec("ALTER TABLE mail_tasks ADD COLUMN skip_days INTEGER DEFAULT 0") } catch (e) { }
+  try { db.exec("ALTER TABLE mail_templates ADD COLUMN template_type TEXT DEFAULT 'rich'") } catch (e) { }
+
+  // External API keys
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      value TEXT NOT NULL DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS hero_content (

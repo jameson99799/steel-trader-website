@@ -244,14 +244,14 @@ router.get('/templates', authMiddleware, (req, res) => {
     res.json(getAll('SELECT * FROM mail_templates ORDER BY id DESC'))
 })
 router.post('/templates', authMiddleware, (req, res) => {
-    const { name, subject, html_body, note } = req.body
-    const r = run('INSERT INTO mail_templates (name, subject, html_body, note) VALUES (?,?,?,?)', [name, subject, html_body, note || ''])
+    const { name, subject, html_body, note, template_type } = req.body
+    const r = run('INSERT INTO mail_templates (name, subject, html_body, note, template_type) VALUES (?,?,?,?,?)', [name, subject, html_body, note || '', template_type || 'rich'])
     res.json({ id: r.lastInsertRowid, message: '模板已保存' })
 })
 router.put('/templates/:id', authMiddleware, (req, res) => {
-    const { name, subject, html_body, note } = req.body
-    run('UPDATE mail_templates SET name=?, subject=?, html_body=?, note=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
-        [name, subject, html_body, note || '', req.params.id])
+    const { name, subject, html_body, note, template_type } = req.body
+    run('UPDATE mail_templates SET name=?, subject=?, html_body=?, note=?, template_type=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+        [name, subject, html_body, note || '', template_type || 'rich', req.params.id])
     res.json({ message: '模板已更新' })
 })
 router.delete('/templates/:id', authMiddleware, (req, res) => {
@@ -261,8 +261,8 @@ router.delete('/templates/:id', authMiddleware, (req, res) => {
 router.post('/templates/:id/duplicate', authMiddleware, (req, res) => {
     const orig = getOne('SELECT * FROM mail_templates WHERE id=?', [req.params.id])
     if (!orig) return res.status(404).json({ error: '模板不存在' })
-    const r = run('INSERT INTO mail_templates (name, subject, html_body, note) VALUES (?,?,?,?)',
-        [orig.name + ' (副本)', orig.subject, orig.html_body, orig.note || ''])
+    const r = run('INSERT INTO mail_templates (name, subject, html_body, note, template_type) VALUES (?,?,?,?,?)',
+        [orig.name + ' (副本)', orig.subject, orig.html_body, orig.note || '', orig.template_type || 'rich'])
     res.json({ id: r.lastInsertRowid, message: '模板已复制' })
 })
 
