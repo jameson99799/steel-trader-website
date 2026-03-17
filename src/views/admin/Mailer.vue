@@ -254,13 +254,19 @@
           </template>
           <!-- HTML code editor (for 'html' type) -->
           <template v-else>
-            <textarea v-model="editTpl.html_body" class="html-code-editor" placeholder="在此粘贴或编写 HTML 代码...
-
-例如：
-<div style='font-family:Arial;padding:20px'>
-  <h2>标题</h2>
-  <p>正文内容</p>
-</div>"></textarea>
+            <div class="html-editor-tabs">
+              <button :class="['tab-btn', htmlEditorTab==='code'&&'active']" @click="htmlEditorTab='code'">📝 代码</button>
+              <button :class="['tab-btn', htmlEditorTab==='visual'&&'active']" @click="htmlEditorTab='visual';initHtmlVisual()">🖊 可视化编辑</button>
+              <button :class="['tab-btn', htmlEditorTab==='preview'&&'active']" @click="htmlEditorTab='preview'">👁 预览</button>
+              <span style="flex:1"></span>
+              <button class="btn btn-sm btn-outline" @click="htmlInsertImage" title="插入本地图片">🖼 插入图片</button>
+            </div>
+            <!-- Code tab -->
+            <textarea v-show="htmlEditorTab==='code'" v-model="editTpl.html_body" class="html-code-editor" placeholder="在此粘贴或编写 HTML 代码..."></textarea>
+            <!-- Visual edit tab (designMode iframe) -->
+            <iframe v-show="htmlEditorTab==='visual'" ref="htmlVisualFrame" class="rte-frame" style="min-height:350px" @load="onHtmlVisualLoad"></iframe>
+            <!-- Preview tab -->
+            <iframe v-show="htmlEditorTab==='preview'" ref="htmlPreviewFrame" class="html-preview-frame" :srcdoc="editTpl.html_body"></iframe>
           </template>
         </div>
         <div class="modal-actions">
@@ -839,13 +845,100 @@ const showTplEditor = ref(false)
 const showTplTypeSelector = ref(false)
 const editTpl = reactive({ id: null, name: '', subject: '', html_body: '', note: '', template_type: 'rich' })
 const editorRef = ref(null)
+const htmlEditorTab = ref('code')
+const htmlVisualFrame = ref(null)
+const htmlPreviewFrame = ref(null)
+
+// ─── HTML template visual editing ────────────────────────────────────────────
+function initHtmlVisual() {
+  nextTick(() => {
+    const frame = htmlVisualFrame.value
+    if (!frame) return
+    try {
+      const doc = frame.contentDocument || frame.contentWindow.document
+      doc.open()
+      doc.write(`<!DOCTYPE html><html><head><style>
+        body { font-family:Arial,sans-serif; padding:14px; margin:0; line-height:1.6; }
+        img { max-width:100%; cursor:nwse-resize; }
+        img:hover { outline:2px solid #3b82f6; }
+        img.resizing { outline:2px dashed #ef4444; }
+      </style></head><body>${editTpl.html_body || '<p>在此编辑内容...</p>'}</body></html>`)
+      doc.close()
+      doc.designMode = 'on'
+      // Image resize via mouse drag
+      doc.addEventListener('mousedown', (e) => {
+        if (e.target.tagName === 'IMG') {
+          e.preventDefault()
+          const img = e.target
+          img.classList.add('resizing')
+          const startX = e.clientX
+          const startW = img.offsetWidth
+          const startH = img.offsetHeight
+          const ratio = startH / startW
+          const onMove = (ev) => {
+            const dw = ev.clientX - startX
+            const newW = Math.max(50, startW + dw)
+            img.style.width = newW + 'px'
+            img.style.height = Math.round(newW * ratio) + 'px'
+          }
+          const onUp = () => {
+            img.classList.remove('resizing')
+            doc.removeEventListener('mousemove', onMove)
+            doc.removeEventListener('mouseup', onUp)
+          }
+          doc.addEventListener('mousemove', onMove)
+          doc.addEventListener('mouseup', onUp)
+        }
+      })
+    } catch (e) { console.error('initHtmlVisual error', e) }
+  })
+}
+function onHtmlVisualLoad() { /* handled by initHtmlVisual */ }
+function syncHtmlVisual() {
+  try {
+    const frame = htmlVisualFrame.value
+    if (frame) {
+      const doc = frame.contentDocument || frame.contentWindow.document
+      if (doc?.body) editTpl.html_body = doc.body.innerHTML
+    }
+  } catch (e) {}
+}
+function htmlInsertImage() {
+  const input = document.createElement('input')
+  input.type = 'file'; input.accept = 'image/*'; input.click()
+  input.onchange = async () => {
+    const file = input.files[0]; if (!file) return
+    // Upload to server
+    const fd = new FormData(); fd.append('image', file)
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/upload/image', {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd
+      })
+      const data = await res.json()
+      const imgUrl = data.url || data.path
+      if (!imgUrl) { alert('上传失败'); return }
+      const imgTag = `<img src="${imgUrl}" style="max-width:100%;height:auto" />`
+      if (htmlEditorTab.value === 'visual') {
+        try {
+          const doc = htmlVisualFrame.value.contentDocument
+          doc.execCommand('insertHTML', false, imgTag)
+        } catch (e) { editTpl.html_body += imgTag }
+      } else {
+        editTpl.html_body += '\n' + imgTag
+      }
+    } catch (e) { alert('图片上传失败: ' + e.message) }
+  }
+}
 
 function chooseTplType(type) {
   showTplTypeSelector.value = false
+  htmlEditorTab.value = 'code'
   Object.assign(editTpl, { id: null, name: '', subject: '', html_body: '', note: '', template_type: type })
   showTplEditor.value = true
 }
 function openTplEditor(t) {
+  htmlEditorTab.value = 'code'
   Object.assign(editTpl, t || { id: null, name: '', subject: '', html_body: '', note: '', template_type: 'rich' })
   showTplEditor.value = true
 }
@@ -856,7 +949,11 @@ function closeTplEditor() {
 }
 
 async function saveTpl() {
-  if (editTpl.template_type !== 'html') syncFrameContent() // only sync iframe for rich type
+  if (editTpl.template_type === 'html') {
+    if (htmlEditorTab.value === 'visual') syncHtmlVisual()
+  } else {
+    syncFrameContent()
+  }
   savingTpl.value = true
   try {
     if (editTpl.id) {
@@ -1065,9 +1162,14 @@ textarea.form-control { resize: vertical; font-family: inherit }
 .rich-editor img { max-width: 100%; cursor: pointer }
 
 /* HTML code editor */
-.html-code-editor { width:100%; min-height:350px; max-height:500px; font-family:'Courier New',monospace; font-size:13px; line-height:1.6; padding:14px; border:1px solid #e2e8f0; border-radius:8px; background:#1e293b; color:#e2e8f0; resize:vertical; tab-size:2; white-space:pre-wrap }
+.html-code-editor { width:100%; min-height:300px; max-height:500px; font-family:'Courier New',monospace; font-size:13px; line-height:1.6; padding:14px; border:1px solid #e2e8f0; border-radius:0 0 8px 8px; background:#1e293b; color:#e2e8f0; resize:vertical; tab-size:2; white-space:pre-wrap }
 .html-code-editor:focus { outline:none; border-color:#60a5fa; box-shadow:0 0 0 3px rgba(96,165,250,0.2) }
 .html-code-editor::placeholder { color:#64748b }
+.html-editor-tabs { display:flex; gap:2px; background:#f1f5f9; border-radius:8px 8px 0 0; padding:4px 4px 0; align-items:center }
+.html-editor-tabs .tab-btn { padding:8px 16px; border:none; background:transparent; cursor:pointer; font-size:13px; border-radius:6px 6px 0 0; color:#64748b; font-weight:500; transition:all .2s }
+.html-editor-tabs .tab-btn.active { background:#fff; color:#1e40af; box-shadow:0 -1px 4px rgba(0,0,0,0.06) }
+.html-editor-tabs .tab-btn:hover:not(.active) { color:#1e293b; background:#e2e8f0 }
+.html-preview-frame { width:100%; min-height:350px; max-height:500px; border:1px solid #e2e8f0; border-radius:0 0 8px 8px; background:#fff }
 
 /* Modals */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000 }
