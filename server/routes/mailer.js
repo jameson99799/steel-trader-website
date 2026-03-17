@@ -132,14 +132,19 @@ async function runTask(taskId, isResume = false) {
             let body = template.html_body.replace(/{{name}}/g, contact.name || '').replace(/{{company}}/g, contact.company || '')
 
             // Convert relative image URLs to absolute URLs for email clients
-            const siteRow = getOne("SELECT value FROM settings WHERE key='site_url'")
-            const siteUrl = (siteRow?.value || 'https://www.sunseasteel.com').replace(/\/+$/, '')
-            body = body.replace(/src=["'](\/uploads\/[^"']+)["']/gi, `src="${siteUrl}$1"`)
-            body = body.replace(/src=["'](\/api\/[^"']+)["']/gi, `src="${siteUrl}$1"`)
-            // Remove placeholder base64 images (1x1 transparent gif)
-            body = body.replace(/src=["']data:image\/gif;base64,[^"']*["']/gi, 'src=""')
-            // Remove .replace-tip spans from sent emails
-            body = body.replace(/<span\s+class=["']replace-tip["'][^>]*>.*?<\/span>/gi, '')
+            try {
+                let siteUrl = 'https://www.sunseasteel.com'
+                try {
+                    const siteRow = getOne("SELECT value FROM settings WHERE key='site_url'")
+                    if (siteRow?.value) siteUrl = siteRow.value.replace(/\/+$/, '')
+                } catch (_) { /* settings table may not exist */ }
+                body = body.replace(/src=["'](\/uploads\/[^"']+)["']/gi, `src="${siteUrl}$1"`)
+                body = body.replace(/src=["'](\/api\/[^"']+)["']/gi, `src="${siteUrl}$1"`)
+                // Remove placeholder base64 images (1x1 transparent gif)
+                body = body.replace(/src=["']data:image\/gif;base64,[^"']*["']/gi, 'src=""')
+                // Remove .replace-tip spans from sent emails
+                body = body.replace(/<span\s+class=["']replace-tip["'][^>]*>.*?<\/span>/gi, '')
+            } catch (urlErr) { console.error('URL conversion error', urlErr) }
 
             // Build attachment list from task's attachment_paths
             const taskAttachments = []
