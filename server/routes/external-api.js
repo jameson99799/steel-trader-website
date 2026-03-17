@@ -189,6 +189,42 @@ router.delete('/news/:id', apiKeyMiddleware, (req, res) => {
     res.json({ success: true, message: 'News deleted' })
 })
 
+// ─── POST /api/external/templates — create email template ────────────────────
+router.post('/templates', apiKeyMiddleware, (req, res) => {
+    const { name, subject, html_body, note, template_type } = req.body
+    if (!name) return res.status(400).json({ error: 'name is required' })
+    if (!html_body) return res.status(400).json({ error: 'html_body is required' })
+    const r = run('INSERT INTO mail_templates (name, subject, html_body, note, template_type) VALUES (?,?,?,?,?)',
+        [name, subject || '', html_body, note || '', template_type || 'html'])
+    res.json({ success: true, id: r.lastInsertRowid, message: 'Template created successfully' })
+})
+
+// ─── PUT /api/external/templates/:id — update email template ────────────────
+router.put('/templates/:id', apiKeyMiddleware, (req, res) => {
+    const { id } = req.params
+    const existing = getOne('SELECT id FROM mail_templates WHERE id = ?', [id])
+    if (!existing) return res.status(404).json({ error: 'Template not found' })
+    const { name, subject, html_body, note, template_type } = req.body
+    const sets = []
+    const vals = []
+    if (name !== undefined) { sets.push('name=?'); vals.push(name) }
+    if (subject !== undefined) { sets.push('subject=?'); vals.push(subject) }
+    if (html_body !== undefined) { sets.push('html_body=?'); vals.push(html_body) }
+    if (note !== undefined) { sets.push('note=?'); vals.push(note) }
+    if (template_type !== undefined) { sets.push('template_type=?'); vals.push(template_type) }
+    if (!sets.length) return res.status(400).json({ error: 'No fields to update' })
+    sets.push('updated_at=CURRENT_TIMESTAMP')
+    vals.push(id)
+    run(`UPDATE mail_templates SET ${sets.join(',')} WHERE id = ?`, vals)
+    res.json({ success: true, message: 'Template updated' })
+})
+
+// ─── DELETE /api/external/templates/:id ──────────────────────────────────────
+router.delete('/templates/:id', apiKeyMiddleware, (req, res) => {
+    run('DELETE FROM mail_templates WHERE id = ?', [req.params.id])
+    res.json({ success: true, message: 'Template deleted' })
+})
+
 router.get('/docs', (req, res) => {
     // Dynamically load categories from DB
     const cats = getAll('SELECT id, name, name_en, slug FROM categories ORDER BY sort_order')
@@ -392,7 +428,61 @@ router.get('/docs', (req, res) => {
                 },
                 update: { method: 'PUT', path: '/api/external/news/:id', note: '只传需要更新的字段' },
                 delete: { method: 'DELETE', path: '/api/external/news/:id' }
+            },
+            templates: {
+                create: {
+                    method: 'POST',
+                    path: '/api/external/templates',
+                    body: {
+                        name: '(required) 模板名称，如 "Cold Email - English"',
+                        subject: '(string) 邮件主题',
+                        html_body: '(required, HTML string) 邮件正文HTML，必须包含签名',
+                        note: '(string) 模板备注',
+                        template_type: '(string) "html"(HTML格式，支持完整样式) 或 "rich"(富文本编辑器)'
+                    }
+                },
+                update: { method: 'PUT', path: '/api/external/templates/:id', note: '只传需要更新的字段' },
+                delete: { method: 'DELETE', path: '/api/external/templates/:id' }
             }
+        },
+
+        // ═══ Email Template Generation Guide ═══
+        email_template_guide: {
+            description: 'Complete guide for generating email template html_body content',
+            template_type: {
+                html: 'Full HTML with inline styles — recommended for cold emails, supports complex layouts',
+                rich: 'Simple HTML for rich-text editor — basic formatting only'
+            },
+            signature: {
+                description: 'All email templates MUST include a professional signature at the bottom',
+                format: `<div style="margin-top:30px;padding-top:20px;border-top:2px solid #e0e6ed;font-family:Arial,sans-serif;font-size:13px;color:#555;line-height:1.8">
+  <p style="margin:0 0 4px"><strong>Best Regards</strong></p>
+  <p style="margin:0 0 12px;font-size:15px;font-weight:700;color:#1f4e79">Mr Jameson / Sales Manager / International Dept.</p>
+  <p style="margin:0 0 4px">📱 Mobile / WhatsApp / Wechat: <a href="{{whatsapp_link}}" style="color:#25d366;text-decoration:none">{{phone}}</a></p>
+  <p style="margin:0 0 12px">📧 Email: <a href="mailto:{{email}}" style="color:#0563c1;text-decoration:none">{{email}}</a></p>
+  <div style="margin:12px 0"><img src="COMPANY_LOGO_PLACEHOLDER" alt="Company Logo" style="max-height:50px" class="replace-tip-target" /><span class="replace-tip">📷 请上传公司LOGO图片</span></div>
+  <p style="margin:0;font-weight:700;color:#1f4e79;font-size:13px">SHANDONG FADA STEEL CO., LTD</p>
+  <p style="margin:0;font-size:12px;color:#777">SHANDONG YANGGU NEW GLOBAL STEEL CO., LTD</p>
+  <p style="margin:0;font-size:12px;color:#777">FADA STEEL PTE. LTD. (SINGAPORE BRANCH)</p>
+  <p style="margin:4px 0 0;font-size:12px;color:#777">📍 ADD: YANGGU, LIAOCHENG CITY, SHANDONG PROVINCE, CHINA</p>
+  <p style="margin:2px 0 0">🌐 <a href="https://www.fadasteel.com" style="color:#0563c1;text-decoration:none;font-weight:600">WWW.FADASTEEL.COM</a></p>
+</div>`,
+                important: 'Use {{email}}, {{phone}}, {{whatsapp_link}} template variables so signature auto-updates with backend settings. The company LOGO should use a placeholder img with .replace-tip for the admin to upload.',
+                logo_placeholder: 'Use data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7 as placeholder src with a .replace-tip span'
+            },
+            image_rules: {
+                description: 'Same rules as product detail — use placeholder images with .replace-tip',
+                side_by_side: 'Use <div style="display:flex;gap:10px"> for side-by-side images, each with flex:1 and fixed aspect-ratio container',
+                click_to_replace: 'Admin visual editor supports double-click on images to replace, and clicking .replace-tip to upload'
+            },
+            best_practices: [
+                'Use inline styles (not <style> blocks) for maximum email client compatibility',
+                'Keep email width ≤600px with margin:auto for centered layout',
+                'Use table-based layout for complex structures (Outlook compatibility)',
+                'Include both text and image content for spam filter avoidance',
+                'Use template variables {{email}}, {{phone}}, {{whatsapp_link}} in all contact points',
+                'Always include the standard signature block at the bottom'
+            ]
         }
     })
 })
