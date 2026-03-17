@@ -2,6 +2,13 @@ import express from 'express'
 import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import nodemailer from 'nodemailer'
+import { attachmentUpload } from '../middleware/upload.js'
+import { join, dirname, basename } from 'path'
+import { fileURLToPath } from 'url'
+import fs from 'fs'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const uploadsDir = join(__dirname, '..', '..', 'uploads')
 
 const router = express.Router()
 router.use(express.json({ limit: '5mb' }))
@@ -124,11 +131,24 @@ async function runTask(taskId, isResume = false) {
             const subj = template.subject.replace(/{{name}}/g, contact.name || '').replace(/{{company}}/g, contact.company || '')
             const body = template.html_body.replace(/{{name}}/g, contact.name || '').replace(/{{company}}/g, contact.company || '')
 
+            // Build attachment list from task's attachment_paths
+            const taskAttachments = []
+            try {
+                const aPaths = JSON.parse(task.attachment_paths || '[]')
+                for (const ap of aPaths) {
+                    const fullPath = join(uploadsDir, ap.filename)
+                    if (fs.existsSync(fullPath)) {
+                        taskAttachments.push({ filename: ap.originalName || ap.filename, path: fullPath })
+                    }
+                }
+            } catch (e) { }
+
             const mailOpts = {
                 from:    `"${account.from_name || 'SunSea Steel'}" <${account.smtp_user}>`,
                 to:      contact.email,
                 subject: subj,
-                html:    body
+                html:    body,
+                attachments: taskAttachments.length ? taskAttachments : undefined
             }
             if (task.cc) mailOpts.cc = task.cc
             if (task.read_receipt) {
@@ -357,11 +377,29 @@ router.get('/tasks', authMiddleware, (req, res) => {
     res.json(result)
 })
 
+// ─── Attachment upload/delete ─────────────────────────────────────────────────
+router.post('/attachments', authMiddleware, attachmentUpload.array('files', 20), (req, res) => {
+    if (!req.files?.length) return res.status(400).json({ error: '请选择文件' })
+    const result = req.files.map(f => ({
+        filename: f.filename,
+        originalName: f.originalname,
+        size: f.size,
+        url: `/uploads/${f.filename}`
+    }))
+    res.json(result)
+})
+
+router.delete('/attachments/:filename', authMiddleware, (req, res) => {
+    const filePath = join(uploadsDir, req.params.filename)
+    try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath) } catch (e) { }
+    res.json({ message: '已删除' })
+})
+
 router.post('/tasks', authMiddleware, (req, res) => {
-    const { name, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id, skip_days } = req.body
+    const { name, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id, skip_days, attachment_paths } = req.body
     const r = run(
-        `INSERT INTO mail_tasks (name, status, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id, skip_days)
-         VALUES (?,'pending',?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO mail_tasks (name, status, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id, skip_days, attachment_paths)
+         VALUES (?,'pending',?,?,?,?,?,?,?,?,?,?,?,?)`,
         [name || 'New Task',
          JSON.stringify(template_ids || []), JSON.stringify(contact_ids || []),
          JSON.stringify(account_ids || []),
@@ -370,7 +408,8 @@ router.post('/tasks', authMiddleware, (req, res) => {
          schedule_at || null,
          priority ? 1 : 0,
          parent_task_id || null,
-         skip_days || 0]
+         skip_days || 0,
+         JSON.stringify(attachment_paths || [])]
     )
     const newId = r.lastInsertRowid
     // Auto-schedule if schedule_at given
@@ -383,8 +422,8 @@ router.put('/tasks/:id', authMiddleware, (req, res) => {
     if (!task) return res.status(404).json({ error: '任务不存在' })
     if (task.status === 'running') return res.status(400).json({ error: '运行中的任务无法直接修改，请先暂停' })
 
-    const { name, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id } = req.body
-    run(`UPDATE mail_tasks SET name=?, template_ids=?, contact_ids=?, account_ids=?, interval_min=?, interval_max=?, cc=?, read_receipt=?, schedule_at=?, priority=?, parent_task_id=? WHERE id=?`,
+    const { name, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id, attachment_paths } = req.body
+    run(`UPDATE mail_tasks SET name=?, template_ids=?, contact_ids=?, account_ids=?, interval_min=?, interval_max=?, cc=?, read_receipt=?, schedule_at=?, priority=?, parent_task_id=?, attachment_paths=? WHERE id=?`,
         [name || 'Updated Task',
          JSON.stringify(template_ids || []), JSON.stringify(contact_ids || []),
          JSON.stringify(account_ids || []),
@@ -393,6 +432,7 @@ router.put('/tasks/:id', authMiddleware, (req, res) => {
          schedule_at || null,
          priority ? 1 : 0,
          parent_task_id || null,
+         JSON.stringify(attachment_paths || []),
          req.params.id])
     // Update schedule
     cancelScheduled(+req.params.id)

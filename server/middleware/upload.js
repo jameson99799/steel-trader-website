@@ -50,6 +50,12 @@ export const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024 } // 20MB
 })
 
+// Attachment upload — accepts ALL file types (for email attachments)
+export const attachmentUpload = multer({
+  storage,
+  limits: { fileSize: 25 * 1024 * 1024 } // 25MB per file
+})
+
 /**
  * Optional post-processing: compress a single req.file with sharp.
  * Works ONLY for single-file uploads (/api/upload route).

@@ -540,6 +540,21 @@ function onVisualInput() {
 
 function onVisualClick(e) {
   const img = e.target.closest('img')
+  const tip = e.target.closest('.replace-tip')
+  if (tip) {
+    // Clicking a replace-tip: find the nearest preceding image to replace
+    e.preventDefault()
+    const parent = tip.parentElement
+    const nearImg = parent ? parent.querySelector('img') : null
+    if (nearImg) {
+      visualEditorEl.value.querySelectorAll('img').forEach(i => i.style.outline = '')
+      nearImg.style.outline = '3px solid #3b82f6'
+      replacingImg = nearImg
+      replacingImg._replaceTipEl = tip  // mark the tip for removal
+      imgUploadInput.value?.click()
+    }
+    return
+  }
   if (img) {
     e.preventDefault()
     // Highlight clicked image
@@ -657,6 +672,16 @@ async function handleImgUpload(e) {
       const res = await api.upload(files[0])
       replacingImg.src = res.url
       replacingImg.style.outline = ''
+      // Auto-remove the associated replace-tip span
+      if (replacingImg._replaceTipEl) {
+        replacingImg._replaceTipEl.remove()
+        delete replacingImg._replaceTipEl
+      } else {
+        // Try to remove next sibling replace-tip
+        let nextEl = replacingImg.nextElementSibling
+        if (!nextEl && replacingImg.parentElement) nextEl = replacingImg.parentElement.querySelector('.replace-tip')
+        if (nextEl && nextEl.classList?.contains('replace-tip')) nextEl.remove()
+      }
       replacingImg = null
       syncFromVisual()
     } catch (err) { alert('图片上传失败: ' + err.message) }
@@ -1056,6 +1081,25 @@ onMounted(() => {
   cursor: pointer; transition: outline 0.15s;
 }
 .visual-editor img:hover { outline: 3px dashed #3b82f6; }
+
+/* Replace-tip: clickable yellow prompt in admin visual editor */
+.visual-editor :deep(.replace-tip),
+.visual-editor .replace-tip {
+  display: block; background: #fffbeb; color: #d97706; font-weight: bold;
+  padding: 10px; margin-top: 8px; border-radius: 6px;
+  border: 1px dashed #fbbf24; font-size: 13px; cursor: pointer;
+  transition: all 0.15s;
+}
+.visual-editor :deep(.replace-tip):hover,
+.visual-editor .replace-tip:hover {
+  background: #fef3c7; border-color: #f59e0b;
+}
+
+/* Hide replace-tip in preview mode */
+.html-preview .replace-tip,
+.html-preview :deep(.replace-tip) {
+  display: none !important;
+}
 .visual-editor table { border-collapse: collapse; width: 100%; }
 .visual-editor table td, .visual-editor table th { border: 1px solid #e2e8f0; padding: 8px 12px; }
 

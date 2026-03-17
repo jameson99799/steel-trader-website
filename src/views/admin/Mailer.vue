@@ -396,6 +396,23 @@
           <p class="form-hint">设置 X-Priority:1 / Importance:High 标头</p>
         </div>
 
+        <div class="form-group">
+          <label>📎 附件（可添加多个文件、图片、视频等）</label>
+          <div class="attachment-bar">
+            <button type="button" class="btn btn-sm btn-secondary" @click="$refs.attachInput.click()">➕ 添加附件</button>
+            <span v-if="newTask.attachment_paths.length" class="attachment-count">已添加 {{ newTask.attachment_paths.length }} 个附件</span>
+          </div>
+          <input type="file" ref="attachInput" multiple style="display:none" @change="uploadAttachments" />
+          <div class="attachment-list" v-if="newTask.attachment_paths.length">
+            <div v-for="(att, i) in newTask.attachment_paths" :key="att.filename" class="attachment-item">
+              <span class="att-icon">{{ getFileIcon(att.originalName) }}</span>
+              <span class="att-name" :title="att.originalName">{{ att.originalName }}</span>
+              <span class="att-size">{{ formatFileSize(att.size) }}</span>
+              <button type="button" class="att-del" @click="removeAttachment(i)" title="删除">✕</button>
+            </div>
+          </div>
+        </div>
+
         <div class="modal-actions">
           <button class="btn btn-primary" @click="createTask">🚀 {{ newTask.id ? '保存修改' : '创建任务' }}</button>
           <button class="btn btn-outline" @click="showTaskCreator=false">取消</button>
@@ -729,7 +746,7 @@ function openImportModal() {
 
 // Task creator
 const showTaskCreator = ref(false)
-const newTask = reactive({ id: null, name: '', template_ids: [], contact_ids: [], account_ids: [], interval_min: 10, interval_max: 120, cc: '', read_receipt: true, priority: false, schedule_at: null, parent_task_id: null, skip_days: 0 })
+const newTask = reactive({ id: null, name: '', template_ids: [], contact_ids: [], account_ids: [], interval_min: 10, interval_max: 120, cc: '', read_receipt: true, priority: false, schedule_at: null, parent_task_id: null, skip_days: 0, attachment_paths: [] })
 
 // Schedule modal
 const showSchedule = ref(false)
@@ -1004,8 +1021,9 @@ function openTaskCreator(existingTask = null) {
     newTask.account_ids = JSON.parse(existingTask.account_ids || '[]')
     newTask.priority = !!existingTask.priority
     newTask.parent_task_id = existingTask.parent_task_id || null
+    newTask.attachment_paths = existingTask.attachment_paths ? (typeof existingTask.attachment_paths === 'string' ? JSON.parse(existingTask.attachment_paths) : existingTask.attachment_paths) : []
   } else {
-    Object.assign(newTask, { id: null, name: '', template_ids: [], contact_ids: selectedContacts.value.slice(), account_ids: [], interval_min: 10, interval_max: 120, cc: '', read_receipt: true, priority: false, schedule_at: null, parent_task_id: null })
+    Object.assign(newTask, { id: null, name: '', template_ids: [], contact_ids: selectedContacts.value.slice(), account_ids: [], interval_min: 10, interval_max: 120, cc: '', read_receipt: true, priority: false, schedule_at: null, parent_task_id: null, attachment_paths: [] })
   }
   showTaskCreator.value = true
 }
@@ -1021,6 +1039,38 @@ async function createTask() {
     }
     showTaskCreator.value = false; await loadAll()
   } catch (e) { alert('保存失败: ' + e.message) }
+}
+
+async function uploadAttachments(e) {
+  const files = Array.from(e.target.files || [])
+  if (!files.length) return
+  try {
+    const formData = new FormData()
+    files.forEach(f => formData.append('files', f))
+    const result = await api.request('/mailer/attachments', { method: 'POST', body: formData })
+    newTask.attachment_paths.push(...result)
+  } catch (err) { alert('附件上传失败: ' + err.message) }
+  if (e.target) e.target.value = ''
+}
+
+async function removeAttachment(index) {
+  const att = newTask.attachment_paths[index]
+  try { await api.request(`/mailer/attachments/${att.filename}`, { method: 'DELETE' }) } catch (e) { }
+  newTask.attachment_paths.splice(index, 1)
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+function getFileIcon(name) {
+  if (!name) return '📄'
+  const ext = name.split('.').pop().toLowerCase()
+  const icons = { pdf: '📕', doc: '📘', docx: '📘', xls: '📗', xlsx: '📗', ppt: '📙', pptx: '📙', zip: '📦', rar: '📦', '7z': '📦', jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️', webp: '🖼️', mp4: '🎬', avi: '🎬', mov: '🎬', mp3: '🎵', wav: '🎵' }
+  return icons[ext] || '📄'
 }
 
 async function startTask(id) { await api.request(`/mailer/tasks/${id}/start`, { method: 'POST' }); await loadAll() }
@@ -1222,4 +1272,16 @@ textarea.form-control { resize: vertical; font-family: inherit }
 .log-round { font-weight: 700; color: #1e293b; min-width: 72px }
 .log-subj { color: #64748b; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0 }
 
+/* Attachment */
+.attachment-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 8px }
+.attachment-count { font-size: 12px; color: #059669; font-weight: 500 }
+.attachment-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding: 10px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0 }
+.attachment-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #fff; border-radius: 6px; border: 1px solid #e2e8f0 }
+.att-icon { font-size: 18px; flex-shrink: 0 }
+.att-name { flex: 1; font-size: 13px; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.att-size { font-size: 11px; color: #94a3b8; flex-shrink: 0 }
+.att-del { background: none; border: none; color: #ef4444; cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; flex-shrink: 0 }
+.att-del:hover { background: #fef2f2 }
+
 </style>
+
