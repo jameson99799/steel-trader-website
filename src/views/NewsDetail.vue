@@ -113,12 +113,32 @@ const loading = ref(true)
 const allCategories = ref([])
 const pageTexts = ref(null)
 const articleIframe = ref(null)
+const company = ref(null)
+
+// ── Template variable substitution helper ────────────────────────────────
+function resolveTemplateVars(html) {
+  const co = company.value || {}
+  const email       = co.email || ''
+  const phone       = co.phone || ''
+  const whatsapp    = co.whatsapp || ''
+  const whatsappRaw = whatsapp.replace(/[^0-9+]/g, '')
+  const whatsappLink = whatsappRaw ? `https://wa.me/${whatsappRaw.replace(/^\+/, '')}` : '#'
+  const companyName = co.name_en || co.name || ''
+  return html
+    .replace(/\{\{email\}\}/g,          email)
+    .replace(/\{\{phone\}\}/g,          phone)
+    .replace(/\{\{whatsapp\}\}/g,       whatsapp)
+    .replace(/\{\{whatsapp_raw\}\}/g,   whatsappRaw)
+    .replace(/\{\{whatsapp_link\}\}/g,  whatsappLink)
+    .replace(/\{\{company_name\}\}/g,   companyName)
+}
 
 // Build iframe srcdoc — isolates all article HTML styles from main page
 const iframeContent = computed(() => {
   const raw = article.value?.content || ''
   if (!raw) return ''
-  let html = raw.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+  let html = resolveTemplateVars(raw)
+  html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
   // CSS fix for full-HTML documents: prevent image overflow + consistent table styling
   const fixCss = `<style>
     .replace-tip{display:none!important}
@@ -126,8 +146,8 @@ const iframeContent = computed(() => {
     *,*::before,*::after{box-sizing:inherit}
     img{max-width:100%!important;height:auto!important}
     table{width:100%!important;border-collapse:collapse!important;margin:16px 0;table-layout:fixed}
-    table th,table td{border:1px solid #ddd!important;padding:8px 12px!important;word-wrap:break-word}
-    table th{background:#f5f5f5;font-weight:600}
+    table th,table td{padding:8px 12px!important;word-wrap:break-word}
+    table td{border-bottom:1px solid #e8ecf0}
   </style>`
   if (html.includes('<html') || html.includes('<body')) {
     return html.replace(/<\/head>/i, fixCss + '</head>')
@@ -139,7 +159,8 @@ const iframeContent = computed(() => {
 const sanitizedContent = computed(() => {
   const raw = article.value?.content || ''
   if (!raw) return ''
-  return raw
+  let html = resolveTemplateVars(raw)
+  return html
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<span\s+class=["']replace-tip["'][^>]*>.*?<\/span>/gi, '')
@@ -170,14 +191,16 @@ async function loadArticle(slug) {
   loading.value = true
   article.value = null
   try {
-    const [art, cats, texts] = await Promise.all([
+    const [art, cats, texts, comp] = await Promise.all([
       api.getNewsItem(slug),
       api.getCategories(),
-      api.getPageTexts()
+      api.getPageTexts(),
+      api.getCompany()
     ])
     article.value = art
     allCategories.value = cats || []
     pageTexts.value = texts
+    company.value = comp
     if (article.value) {
       document.title = article.value.seo_title || localizedValue(article.value, 'title')
 

@@ -38,7 +38,7 @@ router.get('/', (req, res) => {
     params.push(parseInt(status))
   }
 
-  sql += ' ORDER BY p.sort_order, p.id DESC'
+  sql += ' ORDER BY p.sort_order DESC, p.id DESC'
 
   const countSql = sql.replace('SELECT p.*, c.name as category_name, c.name_en as category_name_en', 'SELECT COUNT(*) as total')
   const totalResult = getOne(countSql, params)
