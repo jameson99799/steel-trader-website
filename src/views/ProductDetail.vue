@@ -357,7 +357,7 @@ const iframeContent = computed(() => {
   }
   // Otherwise wrap in a minimal HTML document
   // Use :where() for default table styles so they DON'T override original inline/embedded styles
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;line-height:1.8;color:#333;font-size:16px}img{max-width:100%;height:auto;display:block;margin:12px auto;border-radius:6px}p{margin:0 0 12px}h1,h2,h3,h4{margin:20px 0 10px;font-weight:700}ul,ol{padding-left:24px;margin:8px 0}:where(table){width:100%;border-collapse:collapse;margin:16px 0}:where(table th),:where(table td){border:1px solid #ddd;padding:8px 12px}:where(table th){background:#f5f5f5;font-weight:600}a{color:#1f4e79}</style></head><body>${html}${anchorScript}</body></html>`
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;line-height:1.8;color:#333;font-size:16px}img{max-width:100%;height:auto;display:block;margin:12px auto;border-radius:6px}p{margin:0 0 12px}h1,h2,h3,h4{margin:20px 0 10px;font-weight:700}ul,ol{padding-left:24px;margin:8px 0}:where(table){width:100%;border-collapse:collapse;margin:16px 0}:where(table th),:where(table td){padding:8px 12px}:where(table th){font-weight:600}a{color:#1f4e79}</style></head><body>${html}${anchorScript}</body></html>`
 })
 
 function resizeIframe() {
