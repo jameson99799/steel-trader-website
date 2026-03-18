@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { upload, compressImage } from '../middleware/upload.js'
+import { loadTranslationsForLang, translateProduct } from '../helpers/translate.js'
 
 const router = Router()
 
@@ -49,6 +50,14 @@ router.get('/', (req, res) => {
   params.push(parseInt(limit), offset)
 
   const products = getAll(sql, params)
+
+  // Inject translations if lang param is provided
+  const lang = req.query.lang
+  if (lang && lang !== 'en') {
+    const tMap = loadTranslationsForLang(lang)
+    if (tMap) products.forEach(p => translateProduct(p, tMap, lang))
+  }
+
   res.json({ data: products, total, page: parseInt(page), limit: parseInt(limit) })
 })
 
@@ -62,6 +71,13 @@ router.get('/:slug', (req, res) => {
 
   if (!product) {
     return res.status(404).json({ error: '商品不存在' })
+  }
+
+  // Inject translations if lang param is provided
+  const lang = req.query.lang
+  if (lang && lang !== 'en') {
+    const tMap = loadTranslationsForLang(lang)
+    if (tMap) translateProduct(product, tMap, lang)
   }
 
   res.json(product)

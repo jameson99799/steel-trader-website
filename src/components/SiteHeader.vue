@@ -126,6 +126,8 @@ const selectLang = (code) => {
   if (typeof setLang === 'function') setLang(code)
   else if (typeof toggleLang === 'function') toggleLang() // fallback
   langDropOpen.value = false
+  // Reload page so all data is re-fetched with the new lang parameter
+  window.location.reload()
 }
 
 const handleClickOutside = (e) => {

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { upload } from '../middleware/upload.js'
+import { loadTranslationsForLang, translateCompany } from '../helpers/translate.js'
 
 const router = Router()
 
@@ -16,7 +17,16 @@ function fileUrl(files, field, fallback) {
 
 router.get('/', (req, res) => {
   const company = getOne('SELECT * FROM company WHERE id = 1')
-  res.json(company || {})
+  const result = company || {}
+
+  // Inject translations if lang param is provided
+  const lang = req.query.lang
+  if (lang && lang !== 'en' && result.id) {
+    const tMap = loadTranslationsForLang(lang)
+    if (tMap) translateCompany(result, tMap, lang)
+  }
+
+  res.json(result)
 })
 
 router.put('/', authMiddleware, upload.fields([

@@ -1,12 +1,22 @@
 import { Router } from 'express'
 import { getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
+import { loadTranslationsForLang, translatePageTexts } from '../helpers/translate.js'
 
 const router = Router()
 
 router.get('/', (req, res) => {
   const texts = getOne('SELECT * FROM page_texts WHERE id = 1')
-  res.json(texts || {})
+  const result = texts || {}
+
+  // Inject translations if lang param is provided
+  const lang = req.query.lang
+  if (lang && lang !== 'en' && result.id) {
+    const tMap = loadTranslationsForLang(lang)
+    if (tMap) translatePageTexts(result, tMap, lang)
+  }
+
+  res.json(result)
 })
 
 router.put('/', authMiddleware, (req, res) => {

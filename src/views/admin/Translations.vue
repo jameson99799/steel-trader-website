@@ -94,10 +94,44 @@
               </select>
             </div>
           </div>
-          <button class="btn btn-primary" @click="startTranslate" :disabled="translating || !selectedLang">
-            {{ translating ? '⏳ 翻译中...' : '🚀 开始翻译' }}
-          </button>
-        </div>
+          <div class="btn-row" style="gap:8px">
+            <button class="btn btn-primary" @click="startTranslate" :disabled="translating || !selectedLang">
+              {{ translating ? '⏳ 翻译中...' : '🚀 开始翻译' }}
+            </button>
+            <button v-if="failedPages.length" class="btn btn-warning" @click="retryFailed" :disabled="translating">
+              🔄 重试失败项 ({{ failedPages.length }})
+            </button>
+            <button v-if="translating" class="btn btn-outline" @click="abortTranslation">
+              ⛔ 停止
+            </button>
+          </div>
+
+          <!-- Real-time Progress Bar -->
+          <div v-if="progressTotal > 0" class="progress-bar-wrap">
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: progressPct + '%' }" :class="{ error: progressErrors > 0 }"></div>
+            </div>
+            <div class="progress-text">
+              {{ progressDone }}/{{ progressTotal }} 页面  |  ✅ {{ progressOk }} 项  |  ⚠️ {{ progressErrors }} 错误
+              <span v-if="translating" class="spin">⏳</span>
+            </div>
+          </div>
+
+          <!-- Real-time Log -->
+          <div v-if="logEntries.length" class="log-panel" ref="logPanelRef">
+            <div class="log-header">
+              <span>📝 实时日志 ({{ logEntries.length }} 条)</span>
+              <button class="btn btn-sm btn-outline" @click="logEntries = []">× 清空</button>
+            </div>
+            <div class="log-body">
+              <div v-for="(log, i) in logEntries" :key="i" :class="['log-entry', log.type]">
+                <span class="log-time">{{ log.time }}</span>
+                <span class="log-icon">{{ log.type === 'ok' ? '✅' : log.type === 'error' ? '❌' : log.type === 'warn' ? '⚠️' : 'ℹ️' }}</span>
+                <span class="log-msg">{{ log.msg }}</span>
+              </div>
+            </div>
+          </div>
+        </div>  <!-- end translate-panel -->
 
         <!-- Translation Results -->
         <div v-if="translateResult" class="result-panel">
@@ -109,24 +143,11 @@
             </span>
           </div>
 
-          <!-- Success list -->
-          <div v-if="translateResult.results?.length" class="result-list">
-            <div v-for="(r, i) in translateResult.results.slice(0, 30)" :key="i" class="result-row ok">
-              <span class="r-type">{{ r.type }}/{{ r.field }}</span>
-              <span class="r-src">{{ r.original.slice(0, 50) }}</span>
-              <span class="r-arrow">→</span>
-              <span class="r-dst">{{ r.translated.slice(0, 80) }}</span>
-            </div>
-            <p v-if="translateResult.results.length > 30" class="more-note">
-              ...还有 {{ translateResult.results.length - 30 }} 项（已全部保存到数据库）
-            </p>
-          </div>
-
           <!-- Error logs -->
           <div v-if="translateResult.errors?.length" class="error-log">
-            <h4>⚠️ 错误日志（可根据此调整 API 设置）</h4>
+            <h4>⚠️ 错误日志</h4>
             <div v-for="(e, i) in translateResult.errors" :key="i" class="error-row">
-              <code>{{ e.batch ? `Batch ${e.batch}` : e.item }}</code>: {{ e.error }}
+              <code>{{ e.batch ? `Batch ${e.batch}` : e.item || e.page }}</code>: {{ e.error }}
             </div>
           </div>
         </div>
@@ -201,6 +222,14 @@ const selectedLang = ref('')
 const selectedPage = ref('all')
 const translating = ref(false)
 const translateResult = ref(null)
+const logEntries = ref([])
+const logPanelRef = ref(null)
+const failedPages = ref([])
+const progressTotal = ref(0)
+const progressDone = ref(0)
+const progressOk = ref(0)
+const progressErrors = ref(0)
+let aborted = false
 
 const searchLang = ref('')
 const searchPage = ref('all')
@@ -211,6 +240,8 @@ const searched = ref(false)
 
 const nonEnLangs = computed(() => languages.value.filter(l => l.code !== 'en'))
 
+const progressPct = computed(() => progressTotal.value ? Math.round(progressDone.value / progressTotal.value * 100) : 0)
+
 onMounted(async () => {
   try {
     const [s, langs] = await Promise.all([
@@ -219,7 +250,7 @@ onMounted(async () => {
     ])
     if (s) {
       settings.api_url = s.api_url || 'https://api.openai.com/v1'
-      settings.api_key = ''  // Never pre-fill key for security; user must re-enter to change
+      settings.api_key = ''
       settings.model_name = s.model_name || 'gpt-3.5-turbo'
       settings.multilingual_enabled = !!s.multilingual_enabled
     }
@@ -245,46 +276,139 @@ const saveSettings = async () => {
     savedMsg.value = true
     setTimeout(() => { savedMsg.value = false }, 3000)
   } catch (e) {
-    alert('保存失败: ' + e.message)
+    alert('\u4fdd\u5b58\u5931\u8d25: ' + e.message)
   } finally {
     saving.value = false
   }
 }
 
 const fetchModels = async () => {
-  if (!settings.api_key) return alert('请先填入 API 密钥')
+  if (!settings.api_key) return alert('\u8bf7\u5148\u586b\u5165 API \u5bc6\u94a5')
   fetchingModels.value = true; models.value = []
   try {
     const res = await api.fetchAIModels({ api_url: settings.api_url, api_key: settings.api_key })
     models.value = res.models || []
-    if (!models.value.length) alert('未获取到模型列表，请检查 API 地址和密钥是否正确')
+    if (!models.value.length) alert('\u672a\u83b7\u53d6\u5230\u6a21\u578b\u5217\u8868')
   } catch (e) {
-    alert('获取模型失败: ' + e.message)
-  } finally {
-    fetchingModels.value = false }
+    alert('\u83b7\u53d6\u6a21\u578b\u5931\u8d25: ' + e.message)
+  } finally { fetchingModels.value = false }
 }
+
+function addLog(type, msg) {
+  const now = new Date()
+  const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
+  logEntries.value.push({ type, msg, time })
+  // Auto-scroll to bottom
+  setTimeout(() => {
+    const el = logPanelRef.value?.querySelector('.log-body')
+    if (el) el.scrollTop = el.scrollHeight
+  }, 50)
+}
+
+function abortTranslation() {
+  aborted = true
+  addLog('warn', '用户停止了翻译')
+}
+
+const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero']
+const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域' }
 
 const startTranslate = async () => {
   if (!settings.api_key && !savedMsg.value) {
-    // Check if key is already saved
     const check = await api.getTranslationSettings().catch(() => null)
     if (!check?.api_key) return alert('请先填入并保存 API 密钥')
   }
   if (!selectedLang.value) return alert('请选择目标语言')
+  if (settings.api_key) await saveSettings()
+  aborted = false
+
+  const pages = selectedPage.value === 'all' ? [...allPages] : [selectedPage.value]
+  await runPages(pages)
+}
+
+async function retryFailed() {
+  if (!failedPages.value.length) return
+  const pages = [...failedPages.value]
+  failedPages.value = []
+  addLog('info', `🔄 重试 ${pages.length} 个失败页面: ${pages.map(p => pageLabels[p] || p).join(', ')}`)
+  aborted = false
+  await runPages(pages)
+}
+
+async function runPages(pages) {
   translating.value = true
   translateResult.value = null
-  try {
-    // Save settings first (if api_key is filled)
-    if (settings.api_key) await saveSettings()
-    const res = await api.runTranslationPage(selectedLang.value, selectedPage.value)
-    translateResult.value = res
-    // Refresh language list to get updated ai_translated status
-    languages.value = await api.getLanguages()
-  } catch (e) {
-    translateResult.value = { success: false, error: e.message, results: [], errors: [{ error: e.message }], total: 0, translated: 0 }
-  } finally {
-    translating.value = false
+  progressTotal.value = pages.length
+  progressDone.value = 0
+  progressOk.value = 0
+  progressErrors.value = 0
+  const allResults = []
+  const allErrors = []
+  const newFailed = []
+
+  addLog('info', `开始翻译 → 目标语言: ${selectedLang.value}，范围: ${pages.map(p => pageLabels[p] || p).join(', ')}`)
+
+  for (const page of pages) {
+    if (aborted) {
+      newFailed.push(page)
+      addLog('warn', `❤ 跳过 ${pageLabels[page] || page}（已停止）`)
+      continue
+    }
+
+    addLog('info', `→ 正在翻译: ${pageLabels[page] || page}...`)
+
+    try {
+      const res = await api.runTranslationPage(selectedLang.value, page)
+      const ok = res.results?.length || 0
+      const errs = res.errors?.length || 0
+      progressOk.value += ok
+      progressErrors.value += errs
+
+      if (res.results) allResults.push(...res.results)
+      if (res.errors) allErrors.push(...res.errors.map(e => ({ ...e, page })))
+
+      if (errs > 0) {
+        addLog('warn', `⚠️ ${pageLabels[page]}: ${ok} 成功, ${errs} 错误`)
+        newFailed.push(page)
+      } else if (ok === 0) {
+        addLog('ok', `✔ ${pageLabels[page]}: 无需翻译（已全部翻译）`)
+      } else {
+        addLog('ok', `✅ ${pageLabels[page]}: ${ok} 项翻译成功`)
+      }
+
+      // Show a sample of translations in the log
+      for (const r of (res.results || []).slice(0, 3)) {
+        addLog('ok', `   ${r.type}/${r.field}: "${(r.original || '').slice(0, 30)}" → "${(r.translated || '').slice(0, 40)}"`)
+      }
+      if ((res.results?.length || 0) > 3) {
+        addLog('info', `   ... 另外 ${res.results.length - 3} 项`)
+      }
+
+    } catch (e) {
+      progressErrors.value++
+      allErrors.push({ page, error: e.message })
+      newFailed.push(page)
+      addLog('error', `❌ ${pageLabels[page]}: API错误 - ${e.message}`)
+    }
+
+    progressDone.value++
   }
+
+  failedPages.value = newFailed
+  translateResult.value = {
+    total: progressOk.value + progressErrors.value,
+    translated: progressOk.value,
+    results: allResults,
+    errors: allErrors
+  }
+
+  addLog(newFailed.length ? 'warn' : 'ok',
+    `翻译完成: ${progressOk.value} 成功, ${progressErrors.value} 错误` +
+    (newFailed.length ? ` — 可点击“重试失败项”按钮重新翻译` : '')
+  )
+
+  translating.value = false
+  languages.value = await api.getLanguages()
 }
 
 const doSearch = async () => {
@@ -404,4 +528,28 @@ input:checked + .slider:before { transform: translateX(18px); }
 .btn-outline:hover { background: #eff6ff; }
 .btn-sm { padding: 5px 12px; font-size: 13px; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-warning { background: #f59e0b; color: white; }
+.btn-warning:hover { background: #d97706; }
+
+/* Progress Bar */
+.progress-bar-wrap { margin-top: 16px; }
+.progress-bar { width: 100%; height: 8px; background: #e2e8f0; border-radius: 8px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #22c55e, #16a34a); border-radius: 8px; transition: width 0.3s ease; }
+.progress-fill.error { background: linear-gradient(90deg, #f59e0b, #d97706); }
+.progress-text { font-size: 13px; color: #64748b; margin-top: 6px; text-align: center; }
+.spin { display: inline-block; animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* Log Panel */
+.log-panel { margin-top: 16px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+.log-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-size: 13px; font-weight: 600; color: #475569; }
+.log-body { max-height: 320px; overflow-y: auto; padding: 8px; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; background: #1e293b; color: #e2e8f0; }
+.log-entry { padding: 3px 8px; border-radius: 3px; display: flex; gap: 8px; align-items: flex-start; line-height: 1.5; }
+.log-entry.ok { color: #4ade80; }
+.log-entry.error { color: #f87171; }
+.log-entry.warn { color: #fbbf24; }
+.log-entry.info { color: #93c5fd; }
+.log-time { color: #64748b; flex-shrink: 0; font-size: 11px; }
+.log-icon { flex-shrink: 0; }
+.log-msg { word-break: break-all; }
 </style>

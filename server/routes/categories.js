@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { upload } from '../middleware/upload.js'
+import { loadTranslationsForLang, translateCategory } from '../helpers/translate.js'
 
 const router = Router()
 
@@ -12,6 +13,14 @@ function slugify(text, id) {
 
 router.get('/', (req, res) => {
   const categories = getAll('SELECT * FROM categories ORDER BY sort_order, id')
+
+  // Inject translations if lang param is provided
+  const lang = req.query.lang
+  if (lang && lang !== 'en') {
+    const tMap = loadTranslationsForLang(lang)
+    if (tMap) categories.forEach(c => translateCategory(c, tMap, lang))
+  }
+
   res.json(categories)
 })
 
@@ -22,14 +31,22 @@ router.get('/tree', (req, res) => {
   const productCountMap = {}
   products.forEach(p => { productCountMap[p.category_id] = p.count })
 
+  // Inject translations if lang param is provided
+  const lang = req.query.lang
+  const tMap = (lang && lang !== 'en') ? loadTranslationsForLang(lang) : null
+
   const buildTree = (parentId = 0) => {
     return categories
       .filter(c => c.parent_id === parentId)
-      .map(c => ({
-        ...c,
-        product_count: productCountMap[c.id] || 0,
-        children: buildTree(c.id)
-      }))
+      .map(c => {
+        const node = {
+          ...c,
+          product_count: productCountMap[c.id] || 0,
+          children: buildTree(c.id)
+        }
+        if (tMap) translateCategory(node, tMap, lang)
+        return node
+      })
   }
 
   res.json(buildTree())

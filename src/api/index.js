@@ -10,6 +10,19 @@ const CACHE_TTL = 5 * 60 * 1000  // 5 minutes
 
 function cacheKey(url) { return `_api_cache_${url}` }
 
+// Get current non-English lang for API requests
+function getLangParam() {
+  const lang = localStorage.getItem('lang')
+  return (lang && lang !== 'en') ? lang : ''
+}
+
+function appendLang(url) {
+  const lang = getLangParam()
+  if (!lang) return url
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}lang=${lang}`
+}
+
 function readCache(url) {
   try {
     const raw = localStorage.getItem(cacheKey(url))
@@ -68,15 +81,16 @@ const request = async (url, options = {}) => {
  * Used for public-facing content endpoints.
  */
 async function cachedGet(url) {
-  const cached = readCache(url)
+  const fullUrl = appendLang(url)
+  const cached = readCache(fullUrl)
   if (cached) {
     // Return cached data immediately, refresh in background
-    request(url).then(fresh => writeCache(url, fresh)).catch(() => { })
+    request(fullUrl).then(fresh => writeCache(fullUrl, fresh)).catch(() => { })
     return cached
   }
   // No cache: fetch and cache
-  const data = await request(url)
-  writeCache(url, data)
+  const data = await request(fullUrl)
+  writeCache(fullUrl, data)
   return data
 }
 
@@ -98,10 +112,12 @@ export const api = {
 
   // Products (not cached — list changes frequently with filters/search)
   getProducts: (params = {}) => {
+    const lang = getLangParam()
+    if (lang) params.lang = lang
     const query = new URLSearchParams(params).toString()
     return request(`/products${query ? `?${query}` : ''}`)
   },
-  getProduct: (id) => request(`/products/${id}`),
+  getProduct: (id) => request(appendLang(`/products/${id}`)),
   createProduct: (data) => request('/products', { method: 'POST', body: data }),
   updateProduct: (id, data) => request(`/products/${id}`, { method: 'PUT', body: data }),
   deleteProduct: (id) => request(`/products/${id}`, { method: 'DELETE' }),
@@ -135,10 +151,12 @@ export const api = {
 
   // News
   getNews: (params = {}) => {
+    const lang = getLangParam()
+    if (lang) params.lang = lang
     const query = new URLSearchParams(params).toString()
     return request(`/news${query ? `?${query}` : ''}`)
   },
-  getNewsItem: (slug) => request(`/news/${slug}`),
+  getNewsItem: (slug) => request(appendLang(`/news/${slug}`)),
   createNews: (data) => request('/news', { method: 'POST', body: data }),
   updateNews: (id, data) => request(`/news/${id}`, { method: 'PUT', body: data }),
   deleteNews: (id) => request(`/news/${id}`, { method: 'DELETE' }),

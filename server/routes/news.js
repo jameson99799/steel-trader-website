@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { upload } from '../middleware/upload.js'
+import { loadTranslationsForLang, translateNews } from '../helpers/translate.js'
 
 const router = Router()
 
@@ -34,6 +35,14 @@ router.get('/', (req, res) => {
     params.push(parseInt(limit), (parseInt(page) - 1) * parseInt(limit))
 
     const news = getAll(sql, params)
+
+    // Inject translations if lang param is provided
+    const lang = req.query.lang
+    if (lang && lang !== 'en') {
+        const tMap = loadTranslationsForLang(lang)
+        if (tMap) news.forEach(n => translateNews(n, tMap, lang))
+    }
+
     res.json({ data: news, total, page: parseInt(page), limit: parseInt(limit) })
 })
 
@@ -46,6 +55,14 @@ router.get('/:slug', (req, res) => {
         : getOne('SELECT * FROM news WHERE slug = ?', [slug])
 
     if (!news) return res.status(404).json({ error: '文章不存在' })
+
+    // Inject translations if lang param is provided
+    const lang = req.query.lang
+    if (lang && lang !== 'en') {
+        const tMap = loadTranslationsForLang(lang)
+        if (tMap) translateNews(news, tMap, lang)
+    }
+
     res.json(news)
 })
 
