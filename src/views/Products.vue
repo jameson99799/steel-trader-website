@@ -11,7 +11,8 @@
             <span class="breadcrumb-current">{{ currentCategoryName || t('allProducts') }}</span>
           </div>
           <h1 class="page-title">{{ currentCategoryName || t('allProducts') }}</h1>
-          <p class="page-subtitle">{{ products.length }} {{ t('available') }}</p>
+          <p class="page-subtitle" v-if="!loading">{{ products.length }} {{ t('available') }}</p>
+          <p class="page-subtitle" v-else>&nbsp;</p>
         </div>
       </div>
     </div>
@@ -83,7 +84,12 @@
 
 
             
-            <div class="products-grid" v-if="products.length">
+            <!-- Loading spinner -->
+            <div v-if="loading" class="loading-state">
+              <div class="loading-spinner"></div>
+            </div>
+            
+            <div class="products-grid" v-else-if="products.length">
               <router-link 
                 v-for="product in products" 
                 :key="product.id" 
@@ -122,7 +128,7 @@
               </router-link>
             </div>
             
-            <div v-else class="no-products">
+            <div v-else-if="!loading" class="no-products">
               <div class="no-products-content">
                 <svg class="no-products-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="11" cy="11" r="8"/>
@@ -155,6 +161,7 @@ const { t, localizedValue } = useLang()
 const categoryTree = ref([])
 const products = ref([])
 const selectedCategory = ref(null) // holds slug string
+const loading = ref(true)
 
 // Find category ID from slug or numeric string
 const findCategoryIdBySlugOrId = (slugOrId, cats) => {
@@ -197,6 +204,7 @@ const getTotalCount = (cat) => {
 
 // Load products filtered by category ID resolved from slug
 const loadProducts = async () => {
+  loading.value = true
   try {
     const params = { status: 1 }
     if (selectedCategory.value) {
@@ -207,6 +215,7 @@ const loadProducts = async () => {
     const res = await api.getProducts(params)
     products.value = res.data
   } catch (e) { console.error(e) }
+  finally { loading.value = false }
 }
 
 // Watch route query changes (back/forward navigation)
@@ -602,6 +611,26 @@ onMounted(async () => {
 .icon {
   width: 16px;
   height: 16px;
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* 响应式设计 */

@@ -4,9 +4,9 @@
     <div class="page-header">
       <div class="container">
         <nav class="breadcrumb">
-          <router-link to="/" class="breadcrumb-link">Home</router-link>
+          <router-link to="/" class="breadcrumb-link">{{ t('home') }}</router-link>
           <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
-          <router-link to="/news" class="breadcrumb-link">News</router-link>
+          <router-link to="/news" class="breadcrumb-link">{{ t('news') }}</router-link>
           <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
           <span class="breadcrumb-current">{{ localizedValue(article, 'title') }}</span>
         </nav>
@@ -47,7 +47,7 @@
 
           <div class="article-footer">
             <router-link to="/news" class="back-link">
-              ← Back to News
+              {{ t('backToNews') }}
             </router-link>
           </div>
         </article>
@@ -58,8 +58,8 @@
     <div class="categories-section" v-if="allCategories.length">
       <div class="container">
         <div class="section-hdr">
-          <h2>Product Categories</h2>
-          <p>{{ pageTexts?.categories_subtitle || 'Explore our comprehensive range of LED products' }}</p>
+          <h2>{{ t('productCategories') }}</h2>
+          <p>{{ localizedValue(pageTexts, 'categories_subtitle') || t('productCategories') }}</p>
         </div>
         <div class="categories-grid">
           <router-link
@@ -76,7 +76,7 @@
             </div>
             <div class="cat-info">
               <h3>{{ localizedValue(cat, 'name') }}</h3>
-              <span v-if="cat.product_count" class="cat-count">{{ cat.product_count }} products</span>
+              <span v-if="cat.product_count" class="cat-count">{{ cat.product_count }} {{ t('productsCount') }}</span>
             </div>
           </router-link>
         </div>

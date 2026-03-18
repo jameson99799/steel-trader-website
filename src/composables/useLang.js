@@ -49,7 +49,12 @@ const translations = {
     noNewsYet: '暂无新闻文章，请稍后再查看！',
     prevPage: '← 上一页', nextPage: '下一页 →',
     pageOf: '页',
-    language: '语言'
+    language: '语言',
+    // ProductDetail page
+    clickToZoom: '点击放大', productDetails: '产品详情', sendEmail: '发送邮件',
+    contactOurTeam: '联系我们的团队', needMoreInfo: '需要更多信息？扫码直接联系我们',
+    clickToEnlarge: '点击放大', scanQRWeChat: '扫码添加微信',
+    backToNews: '← 返回新闻列表', quickView: '快速查看'
   },
   en: {
     home: 'Home', products: 'Products', about: 'About Us', contact: 'Contact',
@@ -96,7 +101,12 @@ const translations = {
     noNewsYet: 'No news articles yet. Check back soon!',
     prevPage: '← Prev', nextPage: 'Next →',
     pageOf: 'Page',
-    language: 'Language'
+    language: 'Language',
+    // ProductDetail page
+    clickToZoom: 'Click to zoom', productDetails: 'Product Details', sendEmail: 'Send Email',
+    contactOurTeam: 'Contact Our Team', needMoreInfo: 'Need more information? Scan to contact us directly.',
+    clickToEnlarge: 'Click to enlarge', scanQRWeChat: 'Scan QR to add on WeChat',
+    backToNews: '← Back to News', quickView: 'Quick View'
   }
 }
 

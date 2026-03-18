@@ -31,7 +31,7 @@
                     <path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z" />
                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a4 4 0 00-3.446 6.032l-2.261 2.26a1 1 0 101.414 1.415l2.261-2.261A4 4 0 1011 5z" clip-rule="evenodd" />
                   </svg>
-                  <span>Click to zoom</span>
+                  <span>{{ t('clickToZoom') }}</span>
                 </div>
                 <!-- Image nav arrows -->
                 <button v-if="images.length > 1" class="img-nav img-nav-prev" @click.stop="prevImage" aria-label="Previous image">
@@ -42,7 +42,7 @@
                 </button>
               </div>
               <div class="product-badges">
-                <span v-if="product.is_featured" class="badge badge-featured">Featured</span>
+                <span v-if="product.is_featured" class="badge badge-featured">{{ t('featured') }}</span>
                 <span class="badge badge-category">{{ localizedValue(product, 'category_name') }}</span>
               </div>
             </div>
@@ -111,7 +111,7 @@
                       <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
                       <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
                     </svg>
-                    Send Email
+                    {{ t('sendEmail') }}
                   </button>
                 </div>
               </div>
@@ -121,8 +121,8 @@
           <!-- Sticky Contact Panel (right column) -->
           <div class="contact-panel" v-if="pageTexts?.show_contact_panel">
             <div class="contact-panel-inner">
-              <h3 class="panel-title">{{ pageTexts?.inquiry_panel_title || 'Contact Our Team' }}</h3>
-              <p class="panel-subtitle">Need more information? Scan to contact us directly.</p>
+              <h3 class="panel-title">{{ pageTexts?.inquiry_panel_title || t('contactOurTeam') }}</h3>
+              <p class="panel-subtitle">{{ t('needMoreInfo') }}</p>
 
               <!-- WhatsApp QR -->
               <div class="qr-block" v-if="company?.whatsapp_qr || company?.whatsapp">
@@ -134,7 +134,7 @@
                 </div>
                 <div class="qr-image-wrap" v-if="company?.whatsapp_qr" @click="openLightbox(company.whatsapp_qr)">
                   <img :src="company.whatsapp_qr" alt="WhatsApp QR Code" class="qr-img" />
-                  <div class="qr-hint">Click to enlarge</div>
+                  <div class="qr-hint">{{ t('clickToEnlarge') }}</div>
                 </div>
                 <a v-if="company?.whatsapp" :href="`https://wa.me/${company.whatsapp.replace(/[^0-9]/g, '')}`" class="qr-link wa-link" target="_blank" rel="noopener">
                   WhatsApp: {{ company.whatsapp }}
@@ -160,7 +160,7 @@
                   <span v-if="company?.wechat" class="qr-link wc-link" @click="copyToClipboard(company.wechat)" style="cursor:pointer;" title="Click to copy">
                     WeChat: {{ company.wechat }}
                   </span>
-                  <span v-else class="qr-scan-hint">Scan QR to add on WeChat</span>
+                  <span v-else class="qr-scan-hint">{{ t('scanQRWeChat') }}</span>
                 </div>
               </div>
             </div>
@@ -172,7 +172,7 @@
             <svg class="detail-icon" viewBox="0 0 20 20" fill="currentColor">
               <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
             </svg>
-            <h2>Product Details</h2>
+            <h2>{{ t('productDetails') }}</h2>
           </div>
           <div class="detail-content">
             <iframe
@@ -189,8 +189,8 @@
         <!-- Product Categories Section -->
         <div class="categories-section" v-if="allCategories.length">
           <div class="section-hdr">
-            <h2>Product Categories</h2>
-            <p>{{ pageTexts?.categories_subtitle || 'Explore our comprehensive range of LED products' }}</p>
+            <h2>{{ t('productCategories') }}</h2>
+            <p>{{ localizedValue(pageTexts, 'categories_subtitle') || t('productCategories') }}</p>
           </div>
           <div class="categories-grid">
             <router-link
@@ -207,7 +207,7 @@
               </div>
               <div class="cat-info">
                 <h3>{{ localizedValue(cat, 'name') }}</h3>
-                <span v-if="cat.product_count" class="cat-count">{{ cat.product_count }} products</span>
+                <span v-if="cat.product_count" class="cat-count">{{ cat.product_count }} {{ t('productsCount') }}</span>
               </div>
             </router-link>
           </div>
