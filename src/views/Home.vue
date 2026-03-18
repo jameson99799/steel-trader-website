@@ -223,7 +223,7 @@ const pageTexts = ref({})
 onMounted(async () => {
   try {
     hero.value = await api.getHero()
-    const productsRes = await api.getProducts({ featured: '1', limit: 4 })
+    const productsRes = await api.getProducts({ featured: '1', limit: 12 })
     featuredProducts.value = productsRes.data
     const tree = await api.getCategoryTree()
     categories.value = tree.slice(0, 6)
@@ -407,7 +407,7 @@ onMounted(async () => {
 
 .products-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--spacing-lg);
 }
 
@@ -712,7 +712,10 @@ onMounted(async () => {
     max-width: 280px;
   }
 
-  .products-grid,
+  .products-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
   .categories-grid,
   .advantages-grid {
     grid-template-columns: 1fr;
