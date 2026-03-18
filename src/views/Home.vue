@@ -403,6 +403,7 @@ onMounted(async () => {
 /* Featured Products */
 .featured-products {
   background: var(--gray-50);
+  padding-bottom: var(--spacing-xl);
 }
 
 .products-grid {
