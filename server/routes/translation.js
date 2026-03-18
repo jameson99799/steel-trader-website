@@ -327,8 +327,8 @@ async function translateBatch(settings, items, targetLang, langName, overrideNot
     const shortItems = items.filter(i => !i.long_html)
     const longItems = items.filter(i => i.long_html)
 
-    // ── Translate short text in larger batches for efficiency ──
-    const BATCH = 20
+    // ── Translate short text in mega-batches for efficiency ──
+    const BATCH = 50
     for (let i = 0; i < shortItems.length; i += BATCH) {
         const batch = shortItems.slice(i, i + BATCH)
         const numberedText = batch.map((item, idx) => `${idx + 1}. ${item.text}`).join('\n')
@@ -587,21 +587,13 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
     const errors = []
 
     // ── Translate ALL short text fields in mega-batches ──
-    const BATCH = 25
+    const BATCH = 50
     for (let i = 0; i < allShortItems.length; i += BATCH) {
         const batch = allShortItems.slice(i, i + BATCH)
         const numberedText = batch.map((item, idx) => `${idx + 1}. ${item.text}`).join('\n')
-        const systemPrompt = `You are a professional translator for a steel products export company (GI GL PPGI PPGL steel coil, CRC, roofing sheets).
-Translate each numbered line from English to ${langRow.name}.
-Rules: Keep product codes, model numbers, brand names, HTML tags, and technical specifications unchanged. Return ONLY a JSON object like {"1":"translation","2":"translation"}.
-GLOSSARY (use these translations when applicable):
-- Galvalume / GL = 镀铝锌 (for zh/Chinese)
-- ALUZINC = 镀铝锌 (for zh/Chinese)
-- PPGI = 彩涂镀锌 (for zh/Chinese)
-- PPGL = 彩涂镀铝锌 (for zh/Chinese)
-- GI = 镀锌 (for zh/Chinese)
-- CRC = 冷轧卷 (for zh/Chinese)
-DO NOT TRANSLATE these items (keep original): "SHANDONG SUNSEA STEEL CO., LTD" (company name), standards (ASTM, JIS, EN, GB/T), product model numbers/codes.${overrideNote}`
+        const systemPrompt = `Translate numbered lines to ${langRow.name}. Steel company context. Return JSON {"1":"...","2":"..."}.
+Keep unchanged: codes, HTML, ASTM/JIS/EN/GB/T, "SHANDONG SUNSEA STEEL CO., LTD".
+Glossary(zh): Galvalume/GL=镀铝锌 ALUZINC=镀铝锌 PPGI=彩涂镀锌 PPGL=彩涂镀铝锌 GI=镀锌 CRC=冷轧卷.${overrideNote}`
 
         const MAX_RETRIES = 2
         let attempt = 0

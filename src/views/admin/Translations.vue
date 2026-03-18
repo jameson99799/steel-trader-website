@@ -547,7 +547,7 @@ async function runItems(itemsList) {
   const newFailed = []
 
   const CONCURRENCY = concurrency.value || 3
-  const BULK_SIZE = 5
+  const BULK_SIZE = 10
 
   addLog('info', `⚡ 批量翻译模式: 每次 ${BULK_SIZE} 个项目, ${CONCURRENCY} 路并发`)
 
