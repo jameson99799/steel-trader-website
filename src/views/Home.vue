@@ -397,7 +397,7 @@ onMounted(async () => {
 
 .section-footer {
   text-align: center;
-  margin-top: var(--spacing-2xl);
+  margin-top: var(--spacing-lg);
 }
 
 /* Featured Products */
