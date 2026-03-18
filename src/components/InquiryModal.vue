@@ -131,7 +131,8 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const props = defineProps({
-  productId: Number
+  productId: Number,
+  productName: String
 })
 
 const emit = defineEmits(['close', 'success'])
@@ -155,7 +156,7 @@ const form = reactive({
   phone: '',
   company: '',
   country: '',
-  message: ''
+  message: props.productName ? t('inquiryForProduct') + ': ' + props.productName : ''
 })
 
 const handleSubmit = async () => {

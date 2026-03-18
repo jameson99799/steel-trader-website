@@ -2,60 +2,96 @@
   <div class="translations-page">
     <h1>🤖 AI 翻译管理</h1>
 
-    <!-- AI Settings Card -->
+    <!-- AI 渠道管理 -->
     <div class="card">
       <div class="card-header-row">
-        <h3>AI 渠道设置</h3>
-        <div class="multilingual-toggle">
-          <span>多语言开关</span>
-          <label class="switch">
-            <input type="checkbox" v-model="settings.multilingual_enabled" @change="saveSettings" />
-            <span class="slider"></span>
-          </label>
-          <span class="toggle-status" :class="settings.multilingual_enabled ? 'on' : 'off'">
-            {{ settings.multilingual_enabled ? '已开启' : '已关闭' }}
-          </span>
+        <h3>🤖 AI 渠道管理</h3>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="multilingual-toggle">
+            <span>多语言开关</span>
+            <label class="switch">
+              <input type="checkbox" v-model="settings.multilingual_enabled" @change="saveSettings" />
+              <span class="slider"></span>
+            </label>
+            <span class="toggle-status" :class="settings.multilingual_enabled ? 'on' : 'off'">
+              {{ settings.multilingual_enabled ? '已开启' : '已关闭' }}
+            </span>
+          </div>
+          <button class="btn btn-primary btn-sm" @click="openChannelDialog()">➕ 添加渠道</button>
         </div>
       </div>
       <div class="card-body">
+        <div v-if="channels.length === 0" class="empty-tip">暂无 AI 渠道，请点击「添加渠道」创建</div>
+        <div v-else class="channel-list">
+          <div v-for="ch in channels" :key="ch.id" class="channel-card" :class="{ 'is-default': ch.is_default }">
+            <div class="ch-header">
+              <div class="ch-name">
+                <span class="ch-badge" v-if="ch.is_default">默认</span>
+                {{ ch.name }}
+              </div>
+              <div class="ch-actions">
+                <button class="btn btn-outline btn-xs" @click="openChannelDialog(ch)">✏️ 编辑</button>
+                <button class="btn btn-outline btn-xs" @click="setDefaultChannel(ch.id)" v-if="!ch.is_default">⭐ 设为默认</button>
+                <button class="btn btn-outline btn-xs btn-danger" @click="deleteChannel(ch.id)">🗑️</button>
+              </div>
+            </div>
+            <div class="ch-info">
+              <div><span class="ch-label">API:</span> {{ ch.api_url }}</div>
+              <div><span class="ch-label">Key:</span> {{ ch.api_key_display }}</div>
+              <div><span class="ch-label">模型:</span>
+                <span v-if="ch.models && ch.models.length" class="ch-models">
+                  <span v-for="m in ch.models" :key="m" class="model-tag">{{ m }}</span>
+                </span>
+                <span v-else class="ch-no-model">未选择模型</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Channel Dialog -->
+    <div class="modal-overlay" v-if="showChannelDialog" @click.self="showChannelDialog = false">
+      <div class="modal-box">
+        <h3>{{ editingChannel ? '编辑渠道' : '添加渠道' }}</h3>
+        <div class="form-group">
+          <label>渠道名称</label>
+          <input v-model="channelForm.name" class="form-control" placeholder="例如：OpenAI / DeepSeek / 硅基流动" />
+        </div>
         <div class="grid-2">
           <div class="form-group">
-            <label>API 地址 <span class="hint">支持 OpenAI 及所有兼容格式接口</span></label>
-            <input v-model="settings.api_url" class="form-control" placeholder="https://api.openai.com/v1" />
+            <label>API 地址</label>
+            <input v-model="channelForm.api_url" class="form-control" placeholder="https://api.openai.com/v1" />
           </div>
           <div class="form-group">
             <label>API 密钥</label>
-            <input v-model="settings.api_key" class="form-control" type="password" placeholder="sk-..." autocomplete="new-password" />
+            <input v-model="channelForm.api_key" class="form-control" type="password" :placeholder="editingChannel ? '留空保持不变' : 'sk-...'" autocomplete="new-password" />
           </div>
         </div>
-        <div class="grid-2">
-          <div class="form-group">
-            <label>模型名称</label>
-            <div class="model-row">
-              <input v-model="settings.model_name" class="form-control" placeholder="gpt-3.5-turbo" />
-              <button class="btn btn-outline btn-sm" @click="fetchModels" :disabled="fetchingModels">
-                {{ fetchingModels ? '搜索中...' : '🔍 搜索模型' }}
-              </button>
-            </div>
-            <div class="model-list" v-if="models.length">
-              <div v-for="m in models" :key="m" class="model-item"
-                   :class="{ selected: settings.model_name === m }"
-                   @click="settings.model_name = m">{{ m }}</div>
+        <div class="form-group">
+          <label>模型选择 <button class="btn btn-outline btn-xs" @click="fetchChannelModels" :disabled="fetchingChModels" style="margin-left:8px">{{ fetchingChModels ? '搜索中...' : '🔍 搜索可用模型' }}</button></label>
+          <div class="model-list" v-if="channelModelList.length">
+            <div v-for="m in channelModelList" :key="m" class="model-item"
+                 :class="{ selected: channelForm.models.includes(m) }"
+                 @click="toggleModel(m)">
+              <span class="model-check">{{ channelForm.models.includes(m) ? '☑' : '☐' }}</span> {{ m }}
             </div>
           </div>
-          <div class="form-group">
-            <label>翻译源语言</label>
-            <select v-model="settings.source_lang" class="form-control">
-              <option value="en">English（英文，推荐）</option>
-            </select>
-            <p class="form-hint">翻译以英文内容为标准源语言进行翻译</p>
+          <div v-if="channelForm.models.length" class="selected-models">
+            <span class="ch-label">已选模型：</span>
+            <span v-for="m in channelForm.models" :key="m" class="model-tag removable" @click="removeModel(m)">{{ m }} ×</span>
           </div>
         </div>
-        <div class="btn-row">
-          <button class="btn btn-primary" @click="saveSettings" :disabled="saving">
-            {{ saving ? '保存中...' : '💾 保存设置' }}
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="channelForm.is_default" /> 设为默认渠道（翻译时使用）
+          </label>
+        </div>
+        <div class="btn-row" style="justify-content:flex-end">
+          <button class="btn btn-outline" @click="showChannelDialog = false">取消</button>
+          <button class="btn btn-primary" @click="saveChannel" :disabled="savingChannel">
+            {{ savingChannel ? '保存中...' : '💾 保存' }}
           </button>
-          <span v-if="savedMsg" class="save-ok">✅ 已保存</span>
         </div>
       </div>
     </div>
@@ -219,6 +255,17 @@ const settings = reactive({
   source_lang: 'en'
 })
 
+// AI Channel CRUD
+const channels = ref([])
+const showChannelDialog = ref(false)
+const editingChannel = ref(null)
+const channelModelList = ref([])
+const fetchingChModels = ref(false)
+const savingChannel = ref(false)
+const channelForm = reactive({
+  name: '', api_url: 'https://api.openai.com/v1', api_key: '', models: [], is_default: false
+})
+
 const languages = ref([])
 const models = ref([])
 const fetchingModels = ref(false)
@@ -263,6 +310,7 @@ onMounted(async () => {
       settings.multilingual_enabled = !!s.multilingual_enabled
     }
     languages.value = langs || []
+    await loadChannels()
     if (nonEnLangs.value.length > 0) {
       selectedLang.value = nonEnLangs.value[0].code
       searchLang.value = nonEnLangs.value[0].code
@@ -300,6 +348,111 @@ const fetchModels = async () => {
   } catch (e) {
     alert('\u83b7\u53d6\u6a21\u578b\u5931\u8d25: ' + e.message)
   } finally { fetchingModels.value = false }
+}
+
+// Channel CRUD Methods
+async function loadChannels() {
+  try {
+    const res = await fetch('/api/ai/channels', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') } })
+    if (res.ok) channels.value = await res.json()
+  } catch (e) { console.error('Load channels failed:', e) }
+}
+
+function openChannelDialog(ch = null) {
+  editingChannel.value = ch
+  channelModelList.value = ch?.models || []
+  if (ch) {
+    channelForm.name = ch.name
+    channelForm.api_url = ch.api_url
+    channelForm.api_key = ''
+    channelForm.models = [...(ch.models || [])]
+    channelForm.is_default = !!ch.is_default
+  } else {
+    channelForm.name = ''
+    channelForm.api_url = 'https://api.openai.com/v1'
+    channelForm.api_key = ''
+    channelForm.models = []
+    channelForm.is_default = channels.value.length === 0
+  }
+  showChannelDialog.value = true
+}
+
+function toggleModel(m) {
+  const idx = channelForm.models.indexOf(m)
+  if (idx >= 0) channelForm.models.splice(idx, 1)
+  else channelForm.models.push(m)
+}
+
+function removeModel(m) {
+  channelForm.models = channelForm.models.filter(x => x !== m)
+}
+
+async function fetchChannelModels() {
+  if (editingChannel.value) {
+    fetchingChModels.value = true
+    try {
+      const res = await fetch('/api/ai/channels/' + editingChannel.value.id + '/models', {
+        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        channelModelList.value = data.models || []
+      } else {
+        const err = await res.json().catch(() => ({}))
+        alert('获取模型失败: ' + (err.error || res.statusText))
+      }
+    } catch (e) { alert('获取模型失败: ' + e.message) }
+    finally { fetchingChModels.value = false }
+  } else {
+    if (!channelForm.api_key || !channelForm.api_url) return alert('请先填入 API 地址和密钥')
+    fetchingChModels.value = true
+    try {
+      const res = await api.fetchAIModels({ api_url: channelForm.api_url, api_key: channelForm.api_key })
+      channelModelList.value = res.models || []
+      if (!channelModelList.value.length) alert('未获取到模型列表')
+    } catch (e) { alert('获取模型失败: ' + e.message) }
+    finally { fetchingChModels.value = false }
+  }
+}
+
+async function saveChannel() {
+  if (!channelForm.name) return alert('请填入渠道名称')
+  if (!channelForm.api_url) return alert('请填入 API 地址')
+  if (!editingChannel.value && !channelForm.api_key) return alert('请填入 API 密钥')
+  savingChannel.value = true
+  try {
+    const body = { name: channelForm.name, api_url: channelForm.api_url, models: channelForm.models, is_default: channelForm.is_default }
+    if (channelForm.api_key) body.api_key = channelForm.api_key
+    const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+    if (editingChannel.value) {
+      await fetch('/api/ai/channels/' + editingChannel.value.id, { method: 'PUT', headers, body: JSON.stringify(body) })
+    } else {
+      body.api_key = channelForm.api_key
+      await fetch('/api/ai/channels', { method: 'POST', headers, body: JSON.stringify(body) })
+    }
+    showChannelDialog.value = false
+    await loadChannels()
+  } catch (e) { alert('保存失败: ' + e.message) }
+  finally { savingChannel.value = false }
+}
+
+async function deleteChannel(id) {
+  if (!confirm('确定删除此渠道？')) return
+  try {
+    await fetch('/api/ai/channels/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') } })
+    await loadChannels()
+  } catch (e) { alert('删除失败: ' + e.message) }
+}
+
+async function setDefaultChannel(id) {
+  try {
+    await fetch('/api/ai/channels/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') },
+      body: JSON.stringify({ is_default: true })
+    })
+    await loadChannels()
+  } catch (e) { alert('设置失败: ' + e.message) }
 }
 
 function addLog(type, msg) {
@@ -621,4 +774,30 @@ input:checked + .slider:before { transform: translateX(18px); }
 .log-time { color: #64748b; flex-shrink: 0; font-size: 11px; }
 .log-icon { flex-shrink: 0; }
 .log-msg { word-break: break-all; }
+
+.channel-list { display: flex; flex-direction: column; gap: 12px; }
+.channel-card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 18px; background: #fff; transition: all 0.2s; }
+.channel-card:hover { border-color: var(--primary, #1d4f73); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.channel-card.is-default { border-color: var(--primary, #1d4f73); background: linear-gradient(135deg, #f0f7ff 0%, #fff 100%); }
+.ch-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.ch-name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.ch-badge { background: var(--primary, #1d4f73); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+.ch-actions { display: flex; gap: 6px; }
+.ch-info { font-size: 13px; color: #64748b; display: flex; flex-direction: column; gap: 4px; }
+.ch-label { color: #94a3b8; min-width: 40px; display: inline-block; }
+.ch-models { display: flex; flex-wrap: wrap; gap: 4px; }
+.model-tag { background: #e2e8f0; color: #334155; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+.model-tag.removable { cursor: pointer; }
+.model-tag.removable:hover { background: #fecaca; color: #991b1b; }
+.ch-no-model { color: #94a3b8; font-style: italic; }
+.selected-models { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.btn-xs { padding: 3px 8px; font-size: 12px; }
+.btn-danger { color: #e74c3c; border-color: #e74c3c; }
+.btn-danger:hover { background: #e74c3c; color: #fff; }
+.model-check { margin-right: 4px; }
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+.modal-box { background: #fff; border-radius: 14px; padding: 28px; width: 600px; max-width: 95vw; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+.modal-box h3 { margin: 0 0 20px; font-size: 18px; }
+.checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.checkbox-label input { width: 16px; height: 16px; }
 </style>

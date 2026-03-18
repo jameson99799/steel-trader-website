@@ -248,6 +248,7 @@
     <InquiryModal 
       v-if="showInquiry" 
       :product-id="product.id"
+      :product-name="localizedValue(product, 'name')"
       @close="showInquiry = false"
     />
 

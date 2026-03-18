@@ -317,7 +317,18 @@ async function translateBatch(settings, items, targetLang, langName, overrideNot
         const numberedText = batch.map((item, idx) => `${idx + 1}. ${item.text}`).join('\n')
         const systemPrompt = `You are a professional translator for a steel products export company (GI GL PPGI PPGL steel coil, CRC, roofing sheets).
 Translate each numbered line from English to ${langName}.
-Rules: Keep product codes, model numbers, brand names, HTML tags, and technical specifications unchanged. Return ONLY a JSON object like {"1":"translation","2":"translation"}.${overrideNote}`
+Rules: Keep product codes, model numbers, brand names, HTML tags, and technical specifications unchanged. Return ONLY a JSON object like {"1":"translation","2":"translation"}.
+GLOSSARY (use these translations when applicable):
+- Galvalume / GL = 镀铝锌 (for zh/Chinese)
+- ALUZINC = 镀铝锌 (for zh/Chinese)
+- PPGI = 彩涂镀锌 (for zh/Chinese)
+- PPGL = 彩涂镀铝锌 (for zh/Chinese)
+- GI = 镀锌 (for zh/Chinese)
+- CRC = 冷轧卷 (for zh/Chinese)
+DO NOT TRANSLATE these terms — keep them exactly as-is:
+- "SHANDONG SUNSEA STEEL CO., LTD" (company name, never translate)
+- ASTM, JIS, EN, GB/T (standards)
+- Product model numbers and codes${overrideNote}`
 
         const MAX_RETRIES = 2
         let attempt = 0
@@ -399,7 +410,18 @@ CRITICAL RULES:
 - Keep product codes, model numbers, brand names, units (mm, kg, MPa, etc.) unchanged
 - Keep URLs, email addresses, and phone numbers unchanged
 - Return ONLY a JSON object like {"1":"translated html","2":"translated html",...}
-- Each value should be the complete translated HTML block${overrideNote}`
+- Each value should be the complete translated HTML block
+GLOSSARY (use these translations when applicable):
+- Galvalume / GL = 镀铝锌 (for zh/Chinese)
+- ALUZINC = 镀铝锌 (for zh/Chinese)
+- PPGI = 彩涂镀锌 (for zh/Chinese)
+- PPGL = 彩涂镀铝锌 (for zh/Chinese)
+- GI = 镀锌 (for zh/Chinese)
+- CRC = 冷轧卷 (for zh/Chinese)
+DO NOT TRANSLATE these terms — keep them exactly as-is:
+- "SHANDONG SUNSEA STEEL CO., LTD" (company name, never translate)
+- ASTM, JIS, EN, GB/T (standards)
+- Product model numbers and codes${overrideNote}`
 
                 let batchSuccess = false
                 for (let retry = 0; retry <= 2 && !batchSuccess; retry++) {
