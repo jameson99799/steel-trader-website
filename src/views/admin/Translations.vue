@@ -314,6 +314,8 @@ function abortTranslation() {
 const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero']
 const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域' }
 
+const failedItems = ref([])
+
 const startTranslate = async () => {
   if (!settings.api_key && !savedMsg.value) {
     const check = await api.getTranslationSettings().catch(() => null)
@@ -322,24 +324,59 @@ const startTranslate = async () => {
   if (!selectedLang.value) return alert('请选择目标语言')
   if (settings.api_key) await saveSettings()
   aborted = false
-
   const pages = selectedPage.value === 'all' ? [...allPages] : [selectedPage.value]
   await runPages(pages)
 }
 
 async function retryFailed() {
-  if (!failedPages.value.length) return
-  const pages = [...failedPages.value]
-  failedPages.value = []
-  addLog('info', `🔄 重试 ${pages.length} 个失败页面: ${pages.map(p => pageLabels[p] || p).join(', ')}`)
+  if (!failedItems.value.length) return
+  const items = [...failedItems.value]
+  failedItems.value = []
+  addLog('info', `🔄 重试 ${items.length} 个失败项目`)
   aborted = false
-  await runPages(pages)
+  await runItems(items)
 }
 
 async function runPages(pages) {
   translating.value = true
   translateResult.value = null
-  progressTotal.value = pages.length
+  failedPages.value = []
+  failedItems.value = []
+  progressTotal.value = 0
+  progressDone.value = 0
+  progressOk.value = 0
+  progressErrors.value = 0
+
+  addLog('info', `开始翻译 → 目标语言: ${selectedLang.value}，范围: ${pages.map(p => pageLabels[p] || p).join(', ')}`)
+
+  // Step 1: Collect all items across all pages
+  addLog('info', `📋 正在获取待翻译内容列表...`)
+  let allItemsList = []
+  try {
+    for (const page of pages) {
+      const items = await api.getTranslationItems(page)
+      allItemsList.push(...(items || []))
+    }
+    addLog('ok', `📋 共发现 ${allItemsList.length} 个待翻译项目`)
+  } catch (e) {
+    addLog('error', `❌ 获取翻译列表失败: ${e.message}`)
+    translating.value = false
+    return
+  }
+
+  if (allItemsList.length === 0) {
+    addLog('ok', `✔ 无需翻译（已全部翻译）`)
+    translating.value = false
+    return
+  }
+
+  // Step 2: Translate each item one by one
+  await runItems(allItemsList)
+}
+
+async function runItems(itemsList) {
+  translating.value = true
+  progressTotal.value = itemsList.length
   progressDone.value = 0
   progressOk.value = 0
   progressErrors.value = 0
@@ -347,65 +384,55 @@ async function runPages(pages) {
   const allErrors = []
   const newFailed = []
 
-  addLog('info', `开始翻译 → 目标语言: ${selectedLang.value}，范围: ${pages.map(p => pageLabels[p] || p).join(', ')}`)
+  const typeLabels = { product: '产品', news: '新闻', company: '公司', page_text: '页面', category: '分类', hero: 'Hero' }
 
-  for (const page of pages) {
+  for (const item of itemsList) {
     if (aborted) {
-      newFailed.push(page)
-      addLog('warn', `❤ 跳过 ${pageLabels[page] || page}（已停止）`)
+      newFailed.push(item)
+      addLog('warn', `⏭ 跳过「${item.itemName}」（已停止）`)
+      progressDone.value++
       continue
     }
 
-    addLog('info', `→ 正在翻译: ${pageLabels[page] || page}...`)
+    const typeLabel = typeLabels[item.type] || item.type
+    addLog('info', `→ 正在翻译: ${typeLabel}「${item.itemName}」(${item.fields.length} 个字段)...`)
 
     try {
-      const res = await api.runTranslationPage(selectedLang.value, page)
+      const res = await api.runTranslationOne(selectedLang.value, item.type, item.id)
       const ok = res.results?.length || 0
       const errs = res.errors?.length || 0
       progressOk.value += ok
       progressErrors.value += errs
 
       if (res.results) allResults.push(...res.results)
-      if (res.errors) allErrors.push(...res.errors.map(e => ({ ...e, page })))
-
-      // Show per-item success logs with names
-      const grouped = {}
-      for (const r of (res.results || [])) {
-        const name = r.itemName || r.type
-        if (!grouped[name]) grouped[name] = []
-        grouped[name].push(r.field)
-      }
-      for (const [name, fields] of Object.entries(grouped)) {
-        addLog('ok', `   ✅ "${name}" 翻译成功 (${fields.join(', ')})`)
-      }
-
-      // Show per-item error logs with names and error codes
-      for (const e of (res.errors || [])) {
-        const name = e.itemName || e.item || `Batch ${e.batch}`
-        const code = e.errorCode ? `[${e.errorCode}]` : ''
-        addLog('error', `   ❌ "${name}" 翻译失败 ${code}: ${e.error?.slice(0, 120)}`)
-      }
+      if (res.errors) allErrors.push(...res.errors)
 
       if (errs > 0) {
-        addLog('warn', `⚠️ ${pageLabels[page]}: ${ok} 成功, ${errs} 错误`)
-        newFailed.push(page)
+        for (const e of res.errors) {
+          const code = e.errorCode ? `[${e.errorCode}]` : ''
+          addLog('error', `   ❌「${item.itemName}」翻译失败 ${code}: ${e.error?.slice(0, 120)}`)
+        }
+        if (ok > 0) addLog('warn', `   ⚠️「${item.itemName}」: ${ok} 成功, ${errs} 错误`)
+        newFailed.push(item)
       } else if (ok === 0) {
-        addLog('ok', `✔ ${pageLabels[page]}: 无需翻译（已全部翻译）`)
+        addLog('ok', `   ✔「${item.itemName}」无需翻译`)
       } else {
-        addLog('ok', `✅ ${pageLabels[page]}: 共 ${ok} 项翻译成功`)
+        const fields = res.results.map(r => r.field).join(', ')
+        addLog('ok', `   ✅「${item.itemName}」翻译成功 (${fields})`)
       }
 
     } catch (e) {
       progressErrors.value++
-      allErrors.push({ page, error: e.message })
-      newFailed.push(page)
-      addLog('error', `❌ ${pageLabels[page]}: API错误 - ${e.message}`)
+      allErrors.push({ item: item.itemName, error: e.message, errorCode: 'ERR_API' })
+      newFailed.push(item)
+      addLog('error', `   ❌「${item.itemName}」API错误: ${e.message}`)
     }
 
     progressDone.value++
   }
 
-  failedPages.value = newFailed
+  failedItems.value = newFailed
+  failedPages.value = newFailed.length > 0 ? ['has_failures'] : []
   translateResult.value = {
     total: progressOk.value + progressErrors.value,
     translated: progressOk.value,
@@ -413,20 +440,21 @@ async function runPages(pages) {
     errors: allErrors
   }
 
-  // Final summary log
+  // Final summary
   addLog('info', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
   addLog(newFailed.length ? 'warn' : 'ok',
     `🏁 翻译完成: 成功 ${progressOk.value} 项, 错误 ${progressErrors.value} 项` +
-    (newFailed.length ? ` | 失败页面: ${newFailed.map(p => pageLabels[p] || p).join(', ')}` : ' | 全部成功！')
+    (newFailed.length ? ` | ${newFailed.length} 个项目失败` : ' | 全部成功！')
   )
   if (newFailed.length) {
-    addLog('info', `💡 提示: 点击「🔄 重试失败项」按钮可重新翻译失败的内容`)
+    addLog('info', `💡 点击「🔄 重试失败项」可重新翻译: ${newFailed.map(i => i.itemName).slice(0, 5).join(', ')}${newFailed.length > 5 ? '...' : ''}`)
   }
   addLog('info', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
 
   translating.value = false
   languages.value = await api.getLanguages()
 }
+
 
 const doSearch = async () => {
   if (!searchLang.value) return alert('请选择目标语言')

@@ -209,6 +209,8 @@ export const api = {
   fetchAIModels: (data) => request('/translation/models', { method: 'POST', body: JSON.stringify(data) }),
   runTranslation: (lang) => request(`/translation/run/${lang}`, { method: 'POST' }),
   runTranslationPage: (lang, page) => request('/translation/run', { method: 'POST', body: JSON.stringify({ lang, page }) }),
+  getTranslationItems: (page) => request('/translation/items', { method: 'POST', body: JSON.stringify({ page }) }),
+  runTranslationOne: (lang, content_type, content_id) => request('/translation/run-one', { method: 'POST', body: JSON.stringify({ lang, content_type, content_id }) }),
   getTranslationProgress: (lang) => request(`/translation/progress/${lang}`),
   searchUntranslated: (lang, q = '', page = 'all') => request(`/translation/search-untranslated/${lang}?q=${encodeURIComponent(q)}&page=${page}`),
   saveTranslationOverride: (data) => {

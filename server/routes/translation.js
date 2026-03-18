@@ -383,6 +383,64 @@ function upsertTranslation(lang, type, id, field, original, translated) {
     }
 }
 
+// ─── List items to translate (for progress display) ──────────────────────────
+
+router.post('/items', authMiddleware, (req, res) => {
+    const { page } = req.body
+    const pageNames = page && page !== 'all' ? [page] : Object.keys(PAGES)
+    const allItems = []
+    for (const p of pageNames) {
+        if (PAGES[p]) allItems.push(...PAGES[p]())
+    }
+    // Group by unique item (type + id) and return summary
+    const grouped = {}
+    for (const item of allItems) {
+        const key = `${item.type}_${item.id}`
+        if (!grouped[key]) {
+            grouped[key] = { type: item.type, id: item.id, itemName: item.itemName || key, fields: [], hasHtml: false }
+        }
+        grouped[key].fields.push(item.field)
+        if (item.long_html) grouped[key].hasHtml = true
+    }
+    res.json(Object.values(grouped))
+})
+
+// ─── Translate ONE item (type + id) to avoid timeout ─────────────────────────
+
+router.post('/run-one', authMiddleware, async (req, res) => {
+    const { lang: targetLang, content_type, content_id } = req.body
+    if (!targetLang || targetLang === 'en') return res.status(400).json({ error: 'Invalid target language' })
+
+    const langRow = getOne('SELECT * FROM languages WHERE code=?', [targetLang])
+    if (!langRow) return res.status(400).json({ error: `Language "${targetLang}" not found` })
+
+    const s = getOne('SELECT * FROM translation_settings WHERE id=1')
+    if (!s?.api_key) return res.status(400).json({ error: 'AI API key not configured' })
+
+    // Collect only items matching this content_type + content_id
+    if (!PAGES[content_type]) return res.status(400).json({ error: `Unknown content type: ${content_type}` })
+    const allItems = PAGES[content_type]()
+    const items = allItems.filter(i => String(i.id) === String(content_id))
+
+    if (items.length === 0) return res.json({ success: true, results: [], errors: [], total: 0, translated: 0 })
+
+    const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
+    const overrideNote = manualOverrides.length > 0
+        ? '\n\nUse these approved translations as reference:\n' +
+        manualOverrides.slice(0, 8).map(o => `"${o.original_text}" → "${o.translated_text}"`).join('\n')
+        : ''
+
+    try {
+        const { results, errors } = await translateBatch(s, items, targetLang, langRow.name, overrideNote)
+        if (results.length > 0) {
+            run('UPDATE languages SET ai_translated=1 WHERE code=?', [targetLang])
+        }
+        res.json({ success: true, results, errors, total: items.length, translated: results.length })
+    } catch (e) {
+        res.status(500).json({ error: e.message, errorCode: 'ERR_API' })
+    }
+})
+
 // ─── Run full translation (per page or all) ──────────────────────────────────
 
 router.post('/run', authMiddleware, async (req, res) => {
