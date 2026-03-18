@@ -12,7 +12,7 @@
             <span class="breadcrumb-current">{{ t('about') }}</span>
           </nav>
           <h1 class="page-title">{{ t('about') }}</h1>
-          <p class="page-subtitle">Learn more about our company and values</p>
+          <p class="page-subtitle">{{ t('learnMore') }}</p>
         </div>
       </div>
     </div>
@@ -72,8 +72,8 @@
         <!-- Statistics Section -->
         <div class="stats-section" v-if="hero">
           <div class="stats-header">
-            <h2>Our Achievements</h2>
-            <p>Numbers that speak for our excellence</p>
+            <h2>{{ t('ourAchievements') }}</h2>
+            <p>{{ t('achievementsDesc') }}</p>
           </div>
           <div class="stats-grid">
             <div class="stat-card" v-if="hero.stat1_num">
@@ -116,7 +116,7 @@
         <div class="advantages-section" v-if="advantages.length">
           <div class="section-header">
             <h2>{{ t('ourAdvantages') }}</h2>
-            <p>What makes us the preferred choice for LED solutions</p>
+            <p>{{ t('advantagesPageDesc') }}</p>
           </div>
           <div class="advantages-grid">
             <div class="advantage-card" v-for="(adv, index) in advantages" :key="index">
@@ -127,7 +127,7 @@
               </div>
               <div class="advantage-content">
                 <h3>{{ adv }}</h3>
-                <p>Professional quality and service excellence in every aspect of our business operations.</p>
+                <p>{{ t('advantagesPageDesc') }}</p>
               </div>
             </div>
           </div>
@@ -152,7 +152,7 @@
                 <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor">
                   <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
                 </svg>
-                View Products
+                {{ t('viewProducts') }}
               </router-link>
             </div>
           </div>

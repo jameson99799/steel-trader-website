@@ -27,7 +27,29 @@ const translations = {
     readyToStart: '准备好开始你的项目了吗？',
     getQuote: '联系我们的销售团队以获取最优惠的报价',
     companyLabel: '公司',
-    aboutUs: '关于我们'
+    aboutUs: '关于我们',
+    // Products page
+    featured: '精选', available: '个产品可选',
+    noProductsFound: '未找到产品', noProductsDesc: '请尝试调整搜索或筛选条件',
+    viewAllProducts: '查看所有产品',
+    // About page
+    learnMore: '了解更多关于我们的公司和价值观',
+    ourAchievements: '我们的成就', achievementsDesc: '数据证明我们的卓越',
+    advantagesPageDesc: '专业品质和服务卓越，涵盖业务运营的每个方面',
+    viewProducts: '查看产品',
+    // Contact page
+    businessHours: '工作时间', followUs: '关注我们',
+    monFri: '周一 - 周五', saturday: '周六', sunday: '周日', closed: '休息',
+    formIntro: '填写以下表单，我们将在24小时内回复您',
+    sending: '发送中...', privacyNote: '我们尊重您的隐私，不会与第三方分享您的信息',
+    ourLocation: '我们的位置',
+    // News page
+    newsUpdates: '新闻动态', newsSubtitle: '最新新闻、产品知识和公司动态',
+    readMore: '阅读更多 →', loadingNews: '加载新闻中...',
+    noNewsYet: '暂无新闻文章，请稍后再查看！',
+    prevPage: '← 上一页', nextPage: '下一页 →',
+    pageOf: '页',
+    language: '语言'
   },
   en: {
     home: 'Home', products: 'Products', about: 'About Us', contact: 'Contact',
@@ -52,7 +74,29 @@ const translations = {
     readyToStart: 'Ready to Start Your Project?',
     getQuote: 'Get in touch with our experts for professional solutions',
     companyLabel: 'Company',
-    aboutUs: 'About Us'
+    aboutUs: 'About Us',
+    // Products page
+    featured: 'Featured', available: 'products available',
+    noProductsFound: 'No products found', noProductsDesc: 'Try adjusting your search or filter to find what you\'re looking for.',
+    viewAllProducts: 'View All Products',
+    // About page
+    learnMore: 'Learn more about our company and values',
+    ourAchievements: 'Our Achievements', achievementsDesc: 'Numbers that speak for our excellence',
+    advantagesPageDesc: 'Professional quality and service excellence in every aspect of our business operations.',
+    viewProducts: 'View Products',
+    // Contact page
+    businessHours: 'Business Hours', followUs: 'Follow Us',
+    monFri: 'Monday - Friday', saturday: 'Saturday', sunday: 'Sunday', closed: 'Closed',
+    formIntro: 'Fill out the form below and we\'ll get back to you within 24 hours',
+    sending: 'Sending...', privacyNote: 'We respect your privacy and will never share your information with third parties.',
+    ourLocation: 'Our Location',
+    // News page
+    newsUpdates: 'News & Updates', newsSubtitle: 'Latest news, product knowledge and company updates',
+    readMore: 'Read more →', loadingNews: 'Loading news...',
+    noNewsYet: 'No news articles yet. Check back soon!',
+    prevPage: '← Prev', nextPage: 'Next →',
+    pageOf: 'Page',
+    language: 'Language'
   }
 }
 

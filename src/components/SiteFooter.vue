@@ -9,7 +9,7 @@
                 <img :src="company.logo" :alt="localizedValue(company, 'name')" />
               </div>
               <div class="brand-text">
-                <h3 class="brand-name">{{ localizedValue(company, 'name') || 'LED Trade' }}</h3>
+                <h3 class="brand-name">{{ localizedValue(company, 'name') }}</h3>
                 <p class="brand-tagline">{{ localizedValue(pageTexts, 'logo_subtitle') || pageTexts?.logo_subtitle || 'Professional LED Solutions' }}</p>
               </div>
             </div>
@@ -116,7 +116,7 @@
       <div class="container">
         <div class="footer-bottom-content">
           <p class="copyright">
-            &copy; {{ new Date().getFullYear() }} {{ localizedValue(company, 'name') || 'LED Trade' }}. All rights reserved.
+            &copy; {{ new Date().getFullYear() }} {{ localizedValue(company, 'name') }}. All rights reserved.
           </p>
           <div class="footer-nav">
             <a href="#" class="footer-nav-link">Privacy Policy</a>

@@ -11,7 +11,7 @@
             <span class="breadcrumb-current">{{ currentCategoryName || t('allProducts') }}</span>
           </div>
           <h1 class="page-title">{{ currentCategoryName || t('allProducts') }}</h1>
-          <p class="page-subtitle">{{ products.length }} {{ t('products') }} available</p>
+          <p class="page-subtitle">{{ products.length }} {{ t('available') }}</p>
         </div>
       </div>
     </div>
@@ -103,7 +103,7 @@
                     </div>
                   </div>
                   <div class="product-badge" v-if="product.is_featured">
-                    <span>Featured</span>
+                    <span>{{ t('featured') }}</span>
                   </div>
                 </div>
                 <div class="product-info">
@@ -128,10 +128,10 @@
                   <circle cx="11" cy="11" r="8"/>
                   <path d="M21 21l-4.35-4.35"/>
                 </svg>
-                <h3 class="no-products-title">No products found</h3>
-                <p class="no-products-desc">Try adjusting your search or filter to find what you're looking for.</p>
+                <h3 class="no-products-title">{{ t('noProductsFound') }}</h3>
+                <p class="no-products-desc">{{ t('noProductsDesc') }}</p>
                 <button @click="selectCategory(null)" class="btn btn-primary">
-                  View All Products
+                  {{ t('viewAllProducts') }}
                 </button>
               </div>
             </div>

@@ -6,10 +6,10 @@
           <nav class="breadcrumb">
             <router-link to="/" class="breadcrumb-link">{{ t('home') }}</router-link>
             <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
-            <span class="breadcrumb-current">News</span>
+            <span class="breadcrumb-current">{{ t('news') }}</span>
           </nav>
-          <h1 class="page-title">News & Updates</h1>
-          <p class="page-subtitle">Latest news, product knowledge and company updates</p>
+          <h1 class="page-title">{{ t('newsUpdates') }}</h1>
+          <p class="page-subtitle">{{ t('newsSubtitle') }}</p>
         </div>
       </div>
     </div>
@@ -18,10 +18,10 @@
       <div class="container">
         <div v-if="loading" class="loading-state">
           <div class="spinner"></div>
-          <p>Loading news...</p>
+          <p>{{ t('loadingNews') }}</p>
         </div>
         <div v-else-if="news.length === 0" class="empty-state">
-          <p>No news articles yet. Check back soon!</p>
+          <p>{{ t('noNewsYet') }}</p>
         </div>
         <div v-else class="news-grid">
           <article v-for="item in news" :key="item.id" class="news-card" @click="goToArticle(item)">
@@ -36,7 +36,7 @@
               <p class="card-summary" v-if="localizedValue(item, 'summary')">{{ localizedValue(item, 'summary') }}</p>
               <div class="card-meta">
                 <span class="card-date">{{ formatDate(item.created_at) }}</span>
-                <span class="read-more">Read more →</span>
+                <span class="read-more">{{ t('readMore') }}</span>
               </div>
             </div>
           </article>
@@ -44,9 +44,9 @@
 
         <!-- Pagination -->
         <div class="pagination" v-if="total > limit">
-          <button class="page-btn" :disabled="page <= 1" @click="changePage(page - 1)">← Prev</button>
-          <span class="page-info">Page {{ page }} / {{ Math.ceil(total / limit) }}</span>
-          <button class="page-btn" :disabled="page >= Math.ceil(total / limit)" @click="changePage(page + 1)">Next →</button>
+          <button class="page-btn" :disabled="page <= 1" @click="changePage(page - 1)">{{ t('prevPage') }}</button>
+          <span class="page-info">{{ t('pageOf') }} {{ page }} / {{ Math.ceil(total / limit) }}</span>
+          <button class="page-btn" :disabled="page >= Math.ceil(total / limit)" @click="changePage(page + 1)">{{ t('nextPage') }}</button>
         </div>
       </div>
     </div>

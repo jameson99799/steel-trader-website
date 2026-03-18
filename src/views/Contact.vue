@@ -93,26 +93,26 @@
               </div>
 
               <div class="business-hours">
-                <h4>Business Hours</h4>
+                <h4>{{ t('businessHours') }}</h4>
                 <div class="hours-list">
                   <div class="hours-item">
-                    <span>Monday - Friday</span>
+                    <span>{{ t('monFri') }}</span>
                     <span>9:00 AM - 6:00 PM</span>
                   </div>
                   <div class="hours-item">
-                    <span>Saturday</span>
+                    <span>{{ t('saturday') }}</span>
                     <span>9:00 AM - 12:00 PM</span>
                   </div>
                   <div class="hours-item">
-                    <span>Sunday</span>
-                    <span>Closed</span>
+                    <span>{{ t('sunday') }}</span>
+                    <span>{{ t('closed') }}</span>
                   </div>
                 </div>
               </div>
 
               <!-- Social Media Links -->
               <div class="social-links" v-if="company?.facebook || company?.linkedin || company?.instagram || company?.tiktok || company?.twitter || company?.youtube">
-                <h4>Follow Us</h4>
+                <h4>{{ t('followUs') }}</h4>
                 <div class="social-icons">
                   <a v-if="company.facebook" :href="company.facebook" target="_blank" class="social-icon" title="Facebook">
                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
@@ -143,7 +143,7 @@
             <div class="form-card">
               <div class="form-header">
                 <h3>{{ t('sendInquiry') }}</h3>
-                <p>Fill out the form below and we'll get back to you within 24 hours</p>
+                <p>{{ t('formIntro') }}</p>
               </div>
               
               <form @submit.prevent="handleSubmit" class="contact-form">
@@ -187,13 +187,13 @@
                     <svg v-else class="btn-icon" viewBox="0 0 20 20" fill="currentColor">
                       <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
                     </svg>
-                    {{ loading ? 'Sending...' : t('submit') }}
+                    {{ loading ? t('sending') : t('submit') }}
                   </button>
                   <p class="form-note">
                     <svg class="note-icon" viewBox="0 0 20 20" fill="currentColor">
                       <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
                     </svg>
-                    We respect your privacy and will never share your information with third parties.
+                    {{ t('privacyNote') }}
                   </p>
                 </div>
               </form>
@@ -212,7 +212,7 @@
           <svg viewBox="0 0 24 24" fill="currentColor" class="map-pin-icon">
             <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
           </svg>
-          <h3>Our Location</h3>
+          <h3>{{ t('ourLocation') }}</h3>
         </div>
         <div class="map-embed-wrap" v-if="company?.map_embed_url">
           <iframe
