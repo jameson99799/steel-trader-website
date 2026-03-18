@@ -541,6 +541,157 @@ router.post('/items', authMiddleware, (req, res) => {
     res.json(Object.values(grouped))
 })
 
+// ─── Translate BULK items — aggregates ALL fields across multiple items for max token efficiency ──
+
+router.post('/run-bulk', authMiddleware, async (req, res) => {
+    const { lang: targetLang, items: requestedItems } = req.body
+    // items = [{type:'product', id:1}, {type:'news', id:5}, ...]
+    if (!targetLang || targetLang === 'en') return res.status(400).json({ error: 'Invalid target language' })
+    if (!requestedItems || !requestedItems.length) return res.status(400).json({ error: 'No items' })
+
+    const langRow = getOne('SELECT * FROM languages WHERE code=?', [targetLang])
+    if (!langRow) return res.status(400).json({ error: 'Language not found' })
+
+    const s = getOne('SELECT * FROM translation_settings WHERE id=1')
+    if (!s?.api_key && !getOne('SELECT api_key FROM ai_channels WHERE is_default = 1')?.api_key) {
+        return res.status(400).json({ error: 'AI API key not configured' })
+    }
+
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', hero: 'hero' }
+    const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
+    const overrideNote = manualOverrides.length > 0
+        ? '\n\nUse these approved translations as reference:\n' +
+        manualOverrides.slice(0, 8).map(o => `"${o.original_text}" → "${o.translated_text}"`).join('\n')
+        : ''
+
+    // Collect ALL fields from ALL requested items into one big list
+    let allShortItems = []
+    let allLongItems = []
+    const itemMeta = [] // Track which item each field belongs to for progress reporting
+
+    for (const ri of requestedItems) {
+        const pageKey = TYPE_TO_PAGE[ri.type] || ri.type
+        if (!PAGES[pageKey]) continue
+        const pageItems = PAGES[pageKey]().filter(i => String(i.id) === String(ri.id))
+        for (const item of pageItems) {
+            if (item.long_html) {
+                allLongItems.push({ ...item, _reqType: ri.type, _reqId: ri.id })
+            } else {
+                allShortItems.push({ ...item, _reqType: ri.type, _reqId: ri.id })
+            }
+        }
+    }
+
+    const enhanced = enhanceWithDefaultChannel(s)
+    const results = []
+    const errors = []
+
+    // ── Translate ALL short text fields in mega-batches ──
+    const BATCH = 25
+    for (let i = 0; i < allShortItems.length; i += BATCH) {
+        const batch = allShortItems.slice(i, i + BATCH)
+        const numberedText = batch.map((item, idx) => `${idx + 1}. ${item.text}`).join('\n')
+        const systemPrompt = `You are a professional translator for a steel products export company (GI GL PPGI PPGL steel coil, CRC, roofing sheets).
+Translate each numbered line from English to ${langRow.name}.
+Rules: Keep product codes, model numbers, brand names, HTML tags, and technical specifications unchanged. Return ONLY a JSON object like {"1":"translation","2":"translation"}.
+GLOSSARY (use these translations when applicable):
+- Galvalume / GL = 镀铝锌 (for zh/Chinese)
+- ALUZINC = 镀铝锌 (for zh/Chinese)
+- PPGI = 彩涂镀锌 (for zh/Chinese)
+- PPGL = 彩涂镀铝锌 (for zh/Chinese)
+- GI = 镀锌 (for zh/Chinese)
+- CRC = 冷轧卷 (for zh/Chinese)
+DO NOT TRANSLATE these items (keep original): "SHANDONG SUNSEA STEEL CO., LTD" (company name), standards (ASTM, JIS, EN, GB/T), product model numbers/codes.${overrideNote}`
+
+        const MAX_RETRIES = 2
+        let attempt = 0
+        let success = false
+        while (!success && attempt <= MAX_RETRIES) {
+            try {
+                const content = await callAI(enhanced, [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: numberedText }
+                ], 8000)
+                // Parse JSON from response
+                const jsonMatch = content.match(/\{[\s\S]*\}/)
+                if (!jsonMatch) {
+                    errors.push({ error: 'JSON parse error', errorCode: 'ERR_PARSE', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
+                    break
+                }
+                const translations = JSON.parse(jsonMatch[0])
+                for (let j = 0; j < batch.length; j++) {
+                    const item = batch[j]
+                    const translated = translations[String(j + 1)]
+                    if (!translated) {
+                        errors.push({ item: item.text.slice(0, 60), error: 'No translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
+                        continue
+                    }
+                    upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
+                    results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field, itemName: item.itemName })
+                }
+                success = true
+            } catch (e) {
+                attempt++
+                if (attempt > MAX_RETRIES) {
+                    errors.push({ error: e.message + ' (retried ' + MAX_RETRIES + 'x)', errorCode: 'ERR_API', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
+                }
+            }
+        }
+    }
+
+    // ── Translate long HTML items one by one (these are naturally large) ──
+    for (const item of allLongItems) {
+        try {
+            const { root, blocks } = extractBlockSegments(item.text)
+            if (!root || blocks.length === 0) continue
+
+            const BLOCK_BATCH = 15
+            const contextName = item.itemName ? `\nContext: This content is about "${item.itemName}".` : ''
+
+            for (let i = 0; i < blocks.length; i += BLOCK_BATCH) {
+                const batch = blocks.slice(i, i + BLOCK_BATCH)
+                const numberedText = batch.map((b, idx) => `${idx + 1}. ${b.innerHTML}`).join('\n')
+                let prevContext = ''
+                if (i > 0) {
+                    const recent = blocks.slice(Math.max(0, i - 3), i)
+                    prevContext = '\nPrevious translated content for context:\n' + recent.map(b => b.innerHTML).join('\n')
+                }
+                const blockPrompt = `You are translating HTML content for a steel products company website from English to ${langRow.name}.
+Translate each numbered HTML block. Preserve ALL HTML tags, attributes, CSS, and structure exactly. Only translate visible text content.
+Return ONLY a JSON object like {"1":"<translated html>","2":"<translated html>"}.
+GLOSSARY: Galvalume/GL=镀铝锌, ALUZINC=镀铝锌, PPGI=彩涂镀锌, PPGL=彩涂镀铝锌, GI=镀锌, CRC=冷轧卷 (for Chinese).
+DO NOT TRANSLATE: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T, model numbers.${contextName}${prevContext}${overrideNote}`
+                try {
+                    const aiContent = await callAI(enhanced, [
+                        { role: 'system', content: blockPrompt },
+                        { role: 'user', content: numberedText }
+                    ], 8000)
+                    const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
+                    if (jsonMatch) {
+                        const translations = JSON.parse(jsonMatch[0])
+                        for (let j = 0; j < batch.length; j++) {
+                            const translated = translations[String(j + 1)]
+                            if (translated) batch[j].set_innerHTML(translated)
+                        }
+                    }
+                } catch (e) {
+                    errors.push({ error: e.message, errorCode: 'ERR_BLOCK', itemName: item.itemName })
+                }
+            }
+            const translatedHtml = root.toString()
+            upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translatedHtml)
+            results.push({ type: item.type, field: item.field, itemName: item.itemName, original: '[HTML]', translated: '[HTML translated]' })
+        } catch (e) {
+            errors.push({ error: e.message, errorCode: 'ERR_HTML', itemName: item.itemName })
+        }
+    }
+
+    if (results.length > 0) {
+        run('UPDATE languages SET ai_translated=1 WHERE code=?', [targetLang])
+    }
+    res.json({ success: true, results, errors, total: allShortItems.length + allLongItems.length, translated: results.length })
+})
+
 // ─── Translate ONE item (type + id) to avoid timeout ─────────────────────────
 
 router.post('/run-one', authMiddleware, async (req, res) => {

@@ -469,7 +469,6 @@ function addLog(type, msg) {
   const now = new Date()
   const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
   logEntries.value.push({ type, msg, time })
-  // Auto-scroll to bottom
   setTimeout(() => {
     const el = logPanelRef.value?.querySelector('.log-body')
     if (el) el.scrollTop = el.scrollHeight
@@ -487,12 +486,7 @@ const pageLabels = { products: '产品', news: '新闻', company: '公司信息'
 const failedItems = ref([])
 
 const startTranslate = async () => {
-  if (!settings.api_key && !savedMsg.value) {
-    const check = await api.getTranslationSettings().catch(() => null)
-    if (!check?.api_key) return alert('请先填入并保存 API 密钥')
-  }
   if (!selectedLang.value) return alert('请选择目标语言')
-  if (settings.api_key) await saveSettings()
   aborted = false
   const pages = selectedPage.value === 'all' ? [...allPages] : [selectedPage.value]
   await runPages(pages)
@@ -519,7 +513,6 @@ async function runPages(pages) {
 
   addLog('info', `开始翻译 → 目标语言: ${selectedLang.value}，范围: ${pages.map(p => pageLabels[p] || p).join(', ')}`)
 
-  // Step 1: Collect all items across all pages
   addLog('info', `📋 正在获取待翻译内容列表...`)
   let allItemsList = []
   try {
@@ -540,7 +533,6 @@ async function runPages(pages) {
     return
   }
 
-  // Step 2: Translate each item one by one
   await runItems(allItemsList)
 }
 
@@ -555,32 +547,34 @@ async function runItems(itemsList) {
   const newFailed = []
 
   const CONCURRENCY = concurrency.value || 3
-  const typeLabels = { product: '产品', news: '新闻', company: '公司', page_text: '页面', category: '分类', hero: 'Hero' }
+  const BULK_SIZE = 5
 
-  addLog('info', `⚡ 并发翻译模式: ${CONCURRENCY} 个任务同时进行`)
+  addLog('info', `⚡ 批量翻译模式: 每次 ${BULK_SIZE} 个项目, ${CONCURRENCY} 路并发`)
 
-  // Shared queue index
   let queueIdx = 0
 
   async function worker() {
     while (queueIdx < itemsList.length) {
       if (aborted) break
-      const idx = queueIdx++
-      if (idx >= itemsList.length) break
-      const item = itemsList[idx]
+      const chunk = []
+      while (queueIdx < itemsList.length && chunk.length < BULK_SIZE) {
+        chunk.push(itemsList[queueIdx++])
+      }
+      if (chunk.length === 0) break
 
       if (aborted) {
-        newFailed.push(item)
-        addLog('warn', `⏭ 跳过「${item.itemName}」（已停止）`)
-        progressDone.value++
+        for (const item of chunk) { newFailed.push(item); progressDone.value++ }
+        addLog('warn', `⏭ 跳过 ${chunk.length} 个项目（已停止）`)
         continue
       }
 
-      const typeLabel = typeLabels[item.type] || item.type
-      addLog('info', `→ 正在翻译: ${typeLabel}「${item.itemName}」(${item.fields.length} 个字段)...`)
+      const names = chunk.map(c => c.itemName).join(', ')
+      const totalFields = chunk.reduce((s, c) => s + (c.fields?.length || 0), 0)
+      addLog('info', `→ 批量翻译 ${chunk.length} 个项目 (${totalFields} 个字段): ${names.slice(0, 120)}`)
 
       try {
-        const res = await api.runTranslationOne(selectedLang.value, item.type, item.id)
+        const bulkItems = chunk.map(c => ({ type: c.type, id: c.id }))
+        const res = await api.runTranslationBulk(selectedLang.value, bulkItems)
         const ok = res.results?.length || 0
         const errs = res.errors?.length || 0
         progressOk.value += ok
@@ -592,30 +586,29 @@ async function runItems(itemsList) {
         if (errs > 0) {
           for (const e of res.errors) {
             const code = e.errorCode ? `[${e.errorCode}]` : ''
-            addLog('error', `   ❌「${item.itemName}」翻译失败 ${code}: ${e.error?.slice(0, 120)}`)
+            addLog('error', `   ❌ ${e.itemName || ''} ${code}: ${(e.error || '').slice(0, 120)}`)
           }
-          if (ok > 0) addLog('warn', `   ⚠️「${item.itemName}」: ${ok} 成功, ${errs} 错误`)
-          newFailed.push(item)
+          if (ok > 0) addLog('warn', `   ⚠️ 批量: ${ok} 成功, ${errs} 错误`)
+          for (const item of chunk) newFailed.push(item)
         } else if (ok === 0) {
-          addLog('ok', `   ✔「${item.itemName}」无需翻译`)
+          addLog('ok', `   ✔ 批量 ${chunk.length} 个项目无需翻译`)
         } else {
-          const fields = res.results.map(r => r.field).join(', ')
-          addLog('ok', `   ✅「${item.itemName}」翻译成功 (${fields})`)
+          addLog('ok', `   ✅ 批量翻译成功: ${ok} 个字段`)
         }
-
       } catch (e) {
-        progressErrors.value++
-        allErrors.push({ item: item.itemName, error: e.message, errorCode: 'ERR_API' })
-        newFailed.push(item)
-        addLog('error', `   ❌「${item.itemName}」API错误: ${e.message}`)
+        progressErrors.value += chunk.length
+        for (const item of chunk) {
+          allErrors.push({ item: item.itemName, error: e.message, errorCode: 'ERR_API' })
+          newFailed.push(item)
+        }
+        addLog('error', `   ❌ 批量翻译失败: ${e.message}`)
       }
 
-      progressDone.value++
+      progressDone.value += chunk.length
     }
   }
 
-  // Launch concurrent workers
-  const workers = Array.from({ length: Math.min(CONCURRENCY, itemsList.length) }, () => worker())
+  const workers = Array.from({ length: Math.min(CONCURRENCY, Math.ceil(itemsList.length / BULK_SIZE)) }, () => worker())
   await Promise.all(workers)
 
   failedItems.value = newFailed
@@ -627,7 +620,6 @@ async function runItems(itemsList) {
     errors: allErrors
   }
 
-  // Final summary
   addLog('info', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
   addLog(newFailed.length ? 'warn' : 'ok',
     `🏁 翻译完成: 成功 ${progressOk.value} 项, 错误 ${progressErrors.value} 项` +
@@ -641,7 +633,6 @@ async function runItems(itemsList) {
   translating.value = false
   languages.value = await api.getLanguages()
 }
-
 
 const doSearch = async () => {
   if (!searchLang.value) return alert('请选择目标语言')
