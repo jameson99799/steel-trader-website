@@ -340,15 +340,25 @@ Rules: Keep product codes, model numbers, brand names, HTML tags, and technical 
             const segments = extractTextSegments(item.text)
             if (segments.length === 0) continue
 
-            const SEG_BATCH = 8
+            const SEG_BATCH = 15 // larger batches = better context coherence
             const translatedSegments = []
 
             for (let i = 0; i < segments.length; i += SEG_BATCH) {
                 const segBatch = segments.slice(i, i + SEG_BATCH)
                 const numberedText = segBatch.map((s, idx) => `${idx + 1}. ${s.text}`).join('\n')
-                const systemPrompt = `You are a professional translator for a steel products export company.
+
+                // Build context: product/article name + previous translations for coherence
+                const contextName = item.itemName ? `\nContext: This content is about "${item.itemName}".` : ''
+                let prevContext = ''
+                if (i > 0 && translatedSegments.length > 0) {
+                    const recent = translatedSegments.slice(-3).map(s => s.translated).join(' ')
+                    prevContext = `\nPrevious translated context (for coherence): "${recent.slice(0, 200)}"`
+                }
+
+                const systemPrompt = `You are a professional translator for a steel products export company (GI GL PPGI PPGL steel coil, CRC, roofing sheets, galvanized/galvalume products).${contextName}${prevContext}
 Translate each numbered line from English to ${langName}.
-Rules: Keep product codes, model numbers, brand names, HTML entities unchanged. Return ONLY a JSON object like {"1":"translation","2":"translation"}.`
+Rules: Keep product codes, model numbers, brand names, HTML entities, units (mm, kg, etc.), and technical specifications unchanged.
+Translate ALL lines completely. Return ONLY a JSON object like {"1":"translation","2":"translation",...}.${overrideNote}`
 
                 let segSuccess = false
                 for (let retry = 0; retry <= 2 && !segSuccess; retry++) {
