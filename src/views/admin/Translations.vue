@@ -44,6 +44,7 @@
                 </span>
                 <span v-else class="ch-no-model">未选择模型</span>
               </div>
+              <div v-if="ch.default_model"><span class="ch-label">默认:</span> <span class="model-tag" style="background:#dcfce7;color:#166534">{{ ch.default_model }}</span></div>
             </div>
           </div>
         </div>
@@ -81,6 +82,13 @@
             <span class="ch-label">已选模型：</span>
             <span v-for="m in channelForm.models" :key="m" class="model-tag removable" @click="removeModel(m)">{{ m }} ×</span>
           </div>
+        </div>
+        <div class="form-group" v-if="channelForm.models.length">
+          <label>默认翻译模型</label>
+          <select v-model="channelForm.default_model" class="form-control">
+            <option value="">自动选择（使用列表第一个）</option>
+            <option v-for="m in channelForm.models" :key="m" :value="m">{{ m }}</option>
+          </select>
         </div>
         <div class="form-group">
           <label class="checkbox-label">
@@ -263,7 +271,7 @@ const channelModelList = ref([])
 const fetchingChModels = ref(false)
 const savingChannel = ref(false)
 const channelForm = reactive({
-  name: '', api_url: 'https://api.openai.com/v1', api_key: '', models: [], is_default: false
+  name: '', api_url: 'https://api.openai.com/v1', api_key: '', models: [], is_default: false, default_model: ''
 })
 
 const languages = ref([])
@@ -367,12 +375,14 @@ function openChannelDialog(ch = null) {
     channelForm.api_key = ''
     channelForm.models = [...(ch.models || [])]
     channelForm.is_default = !!ch.is_default
+    channelForm.default_model = ch.default_model || ''
   } else {
     channelForm.name = ''
     channelForm.api_url = 'https://api.openai.com/v1'
     channelForm.api_key = ''
     channelForm.models = []
     channelForm.is_default = channels.value.length === 0
+    channelForm.default_model = ''
   }
   showChannelDialog.value = true
 }
@@ -421,7 +431,7 @@ async function saveChannel() {
   if (!editingChannel.value && !channelForm.api_key) return alert('请填入 API 密钥')
   savingChannel.value = true
   try {
-    const body = { name: channelForm.name, api_url: channelForm.api_url, models: channelForm.models, is_default: channelForm.is_default }
+    const body = { name: channelForm.name, api_url: channelForm.api_url, models: channelForm.models, is_default: channelForm.is_default, default_model: channelForm.default_model }
     if (channelForm.api_key) body.api_key = channelForm.api_key
     const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') }
     if (editingChannel.value) {

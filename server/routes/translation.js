@@ -7,6 +7,23 @@ import { parse as parseHTML } from 'node-html-parser'
 
 const router = Router()
 
+// Helper: override translation settings with default AI channel if available
+function enhanceWithDefaultChannel(settings) {
+    const ch = getOne('SELECT * FROM ai_channels WHERE is_default = 1')
+    if (!ch) return settings
+    const s = { ...settings }
+    // Use channel's API url and key if translation_settings has defaults or empty
+    if (ch.api_url) s.api_url = ch.api_url
+    if (ch.api_key) s.api_key = ch.api_key
+    // Use channel's default_model, or first model in list
+    if (ch.default_model) s.model_name = ch.default_model
+    else {
+        const models = JSON.parse(ch.models || '[]')
+        if (models.length > 0) s.model_name = models[0]
+    }
+    return s
+}
+
 // ─── Settings ────────────────────────────────────────────────────────────────
 
 router.get('/settings', (req, res) => {
@@ -534,7 +551,7 @@ router.post('/run-one', authMiddleware, async (req, res) => {
     if (!langRow) return res.status(400).json({ error: `Language "${targetLang}" not found` })
 
     const s = getOne('SELECT * FROM translation_settings WHERE id=1')
-    if (!s?.api_key) return res.status(400).json({ error: 'AI API key not configured' })
+    if (!s?.api_key && !getOne('SELECT api_key FROM ai_channels WHERE is_default = 1')?.api_key) return res.status(400).json({ error: 'AI API key not configured. Please add an AI channel in AI Translation settings.' })
 
     // Map singular type names to PAGES keys (product -> products, category -> categories, etc.)
     const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', hero: 'hero' }
@@ -552,7 +569,7 @@ router.post('/run-one', authMiddleware, async (req, res) => {
         : ''
 
     try {
-        const { results, errors } = await translateBatch(s, items, targetLang, langRow.name, overrideNote)
+        const { results, errors } = await translateBatch(enhanceWithDefaultChannel(s), items, targetLang, langRow.name, overrideNote)
         if (results.length > 0) {
             run('UPDATE languages SET ai_translated=1 WHERE code=?', [targetLang])
         }
@@ -590,7 +607,7 @@ router.post('/run', authMiddleware, async (req, res) => {
         manualOverrides.slice(0, 8).map(o => `"${o.original_text}" → "${o.translated_text}"`).join('\n')
         : ''
 
-    const { results, errors } = await translateBatch(s, items, targetLang, langRow.name, overrideNote)
+    const { results, errors } = await translateBatch(enhanceWithDefaultChannel(s), items, targetLang, langRow.name, overrideNote)
 
     if (results.length > 0) {
         run('UPDATE languages SET ai_translated=1 WHERE code=?', [targetLang])
@@ -673,7 +690,7 @@ router.post('/translate-item', authMiddleware, async (req, res) => {
     const allErrors = []
 
     for (const lang of langs) {
-        const { results, errors } = await translateBatch(s, items, lang.code, lang.name, '')
+        const { results, errors } = await translateBatch(enhanceWithDefaultChannel(s), items, lang.code, lang.name, '')
         allResults.push(...results.map(r => ({ ...r, lang: lang.code })))
         allErrors.push(...errors.map(e => ({ ...e, lang: lang.code })))
     }

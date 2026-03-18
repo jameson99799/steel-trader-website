@@ -120,6 +120,10 @@ async function initDb() {
     )
   `)
 
+
+  // Migration: add default_model to ai_channels
+  try { db.exec("ALTER TABLE ai_channels ADD COLUMN default_model TEXT DEFAULT ''") } catch (e) { }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS banners (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -59,37 +59,36 @@ function httpStream(urlStr, options = {}, body = null) {
 
 router.get('/channels', authMiddleware, (req, res) => {
     const channels = getAll('SELECT * FROM ai_channels ORDER BY is_default DESC, id ASC')
-    // Mask API keys
-    const masked = channels.map(c => ({
+    // Return channels with plaintext keys (private server) + parsed models
+    const parsed = channels.map(c => ({
         ...c,
-        api_key_display: c.api_key && c.api_key.length > 8
-            ? c.api_key.slice(0, 4) + '****' + c.api_key.slice(-4) : '****',
+        api_key_display: c.api_key || '',
         models: JSON.parse(c.models || '[]')
     }))
-    res.json(masked)
+    res.json(parsed)
 })
 
 router.post('/channels', authMiddleware, (req, res) => {
-    const { name, api_url, api_key, models, is_default } = req.body
+    const { name, api_url, api_key, models, is_default, default_model } = req.body
     if (!name || !api_url || !api_key) return res.status(400).json({ error: '名称、API URL 和 API Key 不能为空' })
     if (is_default) run('UPDATE ai_channels SET is_default = 0')
     const result = run(
-        'INSERT INTO ai_channels (name, api_url, api_key, models, is_default) VALUES (?, ?, ?, ?, ?)',
-        [name, api_url, api_key, JSON.stringify(models || []), is_default ? 1 : 0]
+        'INSERT INTO ai_channels (name, api_url, api_key, models, is_default, default_model) VALUES (?, ?, ?, ?, ?, ?)',
+        [name, api_url, api_key, JSON.stringify(models || []), is_default ? 1 : 0, default_model || '']
     )
     res.json({ id: result.lastInsertRowid, message: '创建成功' })
 })
 
 router.put('/channels/:id', authMiddleware, (req, res) => {
     const { id } = req.params
-    const { name, api_url, api_key, models, is_default } = req.body
+    const { name, api_url, api_key, models, is_default, default_model } = req.body
     const channel = getOne('SELECT * FROM ai_channels WHERE id = ?', [id])
     if (!channel) return res.status(404).json({ error: '渠道不存在' })
     const finalKey = (api_key && !api_key.includes('****')) ? api_key : channel.api_key
     if (is_default) run('UPDATE ai_channels SET is_default = 0')
     run(
-        'UPDATE ai_channels SET name=?, api_url=?, api_key=?, models=?, is_default=? WHERE id=?',
-        [name || channel.name, api_url || channel.api_url, finalKey, JSON.stringify(models || JSON.parse(channel.models || '[]')), is_default ? 1 : 0, id]
+        'UPDATE ai_channels SET name=?, api_url=?, api_key=?, models=?, is_default=?, default_model=? WHERE id=?',
+        [name || channel.name, api_url || channel.api_url, finalKey, JSON.stringify(models || JSON.parse(channel.models || '[]')), is_default ? 1 : 0, default_model || channel.default_model || '', id]
     )
     res.json({ message: '更新成功' })
 })
