@@ -12,7 +12,7 @@
             <span class="breadcrumb-current">{{ t('contactUs') }}</span>
           </nav>
           <h1 class="page-title">{{ t('contactUs') }}</h1>
-           <p class="page-subtitle">{{ pageTexts?.contact_page_subtitle || (t('getInTouch') + " - We're here to help with your LED requirements") }}</p>
+           <p class="page-subtitle">{{ localizedValue(pageTexts, 'contact_page_subtitle') || t('getInTouch') }}</p>
         </div>
       </div>
     </div>
@@ -26,7 +26,7 @@
             <div class="info-card">
               <div class="info-header">
                 <h3>{{ localizedValue(company, 'name') }}</h3>
-                <p class="company-tagline">{{ pageTexts?.contact_tagline || 'Professional LED Solutions Provider' }}</p>
+                <p class="company-tagline">{{ localizedValue(pageTexts, 'contact_tagline') }}</p>
               </div>
               
               <div class="info-content">
@@ -176,7 +176,7 @@
                 
                 <div class="form-group">
                   <label>{{ t('message') }}</label>
-                  <textarea v-model="form.message" class="form-control" rows="6" :placeholder="pageTexts?.contact_form_desc || 'Tell us about your LED requirements, project details, quantity needed, etc.'"></textarea>
+                  <textarea v-model="form.message" class="form-control" rows="6" :placeholder="localizedValue(pageTexts, 'contact_form_desc') || t('placeholderMessage')"></textarea>
                 </div>
                 
                 <div class="form-actions">

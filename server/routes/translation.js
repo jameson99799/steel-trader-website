@@ -3,6 +3,7 @@ import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import https from 'https'
 import http from 'http'
+import { parse as parseHTML } from 'node-html-parser'
 
 const router = Router()
 
@@ -102,56 +103,81 @@ router.post('/models', authMiddleware, async (req, res) => {
     }
 })
 
-// ─── HTML segmented translation helper ───────────────────────────────────────
-// Split long HTML into translatable text segments while preserving structure
+// ─── Block-level HTML translation (inspired by read-frog / immersive-translate) ─
+// Translates complete block elements (p, h1-h6, li, td, th, div) as units,
+// preserving inline HTML tags. Produces coherent, selectable text.
 
-function extractTextSegments(html) {
-    if (!html || typeof html !== 'string') return []
-    const segments = []
-    const parts = html.split(/(<[^>]+>)/)
-    let insideSkip = false // true when inside <style> or <script>
-    let insideReplaceTip = false // true when inside .replace-tip elements
-    for (let i = 0; i < parts.length; i++) {
-        const part = parts[i]
-        if (!part) continue
-        if (part.startsWith('<')) {
-            // Check for opening/closing of style/script tags
-            const lower = part.toLowerCase()
-            if (/<style[\s>]/i.test(lower) || /<script[\s>]/i.test(lower)) {
-                insideSkip = true
-            } else if (/<\/style>/i.test(lower) || /<\/script>/i.test(lower)) {
-                insideSkip = false
+const BLOCK_TAGS = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'td', 'th', 'dt', 'dd', 'figcaption', 'blockquote', 'caption'])
+const SKIP_TAGS = new Set(['style', 'script', 'code', 'pre', 'svg', 'math', 'noscript'])
+
+function extractBlockSegments(html) {
+    if (!html || typeof html !== 'string') return { root: null, blocks: [] }
+    
+    let bodyHtml = html
+    const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)
+    if (bodyMatch) bodyHtml = bodyMatch[1]
+    
+    const root = parseHTML(bodyHtml, { comment: false })
+    const blocks = []
+    let blockId = 0
+    
+    function walk(node) {
+        if (!node || node.nodeType === 3) return
+        const tag = (node.tagName || '').toLowerCase()
+        
+        if (SKIP_TAGS.has(tag)) return
+        if (node.classList && node.classList.contains('replace-tip')) return
+        
+        // Block element with text -> translate as a unit
+        if (BLOCK_TAGS.has(tag)) {
+            const textContent = node.textContent.trim()
+            if (textContent.length > 1 && /[a-zA-Z]/.test(textContent)) {
+                blocks.push({ id: blockId++, tag, innerHTML: node.innerHTML, node })
+                return
             }
-            // Skip .replace-tip elements (image placeholder hints)
-            if (/class\s*=\s*["'][^"']*replace-tip/i.test(part)) {
-                insideReplaceTip = true
-            } else if (insideReplaceTip && /^<\//i.test(part)) {
-                insideReplaceTip = false
-            }
-            continue // skip tag itself
         }
-        if (insideSkip || insideReplaceTip) continue // skip content inside style/script/replace-tip
-        const text = part.trim()
-        if (text.length > 1
-            && !/^[\s\d.,;:!?@#$%^&*()\-+=\[\]{}|\\/\<\>'"~`]+$/.test(text)
-            && !text.includes('{')   // skip CSS-like content
-            && !text.includes('var(') // skip CSS variables
-            && !/^[\s]*[.#@:]/.test(text) // skip CSS selectors
-        ) {
-            segments.push({ index: i, text })
+        
+        // Non-block elements: div, span, a -> only if no block children
+        if (['div', 'section', 'article', 'span', 'a', 'label', 'strong', 'em', 'b', 'i'].includes(tag)) {
+            const children = node.childNodes || []
+            let hasBlockChildren = false
+            for (const child of children) {
+                if (child.nodeType === 1) {
+                    const ct = (child.tagName || '').toLowerCase()
+                    if (BLOCK_TAGS.has(ct) || ['div', 'section', 'ul', 'ol', 'table', 'article'].includes(ct)) {
+                        hasBlockChildren = true
+                        break
+                    }
+                }
+            }
+            if (!hasBlockChildren) {
+                const textContent = node.textContent.trim()
+                if (textContent.length > 2 && /[a-zA-Z]/.test(textContent)
+                    && !textContent.includes('{') && !textContent.includes('var(')) {
+                    blocks.push({ id: blockId++, tag, innerHTML: node.innerHTML, node })
+                    return
+                }
+            }
+        }
+        
+        for (const child of (node.childNodes || [])) {
+            if (child.nodeType === 1) walk(child)
         }
     }
-    return segments
+    
+    walk(root)
+    return { root, blocks }
 }
 
-function reassembleHtml(html, translations) {
-    const parts = html.split(/(<[^>]+>)/)
-    for (const t of translations) {
-        if (t.index < parts.length && t.translated) {
-            parts[t.index] = t.translated
+function reassembleFromBlocks(html, root, translatedBlocks) {
+    for (const block of translatedBlocks) {
+        if (block.translated && block.node) {
+            block.node.set_content(block.translated)
         }
     }
-    return parts.join('')
+    const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)
+    if (bodyMatch) return html.replace(bodyMatch[1], root.toString())
+    return root.toString()
 }
 
 // ─── Content collector — EXPANDED to cover ALL site content ──────────────────
@@ -341,74 +367,83 @@ Rules: Keep product codes, model numbers, brand names, HTML tags, and technical 
         }
     }
 
-    // ── Translate long HTML (detail_content, news content) ──
+    // ── Translate long HTML using block-level DOM parsing ──
     for (const item of longItems) {
         try {
-            const segments = extractTextSegments(item.text)
-            if (segments.length === 0) continue
+            const { root, blocks } = extractBlockSegments(item.text)
+            if (!root || blocks.length === 0) continue
 
-            const SEG_BATCH = 15 // larger batches = better context coherence
-            const translatedSegments = []
-
-            for (let i = 0; i < segments.length; i += SEG_BATCH) {
-                const segBatch = segments.slice(i, i + SEG_BATCH)
-                const numberedText = segBatch.map((s, idx) => `${idx + 1}. ${s.text}`).join('\n')
-
-                // Build context: product/article name + previous translations for coherence
-                const contextName = item.itemName ? `\nContext: This content is about "${item.itemName}".` : ''
+            const BLOCK_BATCH = 8 // blocks per API call
+            const contextName = item.itemName ? `\nContext: This content is about "${item.itemName}".` : ''
+            
+            for (let i = 0; i < blocks.length; i += BLOCK_BATCH) {
+                const batch = blocks.slice(i, i + BLOCK_BATCH)
+                // Send full innerHTML of each block for translation
+                const numberedText = batch.map((b, idx) => `${idx + 1}. ${b.innerHTML}`).join('\n')
+                
+                // Build previous context for coherence
                 let prevContext = ''
-                if (i > 0 && translatedSegments.length > 0) {
-                    const recent = translatedSegments.slice(-3).map(s => s.translated).join(' ')
-                    prevContext = `\nPrevious translated context (for coherence): "${recent.slice(0, 200)}"`
+                if (i > 0) {
+                    const recent = blocks.slice(Math.max(0, i - 3), i)
+                        .filter(b => b.translated)
+                        .map(b => b.translated.replace(/<[^>]+>/g, ''))
+                        .join(' ')
+                    if (recent) prevContext = `\nPrevious translated context (for coherence): "${recent.slice(0, 200)}"`
                 }
 
                 const systemPrompt = `You are a professional translator for a steel products export company (GI GL PPGI PPGL steel coil, CRC, roofing sheets, galvanized/galvalume products).${contextName}${prevContext}
-Translate each numbered line from English to ${langName}.
-Rules: Keep product codes, model numbers, brand names, HTML entities, units (mm, kg, etc.), and technical specifications unchanged.
-Translate ALL lines completely. Return ONLY a JSON object like {"1":"translation","2":"translation",...}.${overrideNote}`
+Translate each numbered HTML block from English to ${langName}.
+CRITICAL RULES:
+- Translate ALL text content completely, do NOT leave any English text untranslated
+- Preserve ALL HTML tags (<strong>, <a>, <em>, <span>, <br>, etc.) exactly as they are
+- Keep product codes, model numbers, brand names, units (mm, kg, MPa, etc.) unchanged
+- Keep URLs, email addresses, and phone numbers unchanged
+- Return ONLY a JSON object like {"1":"translated html","2":"translated html",...}
+- Each value should be the complete translated HTML block${overrideNote}`
 
-                let segSuccess = false
-                for (let retry = 0; retry <= 2 && !segSuccess; retry++) {
+                let batchSuccess = false
+                for (let retry = 0; retry <= 2 && !batchSuccess; retry++) {
                     try {
-                        const content = await callAI(settings, [
+                        const aiContent = await callAI(settings, [
                             { role: 'system', content: systemPrompt },
                             { role: 'user', content: numberedText }
                         ], 4000)
 
                         let translations = {}
-                        const jsonMatch = content.match(/\{[\s\S]*\}/)
+                        const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
                         if (jsonMatch) {
-                            try { translations = JSON.parse(jsonMatch[0]); segSuccess = true } catch (e) {
+                            try { translations = JSON.parse(jsonMatch[0]); batchSuccess = true } catch (e) {
                                 if (retry >= 2) {
-                                    errors.push({ item: `${item.type}/${item.field} seg${i}`, error: 'JSON parse error (retried 2x): ' + content.slice(0, 300), errorCode: 'ERR_PARSE', itemName: item.itemName })
+                                    errors.push({ item: `${item.type}/${item.field} block${i}`, error: 'JSON parse error (retried 2x): ' + aiContent.slice(0, 300), errorCode: 'ERR_PARSE', itemName: item.itemName })
                                 }
                                 continue
                             }
                         } else {
                             if (retry >= 2) {
-                                errors.push({ item: `${item.type}/${item.field} seg${i}`, error: 'No JSON (retried 2x): ' + content.slice(0, 300), errorCode: 'ERR_NO_JSON', itemName: item.itemName })
+                                errors.push({ item: `${item.type}/${item.field} block${i}`, error: 'No JSON (retried 2x): ' + aiContent.slice(0, 300), errorCode: 'ERR_NO_JSON', itemName: item.itemName })
                             }
                             continue
                         }
 
-                        for (let j = 0; j < segBatch.length; j++) {
+                        for (let j = 0; j < batch.length; j++) {
                             const translated = translations[String(j + 1)]
                             if (translated) {
-                                translatedSegments.push({ index: segBatch[j].index, translated })
+                                batch[j].translated = translated
                             }
                         }
                     } catch (e) {
                         if (retry >= 2) {
-                            errors.push({ item: `${item.type}/${item.field} seg${i}`, error: e.message + ' (retried 2x)', errorCode: 'ERR_API', itemName: item.itemName })
+                            errors.push({ item: `${item.type}/${item.field} block${i}`, error: e.message + ' (retried 2x)', errorCode: 'ERR_API', itemName: item.itemName })
                         }
                     }
                 }
             }
 
-            if (translatedSegments.length > 0) {
-                const translatedHtml = reassembleHtml(item.text, translatedSegments)
+            const translatedCount = blocks.filter(b => b.translated).length
+            if (translatedCount > 0) {
+                const translatedHtml = reassembleFromBlocks(item.text, root, blocks)
                 upsertTranslation(targetLang, item.type, item.id, item.field, '[HTML]', translatedHtml)
-                results.push({ original: `[HTML ${item.field}]`, translated: `${translatedSegments.length} segments`, type: item.type, field: item.field, itemName: item.itemName })
+                results.push({ original: `[HTML ${item.field}]`, translated: `${translatedCount}/${blocks.length} blocks`, type: item.type, field: item.field, itemName: item.itemName })
             }
         } catch (e) {
             errors.push({ item: `${item.type}/${item.field} id=${item.id}`, error: e.message, errorCode: 'ERR_API', itemName: item.itemName })

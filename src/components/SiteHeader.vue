@@ -68,7 +68,7 @@
             </div>
             <div class="logo-text">
               <h1 class="logo-title">{{ localizedValue(company, 'name') }}</h1>
-              <p class="logo-subtitle">{{ pageTexts?.logo_subtitle || 'Professional LED Solutions' }}</p>
+              <p class="logo-subtitle">{{ localizedValue(pageTexts, 'logo_subtitle') }}</p>
             </div>
           </router-link>
           

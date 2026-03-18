@@ -10,7 +10,7 @@
               </div>
               <div class="brand-text">
                 <h3 class="brand-name">{{ localizedValue(company, 'name') }}</h3>
-                <p class="brand-tagline">{{ localizedValue(pageTexts, 'logo_subtitle') || pageTexts?.logo_subtitle || 'Professional LED Solutions' }}</p>
+                <p class="brand-tagline">{{ localizedValue(pageTexts, 'logo_subtitle') }}</p>
               </div>
             </div>
             <p class="brand-desc">

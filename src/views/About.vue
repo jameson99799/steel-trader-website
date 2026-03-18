@@ -28,7 +28,7 @@
               <div class="image-overlay">
                 <div class="overlay-content">
                   <h3>{{ localizedValue(company, 'name') }}</h3>
-                  <p>{{ pageTexts?.about_overlay_text || 'Professional LED Solutions' }}</p>
+                  <p>{{ localizedValue(pageTexts, 'about_overlay_text') }}</p>
                 </div>
               </div>
             </div>

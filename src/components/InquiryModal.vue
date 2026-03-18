@@ -140,12 +140,9 @@ const loading = ref(false)
 const pageTexts = ref(null)
 
 const inquirySubtitle = computed(() => {
-  if (!pageTexts.value) return 'Get a quote for your LED requirements'
-  const isEn = lang.value === 'en'
-  const txt = isEn
-    ? (pageTexts.value.inquiry_subtitle_en || pageTexts.value.inquiry_subtitle)
-    : (pageTexts.value.inquiry_subtitle)
-  return txt || 'Get a quote for your LED requirements'
+  if (!pageTexts.value) return t('placeholderMessage')
+  const txt = localizedValue(pageTexts.value, 'inquiry_subtitle')
+  return txt || t('placeholderMessage')
 })
 
 onMounted(async () => {

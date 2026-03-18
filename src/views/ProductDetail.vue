@@ -174,16 +174,7 @@
             </svg>
             <h2>{{ t('productDetails') }}</h2>
           </div>
-          <div class="detail-content">
-            <iframe
-              ref="detailIframe"
-              class="detail-iframe"
-              :srcdoc="iframeContent"
-              frameborder="0"
-              scrolling="no"
-              @load="resizeIframe"
-            ></iframe>
-          </div>
+          <div class="detail-content product-detail-html" v-html="sanitizedDetailContent"></div>
         </div>
 
         <!-- Product Categories Section -->
@@ -287,7 +278,6 @@ const company = ref(null)
 const pageTexts = ref(null)
 const lightboxImg = ref(null)
 const allCategories = ref([])
-const detailIframe = ref(null)
 
 // Grid: 3 cols with contact panel, 2 cols without
 const layoutColumns = computed(() =>
@@ -312,12 +302,11 @@ const specs = computed(() => {
 })
 
 // Build iframe srcdoc — isolates all product HTML styles from main page
-const iframeContent = computed(() => {
+const sanitizedDetailContent = computed(() => {
   const raw = localizedHtml(product.value, 'detail_content') || ''
   if (!raw) return ''
 
-  // ── Template variable substitution ──────────────────────────────────────
-  // Replaces {{variable}} placeholders with real company contact info
+  // Template variable substitution
   const co = company.value || {}
   const email       = co.email || ''
   const phone       = co.phone || ''
@@ -333,65 +322,42 @@ const iframeContent = computed(() => {
     .replace(/\{\{whatsapp_raw\}\}/g,   whatsappRaw)
     .replace(/\{\{whatsapp_link\}\}/g,  whatsappLink)
     .replace(/\{\{company_name\}\}/g,   companyName)
-  // ────────────────────────────────────────────────────────────────────────
 
-  // Strip <script> tags for security, but keep <style>
+  // Strip <script> tags for security
   html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+  
+  // Extract <style> tags and scope them to .product-detail-html
+  html = html.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (match, css) => {
+    // Prefix all CSS rules with .product-detail-html
+    const scoped = css.replace(/([^{}]+)\{/g, (m, selector) => {
+      const trimmed = selector.trim()
+      if (!trimmed || trimmed.startsWith('@') || trimmed.startsWith('from') || trimmed.startsWith('to') || /^\d+%/.test(trimmed)) return m
+      const scopedSelectors = trimmed.split(',').map(s => {
+        s = s.trim()
+        if (s.startsWith('.product-detail-html') || s === 'body' || s === 'html' || s === '*') return s
+        return '.product-detail-html ' + s
+      }).join(', ')
+      return scopedSelectors + ' {'
+    })
+    return '<style>' + scoped + '</style>'
+  })
+  
+  // Strip <html>, <head>, <body> wrappers — we just want the content
+  html = html.replace(/<!DOCTYPE[^>]*>/gi, '')
+  html = html.replace(/<html[^>]*>/gi, '').replace(/<\/html>/gi, '')
+  html = html.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, (match) => {
+    // Keep <style> tags from head
+    const styles = match.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || []
+    return styles.join('')
+  })
+  html = html.replace(/<body[^>]*>/gi, '').replace(/<\/body>/gi, '')
+  html = html.replace(/<meta[^>]*>/gi, '')
 
-  // Anchor-click handler: intercepts #id links to scroll the parent page
-  const anchorScript = `<script>
-    document.addEventListener('click', function(e) {
-      var a = e.target.closest('a[href^="#"]');
-      if (!a) return;
-      e.preventDefault();
-      var id = a.getAttribute('href').slice(1);
-      var target = document.getElementById(id) || document.querySelector('[name="' + id + '"]');
-      if (target) {
-        var rect = target.getBoundingClientRect();
-        var iframeRect = window.frameElement ? window.frameElement.getBoundingClientRect() : {top:0};
-        window.parent.scrollTo({ top: iframeRect.top + window.parent.scrollY + rect.top - 80, behavior: 'smooth' });
-      }
-    });
-  <\/script>`
-
-  // If it's a full HTML document, inject helper script before </body>
-  if (html.includes('<html') || html.includes('<body')) {
-    // Inject CSS to hide replace-tip + fix image overflow + consistent table styling
-    const fixCss = `<style>
-      .replace-tip{display:none!important}
-      body{overflow-x:hidden;box-sizing:border-box}
-      *,*::before,*::after{box-sizing:inherit}
-      img{max-width:100%!important;height:auto!important}
-      table{width:100%!important;border-collapse:collapse!important;margin:16px 0;table-layout:fixed}
-      table th,table td{border:1px solid #ddd!important;padding:8px 12px!important;word-wrap:break-word}
-      table th{background:#f5f5f5;font-weight:600}
-    </style>`
-    return html.replace(/<\/head>/i, fixCss + '</head>').replace(/<\/body>/i, anchorScript + '</body>')
-  }
-  // Otherwise wrap in a minimal HTML document
-  // Use :where() for default table styles so they DON'T override original inline/embedded styles
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;line-height:1.8;color:#333;font-size:16px;overflow-x:hidden;box-sizing:border-box}*,*::before,*::after{box-sizing:inherit}img{max-width:100%!important;height:auto!important;display:block;margin:12px auto;border-radius:6px}p{margin:0 0 12px}h1,h2,h3,h4{margin:20px 0 10px;font-weight:700}ul,ol{padding-left:24px;margin:8px 0}table{width:100%!important;border-collapse:collapse;margin:16px 0;table-layout:fixed}table th,table td{border:1px solid #ddd;padding:8px 12px;word-wrap:break-word}table th{background:#f5f5f5;font-weight:600}a{color:#1f4e79}.replace-tip{display:none!important}</style></head><body>${html}${anchorScript}</body></html>`
+  return html
 })
 
-function resizeIframe() {
-  const iframe = detailIframe.value
-  if (!iframe) return
-  try {
-    const doc = iframe.contentDocument || iframe.contentWindow?.document
-    if (doc) {
-      iframe.style.height = doc.documentElement.scrollHeight + 'px'
-      // Watch for images loading and resize again
-      const imgs = doc.querySelectorAll('img')
-      imgs.forEach(img => {
-        if (!img.complete) {
-          img.addEventListener('load', () => {
-            iframe.style.height = doc.documentElement.scrollHeight + 'px'
-          })
-        }
-      })
-    }
-  } catch (e) { /* cross-origin error won't happen with srcdoc */ }
-}
+
+
 
 const currentImageIndex = computed(() => {
   return images.value.indexOf(currentImage.value)
