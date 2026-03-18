@@ -145,9 +145,10 @@
 
           <!-- Error logs -->
           <div v-if="translateResult.errors?.length" class="error-log">
-            <h4>⚠️ 错误日志</h4>
+            <h4>⚠️ 错误日志 ({{ translateResult.errors.length }} 个)</h4>
             <div v-for="(e, i) in translateResult.errors" :key="i" class="error-row">
-              <code>{{ e.batch ? `Batch ${e.batch}` : e.item || e.page }}</code>: {{ e.error }}
+              <code>{{ e.errorCode || 'ERR' }}</code>
+              <strong>{{ e.itemName || e.item || e.page || `Batch ${e.batch}` }}</strong>: {{ e.error }}
             </div>
           </div>
         </div>
@@ -367,21 +368,31 @@ async function runPages(pages) {
       if (res.results) allResults.push(...res.results)
       if (res.errors) allErrors.push(...res.errors.map(e => ({ ...e, page })))
 
+      // Show per-item success logs with names
+      const grouped = {}
+      for (const r of (res.results || [])) {
+        const name = r.itemName || r.type
+        if (!grouped[name]) grouped[name] = []
+        grouped[name].push(r.field)
+      }
+      for (const [name, fields] of Object.entries(grouped)) {
+        addLog('ok', `   ✅ "${name}" 翻译成功 (${fields.join(', ')})`)
+      }
+
+      // Show per-item error logs with names and error codes
+      for (const e of (res.errors || [])) {
+        const name = e.itemName || e.item || `Batch ${e.batch}`
+        const code = e.errorCode ? `[${e.errorCode}]` : ''
+        addLog('error', `   ❌ "${name}" 翻译失败 ${code}: ${e.error?.slice(0, 120)}`)
+      }
+
       if (errs > 0) {
         addLog('warn', `⚠️ ${pageLabels[page]}: ${ok} 成功, ${errs} 错误`)
         newFailed.push(page)
       } else if (ok === 0) {
         addLog('ok', `✔ ${pageLabels[page]}: 无需翻译（已全部翻译）`)
       } else {
-        addLog('ok', `✅ ${pageLabels[page]}: ${ok} 项翻译成功`)
-      }
-
-      // Show a sample of translations in the log
-      for (const r of (res.results || []).slice(0, 3)) {
-        addLog('ok', `   ${r.type}/${r.field}: "${(r.original || '').slice(0, 30)}" → "${(r.translated || '').slice(0, 40)}"`)
-      }
-      if ((res.results?.length || 0) > 3) {
-        addLog('info', `   ... 另外 ${res.results.length - 3} 项`)
+        addLog('ok', `✅ ${pageLabels[page]}: 共 ${ok} 项翻译成功`)
       }
 
     } catch (e) {
@@ -402,10 +413,16 @@ async function runPages(pages) {
     errors: allErrors
   }
 
+  // Final summary log
+  addLog('info', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
   addLog(newFailed.length ? 'warn' : 'ok',
-    `翻译完成: ${progressOk.value} 成功, ${progressErrors.value} 错误` +
-    (newFailed.length ? ` — 可点击“重试失败项”按钮重新翻译` : '')
+    `🏁 翻译完成: 成功 ${progressOk.value} 项, 错误 ${progressErrors.value} 项` +
+    (newFailed.length ? ` | 失败页面: ${newFailed.map(p => pageLabels[p] || p).join(', ')}` : ' | 全部成功！')
   )
+  if (newFailed.length) {
+    addLog('info', `💡 提示: 点击「🔄 重试失败项」按钮可重新翻译失败的内容`)
+  }
+  addLog('info', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
 
   translating.value = false
   languages.value = await api.getLanguages()

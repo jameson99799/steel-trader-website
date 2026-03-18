@@ -73,9 +73,8 @@ export function translateCompany(company, map, langCode) {
     const t = map[`company_${company.id}`]
     if (!t) return company
 
-    if (t.name) company[`name_${langCode}`] = t.name
+    // Only translate description — company name, address, contact info always in English
     if (t.description) company[`description_${langCode}`] = t.description
-    if (t.address) company[`address_${langCode}`] = t.address
 
     return company
 }

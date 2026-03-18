@@ -139,35 +139,33 @@ function collectProducts() {
     const rows = getAll('SELECT id, name_en, description_en, seo_title, seo_description, seo_keywords, detail_content, faq_items, specs FROM products WHERE status=1')
     const items = []
     for (const r of rows) {
-        if (r.name_en) items.push({ type: 'product', id: r.id, field: 'name', text: r.name_en })
-        if (r.description_en) items.push({ type: 'product', id: r.id, field: 'description', text: r.description_en })
-        if (r.seo_title) items.push({ type: 'product', id: r.id, field: 'seo_title', text: r.seo_title })
-        if (r.seo_description) items.push({ type: 'product', id: r.id, field: 'seo_description', text: r.seo_description })
-        if (r.seo_keywords) items.push({ type: 'product', id: r.id, field: 'seo_keywords', text: r.seo_keywords })
-        // detail_content — mark as long_html for segmented translation
+        const itemName = r.name_en || `Product #${r.id}`
+        if (r.name_en) items.push({ type: 'product', id: r.id, field: 'name', text: r.name_en, itemName })
+        if (r.description_en) items.push({ type: 'product', id: r.id, field: 'description', text: r.description_en, itemName })
+        if (r.seo_title) items.push({ type: 'product', id: r.id, field: 'seo_title', text: r.seo_title, itemName })
+        if (r.seo_description) items.push({ type: 'product', id: r.id, field: 'seo_description', text: r.seo_description, itemName })
+        if (r.seo_keywords) items.push({ type: 'product', id: r.id, field: 'seo_keywords', text: r.seo_keywords, itemName })
         if (r.detail_content && r.detail_content.length > 10) {
-            items.push({ type: 'product', id: r.id, field: 'detail_content', text: r.detail_content, long_html: true })
+            items.push({ type: 'product', id: r.id, field: 'detail_content', text: r.detail_content, long_html: true, itemName })
         }
-        // FAQ items
         if (r.faq_items) {
             try {
                 const faqs = JSON.parse(r.faq_items)
                 if (Array.isArray(faqs)) {
                     faqs.forEach((f, idx) => {
-                        if (f.question) items.push({ type: 'product', id: r.id, field: `faq_q_${idx}`, text: f.question })
-                        if (f.answer) items.push({ type: 'product', id: r.id, field: `faq_a_${idx}`, text: f.answer })
+                        if (f.question) items.push({ type: 'product', id: r.id, field: `faq_q_${idx}`, text: f.question, itemName })
+                        if (f.answer) items.push({ type: 'product', id: r.id, field: `faq_a_${idx}`, text: f.answer, itemName })
                     })
                 }
             } catch (e) { }
         }
-        // Specs
         if (r.specs) {
             try {
                 const specs = JSON.parse(r.specs)
                 if (Array.isArray(specs)) {
                     specs.forEach((s, idx) => {
-                        if (s.name) items.push({ type: 'product', id: r.id, field: `spec_name_${idx}`, text: s.name })
-                        if (s.value) items.push({ type: 'product', id: r.id, field: `spec_value_${idx}`, text: s.value })
+                        if (s.name) items.push({ type: 'product', id: r.id, field: `spec_name_${idx}`, text: s.name, itemName })
+                        if (s.value) items.push({ type: 'product', id: r.id, field: `spec_value_${idx}`, text: s.value, itemName })
                     })
                 }
             } catch (e) { }
@@ -180,21 +178,22 @@ function collectNews() {
     const rows = getAll('SELECT id, title_en, summary_en, content, seo_title, seo_description, seo_keywords, faq_items FROM news WHERE status=1')
     const items = []
     for (const r of rows) {
-        if (r.title_en) items.push({ type: 'news', id: r.id, field: 'title', text: r.title_en })
-        if (r.summary_en) items.push({ type: 'news', id: r.id, field: 'summary', text: r.summary_en })
-        if (r.seo_title) items.push({ type: 'news', id: r.id, field: 'seo_title', text: r.seo_title })
-        if (r.seo_description) items.push({ type: 'news', id: r.id, field: 'seo_description', text: r.seo_description })
-        if (r.seo_keywords) items.push({ type: 'news', id: r.id, field: 'seo_keywords', text: r.seo_keywords })
+        const itemName = r.title_en || `News #${r.id}`
+        if (r.title_en) items.push({ type: 'news', id: r.id, field: 'title', text: r.title_en, itemName })
+        if (r.summary_en) items.push({ type: 'news', id: r.id, field: 'summary', text: r.summary_en, itemName })
+        if (r.seo_title) items.push({ type: 'news', id: r.id, field: 'seo_title', text: r.seo_title, itemName })
+        if (r.seo_description) items.push({ type: 'news', id: r.id, field: 'seo_description', text: r.seo_description, itemName })
+        if (r.seo_keywords) items.push({ type: 'news', id: r.id, field: 'seo_keywords', text: r.seo_keywords, itemName })
         if (r.content && r.content.length > 10) {
-            items.push({ type: 'news', id: r.id, field: 'content', text: r.content, long_html: true })
+            items.push({ type: 'news', id: r.id, field: 'content', text: r.content, long_html: true, itemName })
         }
         if (r.faq_items) {
             try {
                 const faqs = JSON.parse(r.faq_items)
                 if (Array.isArray(faqs)) {
                     faqs.forEach((f, idx) => {
-                        if (f.question) items.push({ type: 'news', id: r.id, field: `faq_q_${idx}`, text: f.question })
-                        if (f.answer) items.push({ type: 'news', id: r.id, field: `faq_a_${idx}`, text: f.answer })
+                        if (f.question) items.push({ type: 'news', id: r.id, field: `faq_q_${idx}`, text: f.question, itemName })
+                        if (f.answer) items.push({ type: 'news', id: r.id, field: `faq_a_${idx}`, text: f.answer, itemName })
                     })
                 }
             } catch (e) { }
@@ -206,9 +205,10 @@ function collectNews() {
 function collectCompany() {
     const c = getOne('SELECT * FROM company WHERE id=1')
     if (!c) return []
-    return ['name', 'description', 'address'].flatMap(f =>
-        c[`${f}_en`] ? [{ type: 'company', id: 1, field: f, text: c[`${f}_en`] }] : []
-    )
+    // Only translate description — company name, address, and contact info always stay in English
+    return c.description_en
+        ? [{ type: 'company', id: 1, field: 'description', text: c.description_en, itemName: '公司简介' }]
+        : []
 }
 
 function collectPageTexts() {
@@ -224,14 +224,14 @@ function collectPageTexts() {
         'inquiry_subtitle_en'
     ]
     return fields.flatMap(f =>
-        pt[f] ? [{ type: 'page_text', id: 1, field: f.replace(/_en$/, ''), text: pt[f] }] : []
+        pt[f] ? [{ type: 'page_text', id: 1, field: f.replace(/_en$/, ''), text: pt[f], itemName: f.replace(/_en$/, '') }] : []
     )
 }
 
 function collectCategories() {
     const cats = getAll('SELECT id, name_en FROM categories')
     return cats.flatMap(c =>
-        c.name_en ? [{ type: 'category', id: c.id, field: 'name', text: c.name_en }] : []
+        c.name_en ? [{ type: 'category', id: c.id, field: 'name', text: c.name_en, itemName: c.name_en }] : []
     )
 }
 
@@ -240,7 +240,7 @@ function collectHero() {
     if (!h) return []
     const fields = ['tag', 'title', 'subtitle', 'stat1_label', 'stat2_label', 'stat3_label']
     return fields.flatMap(f =>
-        h[`${f}_en`] ? [{ type: 'hero', id: 1, field: f, text: h[`${f}_en`] }] : []
+        h[`${f}_en`] ? [{ type: 'hero', id: 1, field: f, text: h[`${f}_en`], itemName: `Hero ${f}` }] : []
     )
 }
 
@@ -282,11 +282,11 @@ Rules: Keep product codes, model numbers, brand names, HTML tags, and technical 
             const jsonMatch = content.match(/\{[\s\S]*\}/)
             if (jsonMatch) {
                 try { translations = JSON.parse(jsonMatch[0]) } catch (e) {
-                    errors.push({ batch: Math.floor(i / BATCH) + 1, error: 'JSON parse error: ' + content.slice(0, 200) })
+                    errors.push({ batch: Math.floor(i / BATCH) + 1, error: 'JSON parse error: ' + content.slice(0, 200), errorCode: 'ERR_PARSE', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
                     continue
                 }
             } else {
-                errors.push({ batch: Math.floor(i / BATCH) + 1, error: 'No JSON in response: ' + content.slice(0, 200) })
+                errors.push({ batch: Math.floor(i / BATCH) + 1, error: 'No JSON in response: ' + content.slice(0, 200), errorCode: 'ERR_NO_JSON', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
                 continue
             }
 
@@ -294,14 +294,14 @@ Rules: Keep product codes, model numbers, brand names, HTML tags, and technical 
                 const item = batch[j]
                 const translated = translations[String(j + 1)]
                 if (!translated) {
-                    errors.push({ item: item.text.slice(0, 60), error: 'No translation in response' })
+                    errors.push({ item: item.text.slice(0, 60), error: 'No translation in response', errorCode: 'ERR_MISSING', itemName: item.itemName })
                     continue
                 }
                 upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
-                results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field })
+                results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field, itemName: item.itemName })
             }
         } catch (e) {
-            errors.push({ batch: Math.floor(i / BATCH) + 1, error: e.message })
+            errors.push({ batch: Math.floor(i / BATCH) + 1, error: e.message, errorCode: 'ERR_API', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
         }
     }
 
@@ -330,7 +330,7 @@ Rules: Keep product codes, model numbers, brand names, HTML entities unchanged. 
                 const jsonMatch = content.match(/\{[\s\S]*\}/)
                 if (jsonMatch) {
                     try { translations = JSON.parse(jsonMatch[0]) } catch (e) {
-                        errors.push({ item: `${item.type}/${item.field} seg${i}`, error: 'JSON parse' })
+                        errors.push({ item: `${item.type}/${item.field} seg${i}`, error: 'JSON parse', errorCode: 'ERR_PARSE', itemName: item.itemName })
                         continue
                     }
                 }
@@ -346,10 +346,10 @@ Rules: Keep product codes, model numbers, brand names, HTML entities unchanged. 
             if (translatedSegments.length > 0) {
                 const translatedHtml = reassembleHtml(item.text, translatedSegments)
                 upsertTranslation(targetLang, item.type, item.id, item.field, '[HTML]', translatedHtml)
-                results.push({ original: `[HTML ${item.field}]`, translated: `${translatedSegments.length} segments`, type: item.type, field: item.field })
+                results.push({ original: `[HTML ${item.field}]`, translated: `${translatedSegments.length} segments`, type: item.type, field: item.field, itemName: item.itemName })
             }
         } catch (e) {
-            errors.push({ item: `${item.type}/${item.field} id=${item.id}`, error: e.message })
+            errors.push({ item: `${item.type}/${item.field} id=${item.id}`, error: e.message, errorCode: 'ERR_API', itemName: item.itemName })
         }
     }
 
