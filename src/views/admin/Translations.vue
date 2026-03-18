@@ -547,9 +547,9 @@ async function runItems(itemsList) {
   const newFailed = []
 
   const CONCURRENCY = concurrency.value || 3
-  const BULK_SIZE = 10
+  const BULK_SIZE = 1
 
-  addLog('info', `⚡ 批量翻译模式: 每次 ${BULK_SIZE} 个项目, ${CONCURRENCY} 路并发`)
+  addLog('info', `⚡ 陪读蛙模式: ${CONCURRENCY} 个产品同时翻译, 每个产品内部多段并发`)
 
   let queueIdx = 0
 
@@ -570,11 +570,11 @@ async function runItems(itemsList) {
 
       const names = chunk.map(c => c.itemName).join(', ')
       const totalFields = chunk.reduce((s, c) => s + (c.fields?.length || 0), 0)
-      addLog('info', `→ 批量翻译 ${chunk.length} 个项目 (${totalFields} 个字段): ${names.slice(0, 120)}`)
+      addLog('info', `→ 正在翻译: ${chunk[0].itemName} (${totalFields} 个字段, 多段并发)...`)
 
       try {
-        const bulkItems = chunk.map(c => ({ type: c.type, id: c.id }))
-        const res = await api.runTranslationBulk(selectedLang.value, bulkItems)
+        const item = chunk[0]
+        const res = await api.runTranslationOne(selectedLang.value, item.type, item.id)
         const ok = res.results?.length || 0
         const errs = res.errors?.length || 0
         progressOk.value += ok
@@ -588,12 +588,12 @@ async function runItems(itemsList) {
             const code = e.errorCode ? `[${e.errorCode}]` : ''
             addLog('error', `   ❌ ${e.itemName || ''} ${code}: ${(e.error || '').slice(0, 120)}`)
           }
-          if (ok > 0) addLog('warn', `   ⚠️ 批量: ${ok} 成功, ${errs} 错误`)
+          if (ok > 0) addLog('warn', `   ⚠️「${chunk[0].itemName}」: ${ok} 成功, ${errs} 错误`)
           for (const item of chunk) newFailed.push(item)
         } else if (ok === 0) {
-          addLog('ok', `   ✔ 批量 ${chunk.length} 个项目无需翻译`)
+          addLog('ok', `   ✔「${chunk[0].itemName}」无需翻译`)
         } else {
-          addLog('ok', `   ✅ 批量翻译成功: ${ok} 个字段`)
+          addLog('ok', `   ✅「${chunk[0].itemName}」翻译成功: ${ok} 个字段`)
         }
       } catch (e) {
         progressErrors.value += chunk.length
@@ -601,7 +601,7 @@ async function runItems(itemsList) {
           allErrors.push({ item: item.itemName, error: e.message, errorCode: 'ERR_API' })
           newFailed.push(item)
         }
-        addLog('error', `   ❌ 批量翻译失败: ${e.message}`)
+        addLog('error', `   ❌「${chunk[0].itemName}」翻译失败: ${e.message}`)
       }
 
       progressDone.value += chunk.length

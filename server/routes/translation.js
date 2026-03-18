@@ -327,10 +327,18 @@ async function translateBatch(settings, items, targetLang, langName, overrideNot
     const shortItems = items.filter(i => !i.long_html)
     const longItems = items.filter(i => i.long_html)
 
-    // ── Translate short text in mega-batches for efficiency ──
-    const BATCH = 50
+    // ── Translate short text — ALL batches CONCURRENTLY (read-frog style) ──
+    const BATCH = 10  // Smaller batches, but ALL run concurrently
+    const AI_CONCURRENCY = 8  // Max concurrent AI calls
+
+    // Build all batch tasks
+    const shortBatches = []
     for (let i = 0; i < shortItems.length; i += BATCH) {
-        const batch = shortItems.slice(i, i + BATCH)
+        shortBatches.push(shortItems.slice(i, i + BATCH))
+    }
+
+    // Process all batches concurrently with limiter
+    async function processBatch(batch, batchIdx) {
         const numberedText = batch.map((item, idx) => `${idx + 1}. ${item.text}`).join('\n')
         const systemPrompt = `You are a professional translator for a steel products export company (GI GL PPGI PPGL steel coil, CRC, roofing sheets).
 Translate each numbered line from English to ${langName}.
@@ -394,6 +402,22 @@ DO NOT TRANSLATE these terms — keep them exactly as-is:
             }
         }
     }
+
+    // Run ALL short-text batches concurrently with limiter
+    const runConcurrently = async (tasks, limit) => {
+        const executing = new Set()
+        for (const task of tasks) {
+            const p = task().then(() => executing.delete(p))
+            executing.add(p)
+            if (executing.size >= limit) await Promise.race(executing)
+        }
+        await Promise.all(executing)
+    }
+    
+    await runConcurrently(
+        shortBatches.map((batch, idx) => () => processBatch(batch, idx)),
+        AI_CONCURRENCY
+    )
 
     // ── Translate long HTML using block-level DOM parsing ──
     for (const item of longItems) {
