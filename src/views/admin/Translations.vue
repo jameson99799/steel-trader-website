@@ -98,8 +98,8 @@
             <button class="btn btn-primary" @click="startTranslate" :disabled="translating || !selectedLang">
               {{ translating ? '⏳ 翻译中...' : '🚀 开始翻译' }}
             </button>
-            <button v-if="failedPages.length" class="btn btn-warning" @click="retryFailed" :disabled="translating">
-              🔄 重试失败项 ({{ failedPages.length }})
+            <button v-if="failedItems.length" class="btn btn-warning" @click="retryFailed" :disabled="translating">
+              🔄 重试失败项 ({{ failedItems.length }})
             </button>
             <button v-if="translating" class="btn btn-outline" @click="abortTranslation">
               ⛔ 停止
