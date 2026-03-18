@@ -384,52 +384,69 @@ async function runItems(itemsList) {
   const allErrors = []
   const newFailed = []
 
+  const CONCURRENCY = 3 // Number of parallel translation requests
   const typeLabels = { product: '产品', news: '新闻', company: '公司', page_text: '页面', category: '分类', hero: 'Hero' }
 
-  for (const item of itemsList) {
-    if (aborted) {
-      newFailed.push(item)
-      addLog('warn', `⏭ 跳过「${item.itemName}」（已停止）`)
-      progressDone.value++
-      continue
-    }
+  addLog('info', `⚡ 并发翻译模式: ${CONCURRENCY} 个任务同时进行`)
 
-    const typeLabel = typeLabels[item.type] || item.type
-    addLog('info', `→ 正在翻译: ${typeLabel}「${item.itemName}」(${item.fields.length} 个字段)...`)
+  // Shared queue index
+  let queueIdx = 0
 
-    try {
-      const res = await api.runTranslationOne(selectedLang.value, item.type, item.id)
-      const ok = res.results?.length || 0
-      const errs = res.errors?.length || 0
-      progressOk.value += ok
-      progressErrors.value += errs
+  async function worker() {
+    while (queueIdx < itemsList.length) {
+      if (aborted) break
+      const idx = queueIdx++
+      if (idx >= itemsList.length) break
+      const item = itemsList[idx]
 
-      if (res.results) allResults.push(...res.results)
-      if (res.errors) allErrors.push(...res.errors)
-
-      if (errs > 0) {
-        for (const e of res.errors) {
-          const code = e.errorCode ? `[${e.errorCode}]` : ''
-          addLog('error', `   ❌「${item.itemName}」翻译失败 ${code}: ${e.error?.slice(0, 120)}`)
-        }
-        if (ok > 0) addLog('warn', `   ⚠️「${item.itemName}」: ${ok} 成功, ${errs} 错误`)
+      if (aborted) {
         newFailed.push(item)
-      } else if (ok === 0) {
-        addLog('ok', `   ✔「${item.itemName}」无需翻译`)
-      } else {
-        const fields = res.results.map(r => r.field).join(', ')
-        addLog('ok', `   ✅「${item.itemName}」翻译成功 (${fields})`)
+        addLog('warn', `⏭ 跳过「${item.itemName}」（已停止）`)
+        progressDone.value++
+        continue
       }
 
-    } catch (e) {
-      progressErrors.value++
-      allErrors.push({ item: item.itemName, error: e.message, errorCode: 'ERR_API' })
-      newFailed.push(item)
-      addLog('error', `   ❌「${item.itemName}」API错误: ${e.message}`)
-    }
+      const typeLabel = typeLabels[item.type] || item.type
+      addLog('info', `→ 正在翻译: ${typeLabel}「${item.itemName}」(${item.fields.length} 个字段)...`)
 
-    progressDone.value++
+      try {
+        const res = await api.runTranslationOne(selectedLang.value, item.type, item.id)
+        const ok = res.results?.length || 0
+        const errs = res.errors?.length || 0
+        progressOk.value += ok
+        progressErrors.value += errs
+
+        if (res.results) allResults.push(...res.results)
+        if (res.errors) allErrors.push(...res.errors)
+
+        if (errs > 0) {
+          for (const e of res.errors) {
+            const code = e.errorCode ? `[${e.errorCode}]` : ''
+            addLog('error', `   ❌「${item.itemName}」翻译失败 ${code}: ${e.error?.slice(0, 120)}`)
+          }
+          if (ok > 0) addLog('warn', `   ⚠️「${item.itemName}」: ${ok} 成功, ${errs} 错误`)
+          newFailed.push(item)
+        } else if (ok === 0) {
+          addLog('ok', `   ✔「${item.itemName}」无需翻译`)
+        } else {
+          const fields = res.results.map(r => r.field).join(', ')
+          addLog('ok', `   ✅「${item.itemName}」翻译成功 (${fields})`)
+        }
+
+      } catch (e) {
+        progressErrors.value++
+        allErrors.push({ item: item.itemName, error: e.message, errorCode: 'ERR_API' })
+        newFailed.push(item)
+        addLog('error', `   ❌「${item.itemName}」API错误: ${e.message}`)
+      }
+
+      progressDone.value++
+    }
   }
+
+  // Launch concurrent workers
+  const workers = Array.from({ length: Math.min(CONCURRENCY, itemsList.length) }, () => worker())
+  await Promise.all(workers)
 
   failedItems.value = newFailed
   failedPages.value = newFailed.length > 0 ? ['has_failures'] : []
