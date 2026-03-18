@@ -336,24 +336,40 @@ Rules: Keep product codes, model numbers, brand names, HTML tags, and technical 
 Translate each numbered line from English to ${langName}.
 Rules: Keep product codes, model numbers, brand names, HTML entities unchanged. Return ONLY a JSON object like {"1":"translation","2":"translation"}.`
 
-                const content = await callAI(settings, [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: numberedText }
-                ], 4000)
+                let segSuccess = false
+                for (let retry = 0; retry <= 2 && !segSuccess; retry++) {
+                    try {
+                        const content = await callAI(settings, [
+                            { role: 'system', content: systemPrompt },
+                            { role: 'user', content: numberedText }
+                        ], 4000)
 
-                let translations = {}
-                const jsonMatch = content.match(/\{[\s\S]*\}/)
-                if (jsonMatch) {
-                    try { translations = JSON.parse(jsonMatch[0]) } catch (e) {
-                        errors.push({ item: `${item.type}/${item.field} seg${i}`, error: 'JSON parse', errorCode: 'ERR_PARSE', itemName: item.itemName })
-                        continue
-                    }
-                }
+                        let translations = {}
+                        const jsonMatch = content.match(/\{[\s\S]*\}/)
+                        if (jsonMatch) {
+                            try { translations = JSON.parse(jsonMatch[0]); segSuccess = true } catch (e) {
+                                if (retry >= 2) {
+                                    errors.push({ item: `${item.type}/${item.field} seg${i}`, error: 'JSON parse error (retried 2x): ' + content.slice(0, 300), errorCode: 'ERR_PARSE', itemName: item.itemName })
+                                }
+                                continue
+                            }
+                        } else {
+                            if (retry >= 2) {
+                                errors.push({ item: `${item.type}/${item.field} seg${i}`, error: 'No JSON (retried 2x): ' + content.slice(0, 300), errorCode: 'ERR_NO_JSON', itemName: item.itemName })
+                            }
+                            continue
+                        }
 
-                for (let j = 0; j < segBatch.length; j++) {
-                    const translated = translations[String(j + 1)]
-                    if (translated) {
-                        translatedSegments.push({ index: segBatch[j].index, translated })
+                        for (let j = 0; j < segBatch.length; j++) {
+                            const translated = translations[String(j + 1)]
+                            if (translated) {
+                                translatedSegments.push({ index: segBatch[j].index, translated })
+                            }
+                        }
+                    } catch (e) {
+                        if (retry >= 2) {
+                            errors.push({ item: `${item.type}/${item.field} seg${i}`, error: e.message + ' (retried 2x)', errorCode: 'ERR_API', itemName: item.itemName })
+                        }
                     }
                 }
             }

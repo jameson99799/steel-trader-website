@@ -93,6 +93,12 @@
                 <option value="hero">首页 Hero 区域（Hero）</option>
               </select>
             </div>
+            <div class="form-group" style="width:120px">
+              <label>并发数</label>
+              <select v-model="concurrency" class="form-control">
+                <option v-for="n in 10" :key="n" :value="n">{{ n }} 并发</option>
+              </select>
+            </div>
           </div>
           <div class="btn-row" style="gap:8px">
             <button class="btn btn-primary" @click="startTranslate" :disabled="translating || !selectedLang">
@@ -221,6 +227,7 @@ const savedMsg = ref(false)
 
 const selectedLang = ref('')
 const selectedPage = ref('all')
+const concurrency = ref(3)
 const translating = ref(false)
 const translateResult = ref(null)
 const logEntries = ref([])
@@ -384,7 +391,7 @@ async function runItems(itemsList) {
   const allErrors = []
   const newFailed = []
 
-  const CONCURRENCY = 3 // Number of parallel translation requests
+  const CONCURRENCY = concurrency.value || 3
   const typeLabels = { product: '产品', news: '新闻', company: '公司', page_text: '页面', category: '分类', hero: 'Hero' }
 
   addLog('info', `⚡ 并发翻译模式: ${CONCURRENCY} 个任务同时进行`)
