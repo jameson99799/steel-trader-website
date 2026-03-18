@@ -107,16 +107,30 @@ router.post('/models', authMiddleware, async (req, res) => {
 
 function extractTextSegments(html) {
     if (!html || typeof html !== 'string') return []
-    // Extract text from HTML tags — match content between > and <
     const segments = []
-    // Split by HTML tags, collect text nodes
     const parts = html.split(/(<[^>]+>)/)
+    let insideSkip = false // true when inside <style> or <script>
     for (let i = 0; i < parts.length; i++) {
         const part = parts[i]
         if (!part) continue
-        if (part.startsWith('<')) continue // skip tags
+        if (part.startsWith('<')) {
+            // Check for opening/closing of style/script tags
+            const lower = part.toLowerCase()
+            if (/<style[\s>]/i.test(lower) || /<script[\s>]/i.test(lower)) {
+                insideSkip = true
+            } else if (/<\/style>/i.test(lower) || /<\/script>/i.test(lower)) {
+                insideSkip = false
+            }
+            continue // skip tag itself
+        }
+        if (insideSkip) continue // skip content inside style/script
         const text = part.trim()
-        if (text.length > 1 && !/^[\s\d.,;:!?@#$%^&*()\-+=\[\]{}|\\/<>'"~`]+$/.test(text)) {
+        if (text.length > 1
+            && !/^[\s\d.,;:!?@#$%^&*()\-+=\[\]{}|\\/\<\>'"~`]+$/.test(text)
+            && !text.includes('{')   // skip CSS-like content
+            && !text.includes('var(') // skip CSS variables
+            && !/^[\s]*[.#@:]/.test(text) // skip CSS selectors
+        ) {
             segments.push({ index: i, text })
         }
     }
