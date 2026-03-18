@@ -300,9 +300,12 @@ const images = computed(() => {
 })
 
 const specs = computed(() => {
-  if (!product.value?.specs) return []
+  if (!product.value) return []
+  // Try localized specs first (specs_zh, specs_ja, etc.), fallback to raw specs
+  const raw = localizedValue(product.value, 'specs') || product.value?.specs
+  if (!raw) return []
   try {
-    return JSON.parse(product.value.specs)
+    return JSON.parse(raw)
   } catch {
     return []
   }

@@ -87,14 +87,14 @@
   <div v-else-if="loading" class="loading-state">
     <div class="container">
       <div class="spinner"></div>
-      <p>Loading article...</p>
+      <p>{{ t('loadingNews') }}</p>
     </div>
   </div>
 
   <div v-else class="not-found">
     <div class="container">
-      <h2>Article not found</h2>
-      <router-link to="/news" class="btn btn-primary">Back to News</router-link>
+      <h2>{{ t('articleNotFound') }}</h2>
+      <router-link to="/news" class="btn btn-primary">{{ t('backToNews') }}</router-link>
     </div>
   </div>
 </template>
@@ -106,7 +106,7 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const route = useRoute()
-const { localizedValue, localizedHtml } = useLang()
+const { t, localizedValue, localizedHtml } = useLang()
 
 const article = ref(null)
 const loading = ref(true)

@@ -110,6 +110,7 @@ function extractTextSegments(html) {
     const segments = []
     const parts = html.split(/(<[^>]+>)/)
     let insideSkip = false // true when inside <style> or <script>
+    let insideReplaceTip = false // true when inside .replace-tip elements
     for (let i = 0; i < parts.length; i++) {
         const part = parts[i]
         if (!part) continue
@@ -121,9 +122,15 @@ function extractTextSegments(html) {
             } else if (/<\/style>/i.test(lower) || /<\/script>/i.test(lower)) {
                 insideSkip = false
             }
+            // Skip .replace-tip elements (image placeholder hints)
+            if (/class\s*=\s*["'][^"']*replace-tip/i.test(part)) {
+                insideReplaceTip = true
+            } else if (insideReplaceTip && /^<\//i.test(part)) {
+                insideReplaceTip = false
+            }
             continue // skip tag itself
         }
-        if (insideSkip) continue // skip content inside style/script
+        if (insideSkip || insideReplaceTip) continue // skip content inside style/script/replace-tip
         const text = part.trim()
         if (text.length > 1
             && !/^[\s\d.,;:!?@#$%^&*()\-+=\[\]{}|\\/\<\>'"~`]+$/.test(text)

@@ -38,6 +38,34 @@ export function translateProduct(product, map, langCode) {
     if (t.seo_keywords) product[`seo_keywords_${langCode}`] = t.seo_keywords
     if (t.detail_content) product[`detail_content_${langCode}`] = t.detail_content
 
+    // Translate specs JSON — build specs_xx from spec_name_N / spec_value_N
+    if (product.specs) {
+        try {
+            const origSpecs = JSON.parse(product.specs)
+            if (Array.isArray(origSpecs) && origSpecs.length > 0) {
+                const translatedSpecs = origSpecs.map((spec, idx) => ({
+                    name: t[`spec_name_${idx}`] || spec.name,
+                    value: t[`spec_value_${idx}`] || spec.value
+                }))
+                product[`specs_${langCode}`] = JSON.stringify(translatedSpecs)
+            }
+        } catch (e) { /* ignore parse errors */ }
+    }
+
+    // Translate FAQ items — build faq_items_xx from faq_q_N / faq_a_N
+    if (product.faq_items) {
+        try {
+            const origFaqs = JSON.parse(product.faq_items)
+            if (Array.isArray(origFaqs) && origFaqs.length > 0) {
+                const translatedFaqs = origFaqs.map((faq, idx) => ({
+                    question: t[`faq_q_${idx}`] || faq.question,
+                    answer: t[`faq_a_${idx}`] || faq.answer
+                }))
+                product[`faq_items_${langCode}`] = JSON.stringify(translatedFaqs)
+            }
+        } catch (e) { /* ignore parse errors */ }
+    }
+
     // Category name — check category translation
     if (product.category_id) {
         const catT = map[`category_${product.category_id}`]

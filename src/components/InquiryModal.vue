@@ -28,13 +28,13 @@
               <svg class="section-icon" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
               </svg>
-              <span>Contact Information</span>
+              <span>{{ t('contactInfo') }}</span>
             </div>
             
             <div class="form-row">
               <div class="form-group">
                 <label>{{ t('name') }} <span class="required">*</span></label>
-                <input v-model="form.name" type="text" class="form-control" required placeholder="Your full name" />
+                <input v-model="form.name" type="text" class="form-control" required :placeholder="t('placeholderName')" />
               </div>
               <div class="form-group">
                 <label>{{ t('email') }} <span class="required">*</span></label>
@@ -45,17 +45,17 @@
             <div class="form-row">
               <div class="form-group">
                 <label>{{ t('phone') }}</label>
-                <input v-model="form.phone" type="text" class="form-control" placeholder="+1 (555) 123-4567" />
+                <input v-model="form.phone" type="text" class="form-control" :placeholder="t('placeholderPhone')" />
               </div>
               <div class="form-group">
                 <label>{{ t('company') }}</label>
-                <input v-model="form.company" type="text" class="form-control" placeholder="Your company name" />
+                <input v-model="form.company" type="text" class="form-control" :placeholder="t('placeholderCompany')" />
               </div>
             </div>
             
             <div class="form-group">
               <label>{{ t('country') }}</label>
-              <input v-model="form.country" type="text" class="form-control" placeholder="Your country" />
+              <input v-model="form.country" type="text" class="form-control" :placeholder="t('placeholderCountry')" />
             </div>
           </div>
 
@@ -64,7 +64,7 @@
               <svg class="section-icon" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
               </svg>
-              <span>Your Requirements</span>
+              <span>{{ t('yourRequirements') }}</span>
             </div>
             
             <div class="form-group">
@@ -73,31 +73,31 @@
                 v-model="form.message"
                 class="form-control"
                 rows="4"
-                :placeholder="pageTexts?.contact_form_desc || 'Please describe your LED requirements: product type, quantity, specifications, application, timeline, etc.'"
+                :placeholder="localizedValue(pageTexts, 'contact_form_desc') || t('placeholderMessage')"
               ></textarea>
             </div>
           </div>
 
           <div class="inquiry-benefits">
-            <h4>Why choose us?</h4>
+            <h4>{{ t('whyChooseUs') }}</h4>
             <div class="benefits-list">
               <div class="benefit-item">
                 <svg class="benefit-icon" viewBox="0 0 20 20" fill="currentColor">
                   <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                 </svg>
-                <span>24-hour response time</span>
+                <span>{{ t('benefit24h') }}</span>
               </div>
               <div class="benefit-item">
                 <svg class="benefit-icon" viewBox="0 0 20 20" fill="currentColor">
                   <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                 </svg>
-                <span>Competitive pricing</span>
+                <span>{{ t('benefitPricing') }}</span>
               </div>
               <div class="benefit-item">
                 <svg class="benefit-icon" viewBox="0 0 20 20" fill="currentColor">
                   <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                 </svg>
-                <span>Quality guarantee</span>
+                <span>{{ t('benefitQuality') }}</span>
               </div>
             </div>
           </div>
@@ -117,7 +117,7 @@
             <svg v-else class="btn-icon" viewBox="0 0 20 20" fill="currentColor">
               <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
             </svg>
-            {{ loading ? 'Sending...' : t('submit') }}
+            {{ loading ? t('sending') : t('submit') }}
           </button>
         </div>
       </form>
@@ -135,7 +135,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'success'])
-const { t, lang } = useLang()
+const { t, lang, localizedValue } = useLang()
 const loading = ref(false)
 const pageTexts = ref(null)
 

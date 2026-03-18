@@ -54,7 +54,14 @@ const translations = {
     clickToZoom: '点击放大', productDetails: '产品详情', sendEmail: '发送邮件',
     contactOurTeam: '联系我们的团队', needMoreInfo: '需要更多信息？扫码直接联系我们',
     clickToEnlarge: '点击放大', scanQRWeChat: '扫码添加微信',
-    backToNews: '← 返回新闻列表', quickView: '快速查看'
+    backToNews: '← 返回新闻列表', quickView: '快速查看',
+    // InquiryModal
+    contactInfo: '联系信息', yourRequirements: '您的需求',
+    placeholderName: '您的姓名', placeholderPhone: '您的电话号码',
+    placeholderCompany: '您的公司名称', placeholderCountry: '您的国家',
+    placeholderMessage: '请描述您的钢材需求：产品类型、数量、规格、用途、时间等',
+    benefit24h: '24小时内响应', benefitPricing: '价格有竞争力', benefitQuality: '品质保证',
+    articleNotFound: '文章未找到'
   },
   en: {
     home: 'Home', products: 'Products', about: 'About Us', contact: 'Contact',
@@ -106,7 +113,14 @@ const translations = {
     clickToZoom: 'Click to zoom', productDetails: 'Product Details', sendEmail: 'Send Email',
     contactOurTeam: 'Contact Our Team', needMoreInfo: 'Need more information? Scan to contact us directly.',
     clickToEnlarge: 'Click to enlarge', scanQRWeChat: 'Scan QR to add on WeChat',
-    backToNews: '← Back to News', quickView: 'Quick View'
+    backToNews: '← Back to News', quickView: 'Quick View',
+    // InquiryModal
+    contactInfo: 'Contact Information', yourRequirements: 'Your Requirements',
+    placeholderName: 'Your full name', placeholderPhone: '+1 (555) 123-4567',
+    placeholderCompany: 'Your company name', placeholderCountry: 'Your country',
+    placeholderMessage: 'Please describe your steel requirements: product type, quantity, specifications, application, timeline, etc.',
+    benefit24h: '24-hour response time', benefitPricing: 'Competitive pricing', benefitQuality: 'Quality guarantee',
+    articleNotFound: 'Article not found'
   }
 }
 
