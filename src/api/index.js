@@ -66,7 +66,20 @@ const request = async (url, options = {}) => {
     }
   }
 
-  const data = await response.json()
+  // Parse response — handle HTML error pages gracefully
+  let data
+  const contentType = response.headers.get('content-type') || ''
+  if (contentType.includes('application/json')) {
+    data = await response.json()
+  } else {
+    const text = await response.text()
+    try {
+      data = JSON.parse(text)
+    } catch {
+      // Server returned non-JSON (HTML error page from nginx, etc.)
+      throw new Error(`服务器错误 (${response.status}): 服务器返回了非JSON响应，请检查后端服务是否正常运行`)
+    }
+  }
 
   if (!response.ok) {
     throw new Error(data.error || '请求失败')
