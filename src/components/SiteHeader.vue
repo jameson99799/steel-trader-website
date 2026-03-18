@@ -79,7 +79,7 @@
             <router-link to="/products" @click="menuOpen = false" class="nav-link">
               {{ t('products') }}
             </router-link>
-            <router-link to="/news" @click="menuOpen = false" class="nav-link">News</router-link>
+            <router-link to="/news" @click="menuOpen = false" class="nav-link">{{ t('news') }}</router-link>
             <router-link to="/about" @click="menuOpen = false" class="nav-link">
               {{ t('about') }}
             </router-link>

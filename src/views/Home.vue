@@ -53,7 +53,7 @@
         <div class="section-header">
           <div class="section-badge">{{ t('products') }}</div>
           <h2 class="section-title">{{ t('featuredProducts') }}</h2>
-          <p class="section-subtitle">{{ pageTexts?.featured_subtitle || 'Discover our premium LED lighting solutions' }}</p>
+          <p class="section-subtitle">{{ localizedValue(pageTexts, 'featured_subtitle') || t('featuredProducts') }}</p>
         </div>
         
         <div class="products-grid">
@@ -92,9 +92,9 @@
     <section class="section categories-section" v-if="categories.length">
       <div class="container">
         <div class="section-header">
-          <div class="section-badge">Categories</div>
+          <div class="section-badge">{{ t('categories') }}</div>
           <h2 class="section-title">{{ t('productCategories') }}</h2>
-          <p class="section-subtitle">{{ pageTexts?.categories_subtitle || 'Explore our comprehensive range of LED products' }}</p>
+          <p class="section-subtitle">{{ localizedValue(pageTexts, 'categories_subtitle') || t('productCategories') }}</p>
         </div>
         
         <div class="categories-grid">
@@ -116,7 +116,7 @@
             </div>
             <div class="category-info">
               <h3 class="category-name">{{ localizedValue(cat, 'name') }}</h3>
-              <p class="category-count">{{ cat.product_count }} Products</p>
+              <p class="category-count">{{ cat.product_count }} {{ t('productsCount') }}</p>
             </div>
           </router-link>
         </div>
@@ -127,9 +127,9 @@
     <section class="section advantages-section">
       <div class="container">
         <div class="section-header">
-          <div class="section-badge">Why Choose Us</div>
+          <div class="section-badge">{{ t('whyChooseUs') }}</div>
           <h2 class="section-title">{{ t('ourAdvantages') }}</h2>
-          <p class="section-subtitle">{{ pageTexts?.advantages_subtitle || 'Professional LED solutions with unmatched quality and service' }}</p>
+          <p class="section-subtitle">{{ localizedValue(pageTexts, 'advantages_subtitle') || t('ourAdvantages') }}</p>
         </div>
         
         <div class="advantages-grid">
@@ -142,7 +142,7 @@
               </svg>
             </div>
             <h3 class="advantage-title">{{ t('factoryDirect') }}</h3>
-            <p class="advantage-desc">Direct from manufacturer with competitive pricing and quality control</p>
+            <p class="advantage-desc">{{ t('factoryDirectDesc') }}</p>
           </div>
           
           <div class="advantage-card">
@@ -155,7 +155,7 @@
               </svg>
             </div>
             <h3 class="advantage-title">{{ t('qualityAssurance') }}</h3>
-            <p class="advantage-desc">Rigorous testing and certification ensuring premium quality standards</p>
+            <p class="advantage-desc">{{ t('qualityAssuranceDesc') }}</p>
           </div>
           
           <div class="advantage-card">
@@ -165,7 +165,7 @@
               </svg>
             </div>
             <h3 class="advantage-title">{{ t('fastDelivery') }}</h3>
-            <p class="advantage-desc">Efficient logistics and worldwide shipping for timely delivery</p>
+            <p class="advantage-desc">{{ t('fastDeliveryDesc') }}</p>
           </div>
           
           <div class="advantage-card">
@@ -175,7 +175,7 @@
               </svg>
             </div>
             <h3 class="advantage-title">{{ t('customService') }}</h3>
-            <p class="advantage-desc">Tailored solutions and professional support for your specific needs</p>
+            <p class="advantage-desc">{{ t('customServiceDesc') }}</p>
           </div>
         </div>
       </div>
@@ -186,8 +186,8 @@
       <div class="container">
         <div class="cta-content">
           <div class="cta-text">
-            <h2 class="cta-title">{{ pageTexts?.cta_title || 'Ready to Start Your Project?' }}</h2>
-            <p class="cta-subtitle">{{ pageTexts?.cta_subtitle || 'Get in touch with our experts for professional LED lighting solutions' }}</p>
+            <h2 class="cta-title">{{ localizedValue(pageTexts, 'cta_title') || t('readyToStart') }}</h2>
+            <p class="cta-subtitle">{{ localizedValue(pageTexts, 'cta_subtitle') || t('getQuote') }}</p>
           </div>
           <div class="cta-actions">
             <router-link to="/contact" class="btn btn-primary btn-lg">

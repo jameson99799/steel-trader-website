@@ -10,7 +10,7 @@
               </div>
               <div class="brand-text">
                 <h3 class="brand-name">{{ localizedValue(company, 'name') || 'LED Trade' }}</h3>
-                <p class="brand-tagline">{{ pageTexts?.logo_subtitle || 'Professional LED Solutions' }}</p>
+                <p class="brand-tagline">{{ localizedValue(pageTexts, 'logo_subtitle') || pageTexts?.logo_subtitle || 'Professional LED Solutions' }}</p>
               </div>
             </div>
             <p class="brand-desc">
@@ -69,7 +69,7 @@
             </div>
             
             <div class="link-group">
-              <h4 class="link-title">Company</h4>
+              <h4 class="link-title">{{ t('companyLabel') }}</h4>
               <ul class="link-list">
                 <li><router-link to="/about" class="footer-link">{{ t('about') }}</router-link></li>
                 <li><router-link to="/products" class="footer-link">{{ t('products') }}</router-link></li>

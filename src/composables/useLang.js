@@ -17,7 +17,17 @@ const translations = {
     inquirySuccess: '询盘提交成功，我们会尽快与您联系！', required: '必填',
     yearsExperience: '年行业经验', productModels: '产品型号',
     exportCountries: '出口国家', globalClients: '全球客户',
-    news: '新闻中心', newsCenter: '新闻中心'
+    news: '新闻中心', newsCenter: '新闻中心',
+    whyChooseUs: '为什么选择我们', categories: '产品分类',
+    productsCount: '个产品',
+    factoryDirectDesc: '源头工厂直供，价格更有竞争力，品质有保障',
+    qualityAssuranceDesc: '严格的测试和认证，确保卓越的质量标准',
+    fastDeliveryDesc: '高效的物流和全球运输，确保准时交货',
+    customServiceDesc: '量身定制的解决方案和专业支持，满足您的特定需求',
+    readyToStart: '准备好开始你的项目了吗？',
+    getQuote: '联系我们的销售团队以获取最优惠的报价',
+    companyLabel: '公司',
+    aboutUs: '关于我们'
   },
   en: {
     home: 'Home', products: 'Products', about: 'About Us', contact: 'Contact',
@@ -32,7 +42,17 @@ const translations = {
     inquirySuccess: 'Inquiry submitted successfully! We will contact you soon.', required: 'Required',
     yearsExperience: 'Years Experience', productModels: 'Product Models',
     exportCountries: 'Export Countries', globalClients: 'Global Clients',
-    news: 'News', newsCenter: 'News Center'
+    news: 'News', newsCenter: 'News Center',
+    whyChooseUs: 'Why Choose Us', categories: 'Categories',
+    productsCount: 'Products',
+    factoryDirectDesc: 'Direct from manufacturer with competitive pricing and quality control',
+    qualityAssuranceDesc: 'Rigorous testing and certification ensuring premium quality standards',
+    fastDeliveryDesc: 'Efficient logistics and worldwide shipping for timely delivery',
+    customServiceDesc: 'Tailored solutions and professional support for your specific needs',
+    readyToStart: 'Ready to Start Your Project?',
+    getQuote: 'Get in touch with our experts for professional solutions',
+    companyLabel: 'Company',
+    aboutUs: 'About Us'
   }
 }
 
