@@ -272,36 +272,51 @@ async function translateBatch(settings, items, targetLang, langName, overrideNot
 Translate each numbered line from English to ${langName}.
 Rules: Keep product codes, model numbers, brand names, HTML tags, and technical specifications unchanged. Return ONLY a JSON object like {"1":"translation","2":"translation"}.${overrideNote}`
 
-        try {
-            const content = await callAI(settings, [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: numberedText }
-            ])
+        const MAX_RETRIES = 2
+        let attempt = 0
+        let success = false
+        while (attempt <= MAX_RETRIES && !success) {
+            try {
+                const content = await callAI(settings, [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: numberedText }
+                ])
 
-            let translations = {}
-            const jsonMatch = content.match(/\{[\s\S]*\}/)
-            if (jsonMatch) {
-                try { translations = JSON.parse(jsonMatch[0]) } catch (e) {
-                    errors.push({ batch: Math.floor(i / BATCH) + 1, error: 'JSON parse error: ' + content.slice(0, 200), errorCode: 'ERR_PARSE', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
+                let translations = {}
+                const jsonMatch = content.match(/\{[\s\S]*\}/)
+                if (jsonMatch) {
+                    try { translations = JSON.parse(jsonMatch[0]) } catch (e) {
+                        attempt++
+                        if (attempt > MAX_RETRIES) {
+                            errors.push({ batch: Math.floor(i / BATCH) + 1, error: 'JSON parse error (retried ' + MAX_RETRIES + 'x): ' + content.slice(0, 200), errorCode: 'ERR_PARSE', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
+                        }
+                        continue
+                    }
+                } else {
+                    attempt++
+                    if (attempt > MAX_RETRIES) {
+                        errors.push({ batch: Math.floor(i / BATCH) + 1, error: 'No JSON in response (retried ' + MAX_RETRIES + 'x): ' + content.slice(0, 200), errorCode: 'ERR_NO_JSON', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
+                    }
                     continue
                 }
-            } else {
-                errors.push({ batch: Math.floor(i / BATCH) + 1, error: 'No JSON in response: ' + content.slice(0, 200), errorCode: 'ERR_NO_JSON', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
-                continue
-            }
 
-            for (let j = 0; j < batch.length; j++) {
-                const item = batch[j]
-                const translated = translations[String(j + 1)]
-                if (!translated) {
-                    errors.push({ item: item.text.slice(0, 60), error: 'No translation in response', errorCode: 'ERR_MISSING', itemName: item.itemName })
-                    continue
+                for (let j = 0; j < batch.length; j++) {
+                    const item = batch[j]
+                    const translated = translations[String(j + 1)]
+                    if (!translated) {
+                        errors.push({ item: item.text.slice(0, 60), error: 'No translation in response', errorCode: 'ERR_MISSING', itemName: item.itemName })
+                        continue
+                    }
+                    upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
+                    results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field, itemName: item.itemName })
                 }
-                upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
-                results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field, itemName: item.itemName })
+                success = true
+            } catch (e) {
+                attempt++
+                if (attempt > MAX_RETRIES) {
+                    errors.push({ batch: Math.floor(i / BATCH) + 1, error: e.message + ' (retried ' + MAX_RETRIES + 'x)', errorCode: 'ERR_API', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
+                }
             }
-        } catch (e) {
-            errors.push({ batch: Math.floor(i / BATCH) + 1, error: e.message, errorCode: 'ERR_API', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
         }
     }
 
@@ -417,9 +432,11 @@ router.post('/run-one', authMiddleware, async (req, res) => {
     const s = getOne('SELECT * FROM translation_settings WHERE id=1')
     if (!s?.api_key) return res.status(400).json({ error: 'AI API key not configured' })
 
-    // Collect only items matching this content_type + content_id
-    if (!PAGES[content_type]) return res.status(400).json({ error: `Unknown content type: ${content_type}` })
-    const allItems = PAGES[content_type]()
+    // Map singular type names to PAGES keys (product -> products, category -> categories, etc.)
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', hero: 'hero' }
+    const pageKey = TYPE_TO_PAGE[content_type] || content_type
+    if (!PAGES[pageKey]) return res.status(400).json({ error: `Unknown content type: ${content_type}` })
+    const allItems = PAGES[pageKey]()
     const items = allItems.filter(i => String(i.id) === String(content_id))
 
     if (items.length === 0) return res.json({ success: true, results: [], errors: [], total: 0, translated: 0 })
