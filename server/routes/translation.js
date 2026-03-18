@@ -72,13 +72,13 @@ function httpRequest(urlStr, options = {}, body = null) {
             })
         })
         req.on('error', reject)
-        req.setTimeout(120000, () => { req.destroy(new Error('Request timeout 120s')) })
+        req.setTimeout(300000, () => { req.destroy(new Error('Request timeout 300s')) })
         if (body) req.write(typeof body === 'string' ? body : JSON.stringify(body))
         req.end()
     })
 }
 
-async function callAI(settings, messages, maxTokens = 4000) {
+async function callAI(settings, messages, maxTokens = 8000) {
     const apiUrl = (settings.api_url || 'https://api.openai.com/v1').replace(/\/$/, '') + '/chat/completions'
     const result = await httpRequest(apiUrl, {
         method: 'POST',
@@ -327,8 +327,8 @@ async function translateBatch(settings, items, targetLang, langName, overrideNot
     const shortItems = items.filter(i => !i.long_html)
     const longItems = items.filter(i => i.long_html)
 
-    // ── Translate short text in batches of 5 ──
-    const BATCH = 5
+    // ── Translate short text in larger batches for efficiency ──
+    const BATCH = 20
     for (let i = 0; i < shortItems.length; i += BATCH) {
         const batch = shortItems.slice(i, i + BATCH)
         const numberedText = batch.map((item, idx) => `${idx + 1}. ${item.text}`).join('\n')
@@ -401,7 +401,7 @@ DO NOT TRANSLATE these terms — keep them exactly as-is:
             const { root, blocks } = extractBlockSegments(item.text)
             if (!root || blocks.length === 0) continue
 
-            const BLOCK_BATCH = 8 // blocks per API call
+            const BLOCK_BATCH = 15 // larger batches = better context & efficiency
             const contextName = item.itemName ? `\nContext: This content is about "${item.itemName}".` : ''
             
             for (let i = 0; i < blocks.length; i += BLOCK_BATCH) {
@@ -446,7 +446,7 @@ DO NOT TRANSLATE these terms — keep them exactly as-is:
                         const aiContent = await callAI(settings, [
                             { role: 'system', content: systemPrompt },
                             { role: 'user', content: numberedText }
-                        ], 4000)
+                        ], 8000)
 
                         let translations = {}
                         const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
