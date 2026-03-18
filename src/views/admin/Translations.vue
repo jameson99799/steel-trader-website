@@ -85,10 +85,12 @@
               <label>翻译范围</label>
               <select v-model="selectedPage" class="form-control">
                 <option value="all">全站（所有内容）</option>
-                <option value="products">产品（Products）</option>
-                <option value="news">新闻（News）</option>
+                <option value="products">产品（Products）— 名称、描述、SEO、详情HTML、FAQ、规格</option>
+                <option value="news">新闻（News）— 标题、摘要、SEO、正文HTML、FAQ</option>
                 <option value="company">公司信息（Company）</option>
                 <option value="page_texts">页面文字（Page Texts）</option>
+                <option value="categories">产品分类名称（Categories）</option>
+                <option value="hero">首页 Hero 区域（Hero）</option>
               </select>
             </div>
           </div>

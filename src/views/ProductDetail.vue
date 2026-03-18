@@ -278,7 +278,7 @@ import api from '../api'
 import InquiryModal from '../components/InquiryModal.vue'
 
 const route = useRoute()
-const { t, localizedValue } = useLang()
+const { t, localizedValue, localizedHtml } = useLang()
 
 const product = ref(null)
 const currentImage = ref('')
@@ -310,7 +310,7 @@ const specs = computed(() => {
 
 // Build iframe srcdoc — isolates all product HTML styles from main page
 const iframeContent = computed(() => {
-  const raw = product.value?.detail_content || ''
+  const raw = localizedHtml(product.value, 'detail_content') || ''
   if (!raw) return ''
 
   // ── Template variable substitution ──────────────────────────────────────

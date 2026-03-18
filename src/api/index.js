@@ -186,6 +186,8 @@ export const api = {
     return request('/translation/override', { method: 'POST', body: JSON.stringify(data) })
   },
   getTranslations: (lang) => request(`/translation/${lang}`),
+  translateItem: (type, id) => request('/translation/translate-item', { method: 'POST', body: JSON.stringify({ type, id }) }),
+  getTranslationContent: (lang) => request(`/translation/content/${lang}`),
 
   // AI Channels
   getAIChannels: () => request('/ai/channels'),

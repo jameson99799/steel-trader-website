@@ -106,7 +106,7 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const route = useRoute()
-const { localizedValue } = useLang()
+const { localizedValue, localizedHtml } = useLang()
 
 const article = ref(null)
 const loading = ref(true)
@@ -135,7 +135,7 @@ function resolveTemplateVars(html) {
 
 // Build iframe srcdoc — isolates all article HTML styles from main page
 const iframeContent = computed(() => {
-  const raw = article.value?.content || ''
+  const raw = localizedHtml(article.value, 'content') || ''
   if (!raw) return ''
   let html = resolveTemplateVars(raw)
   html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -157,7 +157,7 @@ const iframeContent = computed(() => {
 
 // Sanitized content for direct render mode — strips <style>/<script> only, keeps inline styles for SEO
 const sanitizedContent = computed(() => {
-  const raw = article.value?.content || ''
+  const raw = localizedHtml(article.value, 'content') || ''
   if (!raw) return ''
   let html = resolveTemplateVars(raw)
   return html

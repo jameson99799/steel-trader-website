@@ -38,6 +38,7 @@
               <td>
                 <button class="btn btn-sm btn-secondary" @click="openModal(product)">编辑</button>
                 <button class="btn btn-sm btn-outline" @click="duplicateProduct(product)" style="color:#0077b5;border-color:#0077b5;">复制</button>
+                <button class="btn btn-sm btn-outline" @click="translateProduct(product)" style="color:#059669;border-color:#059669;" :disabled="translatingId === product.id">{{ translatingId === product.id ? '翻译中...' : '🌐 翻译' }}</button>
                 <button class="btn btn-sm btn-danger" @click="handleDelete(product)">删除</button>
                 <button class="btn btn-sm btn-outline" @click="$router.push(`/admin/products/ai/${product.id}`)" style="color:#7c3aed;border-color:#7c3aed;">🤖 AI</button>
               </td>
@@ -291,6 +292,20 @@ const imgUploadInput = ref(null)
 const carouselUploadInput = ref(null)
 const faqItems = ref([])
 let replacingImg = null  // track image being replaced
+const translatingId = ref(null)
+
+async function translateProduct(product) {
+  if (!confirm(`翻译产品「${product.name_en || product.name}」到所有已配置的语言？`)) return
+  translatingId.value = product.id
+  try {
+    const res = await api.translateItem('product', product.id)
+    alert(`✅ 翻译完成！已翻译 ${res.fields || 0} 个字段到 ${res.languages || 0} 种语言。${res.errors?.length ? `\n⚠️ ${res.errors.length} 个错误` : ''}`)
+  } catch (e) {
+    alert('翻译失败: ' + e.message)
+  } finally {
+    translatingId.value = null
+  }
+}
 
 const form = reactive({
   name: '',

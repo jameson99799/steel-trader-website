@@ -54,12 +54,13 @@ function httpRequest(urlStr, options = {}, body = null) {
             })
         })
         req.on('error', reject)
+        req.setTimeout(120000, () => { req.destroy(new Error('Request timeout 120s')) })
         if (body) req.write(typeof body === 'string' ? body : JSON.stringify(body))
         req.end()
     })
 }
 
-async function callAI(settings, messages) {
+async function callAI(settings, messages, maxTokens = 4000) {
     const apiUrl = (settings.api_url || 'https://api.openai.com/v1').replace(/\/$/, '') + '/chat/completions'
     const result = await httpRequest(apiUrl, {
         method: 'POST',
@@ -71,7 +72,7 @@ async function callAI(settings, messages) {
         model: settings.model_name || 'gpt-3.5-turbo',
         messages,
         temperature: 0.3,
-        max_tokens: 2000
+        max_tokens: maxTokens
     })
     if (result.status !== 200) {
         const errMsg = typeof result.body === 'object'
@@ -101,101 +102,191 @@ router.post('/models', authMiddleware, async (req, res) => {
     }
 })
 
-// ─── Content collector ────────────────────────────────────────────────────────
+// ─── HTML segmented translation helper ───────────────────────────────────────
+// Split long HTML into translatable text segments while preserving structure
 
-const PAGES = {
-    products: () => {
-        const rows = getAll('SELECT id, name_en, description_en FROM products WHERE status=1')
-        return rows.flatMap(r => [
-            r.name_en ? { type: 'product', id: r.id, field: 'name', text: r.name_en } : null,
-            r.description_en ? { type: 'product', id: r.id, field: 'description', text: r.description_en } : null
-        ]).filter(Boolean)
-    },
-    news: () => {
-        const rows = getAll('SELECT id, title_en, summary_en FROM news WHERE status=1')
-        return rows.flatMap(r => [
-            r.title_en ? { type: 'news', id: r.id, field: 'title', text: r.title_en } : null,
-            r.summary_en ? { type: 'news', id: r.id, field: 'summary', text: r.summary_en } : null
-        ]).filter(Boolean)
-    },
-    company: () => {
-        const c = getOne('SELECT * FROM company WHERE id=1')
-        if (!c) return []
-        return ['name', 'description', 'address'].flatMap(f =>
-            c[`${f}_en`] ? [{ type: 'company', id: 1, field: f, text: c[`${f}_en`] }] : []
-        )
-    },
-    page_texts: () => {
-        const pt = getOne('SELECT * FROM page_texts WHERE id=1')
-        if (!pt) return []
-        const fields = [
-            'logo_subtitle', 'featured_subtitle_en', 'categories_subtitle_en',
-            'cta_title_en', 'cta_subtitle_en', 'contact_page_title_en',
-            'contact_page_subtitle_en', 'contact_form_desc_en', 'inquiry_subtitle_en',
-            'about_tagline_en', 'about_cta_subtitle_en'
-        ]
-        return fields.flatMap(f =>
-            pt[f] ? [{ type: 'page_text', id: 1, field: f.replace(/_en$/, ''), text: pt[f] }] : []
-        )
+function extractTextSegments(html) {
+    if (!html || typeof html !== 'string') return []
+    // Extract text from HTML tags — match content between > and <
+    const segments = []
+    // Split by HTML tags, collect text nodes
+    const parts = html.split(/(<[^>]+>)/)
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i]
+        if (!part) continue
+        if (part.startsWith('<')) continue // skip tags
+        const text = part.trim()
+        if (text.length > 1 && !/^[\s\d.,;:!?@#$%^&*()\-+=\[\]{}|\\/<>'"~`]+$/.test(text)) {
+            segments.push({ index: i, text })
+        }
     }
+    return segments
 }
 
-// ─── Run translation (synchronous, per page, with error details) ──────────────
-
-router.post('/run', authMiddleware, async (req, res) => {
-    const { lang: targetLang, page } = req.body
-    if (!targetLang || targetLang === 'en') return res.status(400).json({ error: 'Invalid target language' })
-
-    const langRow = getOne('SELECT * FROM languages WHERE code=?', [targetLang])
-    if (!langRow) return res.status(400).json({ error: `Language "${targetLang}" not found` })
-
-    const s = getOne('SELECT * FROM translation_settings WHERE id=1')
-    if (!s?.api_key) return res.status(400).json({ error: 'AI API key not configured. Please save your API key first.' })
-    if (!s?.model_name) return res.status(400).json({ error: 'AI model not configured.' })
-
-    // Collect items for the requested page(s)
-    const pageNames = page && page !== 'all' ? [page] : Object.keys(PAGES)
-    let items = []
-    for (const p of pageNames) {
-        if (PAGES[p]) items = items.concat(PAGES[p]())
+function reassembleHtml(html, translations) {
+    const parts = html.split(/(<[^>]+>)/)
+    for (const t of translations) {
+        if (t.index < parts.length && t.translated) {
+            parts[t.index] = t.translated
+        }
     }
+    return parts.join('')
+}
 
-    if (items.length === 0) return res.json({ success: true, results: [], message: 'No content to translate for this page.' })
+// ─── Content collector — EXPANDED to cover ALL site content ──────────────────
 
-    // Load manual overrides as context
-    const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
-    const overrideNote = manualOverrides.length > 0
-        ? '\n\nUse these approved translations as reference:\n' +
-        manualOverrides.slice(0, 8).map(o => `"${o.original_text}" → "${o.translated_text}"`).join('\n')
-        : ''
+function collectProducts() {
+    const rows = getAll('SELECT id, name_en, description_en, seo_title, seo_description, seo_keywords, detail_content, faq_items, specs FROM products WHERE status=1')
+    const items = []
+    for (const r of rows) {
+        if (r.name_en) items.push({ type: 'product', id: r.id, field: 'name', text: r.name_en })
+        if (r.description_en) items.push({ type: 'product', id: r.id, field: 'description', text: r.description_en })
+        if (r.seo_title) items.push({ type: 'product', id: r.id, field: 'seo_title', text: r.seo_title })
+        if (r.seo_description) items.push({ type: 'product', id: r.id, field: 'seo_description', text: r.seo_description })
+        if (r.seo_keywords) items.push({ type: 'product', id: r.id, field: 'seo_keywords', text: r.seo_keywords })
+        // detail_content — mark as long_html for segmented translation
+        if (r.detail_content && r.detail_content.length > 10) {
+            items.push({ type: 'product', id: r.id, field: 'detail_content', text: r.detail_content, long_html: true })
+        }
+        // FAQ items
+        if (r.faq_items) {
+            try {
+                const faqs = JSON.parse(r.faq_items)
+                if (Array.isArray(faqs)) {
+                    faqs.forEach((f, idx) => {
+                        if (f.question) items.push({ type: 'product', id: r.id, field: `faq_q_${idx}`, text: f.question })
+                        if (f.answer) items.push({ type: 'product', id: r.id, field: `faq_a_${idx}`, text: f.answer })
+                    })
+                }
+            } catch (e) { }
+        }
+        // Specs
+        if (r.specs) {
+            try {
+                const specs = JSON.parse(r.specs)
+                if (Array.isArray(specs)) {
+                    specs.forEach((s, idx) => {
+                        if (s.name) items.push({ type: 'product', id: r.id, field: `spec_name_${idx}`, text: s.name })
+                        if (s.value) items.push({ type: 'product', id: r.id, field: `spec_value_${idx}`, text: s.value })
+                    })
+                }
+            } catch (e) { }
+        }
+    }
+    return items
+}
 
-    const BATCH = 5
+function collectNews() {
+    const rows = getAll('SELECT id, title_en, summary_en, content, seo_title, seo_description, seo_keywords, faq_items FROM news WHERE status=1')
+    const items = []
+    for (const r of rows) {
+        if (r.title_en) items.push({ type: 'news', id: r.id, field: 'title', text: r.title_en })
+        if (r.summary_en) items.push({ type: 'news', id: r.id, field: 'summary', text: r.summary_en })
+        if (r.seo_title) items.push({ type: 'news', id: r.id, field: 'seo_title', text: r.seo_title })
+        if (r.seo_description) items.push({ type: 'news', id: r.id, field: 'seo_description', text: r.seo_description })
+        if (r.seo_keywords) items.push({ type: 'news', id: r.id, field: 'seo_keywords', text: r.seo_keywords })
+        if (r.content && r.content.length > 10) {
+            items.push({ type: 'news', id: r.id, field: 'content', text: r.content, long_html: true })
+        }
+        if (r.faq_items) {
+            try {
+                const faqs = JSON.parse(r.faq_items)
+                if (Array.isArray(faqs)) {
+                    faqs.forEach((f, idx) => {
+                        if (f.question) items.push({ type: 'news', id: r.id, field: `faq_q_${idx}`, text: f.question })
+                        if (f.answer) items.push({ type: 'news', id: r.id, field: `faq_a_${idx}`, text: f.answer })
+                    })
+                }
+            } catch (e) { }
+        }
+    }
+    return items
+}
+
+function collectCompany() {
+    const c = getOne('SELECT * FROM company WHERE id=1')
+    if (!c) return []
+    return ['name', 'description', 'address'].flatMap(f =>
+        c[`${f}_en`] ? [{ type: 'company', id: 1, field: f, text: c[`${f}_en`] }] : []
+    )
+}
+
+function collectPageTexts() {
+    const pt = getOne('SELECT * FROM page_texts WHERE id=1')
+    if (!pt) return []
+    const fields = [
+        'logo_subtitle', 'featured_subtitle_en', 'categories_subtitle_en',
+        'advantages_subtitle_en', 'cta_title_en', 'cta_subtitle_en',
+        'products_page_subtitle_en', 'contact_page_title_en', 'contact_page_subtitle_en',
+        'contact_form_desc_en', 'inquiry_panel_title_en', 'contact_tagline_en',
+        'about_overlay_text_en', 'about_tagline_en', 'about_cta_subtitle_en',
+        'about_iso_en', 'about_global_en', 'about_innovation_en',
+        'inquiry_subtitle_en'
+    ]
+    return fields.flatMap(f =>
+        pt[f] ? [{ type: 'page_text', id: 1, field: f.replace(/_en$/, ''), text: pt[f] }] : []
+    )
+}
+
+function collectCategories() {
+    const cats = getAll('SELECT id, name_en FROM categories')
+    return cats.flatMap(c =>
+        c.name_en ? [{ type: 'category', id: c.id, field: 'name', text: c.name_en }] : []
+    )
+}
+
+function collectHero() {
+    const h = getOne('SELECT * FROM hero_content WHERE id=1')
+    if (!h) return []
+    const fields = ['tag', 'title', 'subtitle', 'stat1_label', 'stat2_label', 'stat3_label']
+    return fields.flatMap(f =>
+        h[`${f}_en`] ? [{ type: 'hero', id: 1, field: f, text: h[`${f}_en`] }] : []
+    )
+}
+
+const PAGES = {
+    products: collectProducts,
+    news: collectNews,
+    company: collectCompany,
+    page_texts: collectPageTexts,
+    categories: collectCategories,
+    hero: collectHero
+}
+
+// ─── Translation core — handles both short text batches and long HTML ─────────
+
+async function translateBatch(settings, items, targetLang, langName, overrideNote) {
     const results = []
     const errors = []
 
-    // Translate in small batches
-    for (let i = 0; i < items.length; i += BATCH) {
-        const batch = items.slice(i, i + BATCH)
+    // Separate long_html items from short text items
+    const shortItems = items.filter(i => !i.long_html)
+    const longItems = items.filter(i => i.long_html)
+
+    // ── Translate short text in batches of 5 ──
+    const BATCH = 5
+    for (let i = 0; i < shortItems.length; i += BATCH) {
+        const batch = shortItems.slice(i, i + BATCH)
         const numberedText = batch.map((item, idx) => `${idx + 1}. ${item.text}`).join('\n')
-        const systemPrompt = `You are a professional translator for a steel and LED products export company (GI GL PPGI PPGL steel coil, LED lighting products).
-Translate each numbered line from English to ${langRow.name}.
-Rules: Keep product codes, model numbers, and brand names unchanged. Return ONLY a JSON object like {"1":"translation","2":"translation"}.${overrideNote}`
+        const systemPrompt = `You are a professional translator for a steel products export company (GI GL PPGI PPGL steel coil, CRC, roofing sheets).
+Translate each numbered line from English to ${langName}.
+Rules: Keep product codes, model numbers, brand names, HTML tags, and technical specifications unchanged. Return ONLY a JSON object like {"1":"translation","2":"translation"}.${overrideNote}`
 
         try {
-            const content = await callAI(s, [
+            const content = await callAI(settings, [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: numberedText }
             ])
 
             let translations = {}
-            const jsonMatch = content.match(/\{[\s\S]*?\}/)
+            const jsonMatch = content.match(/\{[\s\S]*\}/)
             if (jsonMatch) {
                 try { translations = JSON.parse(jsonMatch[0]) } catch (e) {
-                    errors.push({ batch: i / BATCH + 1, error: 'JSON parse error: ' + content.slice(0, 200) })
+                    errors.push({ batch: Math.floor(i / BATCH) + 1, error: 'JSON parse error: ' + content.slice(0, 200) })
                     continue
                 }
             } else {
-                errors.push({ batch: i / BATCH + 1, error: 'No JSON in response: ' + content.slice(0, 200) })
+                errors.push({ batch: Math.floor(i / BATCH) + 1, error: 'No JSON in response: ' + content.slice(0, 200) })
                 continue
             }
 
@@ -206,30 +297,122 @@ Rules: Keep product codes, model numbers, and brand names unchanged. Return ONLY
                     errors.push({ item: item.text.slice(0, 60), error: 'No translation in response' })
                     continue
                 }
-                try {
-                    run(
-                        `INSERT INTO translations (language_code, content_type, content_id, content_field, original_text, translated_text, is_manual)
-             VALUES (?, ?, ?, ?, ?, ?, 0)`,
-                        [targetLang, item.type, item.id || null, item.field, item.text, translated]
-                    )
-                } catch (e) {
-                    // On conflict — update
-                    try {
-                        run(
-                            `UPDATE translations SET translated_text=?, updated_at=CURRENT_TIMESTAMP
-               WHERE language_code=? AND content_type=? AND content_id IS ? AND content_field=? AND is_manual=0`,
-                            [translated, targetLang, item.type, item.id || null, item.field]
-                        )
-                    } catch (e2) { }
-                }
-                results.push({ original: item.text, translated, type: item.type, field: item.field })
+                upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
+                results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field })
             }
         } catch (e) {
-            errors.push({ batch: i / BATCH + 1, error: e.message })
+            errors.push({ batch: Math.floor(i / BATCH) + 1, error: e.message })
         }
     }
 
-    // Mark language as ai_translated if any succeeded
+    // ── Translate long HTML (detail_content, news content) ──
+    for (const item of longItems) {
+        try {
+            const segments = extractTextSegments(item.text)
+            if (segments.length === 0) continue
+
+            const SEG_BATCH = 8
+            const translatedSegments = []
+
+            for (let i = 0; i < segments.length; i += SEG_BATCH) {
+                const segBatch = segments.slice(i, i + SEG_BATCH)
+                const numberedText = segBatch.map((s, idx) => `${idx + 1}. ${s.text}`).join('\n')
+                const systemPrompt = `You are a professional translator for a steel products export company.
+Translate each numbered line from English to ${langName}.
+Rules: Keep product codes, model numbers, brand names, HTML entities unchanged. Return ONLY a JSON object like {"1":"translation","2":"translation"}.`
+
+                const content = await callAI(settings, [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: numberedText }
+                ], 4000)
+
+                let translations = {}
+                const jsonMatch = content.match(/\{[\s\S]*\}/)
+                if (jsonMatch) {
+                    try { translations = JSON.parse(jsonMatch[0]) } catch (e) {
+                        errors.push({ item: `${item.type}/${item.field} seg${i}`, error: 'JSON parse' })
+                        continue
+                    }
+                }
+
+                for (let j = 0; j < segBatch.length; j++) {
+                    const translated = translations[String(j + 1)]
+                    if (translated) {
+                        translatedSegments.push({ index: segBatch[j].index, translated })
+                    }
+                }
+            }
+
+            if (translatedSegments.length > 0) {
+                const translatedHtml = reassembleHtml(item.text, translatedSegments)
+                upsertTranslation(targetLang, item.type, item.id, item.field, '[HTML]', translatedHtml)
+                results.push({ original: `[HTML ${item.field}]`, translated: `${translatedSegments.length} segments`, type: item.type, field: item.field })
+            }
+        } catch (e) {
+            errors.push({ item: `${item.type}/${item.field} id=${item.id}`, error: e.message })
+        }
+    }
+
+    return { results, errors }
+}
+
+function upsertTranslation(lang, type, id, field, original, translated) {
+    try {
+        run(
+            `INSERT INTO translations (language_code, content_type, content_id, content_field, original_text, translated_text, is_manual)
+             VALUES (?, ?, ?, ?, ?, ?, 0)`,
+            [lang, type, id || null, field, original, translated]
+        )
+    } catch (e) {
+        try {
+            run(
+                `UPDATE translations SET translated_text=?, updated_at=CURRENT_TIMESTAMP
+               WHERE language_code=? AND content_type=? AND content_id IS ? AND content_field=? AND is_manual=0`,
+                [translated, lang, type, id || null, field]
+            )
+        } catch (e2) {
+            // Also try with = instead of IS for non-null IDs
+            try {
+                run(
+                    `UPDATE translations SET translated_text=?, updated_at=CURRENT_TIMESTAMP
+                   WHERE language_code=? AND content_type=? AND content_id=? AND content_field=? AND is_manual=0`,
+                    [translated, lang, type, id, field]
+                )
+            } catch (e3) { }
+        }
+    }
+}
+
+// ─── Run full translation (per page or all) ──────────────────────────────────
+
+router.post('/run', authMiddleware, async (req, res) => {
+    const { lang: targetLang, page } = req.body
+    if (!targetLang || targetLang === 'en') return res.status(400).json({ error: 'Invalid target language' })
+
+    const langRow = getOne('SELECT * FROM languages WHERE code=?', [targetLang])
+    if (!langRow) return res.status(400).json({ error: `Language "${targetLang}" not found` })
+
+    const s = getOne('SELECT * FROM translation_settings WHERE id=1')
+    if (!s?.api_key) return res.status(400).json({ error: 'AI API key not configured. Please save your API key first.' })
+
+    // Collect items
+    const pageNames = page && page !== 'all' ? [page] : Object.keys(PAGES)
+    let items = []
+    for (const p of pageNames) {
+        if (PAGES[p]) items = items.concat(PAGES[p]())
+    }
+
+    if (items.length === 0) return res.json({ success: true, results: [], message: 'No content to translate.' })
+
+    // Load manual overrides
+    const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
+    const overrideNote = manualOverrides.length > 0
+        ? '\n\nUse these approved translations as reference:\n' +
+        manualOverrides.slice(0, 8).map(o => `"${o.original_text}" → "${o.translated_text}"`).join('\n')
+        : ''
+
+    const { results, errors } = await translateBatch(s, items, targetLang, langRow.name, overrideNote)
+
     if (results.length > 0) {
         run('UPDATE languages SET ai_translated=1 WHERE code=?', [targetLang])
     }
@@ -237,15 +420,121 @@ Rules: Keep product codes, model numbers, and brand names unchanged. Return ONLY
     res.json({ success: true, results, errors, total: items.length, translated: results.length })
 })
 
+// ─── Translate single product or article ─────────────────────────────────────
+
+router.post('/translate-item', authMiddleware, async (req, res) => {
+    const { type, id } = req.body
+    if (!type || !id) return res.status(400).json({ error: 'type and id required' })
+
+    const s = getOne('SELECT * FROM translation_settings WHERE id=1')
+    if (!s?.api_key) return res.status(400).json({ error: 'AI API key not configured' })
+
+    // Get all non-English active languages
+    const langs = getAll("SELECT code, name FROM languages WHERE code != 'en' AND status=1")
+    if (langs.length === 0) return res.status(400).json({ error: 'No target languages configured' })
+
+    // Collect items for this single product/article
+    let items = []
+    if (type === 'product') {
+        const r = getOne('SELECT id, name_en, description_en, seo_title, seo_description, seo_keywords, detail_content, faq_items, specs FROM products WHERE id=?', [id])
+        if (!r) return res.status(404).json({ error: 'Product not found' })
+        if (r.name_en) items.push({ type: 'product', id: r.id, field: 'name', text: r.name_en })
+        if (r.description_en) items.push({ type: 'product', id: r.id, field: 'description', text: r.description_en })
+        if (r.seo_title) items.push({ type: 'product', id: r.id, field: 'seo_title', text: r.seo_title })
+        if (r.seo_description) items.push({ type: 'product', id: r.id, field: 'seo_description', text: r.seo_description })
+        if (r.seo_keywords) items.push({ type: 'product', id: r.id, field: 'seo_keywords', text: r.seo_keywords })
+        if (r.detail_content && r.detail_content.length > 10) {
+            items.push({ type: 'product', id: r.id, field: 'detail_content', text: r.detail_content, long_html: true })
+        }
+        if (r.faq_items) {
+            try {
+                const faqs = JSON.parse(r.faq_items)
+                if (Array.isArray(faqs)) faqs.forEach((f, idx) => {
+                    if (f.question) items.push({ type: 'product', id: r.id, field: `faq_q_${idx}`, text: f.question })
+                    if (f.answer) items.push({ type: 'product', id: r.id, field: `faq_a_${idx}`, text: f.answer })
+                })
+            } catch (e) { }
+        }
+        if (r.specs) {
+            try {
+                const specs = JSON.parse(r.specs)
+                if (Array.isArray(specs)) specs.forEach((sp, idx) => {
+                    if (sp.name) items.push({ type: 'product', id: r.id, field: `spec_name_${idx}`, text: sp.name })
+                    if (sp.value) items.push({ type: 'product', id: r.id, field: `spec_value_${idx}`, text: sp.value })
+                })
+            } catch (e) { }
+        }
+    } else if (type === 'news') {
+        const r = getOne('SELECT id, title_en, summary_en, content, seo_title, seo_description, seo_keywords, faq_items FROM news WHERE id=?', [id])
+        if (!r) return res.status(404).json({ error: 'Article not found' })
+        if (r.title_en) items.push({ type: 'news', id: r.id, field: 'title', text: r.title_en })
+        if (r.summary_en) items.push({ type: 'news', id: r.id, field: 'summary', text: r.summary_en })
+        if (r.seo_title) items.push({ type: 'news', id: r.id, field: 'seo_title', text: r.seo_title })
+        if (r.seo_description) items.push({ type: 'news', id: r.id, field: 'seo_description', text: r.seo_description })
+        if (r.seo_keywords) items.push({ type: 'news', id: r.id, field: 'seo_keywords', text: r.seo_keywords })
+        if (r.content && r.content.length > 10) {
+            items.push({ type: 'news', id: r.id, field: 'content', text: r.content, long_html: true })
+        }
+        if (r.faq_items) {
+            try {
+                const faqs = JSON.parse(r.faq_items)
+                if (Array.isArray(faqs)) faqs.forEach((f, idx) => {
+                    if (f.question) items.push({ type: 'news', id: r.id, field: `faq_q_${idx}`, text: f.question })
+                    if (f.answer) items.push({ type: 'news', id: r.id, field: `faq_a_${idx}`, text: f.answer })
+                })
+            } catch (e) { }
+        }
+    } else {
+        return res.status(400).json({ error: 'type must be "product" or "news"' })
+    }
+
+    if (items.length === 0) return res.json({ success: true, message: 'No translatable content found' })
+
+    const allResults = []
+    const allErrors = []
+
+    for (const lang of langs) {
+        const { results, errors } = await translateBatch(s, items, lang.code, lang.name, '')
+        allResults.push(...results.map(r => ({ ...r, lang: lang.code })))
+        allErrors.push(...errors.map(e => ({ ...e, lang: lang.code })))
+    }
+
+    res.json({ success: true, results: allResults, errors: allErrors, languages: langs.length, fields: items.length })
+})
+
 // ─── Progress ─────────────────────────────────────────────────────────────────
 
 router.get('/progress/:lang', authMiddleware, (req, res) => {
     const count = getOne('SELECT COUNT(*) as c FROM translations WHERE language_code=?', [req.params.lang])
     const langRow = getOne('SELECT ai_translated FROM languages WHERE code=?', [req.params.lang])
-    res.json({ count: count?.c || 0, ai_translated: langRow?.ai_translated || 0 })
+
+    // Count total translatable items
+    let total = 0
+    for (const p of Object.values(PAGES)) {
+        try { total += p().filter(i => !i.long_html).length } catch (e) { }
+    }
+
+    res.json({ count: count?.c || 0, total, ai_translated: langRow?.ai_translated || 0 })
 })
 
-// ─── Search untranslated (all content for any page) ───────────────────────────
+// ─── Get translations for frontend rendering ─────────────────────────────────
+
+router.get('/content/:lang', (req, res) => {
+    const lang = req.params.lang
+    if (!lang || lang === 'en') return res.json({})
+
+    const rows = getAll('SELECT content_type, content_id, content_field, translated_text FROM translations WHERE language_code=?', [lang])
+    // Group by type/id for easier frontend consumption
+    const map = {}
+    for (const r of rows) {
+        const key = `${r.content_type}_${r.content_id || 0}`
+        if (!map[key]) map[key] = {}
+        map[key][r.content_field] = r.translated_text
+    }
+    res.json(map)
+})
+
+// ─── Search untranslated ─────────────────────────────────────────────────────
 
 router.get('/search-untranslated/:lang', authMiddleware, (req, res) => {
     const lang = req.params.lang
@@ -253,65 +542,26 @@ router.get('/search-untranslated/:lang', authMiddleware, (req, res) => {
     const page = req.query.page || 'all'
     const results = []
 
-    if (page === 'all' || page === 'products') {
-        const products = query
-            ? getAll('SELECT id, name_en, description_en FROM products WHERE status=1 AND (name_en LIKE ? OR description_en LIKE ?)', [`%${query}%`, `%${query}%`])
-            : getAll('SELECT id, name_en, description_en FROM products WHERE status=1')
-        for (const p of products) {
-            if (p.name_en) {
-                const t = getOne('SELECT translated_text FROM translations WHERE language_code=? AND content_type=? AND content_id=? AND content_field=?', [lang, 'product', p.id, 'name'])
-                if (!t?.translated_text) results.push({ page: 'Products', field: 'name', id: p.id, content_type: 'product', original: p.name_en })
+    const pageNames = page && page !== 'all' ? [page] : Object.keys(PAGES)
+    for (const p of pageNames) {
+        if (!PAGES[p]) continue
+        const items = PAGES[p]()
+        for (const item of items) {
+            if (item.long_html) continue // skip HTML in search
+            if (query && !item.text.toLowerCase().includes(query.toLowerCase())) continue
+            const t = getOne(
+                'SELECT translated_text FROM translations WHERE language_code=? AND content_type=? AND content_id=? AND content_field=?',
+                [lang, item.type, item.id, item.field]
+            )
+            if (!t?.translated_text) {
+                results.push({ page: p, field: item.field, id: item.id, content_type: item.type, original: item.text })
             }
-            if (p.description_en) {
-                const t = getOne('SELECT translated_text FROM translations WHERE language_code=? AND content_type=? AND content_id=? AND content_field=?', [lang, 'product', p.id, 'description'])
-                if (!t?.translated_text) results.push({ page: 'Products', field: 'description', id: p.id, content_type: 'product', original: p.description_en })
-            }
+            if (results.length >= 100) break
         }
+        if (results.length >= 100) break
     }
 
-    if (page === 'all' || page === 'news') {
-        const news = query
-            ? getAll('SELECT id, title_en, summary_en FROM news WHERE status=1 AND (title_en LIKE ? OR summary_en LIKE ?)', [`%${query}%`, `%${query}%`])
-            : getAll('SELECT id, title_en, summary_en FROM news WHERE status=1')
-        for (const n of news) {
-            if (n.title_en) {
-                const t = getOne('SELECT translated_text FROM translations WHERE language_code=? AND content_type=? AND content_id=? AND content_field=?', [lang, 'news', n.id, 'title'])
-                if (!t?.translated_text) results.push({ page: 'News', field: 'title', id: n.id, content_type: 'news', original: n.title_en })
-            }
-            if (n.summary_en) {
-                const t = getOne('SELECT translated_text FROM translations WHERE language_code=? AND content_type=? AND content_id=? AND content_field=?', [lang, 'news', n.id, 'summary'])
-                if (!t?.translated_text) results.push({ page: 'News', field: 'summary', id: n.id, content_type: 'news', original: n.summary_en })
-            }
-        }
-    }
-
-    if (page === 'all' || page === 'company') {
-        const c = getOne('SELECT * FROM company WHERE id=1')
-        if (c) {
-            for (const field of ['name', 'description', 'address']) {
-                const text = c[`${field}_en`]
-                if (!text || (query && !text.toLowerCase().includes(query.toLowerCase()))) continue
-                const t = getOne('SELECT translated_text FROM translations WHERE language_code=? AND content_type=? AND content_id=? AND content_field=?', [lang, 'company', 1, field])
-                if (!t?.translated_text) results.push({ page: 'Company', field, id: 1, content_type: 'company', original: text })
-            }
-        }
-    }
-
-    if (page === 'all' || page === 'page_texts') {
-        const pt = getOne('SELECT * FROM page_texts WHERE id=1')
-        if (pt) {
-            const fields = ['logo_subtitle', 'featured_subtitle_en', 'categories_subtitle_en', 'cta_title_en', 'cta_subtitle_en', 'inquiry_subtitle_en']
-            for (const f of fields) {
-                const text = pt[f]
-                if (!text || (query && !text.toLowerCase().includes(query.toLowerCase()))) continue
-                const fieldKey = f.replace(/_en$/, '')
-                const t = getOne('SELECT translated_text FROM translations WHERE language_code=? AND content_type=? AND content_id=? AND content_field=?', [lang, 'page_text', 1, fieldKey])
-                if (!t?.translated_text) results.push({ page: 'Page Texts', field: fieldKey, id: 1, content_type: 'page_text', original: text })
-            }
-        }
-    }
-
-    res.json(results.slice(0, 100))
+    res.json(results)
 })
 
 // ─── Manual override ──────────────────────────────────────────────────────────
@@ -319,26 +569,21 @@ router.get('/search-untranslated/:lang', authMiddleware, (req, res) => {
 router.post('/override', authMiddleware, (req, res) => {
     const { language_code, content_type, content_id, content_field, original_text, translated_text } = req.body
     if (!language_code || !content_field || !translated_text) return res.status(400).json({ error: 'missing required fields' })
+    upsertTranslation(language_code, content_type || 'manual', content_id || null, content_field, original_text || '', translated_text)
+    // Mark as manual
     try {
         run(
-            `INSERT INTO translations (language_code, content_type, content_id, content_field, original_text, translated_text, is_manual)
-       VALUES (?, ?, ?, ?, ?, ?, 1)`,
-            [language_code, content_type || 'manual', content_id || null, content_field, original_text || '', translated_text]
+            `UPDATE translations SET is_manual=1 WHERE language_code=? AND content_type=? AND content_id IS ? AND content_field=?`,
+            [language_code, content_type || 'manual', content_id || null, content_field]
         )
-    } catch (e) {
-        run(
-            `UPDATE translations SET translated_text=?, is_manual=1, updated_at=CURRENT_TIMESTAMP
-       WHERE language_code=? AND content_type=? AND content_id IS ? AND content_field=?`,
-            [translated_text, language_code, content_type || 'manual', content_id || null, content_field]
-        )
-    }
+    } catch (e) { }
     res.json({ message: 'Saved' })
 })
 
 // ─── Get all translations for a language ─────────────────────────────────────
 
 router.get('/:lang', authMiddleware, (req, res) => {
-    if (['settings', 'multilingual-status'].includes(req.params.lang)) return res.status(404).json({ error: 'not found' })
+    if (['settings', 'multilingual-status', 'content'].includes(req.params.lang)) return res.status(404).json({ error: 'not found' })
     const rows = getAll('SELECT * FROM translations WHERE language_code=? ORDER BY content_type, content_field', [req.params.lang])
     res.json(rows)
 })

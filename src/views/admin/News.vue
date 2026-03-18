@@ -24,6 +24,7 @@
             <td>{{ item.created_at?.substring(0,10) }}</td>
             <td class="actions">
               <button class="btn btn-sm btn-outline" @click="openEdit(item)">编辑</button>
+              <button class="btn btn-sm btn-outline" @click="translateNews(item)" style="color:#059669;border-color:#059669;" :disabled="translatingId === item.id">{{ translatingId === item.id ? '翻译中...' : '🌐 翻译' }}</button>
               <button class="btn btn-sm btn-danger" @click="deleteItem(item.id)">删除</button>
             </td>
           </tr>
@@ -171,6 +172,20 @@ const editId = ref(null)
 const saving = ref(false)
 const activeTab = ref('basic')
 const isFullscreen = ref(false)
+const translatingId = ref(null)
+
+async function translateNews(item) {
+  if (!confirm(`翻译文章「${item.title_en || item.title}」到所有已配置的语言？`)) return
+  translatingId.value = item.id
+  try {
+    const res = await api.translateItem('news', item.id)
+    alert(`✅ 翻译完成！已翻译 ${res.fields || 0} 个字段到 ${res.languages || 0} 种语言。${res.errors?.length ? `\n⚠️ ${res.errors.length} 个错误` : ''}`)
+  } catch (e) {
+    alert('翻译失败: ' + e.message)
+  } finally {
+    translatingId.value = null
+  }
+}
 
 // ─── Editor state ────────────────────────────────────────────────────────────
 const newsEditorMode = ref('visual')

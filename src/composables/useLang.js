@@ -1,8 +1,13 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+import api from '../api'
 
 // Default language is English — highest priority
 // localStorage overrides if user has explicitly picked something else
 const lang = ref(localStorage.getItem('lang') || 'en')
+
+// Global translations cache — loaded from backend translations table
+const translationsMap = ref({})
+let loadingPromise = null
 
 const translations = {
   zh: {
@@ -81,6 +86,49 @@ const translations = {
   }
 }
 
+// Load translations from backend when language changes
+async function loadTranslations(langCode) {
+  if (langCode === 'en') {
+    translationsMap.value = {}
+    return
+  }
+  // Use cache from sessionStorage for performance
+  const cacheKey = `_trans_${langCode}`
+  try {
+    const cached = sessionStorage.getItem(cacheKey)
+    if (cached) {
+      const { data, ts } = JSON.parse(cached)
+      if (Date.now() - ts < 5 * 60 * 1000) {
+        translationsMap.value = data
+        // Refresh in background
+        api.getTranslationContent(langCode).then(fresh => {
+          translationsMap.value = fresh
+          sessionStorage.setItem(cacheKey, JSON.stringify({ data: fresh, ts: Date.now() }))
+        }).catch(() => { })
+        return
+      }
+    }
+  } catch { }
+  try {
+    const data = await api.getTranslationContent(langCode)
+    translationsMap.value = data
+    try { sessionStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() })) } catch { }
+  } catch (e) {
+    console.warn('Failed to load translations:', e)
+    translationsMap.value = {}
+  }
+}
+
+// Watch language changes and load translations
+watch(lang, (newLang) => {
+  loadTranslations(newLang)
+})
+
+// Initial load
+if (lang.value !== 'en') {
+  loadTranslations(lang.value)
+}
+
 export function useLang() {
   const setLang = (newLang) => {
     lang.value = newLang
@@ -96,24 +144,69 @@ export function useLang() {
     return translations[lang.value]?.[key] || translations['en']?.[key] || key
   }
 
-  // English is the primary content language.
-  // _en fields are always preferred. If the chosen lang has a translation in the
-  // translations table it will be applied by the page-level layer. Otherwise shows _en.
+  /**
+   * Get localized value for a data object field.
+   * When lang is 'en', returns _en field.
+   * When lang is other (e.g. 'es', 'ar'), looks up translation from translationsMap.
+   * translationsMap format: { "product_123": { "name": "Translated name", ... }, ... }
+   */
   const localizedValue = (obj, field) => {
     if (!obj) return ''
     const enField = `${field}_en`
-    // English: prefer _en field
-    if (lang.value === 'en') {
-      return obj[enField] || obj[field] || ''
+    const enValue = obj[enField] || obj[field] || ''
+
+    // English: always use _en field
+    if (lang.value === 'en') return enValue
+
+    // Other languages: check translationsMap
+    if (obj.id != null) {
+      // Determine content type from object shape
+      let contentType = ''
+      if (obj.detail_content !== undefined || obj.is_featured !== undefined) contentType = 'product'
+      else if (obj.slug !== undefined && obj.title_en !== undefined) contentType = 'news'
+      else if (obj.whatsapp !== undefined || obj.about_image !== undefined) contentType = 'company'
+      else if (obj.product_count !== undefined) contentType = 'category'
+      else if (obj.stat1_num !== undefined) contentType = 'hero'
+      else if (obj.featured_subtitle !== undefined) contentType = 'page_text'
+
+      if (contentType) {
+        const key = `${contentType}_${obj.id}`
+        const t = translationsMap.value?.[key]
+        if (t?.[field]) return t[field]
+      }
     }
-    // Other languages: prefer _en over Chinese (zh field) for foreign visitors
-    // The page rendering layer should apply DB translations on top of this
-    return obj[enField] || obj[field] || ''
+
+    // Fallback to _en value
+    return enValue
+  }
+
+  /**
+   * Get translated HTML content (detail_content or news content).
+   * Returns translated HTML if available, otherwise original.
+   */
+  const localizedHtml = (obj, field) => {
+    if (!obj) return ''
+    const original = obj[field] || ''
+
+    if (lang.value === 'en') return original
+
+    if (obj.id != null) {
+      let contentType = ''
+      if (obj.detail_content !== undefined || obj.is_featured !== undefined) contentType = 'product'
+      else if (obj.slug !== undefined && (obj.content !== undefined || obj.title_en !== undefined)) contentType = 'news'
+
+      if (contentType) {
+        const key = `${contentType}_${obj.id}`
+        const t = translationsMap.value?.[key]
+        if (t?.[field]) return t[field]
+      }
+    }
+
+    return original
   }
 
   const initLang = () => {
     const saved = localStorage.getItem('lang')
-    // Only restore saved lang if it's a known value
     if (saved && saved !== '') {
       lang.value = saved
     } else {
@@ -121,5 +214,5 @@ export function useLang() {
     }
   }
 
-  return { lang, setLang, toggleLang, t, localizedValue, initLang }
+  return { lang, setLang, toggleLang, t, localizedValue, localizedHtml, initLang, translationsMap }
 }
