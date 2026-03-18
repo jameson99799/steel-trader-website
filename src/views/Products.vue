@@ -80,22 +80,8 @@
 
           <!-- Products Grid -->
           <main class="products-main">
-            <div class="products-header">
-              <div class="results-info">
-                <h2 class="results-title">{{ currentCategoryName || t('allProducts') }}</h2>
-                <p class="results-count">Showing {{ products.length }} products</p>
-              </div>
-              <div class="view-controls">
-                <div class="sort-controls">
-                  <select class="sort-select">
-                    <option>Sort by Default</option>
-                    <option>Name A-Z</option>
-                    <option>Name Z-A</option>
-                    <option>Newest First</option>
-                  </select>
-                </div>
-              </div>
-            </div>
+
+
             
             <div class="products-grid" v-if="products.length">
               <router-link 
