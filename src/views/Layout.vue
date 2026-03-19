@@ -1,11 +1,11 @@
 <template>
   <div class="site-layout">
-    <SiteHeader />
+    <SiteHeader :key="'header-' + lang" />
     <main class="site-main">
       <router-view :key="lang" />
     </main>
-    <SiteFooter />
-    <FloatingContact />
+    <SiteFooter :key="'footer-' + lang" />
+    <FloatingContact :key="'float-' + lang" />
   </div>
 </template>
 
