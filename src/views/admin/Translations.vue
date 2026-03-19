@@ -2,10 +2,10 @@
   <div class="translations-page">
     <h1>🤖 AI 翻译管理</h1>
 
-    <!-- AI 渠道管理 -->
+    <!-- AI 渠道管理 (可折叠) -->
     <div class="card">
-      <div class="card-header-row">
-        <h3>🤖 AI 渠道管理</h3>
+      <div class="card-header-row" style="cursor:pointer" @click="channelCollapsed = !channelCollapsed">
+        <h3>{{ channelCollapsed ? '▶' : '▼' }} 🤖 AI 渠道管理</h3>
         <div style="display:flex;align-items:center;gap:12px">
           <div class="multilingual-toggle">
             <span>多语言开关</span>
@@ -20,7 +20,7 @@
           <button class="btn btn-primary btn-sm" @click="openChannelDialog()">➕ 添加渠道</button>
         </div>
       </div>
-      <div class="card-body">
+      <div class="card-body" v-show="!channelCollapsed">
         <div v-if="channels.length === 0" class="empty-tip">暂无 AI 渠道，请点击「添加渠道」创建</div>
         <div v-else class="channel-list">
           <div v-for="ch in channels" :key="ch.id" class="channel-card" :class="{ 'is-default': ch.is_default }">
@@ -135,6 +135,7 @@
                 <option value="page_texts">页面文字（Page Texts）</option>
                 <option value="categories">产品分类名称（Categories）</option>
                 <option value="hero">首页 Hero 区域（Hero）</option>
+                <option value="ui_texts_static">UI 静态文字（导航、按钮、标签等）</option>
               </select>
             </div>
             <div class="form-group" style="width:120px">
@@ -489,6 +490,7 @@ const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'he
 const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字' }
 
 const failedItems = ref([])
+const channelCollapsed = ref(true)
 
 const startTranslate = async () => {
   if (!selectedLang.value) return alert('请选择目标语言')

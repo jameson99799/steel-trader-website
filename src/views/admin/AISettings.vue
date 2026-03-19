@@ -210,9 +210,10 @@ onMounted(loadChannels)
 </script>
 
 <style scoped>
-.ai-settings-page { max-width: 1100px; }
+.ai-settings-page { max-width: 100%; }
 .page-desc { color: #64748b; margin-bottom: 24px; }
 .table { width: 100%; border-collapse: collapse; }
+.card-body { overflow-x: auto; }
 .table th, .table td { border: 1px solid #e2e8f0; padding: 10px 14px; text-align: left; vertical-align: middle; }
 .table th { background: #f8fafc; font-weight: 600; }
 .model-tag {

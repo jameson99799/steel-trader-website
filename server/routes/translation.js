@@ -468,6 +468,13 @@ const PAGES = {
     hero: collectHero
 }
 
+
+    // Clean up garbled characters (replacement chars from truncated UTF-8)
+    function cleanTranslation(text) {
+        if (!text || typeof text !== 'string') return text
+        return text.replace(/\uFFFD/g, '').replace(/\u{FFFD}/gu, '').replace(/\ufffd/g, '').replace(/\ufffd\ufffd\ufffd/g, '').trim()
+    }
+
 // ─── Translation core — handles both short text batches and long HTML ─────────
 // ─── Translation core — SINGLE-CALL approach (like read-frog) ─────────────────
 // Sends ALL short text fields in ONE API call as a JSON object.
@@ -679,6 +686,10 @@ Do NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T${overrid
 }
 
 function upsertTranslation(lang, type, id, field, original, translated) {
+    // Clean garbled characters from translations
+    if (translated && typeof translated === 'string') {
+        translated = translated.replace(/\uFFFD/g, '').trim()
+    }
     try {
         run(
             `INSERT INTO translations (language_code, content_type, content_id, content_field, original_text, translated_text, is_manual)
