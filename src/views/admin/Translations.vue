@@ -485,8 +485,8 @@ function abortTranslation() {
   }, 1000)
 }
 
-const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero']
-const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域' }
+const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero', 'ui_texts_static']
+const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字' }
 
 const failedItems = ref([])
 

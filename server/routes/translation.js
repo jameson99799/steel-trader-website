@@ -344,7 +344,122 @@ function collectHero() {
     )
 }
 
+// ── Collect static UI text for translation ──
+const UI_TEXTS_EN = {
+    "home": "Home",
+    "products": "Products",
+    "about": "About Us",
+    "contact": "Contact",
+    "inquiry": "Inquiry",
+    "sendInquiry": "Send Inquiry",
+    "name": "Name",
+    "email": "Email",
+    "phone": "Phone",
+    "company": "Company",
+    "country": "Country",
+    "message": "Message",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "viewMore": "View More",
+    "allProducts": "All Products",
+    "featuredProducts": "Featured Products",
+    "productCategories": "Product Categories",
+    "ourAdvantages": "Our Advantages",
+    "factoryDirect": "Factory Direct",
+    "qualityAssurance": "Quality Assurance",
+    "fastDelivery": "Fast Delivery",
+    "customService": "Custom Service",
+    "contactUs": "Contact Us",
+    "getInTouch": "Get In Touch",
+    "address": "Address",
+    "specifications": "Specifications",
+    "description": "Description",
+    "relatedProducts": "Related Products",
+    "inquirySuccess": "Inquiry submitted successfully! We will contact you soon.",
+    "required": "Required",
+    "yearsExperience": "Years Experience",
+    "productModels": "Product Models",
+    "exportCountries": "Export Countries",
+    "globalClients": "Global Clients",
+    "news": "News",
+    "newsCenter": "News Center",
+    "whyChooseUs": "Why Choose Us",
+    "categories": "Categories",
+    "productsCount": "Products",
+    "factoryDirectDesc": "Direct from manufacturer with competitive pricing and quality control",
+    "qualityAssuranceDesc": "Rigorous testing and certification ensuring premium quality standards",
+    "fastDeliveryDesc": "Efficient logistics and worldwide shipping for timely delivery",
+    "customServiceDesc": "Tailored solutions and professional support for your specific needs",
+    "readyToStart": "Ready to Start Your Project?",
+    "getQuote": "Get in touch with our experts for professional solutions",
+    "companyLabel": "Company",
+    "aboutUs": "About Us",
+    "featured": "Featured",
+    "available": "products available",
+    "noProductsFound": "No products found",
+    "noProductsDesc": "Try adjusting your search or filter to find what you're looking for.",
+    "viewAllProducts": "View All Products",
+    "learnMore": "Learn more about our company and values",
+    "ourAchievements": "Our Achievements",
+    "achievementsDesc": "Numbers that speak for our excellence",
+    "advantagesPageDesc": "Professional quality and service excellence in every aspect of our business operations.",
+    "viewProducts": "View Products",
+    "businessHours": "Business Hours",
+    "followUs": "Follow Us",
+    "monFri": "Monday - Friday",
+    "saturday": "Saturday",
+    "sunday": "Sunday",
+    "closed": "Closed",
+    "formIntro": "Fill out the form below and we'll get back to you within 24 hours",
+    "sending": "Sending...",
+    "privacyNote": "We respect your privacy and will never share your information with third parties.",
+    "ourLocation": "Our Location",
+    "newsUpdates": "News & Updates",
+    "newsSubtitle": "Latest news, product knowledge and company updates",
+    "readMore": "Read more →",
+    "loadingNews": "Loading news...",
+    "noNewsYet": "No news articles yet. Check back soon!",
+    "prevPage": "← Prev",
+    "nextPage": "Next →",
+    "pageOf": "Page",
+    "language": "Language",
+    "clickToZoom": "Click to zoom",
+    "productDetails": "Product Details",
+    "sendEmail": "Send Email",
+    "contactOurTeam": "Contact Our Team",
+    "needMoreInfo": "Need more information? Scan to contact us directly.",
+    "clickToEnlarge": "Click to enlarge",
+    "scanQRWeChat": "Scan QR to add on WeChat",
+    "backToNews": "← Back to News",
+    "quickView": "Quick View",
+    "contactInfo": "Contact Information",
+    "yourRequirements": "Your Requirements",
+    "placeholderName": "Your full name",
+    "placeholderPhone": "+1 (555) 123-4567",
+    "placeholderCompany": "Your company name",
+    "placeholderCountry": "Your country",
+    "placeholderMessage": "Please describe your steel requirements: product type, quantity, specifications, application, timeline, etc.",
+    "benefit24h": "24-hour response",
+    "benefitPricing": "Competitive pricing",
+    "benefitQuality": "Quality guarantee",
+    "articleNotFound": "Article not found",
+    "inquiryForProduct": "I would like to inquire about"
+};
+
+function collectUITexts() {
+    const items = []
+    // All UI static texts as one combined field for efficient single-call translation
+    items.push({
+        type: 'ui_text', id: 'static', field: 'ui_combined',
+        text: JSON.stringify(UI_TEXTS_EN),
+        combined: true, subFields: Object.keys(UI_TEXTS_EN),
+        itemName: 'UI Static Text'
+    })
+    return items
+}
+
 const PAGES = {
+        ui_texts_static: () => collectUITexts(),
     products: collectProducts,
     news: collectNews,
     company: collectCompany,
@@ -992,6 +1107,32 @@ router.post('/override', authMiddleware, (req, res) => {
 
 // ─── Get all translations for a language ─────────────────────────────────────
 
+
+
+// ─── Serve UI text translations for frontend (public, no auth) ──────────────
+router.get('/ui-texts/:lang', (req, res) => {
+    const { lang } = req.params
+    if (!lang || lang === 'en') return res.json({})
+    
+    try {
+        // Get all ui_text translations for this language
+        const rows = getAll(
+            'SELECT content_field, translated_text FROM translations WHERE language_code = ? AND content_type = ? AND content_id = ?',
+            [lang, 'ui_text', 'static']
+        )
+        
+        const result = {}
+        for (const row of rows) {
+            result[row.content_field] = row.translated_text
+        }
+        
+        // If we have a combined ui_combined field, it might contain JSON
+        // Otherwise individual fields are already mapped
+        res.json(result)
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
 
 // ─── Fuzzy search ALL translations (translated content) ──────────────────────
 router.get('/search-translations/:lang', authMiddleware, (req, res) => {
