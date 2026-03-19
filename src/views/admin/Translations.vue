@@ -557,25 +557,28 @@ async function runItems(itemsList) {
   addLog('info', `⚡ 陪读蛙模式: ${CONCURRENCY} 个产品同时翻译, 每个产品内部多段并发`)
 
   let queueIdx = 0
+  let consecutiveFailures = 0
+  const MAX_CONSECUTIVE_FAILURES = 3
 
   async function worker() {
     while (queueIdx < itemsList.length) {
       if (aborted) break
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) break
+
       const chunk = []
       while (queueIdx < itemsList.length && chunk.length < BULK_SIZE) {
         chunk.push(itemsList[queueIdx++])
       }
       if (chunk.length === 0) break
 
-      if (aborted) {
+      if (aborted || consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
         for (const item of chunk) { newFailed.push(item); progressDone.value++ }
         addLog('warn', `⏭ 跳过 ${chunk.length} 个项目（已停止）`)
         continue
       }
 
-      const names = chunk.map(c => c.itemName).join(', ')
       const totalFields = chunk.reduce((s, c) => s + (c.fields?.length || 0), 0)
-      addLog('info', `→ 正在翻译: ${chunk[0].itemName} (${totalFields} 个字段, 多段并发)...`)
+      addLog('info', `→ 正在翻译: ${chunk[0].itemName} (${totalFields} 个字段)...`)
 
       try {
         const item = chunk[0]
@@ -588,25 +591,40 @@ async function runItems(itemsList) {
         if (res.results) allResults.push(...res.results)
         if (res.errors) allErrors.push(...res.errors)
 
-        if (errs > 0) {
+        if (errs > 0 && ok === 0) {
+          consecutiveFailures++
           for (const e of res.errors) {
             const code = e.errorCode ? `[${e.errorCode}]` : ''
             addLog('error', `   ❌ ${e.itemName || ''} ${code}: ${(e.error || '').slice(0, 120)}`)
           }
+          for (const item of chunk) newFailed.push(item)
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            addLog('error', `🛑 连续 ${MAX_CONSECUTIVE_FAILURES} 次失败，自动停止翻译！请检查API密钥或网络连接`)
+            aborted = true
+          }
+        } else if (errs > 0) {
+          consecutiveFailures = 0  // 有成功就重置
           if (ok > 0) addLog('warn', `   ⚠️「${chunk[0].itemName}」: ${ok} 成功, ${errs} 错误`)
           for (const item of chunk) newFailed.push(item)
         } else if (ok === 0) {
+          consecutiveFailures = 0
           addLog('ok', `   ✔「${chunk[0].itemName}」无需翻译`)
         } else {
+          consecutiveFailures = 0
           addLog('ok', `   ✅「${chunk[0].itemName}」翻译成功: ${ok} 个字段`)
         }
       } catch (e) {
+        consecutiveFailures++
         progressErrors.value += chunk.length
         for (const item of chunk) {
           allErrors.push({ item: item.itemName, error: e.message, errorCode: 'ERR_API' })
           newFailed.push(item)
         }
-        addLog('error', `   ❌「${chunk[0].itemName}」翻译失败: ${e.message}`)
+        addLog('error', `   ❌「${chunk[0].itemName}」翻译失败 (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}): ${e.message}`)
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          addLog('error', `🛑 连续 ${MAX_CONSECUTIVE_FAILURES} 次失败，自动停止翻译！请检查API密钥或网络连接`)
+          aborted = true
+        }
       }
 
       progressDone.value += chunk.length
