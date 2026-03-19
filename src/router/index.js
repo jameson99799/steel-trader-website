@@ -1,18 +1,28 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useLang } from '../composables/useLang'
+
+const publicRoutes = [
+  { path: '', name: 'Home', component: () => import('../views/Home.vue') },
+  { path: 'products', name: 'Products', component: () => import('../views/Products.vue') },
+  { path: 'products/:slug', name: 'ProductDetail', component: () => import('../views/ProductDetail.vue') },
+  { path: 'news', name: 'News', component: () => import('../views/News.vue') },
+  { path: 'news/:slug', name: 'NewsDetail', component: () => import('../views/NewsDetail.vue') },
+  { path: 'about', name: 'About', component: () => import('../views/About.vue') },
+  { path: 'contact', name: 'Contact', component: () => import('../views/Contact.vue') }
+]
 
 const routes = [
+  // Public routes with optional language prefix: /es/products, /en/about, etc.
+  {
+    path: '/:lang([a-z]{2})',
+    component: () => import('../views/Layout.vue'),
+    children: publicRoutes
+  },
+  // Public routes without language prefix (default = English)
   {
     path: '/',
     component: () => import('../views/Layout.vue'),
-    children: [
-      { path: '', name: 'Home', component: () => import('../views/Home.vue') },
-      { path: 'products', name: 'Products', component: () => import('../views/Products.vue') },
-      { path: 'products/:slug', name: 'ProductDetail', component: () => import('../views/ProductDetail.vue') },
-      { path: 'news', name: 'News', component: () => import('../views/News.vue') },
-      { path: 'news/:slug', name: 'NewsDetail', component: () => import('../views/NewsDetail.vue') },
-      { path: 'about', name: 'About', component: () => import('../views/About.vue') },
-      { path: 'contact', name: 'Contact', component: () => import('../views/Contact.vue') }
-    ]
+    children: publicRoutes.map(r => ({ ...r, name: r.name ? r.name + 'Default' : undefined }))
   },
   {
     path: '/admin/login',
@@ -55,6 +65,14 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
+  // Handle language from URL prefix
+  const langParam = to.params.lang
+  if (langParam && /^[a-z]{2}$/.test(langParam)) {
+    const { setLang } = useLang()
+    setLang(langParam, true)  // true = fromRouter, don't trigger URL change
+  }
+
+  // Auth check for admin routes
   if (to.matched.some(record => record.meta.requiresAuth)) {
     const token = localStorage.getItem('token')
     if (!token) {

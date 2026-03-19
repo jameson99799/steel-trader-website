@@ -106,7 +106,7 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const route = useRoute()
-const { t, localizedValue, localizedHtml } = useLang()
+const { t, localizedValue, localizedHtml, lang } = useLang()
 
 const article = ref(null)
 const loading = ref(true)

@@ -495,6 +495,30 @@ onMounted(async () => {
           }
         } catch (e) {}
       }
+
+      // ── OG + Twitter meta tags for product ──
+      document.title = p.seo_title || localizedValue(p, 'name')
+      const setMeta = (prop, content) => {
+        if (!content) return
+        let el = document.querySelector(`meta[property="${prop}"]`) || document.querySelector(`meta[name="${prop}"]`)
+        if (!el) {
+          el = document.createElement('meta')
+          if (prop.startsWith('og:')) el.setAttribute('property', prop)
+          else el.setAttribute('name', prop)
+          document.head.appendChild(el)
+        }
+        el.setAttribute('content', content)
+      }
+      setMeta('og:type', 'product')
+      setMeta('og:title', productName)
+      setMeta('og:description', productDesc?.substring(0, 200))
+      setMeta('og:url', productUrl)
+      if (productImages.length) setMeta('og:image', productImages[0])
+      setMeta('og:site_name', 'SHANDONG SUNSEA STEEL CO., LTD')
+      setMeta('twitter:card', 'summary_large_image')
+      setMeta('twitter:title', productName)
+      setMeta('twitter:description', productDesc?.substring(0, 200))
+      if (productImages.length) setMeta('twitter:image', productImages[0])
     }
   } catch (e) {
     console.error(e)

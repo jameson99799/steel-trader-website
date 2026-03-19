@@ -1,9 +1,7 @@
 import { ref, watch, reactive } from 'vue'
 
-// Default language is English
 const lang = ref(localStorage.getItem('lang') || 'en')
 
-// Static translations dictionary (zh + en built-in)
 const builtInTranslations = {
   zh: {
     home: '首页', products: '产品中心', about: '关于我们', contact: '联系我们',
@@ -111,11 +109,9 @@ const builtInTranslations = {
   }
 }
 
-// Dynamic translations loaded from database (for languages like es, fr, etc.)
 const dbTranslations = reactive({})
-let loadedLangs = new Set(['en', 'zh'])  // built-in, no need to load
+let loadedLangs = new Set(['en', 'zh'])
 
-// Load UI translations from the server for non-built-in languages
 async function loadUITranslations(langCode) {
   if (loadedLangs.has(langCode)) return
   try {
@@ -133,21 +129,33 @@ async function loadUITranslations(langCode) {
   loadedLangs.add(langCode)
 }
 
-// When language changes, load DB translations and clear caches
+let _router = null
+let _fromRouter = false
+
 watch(lang, (newLang) => {
   Object.keys(localStorage).filter(k => k.startsWith('_api_cache_')).forEach(k => localStorage.removeItem(k))
   try { Object.keys(sessionStorage).filter(k => k.startsWith('_trans_')).forEach(k => sessionStorage.removeItem(k)) } catch { }
-  // Load DB translations for this language
   if (!loadedLangs.has(newLang)) {
     loadUITranslations(newLang)
   }
+  // Sync URL with language (only if not triggered by router itself)
+  if (!_fromRouter && _router) {
+    const currentPath = _router.currentRoute.value.path
+    // Remove existing lang prefix
+    const pathWithoutLang = currentPath.replace(/^\/[a-z]{2}(\/|$)/, '/')
+    const newPath = newLang === 'en' ? pathWithoutLang : `/${newLang}${pathWithoutLang === '/' ? '' : pathWithoutLang}`
+    if (newPath !== currentPath) {
+      _router.replace(newPath)
+    }
+  }
+  _fromRouter = false
 })
 
 export function useLang() {
-  const setLang = (newLang) => {
+  const setLang = (newLang, fromRouter = false) => {
+    _fromRouter = fromRouter
     lang.value = newLang
     localStorage.setItem('lang', newLang)
-    // Preload translations
     if (!loadedLangs.has(newLang)) {
       loadUITranslations(newLang)
     }
@@ -158,11 +166,9 @@ export function useLang() {
   }
 
   const t = (key) => {
-    // 1. Check DB translations first (for es, fr, etc.)
     if (dbTranslations[lang.value]?.[key]) {
       return dbTranslations[lang.value][key]
     }
-    // 2. Check built-in translations (zh, en)
     return builtInTranslations[lang.value]?.[key] || builtInTranslations['en']?.[key] || key
   }
 
@@ -185,11 +191,16 @@ export function useLang() {
     return obj[field] || ''
   }
 
+  // Get language-prefixed path for router-links
+  const langPath = (path) => {
+    if (lang.value === 'en') return path
+    return `/${lang.value}${path}`
+  }
+
   const initLang = () => {
     const saved = localStorage.getItem('lang')
     if (saved && saved !== '') {
       lang.value = saved
-      // Preload translations for non-built-in languages
       if (!loadedLangs.has(saved)) {
         loadUITranslations(saved)
       }
@@ -198,5 +209,9 @@ export function useLang() {
     }
   }
 
-  return { lang, setLang, toggleLang, t, localizedValue, localizedHtml, initLang }
+  const setRouter = (router) => {
+    _router = router
+  }
+
+  return { lang, setLang, toggleLang, t, localizedValue, localizedHtml, langPath, initLang, setRouter }
 }
