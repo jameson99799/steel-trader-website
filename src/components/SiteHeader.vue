@@ -62,7 +62,7 @@
     <div class="header-main">
       <div class="container">
         <div class="header-main-content">
-          <router-link to="/" class="logo">
+          <router-link :to="langPath('/')" class="logo">
             <div class="logo-image" v-if="company?.logo">
               <img :src="company.logo" :alt="localizedValue(company, 'name')" />
             </div>
@@ -73,23 +73,23 @@
           </router-link>
           
           <nav class="main-nav" :class="{ active: menuOpen }">
-            <router-link to="/" @click="menuOpen = false" class="nav-link">
+            <router-link :to="langPath('/')" @click="menuOpen = false" class="nav-link">
               {{ t('home') }}
             </router-link>
-            <router-link to="/products" @click="menuOpen = false" class="nav-link">
+            <router-link :to="langPath('/products')" @click="menuOpen = false" class="nav-link">
               {{ t('products') }}
             </router-link>
-            <router-link to="/news" @click="menuOpen = false" class="nav-link">{{ t('news') }}</router-link>
-            <router-link to="/about" @click="menuOpen = false" class="nav-link">
+            <router-link :to="langPath('/news')" @click="menuOpen = false" class="nav-link">{{ t('news') }}</router-link>
+            <router-link :to="langPath('/about')" @click="menuOpen = false" class="nav-link">
               {{ t('about') }}
             </router-link>
-            <router-link to="/contact" @click="menuOpen = false" class="nav-link">
+            <router-link :to="langPath('/contact')" @click="menuOpen = false" class="nav-link">
               {{ t('contact') }}
             </router-link>
           </nav>
 
           <div class="header-cta">
-            <router-link to="/contact" class="btn btn-primary">
+            <router-link :to="langPath('/contact')" class="btn btn-primary">
               <svg class="icon" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
                 <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
@@ -113,7 +113,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
-const { lang, setLang, toggleLang, t, localizedValue } = useLang()
+const { lang, setLang, toggleLang, t, localizedValue, langPath } = useLang()
 const menuOpen = ref(false)
 const company = ref(null)
 const pageTexts = ref(null)
@@ -126,8 +126,6 @@ const selectLang = (code) => {
   if (typeof setLang === 'function') setLang(code)
   else if (typeof toggleLang === 'function') toggleLang() // fallback
   langDropOpen.value = false
-  // Reload page so all data is re-fetched with the new lang parameter
-  window.location.reload()
 }
 
 const handleClickOutside = (e) => {
