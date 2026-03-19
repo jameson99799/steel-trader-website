@@ -2,7 +2,7 @@
   <div class="site-layout">
     <SiteHeader />
     <main class="site-main">
-      <router-view />
+      <router-view :key="lang" />
     </main>
     <SiteFooter />
     <FloatingContact />
