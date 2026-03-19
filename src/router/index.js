@@ -12,18 +12,25 @@ const publicRoutes = [
 ]
 
 const routes = [
-  // Public routes with optional language prefix: /es/products, /en/about, etc.
+  // All public routes require language prefix: /en/products, /es/about, /zh/news, etc.
   {
     path: '/:lang([a-z]{2})',
     component: () => import('../views/Layout.vue'),
     children: publicRoutes
   },
-  // Public routes without language prefix (default = English)
+  // Root redirects to /en/ (default language)
   {
     path: '/',
-    component: () => import('../views/Layout.vue'),
-    children: publicRoutes.map(r => ({ ...r, name: r.name ? r.name + 'Default' : undefined }))
+    redirect: () => {
+      const saved = localStorage.getItem('lang')
+      return `/${saved && /^[a-z]{2}$/.test(saved) ? saved : 'en'}`
+    }
   },
+  // Legacy paths without lang prefix → redirect to /en/path
+  { path: '/products/:slug?', redirect: to => `/en/products${to.params.slug ? '/' + to.params.slug : ''}` },
+  { path: '/news/:slug?', redirect: to => `/en/news${to.params.slug ? '/' + to.params.slug : ''}` },
+  { path: '/about', redirect: '/en/about' },
+  { path: '/contact', redirect: '/en/contact' },
   {
     path: '/admin/login',
     name: 'AdminLogin',

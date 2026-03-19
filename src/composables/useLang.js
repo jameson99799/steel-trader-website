@@ -141,11 +141,15 @@ watch(lang, (newLang) => {
   // Sync URL with language (only if not triggered by router itself)
   if (!_fromRouter && _router) {
     const currentPath = _router.currentRoute.value.path
-    // Remove existing lang prefix
-    const pathWithoutLang = currentPath.replace(/^\/[a-z]{2}(\/|$)/, '/')
-    const newPath = newLang === 'en' ? pathWithoutLang : `/${newLang}${pathWithoutLang === '/' ? '' : pathWithoutLang}`
-    if (newPath !== currentPath) {
-      _router.replace(newPath)
+    // Don't sync admin routes
+    if (!currentPath.startsWith('/admin')) {
+      // Remove existing lang prefix
+      const pathWithoutLang = currentPath.replace(/^\/[a-z]{2}(\/|$)/, '/')
+      // ALL languages get prefix, including English — best for SEO consistency
+      const newPath = `/${newLang}${pathWithoutLang === '/' ? '' : pathWithoutLang}`
+      if (newPath !== currentPath) {
+        _router.replace(newPath)
+      }
     }
   }
   _fromRouter = false

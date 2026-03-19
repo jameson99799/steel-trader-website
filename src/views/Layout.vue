@@ -41,10 +41,8 @@ async function updateHreflang() {
       const link = document.createElement('link')
       link.rel = 'alternate'
       link.hreflang = l.code
-      // English = root path, others = /xx/ prefix
-      const href = l.code === 'en'
-        ? origin + (currentPath || '/')
-        : origin + '/' + l.code + (currentPath === '/' ? '' : currentPath)
+      // ALL languages get /xx/ prefix for consistent SEO
+      const href = origin + '/' + l.code + (currentPath === '/' ? '' : currentPath)
       link.href = href
       document.head.appendChild(link)
     }
@@ -53,7 +51,7 @@ async function updateHreflang() {
     const xDefault = document.createElement('link')
     xDefault.rel = 'alternate'
     xDefault.hreflang = 'x-default'
-    xDefault.href = origin + (currentPath || '/')
+    xDefault.href = origin + '/en' + (currentPath === '/' ? '' : currentPath)
     document.head.appendChild(xDefault)
   } catch (e) {
     console.warn('Failed to load languages for hreflang:', e)
