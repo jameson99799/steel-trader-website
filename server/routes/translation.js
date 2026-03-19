@@ -318,92 +318,80 @@ const PAGES = {
 }
 
 // ─── Translation core — handles both short text batches and long HTML ─────────
+// ─── Translation core — SINGLE-CALL approach (like read-frog) ─────────────────
+// Sends ALL short text fields in ONE API call as a JSON object.
+// Long HTML is sent as complete text, not split into tiny blocks.
+// This maximizes token efficiency and translation coherence.
 
 async function translateBatch(settings, items, targetLang, langName, overrideNote) {
     const results = []
     const errors = []
-
-    // Separate long_html items from short text items
     const shortItems = items.filter(i => !i.long_html)
     const longItems = items.filter(i => i.long_html)
 
-    // ── Translate short text — ALL batches CONCURRENTLY (read-frog style) ──
-    const BATCH = 10  // Smaller batches, but ALL run concurrently
-    const AI_CONCURRENCY = 8  // Max concurrent AI calls
+    // ── SHORT TEXT: Send ALL fields in ONE API call as {field: text} ──
+    if (shortItems.length > 0) {
+        // Build a JSON object with field keys → original text
+        const fieldsObj = {}
+        for (const item of shortItems) {
+            fieldsObj[item.field] = item.text
+        }
 
-    // Build all batch tasks
-    const shortBatches = []
-    for (let i = 0; i < shortItems.length; i += BATCH) {
-        shortBatches.push(shortItems.slice(i, i + BATCH))
-    }
-
-    // Process all batches concurrently with limiter
-    async function processBatch(batch, batchIdx) {
-        const numberedText = batch.map((item, idx) => `${idx + 1}. ${item.text}`).join('\n')
-        const systemPrompt = `You are a professional translator for a steel products export company (GI GL PPGI PPGL steel coil, CRC, roofing sheets).
-Translate each numbered line from English to ${langName}.
-Rules: Keep product codes, model numbers, brand names, HTML tags, and technical specifications unchanged. Return ONLY a JSON object like {"1":"translation","2":"translation"}.
-GLOSSARY (use these translations when applicable):
-- Galvalume / GL = 镀铝锌 (for zh/Chinese)
-- ALUZINC = 镀铝锌 (for zh/Chinese)
-- PPGI = 彩涂镀锌 (for zh/Chinese)
-- PPGL = 彩涂镀铝锌 (for zh/Chinese)
-- GI = 镀锌 (for zh/Chinese)
-- CRC = 冷轧卷 (for zh/Chinese)
-DO NOT TRANSLATE these terms — keep them exactly as-is:
-- "SHANDONG SUNSEA STEEL CO., LTD" (company name, never translate)
-- ASTM, JIS, EN, GB/T (standards)
-- Product model numbers and codes${overrideNote}`
+        const systemPrompt = `Translate the following JSON values from English to ${langName}. This is content for a steel products company website.
+Return ONLY a JSON object with the SAME keys and translated values.
+Rules:
+- Translate ALL text content completely and naturally
+- Keep HTML tags, product codes, model numbers, units (mm, kg, MPa) unchanged
+- Keep URLs, email addresses unchanged
+GLOSSARY (for Chinese): Galvalume/GL=镀铝锌, ALUZINC=镀铝锌, PPGI=彩涂镀锌, PPGL=彩涂镀铝锌, GI=镀锌, CRC=冷轧卷
+DO NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T${overrideNote}`
 
         const MAX_RETRIES = 2
-        let attempt = 0
-        let success = false
-        while (attempt <= MAX_RETRIES && !success) {
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
-                const content = await callAI(settings, [
+                const aiContent = await callAI(settings, [
                     { role: 'system', content: systemPrompt },
-                    { role: 'user', content: numberedText }
-                ])
+                    { role: 'user', content: JSON.stringify(fieldsObj, null, 0) }
+                ], 16000)  // Large token limit for complete product
 
-                let translations = {}
-                const jsonMatch = content.match(/\{[\s\S]*\}/)
-                if (jsonMatch) {
-                    try { translations = JSON.parse(jsonMatch[0]) } catch (e) {
-                        attempt++
-                        if (attempt > MAX_RETRIES) {
-                            errors.push({ batch: Math.floor(i / BATCH) + 1, error: 'JSON parse error (retried ' + MAX_RETRIES + 'x): ' + content.slice(0, 200), errorCode: 'ERR_PARSE', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
-                        }
-                        continue
-                    }
-                } else {
-                    attempt++
-                    if (attempt > MAX_RETRIES) {
-                        errors.push({ batch: Math.floor(i / BATCH) + 1, error: 'No JSON in response (retried ' + MAX_RETRIES + 'x): ' + content.slice(0, 200), errorCode: 'ERR_NO_JSON', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
+                const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
+                if (!jsonMatch) {
+                    if (attempt >= MAX_RETRIES) {
+                        errors.push({ error: 'No JSON in AI response (retried ' + MAX_RETRIES + 'x)', errorCode: 'ERR_NO_JSON', itemName: shortItems[0]?.itemName })
                     }
                     continue
                 }
 
-                for (let j = 0; j < batch.length; j++) {
-                    const item = batch[j]
-                    const translated = translations[String(j + 1)]
-                    if (!translated) {
-                        errors.push({ item: item.text.slice(0, 60), error: 'No translation in response', errorCode: 'ERR_MISSING', itemName: item.itemName })
-                        continue
+                let translations
+                try { translations = JSON.parse(jsonMatch[0]) } catch (e) {
+                    if (attempt >= MAX_RETRIES) {
+                        errors.push({ error: 'JSON parse error: ' + aiContent.slice(0, 200), errorCode: 'ERR_PARSE', itemName: shortItems[0]?.itemName })
                     }
-                    upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
-                    results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field, itemName: item.itemName })
+                    continue
                 }
-                success = true
+
+                // Match translations back to items
+                for (const item of shortItems) {
+                    const translated = translations[item.field]
+                    if (translated && typeof translated === 'string') {
+                        upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
+                        results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field, itemName: item.itemName })
+                    } else {
+                        errors.push({ item: item.field, error: 'Missing translation for field', errorCode: 'ERR_MISSING', itemName: item.itemName })
+                    }
+                }
+                break  // Success, exit retry loop
             } catch (e) {
-                attempt++
-                if (attempt > MAX_RETRIES) {
-                    errors.push({ batch: Math.floor(i / BATCH) + 1, error: e.message + ' (retried ' + MAX_RETRIES + 'x)', errorCode: 'ERR_API', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
+                if (attempt >= MAX_RETRIES) {
+                    errors.push({ error: e.message + ' (retried ' + MAX_RETRIES + 'x)', errorCode: 'ERR_API', itemName: shortItems[0]?.itemName })
                 }
             }
         }
     }
 
-    // Run ALL short-text batches concurrently with limiter
+    // ── LONG HTML: Send as COMPLETE text in ONE call (no block splitting) ──
+    // For long HTML, send the entire content at once for coherent translation
+    const AI_CONCURRENCY = 5
     const runConcurrently = async (tasks, limit) => {
         const executing = new Set()
         for (const task of tasks) {
@@ -413,105 +401,94 @@ DO NOT TRANSLATE these terms — keep them exactly as-is:
         }
         await Promise.all(executing)
     }
-    
-    await runConcurrently(
-        shortBatches.map((batch, idx) => () => processBatch(batch, idx)),
-        AI_CONCURRENCY
-    )
 
-    // ── Translate long HTML using block-level DOM parsing ──
-    for (const item of longItems) {
+    const htmlTasks = longItems.map(item => async () => {
         try {
-            const { root, blocks } = extractBlockSegments(item.text)
-            if (!root || blocks.length === 0) continue
+            // Check content size - if very large (>15000 chars), use block splitting; otherwise send whole
+            const contentLength = item.text.length
+            const contextName = item.itemName || 'steel product'
 
-            const BLOCK_BATCH = 15 // larger batches = better context & efficiency
-            const contextName = item.itemName ? `\nContext: This content is about "${item.itemName}".` : ''
-            
-            for (let i = 0; i < blocks.length; i += BLOCK_BATCH) {
-                const batch = blocks.slice(i, i + BLOCK_BATCH)
-                // Send full innerHTML of each block for translation
-                const numberedText = batch.map((b, idx) => `${idx + 1}. ${b.innerHTML}`).join('\n')
-                
-                // Build previous context for coherence
-                let prevContext = ''
-                if (i > 0) {
-                    const recent = blocks.slice(Math.max(0, i - 3), i)
-                        .filter(b => b.translated)
-                        .map(b => b.translated.replace(/<[^>]+>/g, ''))
-                        .join(' ')
-                    if (recent) prevContext = `\nPrevious translated context (for coherence): "${recent.slice(0, 200)}"`
-                }
+            if (contentLength > 15000) {
+                // Very large HTML: use block splitting for reliability
+                const { root, blocks } = extractBlockSegments(item.text)
+                if (!root || blocks.length === 0) return
 
-                const systemPrompt = `You are a professional translator for a steel products export company (GI GL PPGI PPGL steel coil, CRC, roofing sheets, galvanized/galvalume products).${contextName}${prevContext}
-Translate each numbered HTML block from English to ${langName}.
-CRITICAL RULES:
-- Translate ALL text content completely, do NOT leave any English text untranslated
-- Preserve ALL HTML tags (<strong>, <a>, <em>, <span>, <br>, etc.) exactly as they are
-- Keep product codes, model numbers, brand names, units (mm, kg, MPa, etc.) unchanged
-- Keep URLs, email addresses, and phone numbers unchanged
-- Return ONLY a JSON object like {"1":"translated html","2":"translated html",...}
-- Each value should be the complete translated HTML block
-GLOSSARY (use these translations when applicable):
-- Galvalume / GL = 镀铝锌 (for zh/Chinese)
-- ALUZINC = 镀铝锌 (for zh/Chinese)
-- PPGI = 彩涂镀锌 (for zh/Chinese)
-- PPGL = 彩涂镀铝锌 (for zh/Chinese)
-- GI = 镀锌 (for zh/Chinese)
-- CRC = 冷轧卷 (for zh/Chinese)
-DO NOT TRANSLATE these terms — keep them exactly as-is:
-- "SHANDONG SUNSEA STEEL CO., LTD" (company name, never translate)
-- ASTM, JIS, EN, GB/T (standards)
-- Product model numbers and codes${overrideNote}`
-
-                let batchSuccess = false
-                for (let retry = 0; retry <= 2 && !batchSuccess; retry++) {
-                    try {
-                        const aiContent = await callAI(settings, [
-                            { role: 'system', content: systemPrompt },
-                            { role: 'user', content: numberedText }
-                        ], 8000)
-
-                        let translations = {}
-                        const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
-                        if (jsonMatch) {
-                            try { translations = JSON.parse(jsonMatch[0]); batchSuccess = true } catch (e) {
-                                if (retry >= 2) {
-                                    errors.push({ item: `${item.type}/${item.field} block${i}`, error: 'JSON parse error (retried 2x): ' + aiContent.slice(0, 300), errorCode: 'ERR_PARSE', itemName: item.itemName })
+                // But use larger batches and concurrent processing
+                const BLOCK_BATCH = 20
+                const blockTasks = []
+                for (let i = 0; i < blocks.length; i += BLOCK_BATCH) {
+                    const batch = blocks.slice(i, i + BLOCK_BATCH)
+                    blockTasks.push(async () => {
+                        const numberedText = batch.map((b, idx) => `${idx + 1}. ${b.innerHTML}`).join('\n')
+                        const blockPrompt = `Translate HTML blocks to ${langName}. Context: "${contextName}" steel product page.
+Return JSON {"1":"translated html","2":"...",...}. Keep ALL HTML tags, attributes, URLs unchanged. Translate only visible text.
+Glossary(zh): Galvalume/GL=镀铝锌 PPGI=彩涂镀锌 PPGL=彩涂镀铝锌 GI=镀锌 CRC=冷轧卷
+Do NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T${overrideNote}`
+                        for (let retry = 0; retry <= 2; retry++) {
+                            try {
+                                const aiContent = await callAI(settings, [
+                                    { role: 'system', content: blockPrompt },
+                                    { role: 'user', content: numberedText }
+                                ], 8000)
+                                const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
+                                if (jsonMatch) {
+                                    const translations = JSON.parse(jsonMatch[0])
+                                    for (let j = 0; j < batch.length; j++) {
+                                        const translated = translations[String(j + 1)]
+                                        if (translated) batch[j].translated = translated
+                                    }
+                                    break
                                 }
-                                continue
+                            } catch (e) {
+                                if (retry >= 2) errors.push({ error: e.message, errorCode: 'ERR_BLOCK', itemName: item.itemName })
                             }
-                        } else {
-                            if (retry >= 2) {
-                                errors.push({ item: `${item.type}/${item.field} block${i}`, error: 'No JSON (retried 2x): ' + aiContent.slice(0, 300), errorCode: 'ERR_NO_JSON', itemName: item.itemName })
-                            }
-                            continue
                         }
+                    })
+                }
+                // Run block batches concurrently
+                await runConcurrently(blockTasks, AI_CONCURRENCY)
 
-                        for (let j = 0; j < batch.length; j++) {
-                            const translated = translations[String(j + 1)]
-                            if (translated) {
-                                batch[j].translated = translated
-                            }
+                const translatedCount = blocks.filter(b => b.translated).length
+                if (translatedCount > 0) {
+                    const translatedHtml = reassembleFromBlocks(item.text, root, blocks)
+                    upsertTranslation(targetLang, item.type, item.id, item.field, '[HTML]', translatedHtml)
+                    results.push({ original: '[HTML ' + item.field + ']', translated: translatedCount + '/' + blocks.length + ' blocks', type: item.type, field: item.field, itemName: item.itemName })
+                }
+            } else {
+                // Normal HTML (<15000 chars): send ENTIRE content in ONE call
+                const htmlPrompt = `Translate the following HTML content from English to ${langName}. Context: "${contextName}" steel product page.
+Rules:
+- Translate ALL visible text content completely
+- Preserve ALL HTML tags, attributes, class names, styles, URLs exactly as-is
+- Keep product codes, model numbers, units unchanged
+- Return ONLY the translated HTML (no wrapper, no explanation)
+Glossary(zh): Galvalume/GL=镀铝锌 PPGI=彩涂镀锌 PPGL=彩涂镀铝锌 GI=镀锌 CRC=冷轧卷
+Do NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T${overrideNote}`
+
+                for (let retry = 0; retry <= 2; retry++) {
+                    try {
+                        const translated = await callAI(settings, [
+                            { role: 'system', content: htmlPrompt },
+                            { role: 'user', content: item.text }
+                        ], 16000)
+
+                        if (translated && translated.length > 10) {
+                            upsertTranslation(targetLang, item.type, item.id, item.field, '[HTML]', translated)
+                            results.push({ original: '[HTML ' + item.field + ']', translated: '[Translated ' + translated.length + ' chars]', type: item.type, field: item.field, itemName: item.itemName })
+                            break
                         }
                     } catch (e) {
-                        if (retry >= 2) {
-                            errors.push({ item: `${item.type}/${item.field} block${i}`, error: e.message + ' (retried 2x)', errorCode: 'ERR_API', itemName: item.itemName })
-                        }
+                        if (retry >= 2) errors.push({ error: e.message + ' (retried 2x)', errorCode: 'ERR_HTML', itemName: item.itemName })
                     }
                 }
             }
-
-            const translatedCount = blocks.filter(b => b.translated).length
-            if (translatedCount > 0) {
-                const translatedHtml = reassembleFromBlocks(item.text, root, blocks)
-                upsertTranslation(targetLang, item.type, item.id, item.field, '[HTML]', translatedHtml)
-                results.push({ original: `[HTML ${item.field}]`, translated: `${translatedCount}/${blocks.length} blocks`, type: item.type, field: item.field, itemName: item.itemName })
-            }
         } catch (e) {
-            errors.push({ item: `${item.type}/${item.field} id=${item.id}`, error: e.message, errorCode: 'ERR_API', itemName: item.itemName })
+            errors.push({ error: e.message, errorCode: 'ERR_API', itemName: item.itemName })
         }
-    }
+    })
+
+    // Run ALL long HTML items concurrently
+    await runConcurrently(htmlTasks, AI_CONCURRENCY)
 
     return { results, errors }
 }
