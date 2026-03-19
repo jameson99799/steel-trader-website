@@ -306,10 +306,9 @@ function collectCompany() {
     const c = getOne('SELECT * FROM company WHERE id=1')
     if (!c) return []
     const items = []
+    // Only translate description and advantages — name, address, contact info stay in original language
     if (c.description_en) items.push({ type: 'company', id: 1, field: 'description', text: c.description_en, itemName: '公司简介' })
     if (c.advantages_en) items.push({ type: 'company', id: 1, field: 'advantages', text: c.advantages_en, itemName: '公司优势' })
-    if (c.name_en) items.push({ type: 'company', id: 1, field: 'name', text: c.name_en, itemName: '公司名称' })
-    if (c.address_en) items.push({ type: 'company', id: 1, field: 'address', text: c.address_en, itemName: '公司地址' })
     return items
 }
 
@@ -317,7 +316,7 @@ function collectPageTexts() {
     const pt = getOne('SELECT * FROM page_texts WHERE id=1')
     if (!pt) return []
     const fields = [
-        'logo_subtitle', 'featured_subtitle_en', 'categories_subtitle_en',
+        'featured_subtitle_en', 'categories_subtitle_en',
         'advantages_subtitle_en', 'cta_title_en', 'cta_subtitle_en',
         'products_page_subtitle_en', 'contact_page_title_en', 'contact_page_subtitle_en',
         'contact_form_desc_en', 'inquiry_panel_title_en', 'contact_tagline_en',

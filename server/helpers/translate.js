@@ -103,8 +103,7 @@ export function translateCompany(company, map, langCode) {
 
     if (t.description) company[`description_${langCode}`] = t.description
     if (t.advantages) company[`advantages_${langCode}`] = t.advantages
-    if (t.name) company[`name_${langCode}`] = t.name
-    if (t.address) company[`address_${langCode}`] = t.address
+    // Company name, address, and contact info are brand/contact identity — never translate
 
     return company
 }
