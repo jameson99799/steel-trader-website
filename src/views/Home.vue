@@ -28,13 +28,13 @@
             </div>
             
             <div class="hero-actions">
-              <router-link to="/products" class="btn btn-primary btn-lg">
+              <router-link :to="langPath('/products')" class="btn btn-primary btn-lg">
                 <svg class="icon" viewBox="0 0 20 20" fill="currentColor">
                   <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
                 </svg>
                 {{ t('viewMore') }}
               </router-link>
-              <router-link to="/contact" class="btn btn-outline btn-lg">
+              <router-link :to="langPath('/contact')" class="btn btn-outline btn-lg">
                 <svg class="icon" viewBox="0 0 20 20" fill="currentColor">
                   <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
                   <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
@@ -60,7 +60,7 @@
           <router-link 
             v-for="product in featuredProducts" 
             :key="product.id" 
-            :to="`/products/${product.slug || product.id}`"
+            :to="langPath(`/products/${product.slug || product.id}`)"
             class="product-card"
           >
             <div class="product-image">
@@ -101,7 +101,7 @@
           <router-link 
             v-for="cat in categories" 
             :key="cat.id" 
-            :to="`/products?category=${cat.slug || cat.id}`"
+            :to="langPath(`/products?category=${cat.slug || cat.id}`)"
             class="category-card"
           >
             <div class="category-image">
@@ -190,10 +190,10 @@
             <p class="cta-subtitle">{{ localizedValue(pageTexts, 'cta_subtitle') || t('getQuote') }}</p>
           </div>
           <div class="cta-actions">
-            <router-link to="/contact" class="btn btn-primary btn-lg">
+            <router-link :to="langPath('/contact')" class="btn btn-primary btn-lg">
               {{ t('contactUs') }}
             </router-link>
-            <router-link to="/products" class="btn btn-ghost btn-lg">
+            <router-link :to="langPath('/products')" class="btn btn-ghost btn-lg">
               {{ t('viewMore') }}
             </router-link>
           </div>
@@ -208,7 +208,7 @@ import { ref, onMounted } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
-const { t, localizedValue } = useLang()
+const { t, localizedValue, langPath } = useLang()
 const hero = ref({})
 const featuredProducts = ref([])
 const categories = ref([])

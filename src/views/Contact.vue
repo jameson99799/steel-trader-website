@@ -5,7 +5,7 @@
       <div class="container">
         <div class="header-content">
           <nav class="breadcrumb">
-            <router-link to="/" class="breadcrumb-link">{{ t('home') }}</router-link>
+            <router-link :to="langPath('/')" class="breadcrumb-link">{{ t('home') }}</router-link>
             <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor">
               <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
             </svg>
@@ -253,7 +253,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
-const { t, localizedValue } = useLang()
+const { t, localizedValue, langPath } = useLang()
 const company = ref(null)
 const pageTexts = ref(null)
 const loading = ref(false)

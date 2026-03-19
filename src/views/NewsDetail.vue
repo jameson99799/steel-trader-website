@@ -4,9 +4,9 @@
     <div class="page-header">
       <div class="container">
         <nav class="breadcrumb">
-          <router-link to="/" class="breadcrumb-link">{{ t('home') }}</router-link>
+          <router-link :to="langPath('/')" class="breadcrumb-link">{{ t('home') }}</router-link>
           <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
-          <router-link to="/news" class="breadcrumb-link">{{ t('news') }}</router-link>
+          <router-link :to="langPath('/news')" class="breadcrumb-link">{{ t('news') }}</router-link>
           <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
           <span class="breadcrumb-current">{{ localizedValue(article, 'title') }}</span>
         </nav>
@@ -46,7 +46,7 @@
           <div class="article-body article-body-direct" v-else-if="article.content" v-html="sanitizedContent"></div>
 
           <div class="article-footer">
-            <router-link to="/news" class="back-link">
+            <router-link :to="langPath('/news')" class="back-link">
               {{ t('backToNews') }}
             </router-link>
           </div>
@@ -65,7 +65,7 @@
           <router-link
             v-for="cat in allCategories"
             :key="cat.id"
-            :to="`/products?category=${cat.slug || cat.id}`"
+            :to="langPath(`/products?category=${cat.slug || cat.id}`)"
             class="cat-card"
           >
             <div class="cat-image" v-if="cat.image">
@@ -94,7 +94,7 @@
   <div v-else class="not-found">
     <div class="container">
       <h2>{{ t('articleNotFound') }}</h2>
-      <router-link to="/news" class="btn btn-primary">{{ t('backToNews') }}</router-link>
+      <router-link :to="langPath('/news')" class="btn btn-primary">{{ t('backToNews') }}</router-link>
     </div>
   </div>
 </template>
@@ -106,7 +106,7 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const route = useRoute()
-const { t, localizedValue, localizedHtml, lang } = useLang()
+const { t, localizedValue, localizedHtml, lang, langPath } = useLang()
 
 const article = ref(null)
 const loading = ref(true)

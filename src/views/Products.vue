@@ -4,7 +4,7 @@
       <div class="container">
         <div class="header-content">
           <div class="breadcrumb">
-            <router-link to="/" class="breadcrumb-link">{{ t('home') }}</router-link>
+            <router-link :to="langPath('/')" class="breadcrumb-link">{{ t('home') }}</router-link>
             <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor">
               <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
             </svg>
@@ -30,7 +30,7 @@
                 <ul class="category-tree">
                   <li class="category-item">
                     <router-link
-                      to="/products"
+                      :to="langPath('/products')"
                       :class="['category-link', { active: !selectedCategory }]"
                     >
                       <svg class="category-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -42,7 +42,7 @@
                   </li>
                   <li v-for="cat in categoryTree" :key="cat.id" class="category-item">
                     <router-link
-                      :to="`/products?category=${cat.slug || cat.id}`"
+                      :to="langPath(`/products?category=${cat.slug || cat.id}`)"
                       :class="['category-link', { active: selectedCategory === (cat.slug || String(cat.id)) }]"
                     >
                       <svg class="category-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -54,7 +54,7 @@
                     <ul v-if="cat.children?.length" class="subcategory-list">
                       <li v-for="child in cat.children" :key="child.id" class="category-item">
                         <router-link
-                          :to="`/products?category=${child.slug || child.id}`"
+                          :to="langPath(`/products?category=${child.slug || child.id}`)"
                           :class="['category-link subcategory-link', { active: selectedCategory === (child.slug || String(child.id)) }]"
                         >
                           <span class="category-name">{{ localizedValue(child, 'name') }}</span>
@@ -63,7 +63,7 @@
                         <ul v-if="child.children?.length" class="subcategory-list">
                           <li v-for="grandChild in child.children" :key="grandChild.id" class="category-item">
                             <router-link
-                              :to="`/products?category=${grandChild.slug || grandChild.id}`"
+                              :to="langPath(`/products?category=${grandChild.slug || grandChild.id}`)"
                               :class="['category-link subcategory-link', { active: selectedCategory === (grandChild.slug || String(grandChild.id)) }]"
                             >
                               <span class="category-name">{{ localizedValue(grandChild, 'name') }}</span>
@@ -93,7 +93,7 @@
               <router-link 
                 v-for="product in products" 
                 :key="product.id" 
-                :to="`/products/${product.slug || product.id}`"
+                :to="langPath(`/products/${product.slug || product.id}`)"
                 class="product-card"
               >
                 <div class="product-image">
@@ -156,7 +156,7 @@ import api from '../api'
 
 const route = useRoute()
 const router = useRouter()
-const { t, localizedValue } = useLang()
+const { t, localizedValue, langPath } = useLang()
 
 const categoryTree = ref([])
 const products = ref([])

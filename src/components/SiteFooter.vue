@@ -71,9 +71,9 @@
             <div class="link-group">
               <h4 class="link-title">{{ t('companyLabel') }}</h4>
               <ul class="link-list">
-                <li><router-link to="/about" class="footer-link">{{ t('about') }}</router-link></li>
-                <li><router-link to="/products" class="footer-link">{{ t('products') }}</router-link></li>
-                <li><router-link to="/contact" class="footer-link">{{ t('contact') }}</router-link></li>
+                <li><router-link :to="langPath('/about')" class="footer-link">{{ t('about') }}</router-link></li>
+                <li><router-link :to="langPath('/products')" class="footer-link">{{ t('products') }}</router-link></li>
+                <li><router-link :to="langPath('/contact')" class="footer-link">{{ t('contact') }}</router-link></li>
               </ul>
             </div>
             
@@ -133,7 +133,7 @@ import { ref, onMounted } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
-const { t, localizedValue } = useLang()
+const { t, localizedValue, langPath } = useLang()
 const company = ref(null)
 const categories = ref([])
 const pageTexts = ref(null)
