@@ -138,7 +138,7 @@
           <div class="cta-content">
             <div class="cta-text">
               <h2>{{ t('getInTouch') }}</h2>
-              <p>{{ pageTexts?.about_cta_subtitle || 'Ready to start your LED project? Contact our expert team for professional consultation and competitive pricing.' }}</p>
+              <p>{{ localizedValue(pageTexts, 'about_cta_subtitle') || t('getQuote') }}</p>
             </div>
             <div class="cta-actions">
               <router-link to="/contact" class="btn btn-primary btn-lg">
@@ -174,7 +174,7 @@ const pageTexts = ref(null)
 
 const advantages = computed(() => {
   if (!company.value) return []
-  const text = lang.value === 'en' ? company.value.advantages_en : company.value.advantages
+  const text = localizedValue(company.value, 'advantages')
   return text?.split('\n').filter(Boolean) || []
 })
 
