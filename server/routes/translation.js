@@ -204,33 +204,55 @@ function collectProducts() {
     const items = []
     for (const r of rows) {
         const itemName = r.name_en || `Product #${r.id}`
+        
+        // Core fields
         if (r.name_en) items.push({ type: 'product', id: r.id, field: 'name', text: r.name_en, itemName })
         if (r.description_en) items.push({ type: 'product', id: r.id, field: 'description', text: r.description_en, itemName })
-        if (r.seo_title) items.push({ type: 'product', id: r.id, field: 'seo_title', text: r.seo_title, itemName })
-        if (r.seo_description) items.push({ type: 'product', id: r.id, field: 'seo_description', text: r.seo_description, itemName })
-        if (r.seo_keywords) items.push({ type: 'product', id: r.id, field: 'seo_keywords', text: r.seo_keywords, itemName })
+        
+        // SEO — combined into single field for efficient translation
+        const seoObj = {}
+        if (r.seo_title) seoObj.seo_title = r.seo_title
+        if (r.seo_description) seoObj.seo_description = r.seo_description
+        if (r.seo_keywords) seoObj.seo_keywords = r.seo_keywords
+        if (Object.keys(seoObj).length > 0) {
+            items.push({ type: 'product', id: r.id, field: 'seo_combined', text: JSON.stringify(seoObj), combined: true, subFields: Object.keys(seoObj), itemName })
+        }
+        
+        // Detail HTML
         if (r.detail_content && r.detail_content.length > 10) {
             items.push({ type: 'product', id: r.id, field: 'detail_content', text: r.detail_content, long_html: true, itemName })
         }
+        
+        // FAQs — combined into single field
         if (r.faq_items) {
             try {
                 const faqs = JSON.parse(r.faq_items)
-                if (Array.isArray(faqs)) {
+                if (Array.isArray(faqs) && faqs.length > 0) {
+                    const faqObj = {}
                     faqs.forEach((f, idx) => {
-                        if (f.question) items.push({ type: 'product', id: r.id, field: `faq_q_${idx}`, text: f.question, itemName })
-                        if (f.answer) items.push({ type: 'product', id: r.id, field: `faq_a_${idx}`, text: f.answer, itemName })
+                        if (f.question) faqObj[`faq_q_${idx}`] = f.question
+                        if (f.answer) faqObj[`faq_a_${idx}`] = f.answer
                     })
+                    if (Object.keys(faqObj).length > 0) {
+                        items.push({ type: 'product', id: r.id, field: 'faq_combined', text: JSON.stringify(faqObj), combined: true, subFields: Object.keys(faqObj), itemName })
+                    }
                 }
             } catch (e) { }
         }
+        
+        // Specs — combined into single field
         if (r.specs) {
             try {
                 const specs = JSON.parse(r.specs)
-                if (Array.isArray(specs)) {
+                if (Array.isArray(specs) && specs.length > 0) {
+                    const specObj = {}
                     specs.forEach((s, idx) => {
-                        if (s.name) items.push({ type: 'product', id: r.id, field: `spec_name_${idx}`, text: s.name, itemName })
-                        if (s.value) items.push({ type: 'product', id: r.id, field: `spec_value_${idx}`, text: s.value, itemName })
+                        if (s.name) specObj[`spec_name_${idx}`] = s.name
+                        if (s.value) specObj[`spec_value_${idx}`] = s.value
                     })
+                    if (Object.keys(specObj).length > 0) {
+                        items.push({ type: 'product', id: r.id, field: 'spec_combined', text: JSON.stringify(specObj), combined: true, subFields: Object.keys(specObj), itemName })
+                    }
                 }
             } catch (e) { }
         }
@@ -245,20 +267,34 @@ function collectNews() {
         const itemName = r.title_en || `News #${r.id}`
         if (r.title_en) items.push({ type: 'news', id: r.id, field: 'title', text: r.title_en, itemName })
         if (r.summary_en) items.push({ type: 'news', id: r.id, field: 'summary', text: r.summary_en, itemName })
-        if (r.seo_title) items.push({ type: 'news', id: r.id, field: 'seo_title', text: r.seo_title, itemName })
-        if (r.seo_description) items.push({ type: 'news', id: r.id, field: 'seo_description', text: r.seo_description, itemName })
-        if (r.seo_keywords) items.push({ type: 'news', id: r.id, field: 'seo_keywords', text: r.seo_keywords, itemName })
+        
+        // SEO combined
+        const seoObj = {}
+        if (r.seo_title) seoObj.seo_title = r.seo_title
+        if (r.seo_description) seoObj.seo_description = r.seo_description
+        if (r.seo_keywords) seoObj.seo_keywords = r.seo_keywords
+        if (Object.keys(seoObj).length > 0) {
+            items.push({ type: 'news', id: r.id, field: 'seo_combined', text: JSON.stringify(seoObj), combined: true, subFields: Object.keys(seoObj), itemName })
+        }
+        
+        // Content HTML
         if (r.content && r.content.length > 10) {
             items.push({ type: 'news', id: r.id, field: 'content', text: r.content, long_html: true, itemName })
         }
+        
+        // FAQs combined
         if (r.faq_items) {
             try {
                 const faqs = JSON.parse(r.faq_items)
-                if (Array.isArray(faqs)) {
+                if (Array.isArray(faqs) && faqs.length > 0) {
+                    const faqObj = {}
                     faqs.forEach((f, idx) => {
-                        if (f.question) items.push({ type: 'news', id: r.id, field: `faq_q_${idx}`, text: f.question, itemName })
-                        if (f.answer) items.push({ type: 'news', id: r.id, field: `faq_a_${idx}`, text: f.answer, itemName })
+                        if (f.question) faqObj[`faq_q_${idx}`] = f.question
+                        if (f.answer) faqObj[`faq_a_${idx}`] = f.answer
                     })
+                    if (Object.keys(faqObj).length > 0) {
+                        items.push({ type: 'news', id: r.id, field: 'faq_combined', text: JSON.stringify(faqObj), combined: true, subFields: Object.keys(faqObj), itemName })
+                    }
                 }
             } catch (e) { }
         }
@@ -331,11 +367,22 @@ async function translateBatch(settings, items, targetLang, langName, overrideNot
 
     // ── SHORT TEXT: Send ALL fields in ONE API call as {field: text} ──
     if (shortItems.length > 0) {
-        // Build a JSON object with field keys → original text
+        // Build a merged JSON object — combined fields get expanded into sub-fields
         const fieldsObj = {}
         for (const item of shortItems) {
-            fieldsObj[item.field] = item.text
+            if (item.combined) {
+                // Expand combined fields (FAQ, specs, SEO) into individual sub-fields
+                try {
+                    const subObj = JSON.parse(item.text)
+                    Object.assign(fieldsObj, subObj)
+                } catch (e) {
+                    fieldsObj[item.field] = item.text
+                }
+            } else {
+                fieldsObj[item.field] = item.text
+            }
         }
+        console.log('[translateBatch] Sending', Object.keys(fieldsObj).length, 'fields in ONE call for', shortItems[0]?.itemName, '| JSON size:', JSON.stringify(fieldsObj).length, 'chars')
 
         const systemPrompt = `Translate the following JSON values from English to ${langName}. This is content for a steel products company website.
 Return ONLY a JSON object with the SAME keys and translated values.
@@ -370,14 +417,37 @@ DO NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T${overrid
                     continue
                 }
 
-                // Match translations back to items
+                // Match translations back to items — handle combined fields
+                console.log('[translateBatch] Got', Object.keys(translations).length, 'translated fields back')
                 for (const item of shortItems) {
-                    const translated = translations[item.field]
-                    if (translated && typeof translated === 'string') {
-                        upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
-                        results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field, itemName: item.itemName })
+                    if (item.combined) {
+                        // Combined field: match each sub-field
+                        try {
+                            const subObj = JSON.parse(item.text)
+                            let allFound = true
+                            for (const subField of Object.keys(subObj)) {
+                                const translated = translations[subField]
+                                if (translated && typeof translated === 'string') {
+                                    upsertTranslation(targetLang, item.type, item.id, subField, subObj[subField], translated)
+                                    results.push({ original: subObj[subField].slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: subField, itemName: item.itemName })
+                                } else {
+                                    allFound = false
+                                }
+                            }
+                            if (!allFound) {
+                                errors.push({ item: item.field, error: 'Some sub-fields missing', errorCode: 'ERR_PARTIAL', itemName: item.itemName })
+                            }
+                        } catch (e) {
+                            errors.push({ item: item.field, error: 'Combined field parse error', errorCode: 'ERR_PARSE', itemName: item.itemName })
+                        }
                     } else {
-                        errors.push({ item: item.field, error: 'Missing translation for field', errorCode: 'ERR_MISSING', itemName: item.itemName })
+                        const translated = translations[item.field]
+                        if (translated && typeof translated === 'string') {
+                            upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
+                            results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field, itemName: item.itemName })
+                        } else {
+                            errors.push({ item: item.field, error: 'Missing translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
+                        }
                     }
                 }
                 break  // Success, exit retry loop
