@@ -66,7 +66,6 @@ const request = async (url, options = {}) => {
     }
   }
 
-  clearTimeout(timeoutId)
 
   // Parse response — handle HTML error pages gracefully
   let data
