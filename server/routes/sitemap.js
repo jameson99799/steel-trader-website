@@ -16,6 +16,15 @@ function escapeXml(str) {
 router.get('/', (req, res) => {
     const baseUrl = (process.env.SITE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '')
 
+    // Get active languages for multi-language sitemap
+    let activeLangs = []
+    try {
+        activeLangs = getAll(`SELECT code FROM languages WHERE is_active = 1 ORDER BY code`)
+    } catch {
+        activeLangs = [{ code: 'en' }]
+    }
+    if (!activeLangs.length) activeLangs = [{ code: 'en' }]
+
     const staticPages = [
         { loc: '/', priority: '1.0', changefreq: 'daily' },
         { loc: '/products', priority: '0.9', changefreq: 'daily' },
@@ -30,55 +39,82 @@ router.get('/', (req, res) => {
 
     const now = new Date().toISOString().split('T')[0]
 
+    // Build hreflang links for a path
+    function hreflangLinks(path) {
+        return activeLangs.map(l => {
+            const langPath = `/${l.code}${path === '/' ? '' : path}`
+            return `    <xhtml:link rel="alternate" hreflang="${escapeXml(l.code)}" href="${escapeXml(baseUrl + langPath)}" />`
+        }).concat([
+            `    <xhtml:link rel="alternate" hreflang="x-default" href="${escapeXml(baseUrl + '/en' + (path === '/' ? '' : path))}" />`
+        ]).join('\n')
+    }
+
     const urls = []
 
-    // Static pages
+    // Static pages — one entry per language
     for (const p of staticPages) {
-        urls.push(`  <url>
-    <loc>${escapeXml(baseUrl + p.loc)}</loc>
+        for (const l of activeLangs) {
+            const langPath = `/${l.code}${p.loc === '/' ? '' : p.loc}`
+            urls.push(`  <url>
+    <loc>${escapeXml(baseUrl + langPath)}</loc>
     <lastmod>${now}</lastmod>
     <changefreq>${p.changefreq}</changefreq>
     <priority>${p.priority}</priority>
+${hreflangLinks(p.loc)}
   </url>`)
+        }
     }
 
-    // Category pages (crawlable filter URLs)
+    // Category pages — one entry per language
     for (const c of categories) {
         const catSlug = c.slug || c.id
-        urls.push(`  <url>
-    <loc>${escapeXml(baseUrl + '/products?category=' + catSlug)}</loc>
+        const catPath = `/products?category=${catSlug}`
+        for (const l of activeLangs) {
+            urls.push(`  <url>
+    <loc>${escapeXml(baseUrl + '/' + l.code + catPath)}</loc>
     <lastmod>${now}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
+${hreflangLinks(catPath)}
   </url>`)
+        }
     }
 
-    // Products (use slug for SEO-friendly URLs)
+    // Products — one entry per language
     for (const p of products) {
         const prodSlug = p.slug || p.id
+        const prodPath = `/products/${prodSlug}`
         const lastmod = p.created_at ? p.created_at.split(' ')[0] : now
-        urls.push(`  <url>
-    <loc>${escapeXml(baseUrl + '/products/' + prodSlug)}</loc>
+        for (const l of activeLangs) {
+            urls.push(`  <url>
+    <loc>${escapeXml(baseUrl + '/' + l.code + prodPath)}</loc>
     <lastmod>${lastmod}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
+${hreflangLinks(prodPath)}
   </url>`)
+        }
     }
 
-    // News
+    // News — one entry per language
     for (const n of news) {
         const slug = n.slug || n.id
+        const newsPath = `/news/${slug}`
         const lastmod = n.updated_at ? n.updated_at.split(' ')[0] : now
-        urls.push(`  <url>
-    <loc>${escapeXml(baseUrl + '/news/' + slug)}</loc>
+        for (const l of activeLangs) {
+            urls.push(`  <url>
+    <loc>${escapeXml(baseUrl + '/' + l.code + newsPath)}</loc>
     <lastmod>${lastmod}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
+${hreflangLinks(newsPath)}
   </url>`)
+        }
     }
 
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
 ${urls.join('\n')}
 </urlset>`
 
