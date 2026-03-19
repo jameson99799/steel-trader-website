@@ -66,6 +66,8 @@ const request = async (url, options = {}) => {
     }
   }
 
+  clearTimeout(timeoutId)
+
   // Parse response — handle HTML error pages gracefully
   let data
   const contentType = response.headers.get('content-type') || ''
@@ -214,6 +216,9 @@ export const api = {
   runTranslationBulk: (lang, items) => request('/translation/run-bulk', { method: 'POST', body: JSON.stringify({ lang, items }) }),
   getTranslationProgress: (lang) => request(`/translation/progress/${lang}`),
   searchUntranslated: (lang, q = '', page = 'all') => request(`/translation/search-untranslated/${lang}?q=${encodeURIComponent(q)}&page=${page}`),
+  searchTranslations: (lang, q = '', page = 'all') => request(`/translation/search-translations/${lang}?q=${encodeURIComponent(q)}&page=${page}`),
+  replaceTranslation: (id, find_text, replace_text) => request('/translation/replace-translation', { method: 'POST', body: JSON.stringify({ id, find_text, replace_text }) }),
+  batchReplace: (lang, find_text, replace_text, content_type = 'all') => request('/translation/batch-replace', { method: 'POST', body: JSON.stringify({ lang, find_text, replace_text, content_type }) }),
   saveTranslationOverride: (data) => {
     // Clear all translation caches when a manual override is saved
     Object.keys(localStorage).filter(k => k.startsWith('_api_cache_')).forEach(k => localStorage.removeItem(k))

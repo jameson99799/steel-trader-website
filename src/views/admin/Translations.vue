@@ -478,6 +478,11 @@ function addLog(type, msg) {
 function abortTranslation() {
   aborted = true
   addLog('warn', '用户停止了翻译')
+  // Reset translating state after a short delay to let workers finish
+  setTimeout(() => {
+    translating.value = false
+    addLog('info', '📛 翻译已停止，可以重新开始')
+  }, 1000)
 }
 
 const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero']
@@ -634,13 +639,28 @@ async function runItems(itemsList) {
   languages.value = await api.getLanguages()
 }
 
+// ── Search mode: untranslated or translated content ──
+const searchMode = ref('translated')  // 'untranslated' | 'translated'
+const findText = ref('')
+const replaceText = ref('')
+const batchReplacing = ref(false)
+
 const doSearch = async () => {
   if (!searchLang.value) return alert('请选择目标语言')
+  if (!searchQuery.value.trim()) return alert('请输入搜索关键词')
   searching.value = true; searched.value = false; searchResults.value = []
   try {
-    const res = await api.searchUntranslated(searchLang.value, searchQuery.value, searchPage.value)
-    searchResults.value = (res || []).map(r => ({ ...r, replacement: '', saving: false, saved: false }))
+    let res
+    if (searchMode.value === 'translated') {
+      res = await api.searchTranslations(searchLang.value, searchQuery.value, searchPage.value)
+      searchResults.value = (res || []).map(r => ({ ...r, original: r.original_text, replacement: '', saving: false, saved: false, field: r.content_field, content_type: r.content_type }))
+    } else {
+      res = await api.searchUntranslated(searchLang.value, searchQuery.value, searchPage.value)
+      searchResults.value = (res || []).map(r => ({ ...r, replacement: '', saving: false, saved: false }))
+    }
     searched.value = true
+    // Auto-fill findText
+    if (searchQuery.value) findText.value = searchQuery.value
   } catch (e) {
     alert(e.message)
   } finally {
@@ -652,19 +672,41 @@ const saveOverride = async (item) => {
   if (!item.replacement.trim()) return alert('请输入翻译内容')
   item.saving = true
   try {
-    await api.saveTranslationOverride({
-      language_code: searchLang.value,
-      content_type: item.content_type,
-      content_id: item.id,
-      content_field: item.field,
-      original_text: item.original,
-      translated_text: item.replacement
-    })
+    if (searchMode.value === 'translated' && item.id) {
+      // Replace within existing translation
+      await api.replaceTranslation(item.id, findText.value || item.translated_text, item.replacement)
+    } else {
+      await api.saveTranslationOverride({
+        language_code: searchLang.value,
+        content_type: item.content_type,
+        content_id: item.content_id || item.id,
+        content_field: item.field,
+        original_text: item.original,
+        translated_text: item.replacement
+      })
+    }
     item.saved = true
     setTimeout(() => {
       searchResults.value = searchResults.value.filter(r => r !== item)
     }, 1500)
   } catch (e) { alert(e.message) } finally { item.saving = false }
+}
+
+// Batch replace all matching translations
+const doBatchReplace = async () => {
+  if (!searchLang.value) return alert('请选择目标语言')
+  if (!findText.value.trim()) return alert('请输入要查找的文字')
+  if (!confirm(`确认将所有包含「${findText.value}」的翻译替换为「${replaceText.value}」？此操作不可撤销！`)) return
+  batchReplacing.value = true
+  try {
+    const res = await api.batchReplace(searchLang.value, findText.value, replaceText.value, searchPage.value)
+    alert(`替换完成: 找到 ${res.found} 条, 替换 ${res.replaced} 条`)
+    if (searchQuery.value) await doSearch()  // Refresh results
+  } catch (e) {
+    alert('替换失败: ' + e.message)
+  } finally {
+    batchReplacing.value = false
+  }
 }
 </script>
 

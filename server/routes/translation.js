@@ -992,6 +992,89 @@ router.post('/override', authMiddleware, (req, res) => {
 
 // ─── Get all translations for a language ─────────────────────────────────────
 
+
+// ─── Fuzzy search ALL translations (translated content) ──────────────────────
+router.get('/search-translations/:lang', authMiddleware, (req, res) => {
+    const { lang } = req.params
+    const q = (req.query.q || '').trim()
+    const page = req.query.page || 'all'
+    
+    if (!q || q.length < 1) return res.json([])
+    
+    // Search in translated_text for this language
+    let sql = `SELECT id, language_code, content_type, content_id, content_field, 
+                original_text, translated_text, is_manual 
+                FROM translations WHERE language_code = ? AND translated_text LIKE ?`
+    const params = [lang, `%${q}%`]
+    
+    // Filter by content type if specified
+    if (page && page !== 'all') {
+        const typeMap = { products: 'product', news: 'news', company: 'company', page_texts: 'page_text', categories: 'category', hero: 'hero' }
+        const contentType = typeMap[page] || page
+        sql += ' AND content_type = ?'
+        params.push(contentType)
+    }
+    
+    sql += ' ORDER BY id DESC LIMIT 100'
+    
+    try {
+        const results = getAll(sql, params)
+        res.json(results)
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+// ─── Replace translation text (find & replace within translated content) ──────
+router.post('/replace-translation', authMiddleware, (req, res) => {
+    const { id, find_text, replace_text } = req.body
+    if (!id || !find_text) return res.status(400).json({ error: 'Missing id or find_text' })
+    
+    try {
+        const row = getOne('SELECT * FROM translations WHERE id = ?', [id])
+        if (!row) return res.status(404).json({ error: 'Translation not found' })
+        
+        const newText = row.translated_text.replace(new RegExp(find_text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), replace_text || '')
+        
+        run('UPDATE translations SET translated_text = ?, is_manual = 1 WHERE id = ?', [newText, id])
+        res.json({ success: true, original: row.translated_text, updated: newText })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+// ─── Batch replace text across ALL translations for a language ──────
+router.post('/batch-replace', authMiddleware, (req, res) => {
+    const { lang, find_text, replace_text, content_type } = req.body
+    if (!lang || !find_text) return res.status(400).json({ error: 'Missing lang or find_text' })
+    
+    try {
+        let sql = 'SELECT id, translated_text FROM translations WHERE language_code = ? AND translated_text LIKE ?'
+        const params = [lang, `%${find_text}%`]
+        if (content_type && content_type !== 'all') {
+            const typeMap = { products: 'product', news: 'news', company: 'company', page_texts: 'page_text', categories: 'category', hero: 'hero' }
+            sql += ' AND content_type = ?'
+            params.push(typeMap[content_type] || content_type)
+        }
+        
+        const rows = getAll(sql, params)
+        let replaced = 0
+        const escapedFind = find_text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        
+        for (const row of rows) {
+            const newText = row.translated_text.replace(new RegExp(escapedFind, 'g'), replace_text || '')
+            if (newText !== row.translated_text) {
+                run('UPDATE translations SET translated_text = ?, is_manual = 1 WHERE id = ?', [newText, row.id])
+                replaced++
+            }
+        }
+        
+        res.json({ success: true, found: rows.length, replaced })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
 router.get('/:lang', authMiddleware, (req, res) => {
     if (['settings', 'multilingual-status', 'content'].includes(req.params.lang)) return res.status(404).json({ error: 'not found' })
     const rows = getAll('SELECT * FROM translations WHERE language_code=? ORDER BY content_type, content_field', [req.params.lang])
