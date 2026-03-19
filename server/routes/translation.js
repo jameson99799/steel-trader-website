@@ -305,10 +305,12 @@ function collectNews() {
 function collectCompany() {
     const c = getOne('SELECT * FROM company WHERE id=1')
     if (!c) return []
-    // Only translate description — company name, address, and contact info always stay in English
-    return c.description_en
-        ? [{ type: 'company', id: 1, field: 'description', text: c.description_en, itemName: '公司简介' }]
-        : []
+    const items = []
+    if (c.description_en) items.push({ type: 'company', id: 1, field: 'description', text: c.description_en, itemName: '公司简介' })
+    if (c.advantages_en) items.push({ type: 'company', id: 1, field: 'advantages', text: c.advantages_en, itemName: '公司优势' })
+    if (c.name_en) items.push({ type: 'company', id: 1, field: 'name', text: c.name_en, itemName: '公司名称' })
+    if (c.address_en) items.push({ type: 'company', id: 1, field: 'address', text: c.address_en, itemName: '公司地址' })
+    return items
 }
 
 function collectPageTexts() {
