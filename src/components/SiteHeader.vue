@@ -86,19 +86,7 @@
             <router-link :to="langPath('/contact')" @click="menuOpen = false" class="nav-link">
               {{ t('contact') }}
             </router-link>
-            <!-- Mobile Language Switcher -->
-            <div class="mobile-lang-switcher" v-if="multilingualEnabled && activeLanguages.length > 1">
-              <button
-                v-for="l in activeLanguages" :key="l.code"
-                class="mobile-lang-btn"
-                :class="{ active: lang === l.code }"
-                @click="selectLang(l.code); menuOpen = false"
-              >
-                <span class="lang-flag">{{ l.flag }}</span>
-                <span>{{ l.name }}</span>
-                <span v-if="lang === l.code" class="lang-check">✓</span>
-              </button>
-            </div>
+
           </nav>
 
           <div class="header-cta">
@@ -109,6 +97,27 @@
               </svg>
               {{ t('getInTouch') }}
             </router-link>
+            <!-- Mobile Language Globe Button -->
+            <div class="mobile-lang-globe" v-if="multilingualEnabled && activeLanguages.length > 1" ref="mobileLangRef">
+              <button class="globe-btn" @click="mobileLangOpen = !mobileLangOpen" aria-label="Switch language">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 2a14.5 14.5 0 0 1 0 20M12 2a14.5 14.5 0 0 0 0 20M2 12h20"/>
+                </svg>
+              </button>
+              <div class="mobile-lang-dropdown" v-show="mobileLangOpen">
+                <button
+                  v-for="l in activeLanguages" :key="l.code"
+                  class="mobile-lang-item"
+                  :class="{ active: lang === l.code }"
+                  @click="selectLang(l.code); mobileLangOpen = false"
+                >
+                  <span class="lang-flag">{{ l.flag }}</span>
+                  <span>{{ l.name }}</span>
+                  <span v-if="lang === l.code" class="lang-check">✓</span>
+                </button>
+              </div>
+            </div>
             <button class="mobile-menu-toggle" @click="menuOpen = !menuOpen" aria-label="Toggle navigation menu">
               <span class="hamburger-line"></span>
               <span class="hamburger-line"></span>
@@ -134,6 +143,8 @@ const multilingualEnabled = ref(true)
 const activeLanguages = ref([])
 const langDropOpen = ref(false)
 const langSwitcherRef = ref(null)
+const mobileLangOpen = ref(false)
+const mobileLangRef = ref(null)
 
 const selectLang = (code) => {
   if (typeof setLang === 'function') setLang(code)
@@ -144,6 +155,9 @@ const selectLang = (code) => {
 const handleClickOutside = (e) => {
   if (langSwitcherRef.value && !langSwitcherRef.value.contains(e.target)) {
     langDropOpen.value = false
+  }
+  if (mobileLangRef.value && !mobileLangRef.value.contains(e.target)) {
+    mobileLangOpen.value = false
   }
 }
 
@@ -546,18 +560,43 @@ onUnmounted(() => {
   }
 }
 
-/* Mobile language switcher inside nav */
-.mobile-lang-switcher {
+/* Mobile language globe button (header bar) */
+.mobile-lang-globe {
   display: none;
-  border-top: 1px solid var(--border);
-  padding: 8px 0;
+  position: relative;
 }
-.mobile-lang-btn {
+.globe-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: none;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: all 0.2s;
+}
+.globe-btn:hover { border-color: var(--primary); color: var(--primary); }
+.mobile-lang-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 160px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+  overflow: hidden;
+  z-index: 200;
+  border: 1px solid #e2e8f0;
+}
+.mobile-lang-item {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 10px 16px;
+  padding: 10px 14px;
   background: none;
   border: none;
   cursor: pointer;
@@ -566,13 +605,13 @@ onUnmounted(() => {
   text-align: left;
   transition: background 0.15s;
 }
-.mobile-lang-btn:hover { background: #f0f4ff; }
-.mobile-lang-btn.active { background: #eff6ff; color: #1d4ed8; font-weight: 700; }
-.mobile-lang-btn .lang-flag { font-size: 18px; }
-.mobile-lang-btn .lang-check { margin-left: auto; color: #22c55e; font-weight: 700; }
+.mobile-lang-item:hover { background: #f0f4ff; }
+.mobile-lang-item.active { background: #eff6ff; color: #1d4ed8; font-weight: 700; }
+.mobile-lang-item .lang-flag { font-size: 18px; }
+.mobile-lang-item .lang-check { margin-left: auto; color: #22c55e; font-weight: 700; }
 
 @media (max-width: 768px) {
-  .mobile-lang-switcher { display: block; }
+  .mobile-lang-globe { display: block; }
 }
 
 @media (max-width: 640px) {
