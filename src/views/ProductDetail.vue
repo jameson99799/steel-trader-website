@@ -1460,6 +1460,13 @@ onMounted(async () => {
 @media (max-width: 768px) {
   .fixed-contact-panel { display: none; }
   .categories-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* Horizontal scroll for specs table on mobile */
+  .section-content { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .specs-table { table-layout: auto; min-width: 480px; }
+
+  /* Also handle any HTML tables in rich content */
+  .section-content table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
 }
 
 @media (max-width: 480px) {
