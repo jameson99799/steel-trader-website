@@ -515,8 +515,27 @@ onUnmounted(() => {
     font-size: var(--text-xs);
   }
   
+  /* Show compact brand on mobile */
   .logo-text {
-    display: none;
+    display: flex;
+  }
+  .logo-title {
+    font-size: 15px;
+    white-space: nowrap;
+  }
+  .logo-subtitle {
+    font-size: 10px;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+  }
+  .logo {
+    flex: 1;
+    min-width: 0;
+  }
+  .logo-image {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
   }
 
   .header-main {
