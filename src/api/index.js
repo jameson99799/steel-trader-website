@@ -40,6 +40,10 @@ function writeCache(url, data) {
   } catch { }
 }
 
+// ─── In-flight request dedup ──────────────────────────────────────────────────
+// Prevents the same API call from firing multiple times simultaneously
+const inflightRequests = new Map()
+
 // ─── Base request ─────────────────────────────────────────────────────────────
 const request = async (url, options = {}) => {
   const headers = { ...options.headers }
@@ -96,6 +100,12 @@ const request = async (url, options = {}) => {
  */
 async function cachedGet(url) {
   const fullUrl = appendLang(url)
+
+  // Dedup: if this exact request is already in-flight, reuse it
+  if (inflightRequests.has(fullUrl)) {
+    return inflightRequests.get(fullUrl)
+  }
+
   const cached = readCache(fullUrl)
   if (cached) {
     // Return cached data immediately, refresh in background

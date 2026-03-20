@@ -86,6 +86,19 @@
             <router-link :to="langPath('/contact')" @click="menuOpen = false" class="nav-link">
               {{ t('contact') }}
             </router-link>
+            <!-- Mobile Language Switcher -->
+            <div class="mobile-lang-switcher" v-if="multilingualEnabled && activeLanguages.length > 1">
+              <button
+                v-for="l in activeLanguages" :key="l.code"
+                class="mobile-lang-btn"
+                :class="{ active: lang === l.code }"
+                @click="selectLang(l.code); menuOpen = false"
+              >
+                <span class="lang-flag">{{ l.flag }}</span>
+                <span>{{ l.name }}</span>
+                <span v-if="lang === l.code" class="lang-check">✓</span>
+              </button>
+            </div>
           </nav>
 
           <div class="header-cta">
@@ -96,7 +109,7 @@
               </svg>
               {{ t('getInTouch') }}
             </router-link>
-            <button class="mobile-menu-toggle" @click="menuOpen = !menuOpen">
+            <button class="mobile-menu-toggle" @click="menuOpen = !menuOpen" aria-label="Toggle navigation menu">
               <span class="hamburger-line"></span>
               <span class="hamburger-line"></span>
               <span class="hamburger-line"></span>
@@ -531,6 +544,35 @@ onUnmounted(() => {
   .header-cta .btn {
     display: none;
   }
+}
+
+/* Mobile language switcher inside nav */
+.mobile-lang-switcher {
+  display: none;
+  border-top: 1px solid var(--border);
+  padding: 8px 0;
+}
+.mobile-lang-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #334155;
+  text-align: left;
+  transition: background 0.15s;
+}
+.mobile-lang-btn:hover { background: #f0f4ff; }
+.mobile-lang-btn.active { background: #eff6ff; color: #1d4ed8; font-weight: 700; }
+.mobile-lang-btn .lang-flag { font-size: 18px; }
+.mobile-lang-btn .lang-check { margin-left: auto; color: #22c55e; font-weight: 700; }
+
+@media (max-width: 768px) {
+  .mobile-lang-switcher { display: block; }
 }
 
 @media (max-width: 640px) {
