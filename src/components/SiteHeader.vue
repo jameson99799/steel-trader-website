@@ -70,6 +70,11 @@
               <h1 class="logo-title">{{ localizedValue(company, 'name') }}</h1>
               <p class="logo-subtitle">{{ localizedValue(pageTexts, 'logo_subtitle') }}</p>
             </div>
+            <!-- Mobile-only hardcoded compact brand -->
+            <div class="logo-text-mobile">
+              <span class="mobile-brand-name">SUNSEA STEEL</span>
+              <span class="mobile-brand-sub">GI GL PPGI PPGL CRC</span>
+            </div>
           </router-link>
           
           <nav class="main-nav" :class="{ active: menuOpen }">
@@ -402,6 +407,25 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
+/* Mobile-only brand (hidden on desktop) */
+.logo-text-mobile {
+  display: none;
+}
+.mobile-brand-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--primary);
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+.mobile-brand-sub {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+}
+
 .main-nav {
   display: flex;
   align-items: center;
@@ -517,14 +541,12 @@ onUnmounted(() => {
   
   /* Show compact brand on mobile */
   .logo-text {
-    display: flex;
-  }
-  .logo-title {
-    font-size: 15px;
-    white-space: nowrap;
-  }
-  .logo-subtitle {
     display: none;
+  }
+  .logo-text-mobile {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
   .logo {
     flex: 1;

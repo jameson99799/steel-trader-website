@@ -390,77 +390,77 @@ textarea.form-control {
 @media (max-width: 768px) {
   .inquiry-modal {
     max-width: calc(100vw - 24px);
-    max-height: 85vh;
+    max-height: 90vh;
     margin: 8px;
-    display: flex;
-    flex-direction: column;
+    overflow: visible;
   }
   
   .modal-header {
-    padding: 12px 16px;
-    flex-direction: row;
+    padding: 10px 16px;
     gap: 10px;
     text-align: left;
   }
   
   .header-content {
-    flex-direction: row;
-    text-align: left;
     gap: 10px;
   }
 
   .header-icon {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
   }
-  .header-icon svg { width: 18px; height: 18px; }
+  .header-icon svg { width: 16px; height: 16px; }
   
   .header-text h3 {
-    font-size: 16px;
+    font-size: 15px;
     margin-bottom: 2px;
   }
   .header-text p {
-    font-size: 12px;
+    font-size: 11px;
   }
   
   .modal-close {
     position: absolute;
     top: 8px;
     right: 8px;
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
   }
+  .modal-close svg { width: 16px; height: 16px; }
   
   .modal-body {
     padding: 12px 16px;
-    max-height: none;
-    flex: 1;
+    max-height: 50vh;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   
   .form-section {
-    margin-bottom: 12px;
-    padding-bottom: 12px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
   }
 
   .section-title {
-    font-size: 14px;
-    margin-bottom: 10px;
+    font-size: 13px;
+    margin-bottom: 8px;
+    gap: 8px;
   }
+  .section-icon { width: 16px; height: 16px; }
 
   .form-group {
     margin-bottom: 8px;
   }
   .form-group label {
-    margin-bottom: 4px;
+    margin-bottom: 3px;
     font-size: 12px;
   }
   .form-control {
-    padding: 8px 12px;
+    padding: 8px 10px;
     font-size: 14px;
+    border-width: 1px;
   }
   textarea.form-control {
-    min-height: 60px;
+    min-height: 50px;
   }
   
   .form-row {
@@ -475,15 +475,13 @@ textarea.form-control {
   
   .modal-footer {
     padding: 10px 16px;
-    flex-direction: row;
     gap: 8px;
-    flex-shrink: 0;
   }
   
   .modal-footer .btn {
     flex: 1;
-    padding: 10px 12px;
-    font-size: 14px;
+    padding: 10px 8px;
+    font-size: 13px;
   }
 }
 </style>
