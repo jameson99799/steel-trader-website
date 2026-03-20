@@ -294,6 +294,15 @@
               </option>
             </select>
           </div>
+          <div class="form-group">
+            <label>📄 参考产品（详情模板）</label>
+            <select v-model="aiRefProductId" class="form-control" @change="onRefProductChange">
+              <option :value="-1">使用默认模板</option>
+              <option :value="0">不生成产品详情</option>
+              <option v-for="p in products" :key="p.id" :value="p.id">{{ p.name_en || p.name }}</option>
+            </select>
+            <p style="font-size:12px;color:#94a3b8;margin:4px 0 0;">AI 会按参考产品的详情格式，替换为新产品的内容</p>
+          </div>
           <div class="grid grid-2">
             <div class="form-group">
               <label>AI 渠道</label>
@@ -310,8 +319,8 @@
           </div>
           <div v-if="aiGenerating" style="text-align:center;padding:20px 0;">
             <div style="font-size:32px;animation:spin 1s linear infinite;display:inline-block;">⚙️</div>
-            <p style="color:#7c3aed;font-weight:600;margin:10px 0 0;">AI 正在生成产品内容...</p>
-            <p style="color:#94a3b8;font-size:13px;">通常需要 10-30 秒</p>
+            <p style="color:#7c3aed;font-weight:600;margin:10px 0 0;">{{ aiStep }}</p>
+            <p style="color:#94a3b8;font-size:13px;">{{ aiRefProductId !== 0 ? '分两步生成，可能需要 30-90 秒' : '通常需要 10-30 秒' }}</p>
           </div>
           <div v-if="aiError" style="background:#fef2f2;color:#dc2626;padding:10px;border-radius:6px;font-size:13px;margin-top:8px;">{{ aiError }}</div>
         </div>
@@ -328,6 +337,7 @@
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useLang } from '../../composables/useLang'
 import api from '../../api'
+import { DEFAULT_DETAIL_TEMPLATE } from '../../utils/defaultDetailTemplate'
 
 const products = ref([])
 const categories = ref([])
@@ -355,6 +365,9 @@ const aiChannelId = ref(null)
 const aiModel = ref('')
 const aiGenerating = ref(false)
 const aiError = ref('')
+const aiStep = ref('AI 正在生成产品内容...')
+const aiRefProductId = ref(-1) // -1 = default template, 0 = no detail, id = use that product's detail
+const aiRefTemplate = ref('') // loaded template HTML
 const aiCurrentModels = computed(() => {
   const ch = aiChannels.value.find(c => c.id === aiChannelId.value)
   return ch?.models || []
@@ -362,6 +375,19 @@ const aiCurrentModels = computed(() => {
 function onAIChannelChange() {
   const ch = aiChannels.value.find(c => c.id === aiChannelId.value)
   if (ch?.models?.length) aiModel.value = ch.models[0]
+}
+async function onRefProductChange() {
+  if (aiRefProductId.value > 0) {
+    try {
+      const resp = await fetch('/api/products/' + aiRefProductId.value, {
+        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+      })
+      const p = await resp.json()
+      aiRefTemplate.value = p.detail_content || ''
+    } catch (e) { aiRefTemplate.value = '' }
+  } else {
+    aiRefTemplate.value = ''
+  }
 }
 
 async function translateProduct(product) {
@@ -822,13 +848,28 @@ async function generateWithAI() {
   if (!aiProductName.value.trim()) return
   aiGenerating.value = true
   aiError.value = ''
+  aiStep.value = '⏳ 第1步：生成产品基本信息...'
   try {
     const selectedCat = flatCategories.value.find(c => c.id === aiCategoryId.value)
+    // Determine template to use
+    let template = ''
+    if (aiRefProductId.value === -1) {
+      template = DEFAULT_DETAIL_TEMPLATE
+    } else if (aiRefProductId.value > 0) {
+      template = aiRefTemplate.value
+    }
+    // else 0 = no detail generation
+
+    if (template) {
+      aiStep.value = '⏳ AI 正在生成完整产品内容（基本信息 + 详情页）...'
+    }
+
     const data = await api.generateProduct({
       product_name: aiProductName.value.trim(),
       category_name: selectedCat?.name || '',
       channel_id: aiChannelId.value,
-      model: aiModel.value
+      model: aiModel.value,
+      detail_template: template
     })
     // Close AI dialog
     showAICreate.value = false
@@ -839,7 +880,7 @@ async function generateWithAI() {
     form.category_id = aiCategoryId.value
     form.description = data.description || ''
     form.description_en = data.description_en || ''
-    form.detail_content = ''
+    form.detail_content = data.detail_content || ''
     form.is_featured = 0
     form.status = 1
     form.sort_order = 0
@@ -856,7 +897,8 @@ async function generateWithAI() {
     showModal.value = true
     await nextTick()
     syncToVisual()
-    alert('✅ AI 生成完成！请检查内容后保存。\n\n提示：保存产品后，可点击 🤖 AI 按钮生成产品详情页面内容。')
+    const hasDetail = data.detail_content ? '\n✅ 产品详情页已生成！' : '\n⚠️ 产品详情未生成，保存后可使用 🤖 AI 按钮单独生成。'
+    alert('✅ AI 生成完成！请检查内容后保存。' + hasDetail)
   } catch (e) {
     aiError.value = e.message || '生成失败，请重试'
   } finally {

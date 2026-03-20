@@ -21,6 +21,7 @@ function httpRequest(urlStr, options = {}, body = null, timeoutMs = 120000) {
             timeout: timeoutMs
         }
         const req = lib.request(reqOptions, (res) => {
+            res.setEncoding('utf8')
             let data = ''
             res.on('data', chunk => { data += chunk })
             res.on('end', () => {
@@ -228,48 +229,27 @@ router.post('/generate-product', authMiddleware, async (req, res) => {
     const apiUrl = channel.api_url.replace(/\/$/, '') + '/chat/completions'
     const modelName = model || channel.default_model || JSON.parse(channel.models || '[]')[0] || 'gpt-3.5-turbo'
 
-    // Build system prompt for product generation
-    const systemPrompt = `You are a professional steel product content generator. Generate product content for: "${product_name}"${category_name ? ` (category: ${category_name})` : ''}.
+    // ── Step 1: Generate metadata JSON ──
+    const metaPrompt = `You are a professional steel product content generator.
+Generate product data for: "${product_name}"${category_name ? ` (category: ${category_name})` : ''}.
 
-CRITICAL RULES:
-1. ALL content MUST be 100% about "${product_name}" - NO content about other products
-2. Return ONLY a valid JSON object, no markdown, no code blocks, no extra text
-3. All text fields must be accurate and professional
+CRITICAL: ALL content MUST be 100% about "${product_name}" only. Return ONLY valid JSON, no markdown code blocks.
 
-Return this exact JSON structure:
 {
-  "name": "中文产品名称",
+  "name": "Chinese product name (中文)",
   "name_en": "English Product Name",
-  "description": "中文产品描述，80-120字，专业准确",
-  "description_en": "English product description, 80-120 words, professional and SEO-optimized",
-  "specs": [
-    {"name": "Material", "value": "..."},
-    {"name": "Thickness", "value": "..."},
-    {"name": "Width", "value": "..."},
-    {"name": "Coating Weight", "value": "..."},
-    {"name": "Surface Treatment", "value": "..."},
-    {"name": "Standard", "value": "..."},
-    {"name": "Application", "value": "..."},
-    {"name": "MOQ", "value": "..."}
-  ],
-  "seo_title": "Product Name - Category | Sunsea Steel Manufacturer & Supplier",
-  "seo_description": "English SEO meta description, 150 chars max, include key specs and brand",
+  "description": "Chinese description 80-120 chars (中文产品介绍)",
+  "description_en": "English description 80-120 words, professional SEO",
+  "specs": [{"name":"Spec Name","value":"Value with units"}, ...8-12 items],
+  "seo_title": "Product - Category | Sunsea Steel Manufacturer",
+  "seo_description": "150 chars max English SEO description",
   "seo_keywords": "keyword1, keyword2, keyword3, keyword4, keyword5",
-  "faq_items": [
-    {"question": "English FAQ question about this product?", "answer": "Detailed English answer..."},
-    {"question": "...", "answer": "..."},
-    {"question": "...", "answer": "..."},
-    {"question": "...", "answer": "..."},
-    {"question": "...", "answer": "..."}
-  ]
-}
-
-Generate 8-12 specs relevant to this specific product. Generate exactly 5 FAQ items.
-Specs names should be in English. Values should include units where applicable.
-The description and SEO fields must specifically describe "${product_name}" and nothing else.`
+  "faq_items": [{"question":"English Q?","answer":"English A"}, ...5 items]
+}`
 
     try {
-        const result = await httpRequest(apiUrl, {
+        // Call AI for metadata
+        const metaResult = await httpRequest(apiUrl, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${channel.api_key}`,
@@ -278,25 +258,22 @@ The description and SEO fields must specifically describe "${product_name}" and 
         }, {
             model: modelName,
             messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: `Generate complete product data for: ${product_name}` }
+                { role: 'system', content: metaPrompt },
+                { role: 'user', content: `Generate complete product data JSON for: ${product_name}` }
             ],
             temperature: 0.5,
             stream: false
         })
 
-        if (result.status !== 200) {
-            const errMsg = result.body?.error?.message || JSON.stringify(result.body)
-            return res.status(result.status).json({ error: errMsg })
+        if (metaResult.status !== 200) {
+            const errMsg = metaResult.body?.error?.message || JSON.stringify(metaResult.body)
+            return res.status(metaResult.status).json({ error: errMsg })
         }
 
-        const content = result.body?.choices?.[0]?.message?.content || ''
-        
-        // Extract JSON from response (handle markdown code blocks if AI wraps it)
-        let jsonStr = content.trim()
+        const metaContent = metaResult.body?.choices?.[0]?.message?.content || ''
+        let jsonStr = metaContent.trim()
         const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
         if (jsonMatch) jsonStr = jsonMatch[1].trim()
-        // Also try to find raw JSON object
         const braceMatch = jsonStr.match(/\{[\s\S]*\}/)
         if (braceMatch) jsonStr = braceMatch[0]
 
@@ -304,7 +281,57 @@ The description and SEO fields must specifically describe "${product_name}" and 
         try {
             productData = JSON.parse(jsonStr)
         } catch (parseErr) {
-            return res.status(500).json({ error: 'AI 返回的 JSON 格式无效，请重试', raw: content.substring(0, 500) })
+            return res.status(500).json({ error: 'AI 返回的 JSON 格式无效，请重试', raw: metaContent.substring(0, 500) })
+        }
+
+        // ── Step 2: Generate detail_content if template provided ──
+        if (detail_template && detail_template.trim().length > 100) {
+            try {
+                const templatePrompt = `You are a product detail page content generator for a steel company.
+
+TASK: Replace ALL text content in the HTML template below with content specific to "${product_name}".
+
+RULES:
+1. Keep the EXACT same HTML structure, CSS classes, and layout - do NOT change any HTML tags or attributes
+2. Replace ALL text content (headings, paragraphs, table data, FAQ questions/answers, etc.) with content about "${product_name}"
+3. Keep all image src, placeholder paths, and {{template_variables}} exactly as they are
+4. All text content must be in English
+5. Content must be 100% accurate for "${product_name}" - do NOT mix in content from other products
+6. Return ONLY the HTML code, no explanations, no markdown code blocks
+
+HTML TEMPLATE:
+${detail_template.substring(0, 30000)}`
+
+                const detailResult = await httpRequest(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${channel.api_key}`,
+                        'Content-Type': 'application/json'
+                    }
+                }, {
+                    model: modelName,
+                    messages: [
+                        { role: 'system', content: templatePrompt },
+                        { role: 'user', content: `Generate the product detail HTML for: ${product_name}. Keep the same HTML structure, only replace text content.` }
+                    ],
+                    temperature: 0.3,
+                    stream: false
+                })
+
+                if (detailResult.status === 200) {
+                    let html = detailResult.body?.choices?.[0]?.message?.content || ''
+                    // Strip markdown code blocks if present
+                    const htmlMatch = html.match(/```(?:html)?\s*([\s\S]*?)```/)
+                    if (htmlMatch) html = htmlMatch[1].trim()
+                    // Basic validation: must contain HTML tags
+                    if (html.includes('<') && html.length > 200) {
+                        productData.detail_content = html
+                    }
+                }
+            } catch (e) {
+                // detail_content generation failed, continue without it
+                console.error('Detail content generation error:', e.message)
+            }
         }
 
         res.json(productData)
