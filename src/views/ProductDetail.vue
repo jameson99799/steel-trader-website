@@ -385,11 +385,7 @@ const sendEmail = () => {
     return
   }
   const productName = localizedValue(product.value, 'name') || ''
-  const mailUrl = `mailto:${email}?subject=${encodeURIComponent('Product Inquiry: ' + productName)}&body=${encodeURIComponent('Hi, I am interested in your product: ' + productName + '\n\nPlease provide more information.')}`
-  // Use both methods for maximum mobile compatibility
-  const a = document.createElement('a')
-  a.href = mailUrl
-  a.click()
+  window.location.href = `mailto:${email}?subject=${encodeURIComponent('Product Inquiry: ' + productName)}&body=${encodeURIComponent('Hi, I am interested in your product: ' + productName + '\n\nPlease provide more information.')}`
 }
 
 const copyToClipboard = (text) => {
