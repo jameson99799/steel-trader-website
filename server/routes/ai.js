@@ -207,4 +207,108 @@ router.post('/chat', authMiddleware, async (req, res) => {
     }
 })
 
+// ─── AI Product Generation (non-streaming, returns JSON) ──────────────────────
+
+router.post('/generate-product', authMiddleware, async (req, res) => {
+    const { product_name, category_name, channel_id, model, detail_template } = req.body
+    if (!product_name) return res.status(400).json({ error: '产品名称不能为空' })
+
+    // Find channel
+    let channel
+    if (channel_id) {
+        channel = getOne('SELECT * FROM ai_channels WHERE id = ?', [channel_id])
+    } else {
+        channel = getOne('SELECT * FROM ai_channels WHERE is_default = 1') ||
+            getOne('SELECT * FROM ai_channels ORDER BY id ASC LIMIT 1')
+    }
+    if (!channel) return res.status(400).json({ error: '未配置 AI 渠道，请先在 AI 设置中添加' })
+
+    const apiUrl = channel.api_url.replace(/\/$/, '') + '/chat/completions'
+    const modelName = model || channel.default_model || JSON.parse(channel.models || '[]')[0] || 'gpt-3.5-turbo'
+
+    // Build system prompt for product generation
+    const systemPrompt = `You are a professional steel product content generator. Generate product content for: "${product_name}"${category_name ? ` (category: ${category_name})` : ''}.
+
+CRITICAL RULES:
+1. ALL content MUST be 100% about "${product_name}" - NO content about other products
+2. Return ONLY a valid JSON object, no markdown, no code blocks, no extra text
+3. All text fields must be accurate and professional
+
+Return this exact JSON structure:
+{
+  "name": "中文产品名称",
+  "name_en": "English Product Name",
+  "description": "中文产品描述，80-120字，专业准确",
+  "description_en": "English product description, 80-120 words, professional and SEO-optimized",
+  "specs": [
+    {"name": "Material", "value": "..."},
+    {"name": "Thickness", "value": "..."},
+    {"name": "Width", "value": "..."},
+    {"name": "Coating Weight", "value": "..."},
+    {"name": "Surface Treatment", "value": "..."},
+    {"name": "Standard", "value": "..."},
+    {"name": "Application", "value": "..."},
+    {"name": "MOQ", "value": "..."}
+  ],
+  "seo_title": "Product Name - Category | Sunsea Steel Manufacturer & Supplier",
+  "seo_description": "English SEO meta description, 150 chars max, include key specs and brand",
+  "seo_keywords": "keyword1, keyword2, keyword3, keyword4, keyword5",
+  "faq_items": [
+    {"question": "English FAQ question about this product?", "answer": "Detailed English answer..."},
+    {"question": "...", "answer": "..."},
+    {"question": "...", "answer": "..."},
+    {"question": "...", "answer": "..."},
+    {"question": "...", "answer": "..."}
+  ]
+}
+
+Generate 8-12 specs relevant to this specific product. Generate exactly 5 FAQ items.
+Specs names should be in English. Values should include units where applicable.
+The description and SEO fields must specifically describe "${product_name}" and nothing else.`
+
+    try {
+        const result = await httpRequest(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${channel.api_key}`,
+                'Content-Type': 'application/json'
+            }
+        }, {
+            model: modelName,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: `Generate complete product data for: ${product_name}` }
+            ],
+            temperature: 0.5,
+            stream: false
+        })
+
+        if (result.status !== 200) {
+            const errMsg = result.body?.error?.message || JSON.stringify(result.body)
+            return res.status(result.status).json({ error: errMsg })
+        }
+
+        const content = result.body?.choices?.[0]?.message?.content || ''
+        
+        // Extract JSON from response (handle markdown code blocks if AI wraps it)
+        let jsonStr = content.trim()
+        const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
+        if (jsonMatch) jsonStr = jsonMatch[1].trim()
+        // Also try to find raw JSON object
+        const braceMatch = jsonStr.match(/\{[\s\S]*\}/)
+        if (braceMatch) jsonStr = braceMatch[0]
+
+        let productData
+        try {
+            productData = JSON.parse(jsonStr)
+        } catch (parseErr) {
+            return res.status(500).json({ error: 'AI 返回的 JSON 格式无效，请重试', raw: content.substring(0, 500) })
+        }
+
+        res.json(productData)
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
 export default router

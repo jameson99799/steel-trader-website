@@ -2,7 +2,10 @@
   <div class="products-page">
     <div class="page-header">
       <h1>商品管理</h1>
-      <button class="btn btn-primary" @click="openModal()">添加商品</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" style="background:#7c3aed;border-color:#7c3aed;" @click="showAICreate = true">🤖 AI 创建商品</button>
+        <button class="btn btn-primary" @click="openModal()">添加商品</button>
+      </div>
     </div>
 
     <div class="card">
@@ -269,6 +272,55 @@
         </form>
       </div>
     </div>
+    <!-- AI Create Modal -->
+    <div v-if="showAICreate" class="modal-overlay" @click.self="showAICreate = false">
+      <div class="modal" style="max-width:520px;">
+        <div class="modal-header" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;">
+          <h3>🤖 AI 创建商品</h3>
+          <button class="modal-close" @click="showAICreate = false" style="color:#fff;">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="color:#64748b;font-size:13px;margin:0 0 16px;">输入产品名称（任何语言），AI 自动生成名称、描述、规格、SEO、FAQ 等所有内容</p>
+          <div class="form-group">
+            <label>产品名称 *</label>
+            <input v-model="aiProductName" type="text" class="form-control" placeholder="例：镀锌钢卷、Galvanized Steel Coil、彩涂钢卷" />
+          </div>
+          <div class="form-group">
+            <label>所属分类（可选）</label>
+            <select v-model="aiCategoryId" class="form-control">
+              <option :value="null">自动匹配</option>
+              <option v-for="cat in flatCategories" :key="cat.id" :value="cat.id">
+                {{ cat.prefix }}{{ cat.name }}
+              </option>
+            </select>
+          </div>
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label>AI 渠道</label>
+              <select v-model="aiChannelId" class="form-control" @change="onAIChannelChange">
+                <option v-for="ch in aiChannels" :key="ch.id" :value="ch.id">{{ ch.name }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>模型</label>
+              <select v-model="aiModel" class="form-control">
+                <option v-for="m in aiCurrentModels" :key="m" :value="m">{{ m }}</option>
+              </select>
+            </div>
+          </div>
+          <div v-if="aiGenerating" style="text-align:center;padding:20px 0;">
+            <div style="font-size:32px;animation:spin 1s linear infinite;display:inline-block;">⚙️</div>
+            <p style="color:#7c3aed;font-weight:600;margin:10px 0 0;">AI 正在生成产品内容...</p>
+            <p style="color:#94a3b8;font-size:13px;">通常需要 10-30 秒</p>
+          </div>
+          <div v-if="aiError" style="background:#fef2f2;color:#dc2626;padding:10px;border-radius:6px;font-size:13px;margin-top:8px;">{{ aiError }}</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="showAICreate = false">取消</button>
+          <button type="button" class="btn btn-primary" style="background:#7c3aed;border-color:#7c3aed;" @click="generateWithAI" :disabled="aiGenerating || !aiProductName.trim()">{{ aiGenerating ? '生成中...' : '🚀 开始生成' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -293,6 +345,24 @@ const carouselUploadInput = ref(null)
 const faqItems = ref([])
 let replacingImg = null  // track image being replaced
 const translatingId = ref(null)
+
+// AI Create state
+const showAICreate = ref(false)
+const aiProductName = ref('')
+const aiCategoryId = ref(null)
+const aiChannels = ref([])
+const aiChannelId = ref(null)
+const aiModel = ref('')
+const aiGenerating = ref(false)
+const aiError = ref('')
+const aiCurrentModels = computed(() => {
+  const ch = aiChannels.value.find(c => c.id === aiChannelId.value)
+  return ch?.models || []
+})
+function onAIChannelChange() {
+  const ch = aiChannels.value.find(c => c.id === aiChannelId.value)
+  if (ch?.models?.length) aiModel.value = ch.models[0]
+}
 
 async function translateProduct(product) {
   if (!confirm(`翻译产品「${product.name_en || product.name}」到所有已配置的语言？`)) return
@@ -396,6 +466,15 @@ const loadCategories = async () => {
     categories.value = await api.getCategoryTree()
     // Also load company info for the template variables panel
     try { companyInfo.value = await api.getCompany() } catch (e) {}
+    // Load AI channels
+    try {
+      aiChannels.value = await api.getAIChannels()
+      if (aiChannels.value.length) {
+        const def = aiChannels.value.find(c => c.is_default) || aiChannels.value[0]
+        aiChannelId.value = def.id
+        aiModel.value = def.models?.[0] || ''
+      }
+    } catch (e) {}
   } catch (e) {
     console.error(e)
   }
@@ -737,6 +816,52 @@ async function handleImgUpload(e) {
     alert('图片上传失败: ' + err.message)
   }
   if (imgUploadInput.value) imgUploadInput.value.value = ''
+}
+
+async function generateWithAI() {
+  if (!aiProductName.value.trim()) return
+  aiGenerating.value = true
+  aiError.value = ''
+  try {
+    const selectedCat = flatCategories.value.find(c => c.id === aiCategoryId.value)
+    const data = await api.generateProduct({
+      product_name: aiProductName.value.trim(),
+      category_name: selectedCat?.name || '',
+      channel_id: aiChannelId.value,
+      model: aiModel.value
+    })
+    // Close AI dialog
+    showAICreate.value = false
+    // Fill form and open edit modal
+    editingProduct.value = null
+    form.name = data.name || aiProductName.value
+    form.name_en = data.name_en || ''
+    form.category_id = aiCategoryId.value
+    form.description = data.description || ''
+    form.description_en = data.description_en || ''
+    form.detail_content = ''
+    form.is_featured = 0
+    form.status = 1
+    form.sort_order = 0
+    form.seo_title = data.seo_title || ''
+    form.seo_description = data.seo_description || ''
+    form.seo_keywords = data.seo_keywords || ''
+    existingImages.value = []
+    specs.value = Array.isArray(data.specs) ? data.specs : []
+    faqItems.value = Array.isArray(data.faq_items) ? data.faq_items : []
+    imageFiles.value = []
+    prodFullscreen.value = false
+    editorMode.value = 'visual'
+    replacingImg = null
+    showModal.value = true
+    await nextTick()
+    syncToVisual()
+    alert('✅ AI 生成完成！请检查内容后保存。\n\n提示：保存产品后，可点击 🤖 AI 按钮生成产品详情页面内容。')
+  } catch (e) {
+    aiError.value = e.message || '生成失败，请重试'
+  } finally {
+    aiGenerating.value = false
+  }
 }
 
 onMounted(() => {
@@ -1157,4 +1282,6 @@ onMounted(() => {
 .var-value { font-size: 11px; color: #6b7280; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vars-example { margin: 0; font-size: 12px; color: #6b7280; }
 .vars-example code { background: #f1f5f9; padding: 2px 5px; border-radius: 3px; }
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>

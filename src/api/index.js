@@ -243,6 +243,7 @@ export const api = {
   updateAIChannel: (id, data) => request(`/ai/channels/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAIChannel: (id) => request(`/ai/channels/${id}`, { method: 'DELETE' }),
   getAIModels: (id) => request(`/ai/channels/${id}/models`),
+  generateProduct: (data) => request('/ai/generate-product', { method: 'POST', body: JSON.stringify(data) }),
 }
 
 export default api
