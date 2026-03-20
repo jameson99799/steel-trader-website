@@ -122,7 +122,7 @@ function resolveTemplateVars(html) {
   const phone       = co.phone || ''
   const whatsapp    = co.whatsapp || ''
   const whatsappRaw = whatsapp.replace(/[^0-9+]/g, '')
-  const whatsappLink = whatsappRaw ? `https://wa.me/${whatsappRaw.replace(/^\+/, '')}` : '#'
+  const whatsappLink = whatsappRaw ? `https://api.whatsapp.com/send?phone=${whatsappRaw.replace(/^\+/, '')}` : '#'
   const companyName = co.name_en || co.name || ''
   return html
     .replace(/\{\{email\}\}/g,          email)

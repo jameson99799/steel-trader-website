@@ -367,7 +367,7 @@ const templateVars = computed(() => {
   const co = companyInfo.value || {}
   const whatsapp = co.whatsapp || ''
   const whatsappRaw = whatsapp.replace(/[^0-9+]/g, '')
-  const whatsappLink = whatsappRaw ? `https://wa.me/${whatsappRaw.replace(/^\+/, '')}` : 'https://wa.me/...'
+  const whatsappLink = whatsappRaw ? `https://api.whatsapp.com/send?phone=${whatsappRaw.replace(/^\+/, '')}` : 'https://api.whatsapp.com/send?phone=...'
   return [
     { var: '{{email}}',          desc: '邮箱地址',       preview: co.email || '(未设置)' },
     { var: '{{phone}}',          desc: '电话号码',       preview: co.phone || '(未设置)' },
