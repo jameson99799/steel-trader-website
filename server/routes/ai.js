@@ -8,7 +8,7 @@ const router = Router()
 
 // ─── HTTP helper ──────────────────────────────────────────────────────────────
 
-function httpRequest(urlStr, options = {}, body = null) {
+function httpRequest(urlStr, options = {}, body = null, timeoutMs = 120000) {
     return new Promise((resolve, reject) => {
         const url = new URL(urlStr)
         const lib = url.protocol === 'https:' ? https : http
@@ -17,7 +17,8 @@ function httpRequest(urlStr, options = {}, body = null) {
             port: url.port || (url.protocol === 'https:' ? 443 : 80),
             path: url.pathname + url.search,
             method: options.method || 'GET',
-            headers: options.headers || {}
+            headers: options.headers || {},
+            timeout: timeoutMs
         }
         const req = lib.request(reqOptions, (res) => {
             let data = ''
@@ -27,6 +28,7 @@ function httpRequest(urlStr, options = {}, body = null) {
                 catch (e) { resolve({ status: res.statusCode, body: data }) }
             })
         })
+        req.on('timeout', () => { req.destroy(); reject(new Error('AI API 请求超时（120秒），请稍后重试')) })
         req.on('error', reject)
         if (body) req.write(typeof body === 'string' ? body : JSON.stringify(body))
         req.end()
