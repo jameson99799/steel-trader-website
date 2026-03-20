@@ -524,9 +524,7 @@ onUnmounted(() => {
     white-space: nowrap;
   }
   .logo-subtitle {
-    font-size: 10px;
-    white-space: nowrap;
-    letter-spacing: 0.02em;
+    display: none;
   }
   .logo {
     flex: 1;

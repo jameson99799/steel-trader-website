@@ -389,31 +389,78 @@ textarea.form-control {
 /* 响应式设计 */
 @media (max-width: 768px) {
   .inquiry-modal {
-    max-width: calc(100vw - 32px);
-    max-height: 80vh; /* leave room for floating bottom bar */
-    margin: var(--spacing);
+    max-width: calc(100vw - 24px);
+    max-height: 85vh;
+    margin: 8px;
+    display: flex;
+    flex-direction: column;
   }
   
   .modal-header {
-    padding: var(--spacing-md);
-    flex-direction: column;
-    gap: var(--spacing);
-    text-align: center;
+    padding: 12px 16px;
+    flex-direction: row;
+    gap: 10px;
+    text-align: left;
   }
   
   .header-content {
-    flex-direction: column;
-    text-align: center;
+    flex-direction: row;
+    text-align: left;
+    gap: 10px;
+  }
+
+  .header-icon {
+    width: 36px;
+    height: 36px;
+  }
+  .header-icon svg { width: 18px; height: 18px; }
+  
+  .header-text h3 {
+    font-size: 16px;
+    margin-bottom: 2px;
+  }
+  .header-text p {
+    font-size: 12px;
   }
   
   .modal-close {
     position: absolute;
-    top: var(--spacing);
-    right: var(--spacing);
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
   }
   
   .modal-body {
-    padding: var(--spacing-md);
+    padding: 12px 16px;
+    max-height: none;
+    flex: 1;
+    overflow-y: auto;
+  }
+  
+  .form-section {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+  }
+
+  .section-title {
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+
+  .form-group {
+    margin-bottom: 8px;
+  }
+  .form-group label {
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+  .form-control {
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+  textarea.form-control {
+    min-height: 60px;
   }
   
   .form-row {
@@ -421,31 +468,22 @@ textarea.form-control {
     gap: 0;
   }
   
+  /* Hide benefits to save space on mobile */
+  .inquiry-benefits {
+    display: none;
+  }
+  
   .modal-footer {
-    padding: var(--spacing-md);
-    flex-direction: column-reverse;
+    padding: 10px 16px;
+    flex-direction: row;
+    gap: 8px;
+    flex-shrink: 0;
   }
   
   .modal-footer .btn {
-    width: 100%;
-  }
-  
-  .benefits-list {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--spacing-sm);
-  }
-}
-
-@media (max-width: 640px) {
-  .section-title {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--spacing-sm);
-  }
-  
-  .inquiry-benefits {
-    padding: var(--spacing);
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 14px;
   }
 }
 </style>
