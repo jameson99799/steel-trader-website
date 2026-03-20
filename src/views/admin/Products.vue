@@ -788,23 +788,28 @@ async function handleImgUpload(e) {
 
   // If replacing an existing image in visual mode, just replace the single image
   if (replacingImg && files.length >= 1) {
-    try {
-      const res = await api.upload(files[0])
-      replacingImg.src = res.url
-      replacingImg.style.outline = ''
-      // Auto-remove the associated replace-tip span
-      if (replacingImg._replaceTipEl) {
-        replacingImg._replaceTipEl.remove()
-        delete replacingImg._replaceTipEl
-      } else {
-        // Try to remove next sibling replace-tip
-        let nextEl = replacingImg.nextElementSibling
-        if (!nextEl && replacingImg.parentElement) nextEl = replacingImg.parentElement.querySelector('.replace-tip')
-        if (nextEl && nextEl.classList?.contains('replace-tip')) nextEl.remove()
-      }
+    // Check if the img element is still in the DOM
+    if (!replacingImg.parentElement) {
       replacingImg = null
-      syncFromVisual()
-    } catch (err) { alert('图片上传失败: ' + err.message) }
+    } else {
+      try {
+        const res = await api.upload(files[0])
+        replacingImg.src = res.url
+        replacingImg.style.outline = ''
+        // Auto-remove the associated replace-tip span
+        if (replacingImg._replaceTipEl) {
+          replacingImg._replaceTipEl.remove()
+          delete replacingImg._replaceTipEl
+        } else {
+          // Try to remove next sibling replace-tip
+          let nextEl = replacingImg.nextElementSibling
+          if (!nextEl && replacingImg.parentElement) nextEl = replacingImg.parentElement.querySelector('.replace-tip')
+          if (nextEl && nextEl.classList?.contains('replace-tip')) nextEl.remove()
+        }
+        replacingImg = null
+        syncFromVisual()
+      } catch (err) { alert('图片上传失败: ' + err.message) }
+    }
     if (imgUploadInput.value) imgUploadInput.value.value = ''
     return
   }
