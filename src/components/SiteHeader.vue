@@ -346,6 +346,7 @@ onUnmounted(() => {
 .header-main {
   background: var(--white);
   padding: 16px 0;
+  min-height: 72px; /* prevent CLS */
 }
 
 .header-main-content {
@@ -359,6 +360,8 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--spacing);
   text-decoration: none;
+  color: inherit;
+  min-height: 48px; /* prevent CLS — reserve logo space */
 }
 
 .logo-image {
@@ -389,6 +392,7 @@ onUnmounted(() => {
   color: var(--primary);
   line-height: var(--leading-tight);
   margin: 0;
+  min-height: 1.25em; /* prevent CLS */
 }
 
 .logo-subtitle {
