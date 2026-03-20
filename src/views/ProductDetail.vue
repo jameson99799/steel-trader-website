@@ -381,7 +381,7 @@ const openLightbox = (src) => {
 const sendEmail = () => {
   const email = company.value?.email || ''
   const productName = localizedValue(product.value, 'name') || ''
-  window.open(`mailto:${email}?subject=Product Inquiry: ${productName}&body=Hi, I am interested in your product: ${productName}%0A%0APlease provide more information.`)
+  window.location.href = `mailto:${email}?subject=Product Inquiry: ${encodeURIComponent(productName)}&body=Hi, I am interested in your product: ${encodeURIComponent(productName)}%0A%0APlease provide more information.`
 }
 
 const copyToClipboard = (text) => {

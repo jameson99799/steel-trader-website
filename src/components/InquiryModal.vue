@@ -390,6 +390,7 @@ textarea.form-control {
 @media (max-width: 768px) {
   .inquiry-modal {
     max-width: calc(100vw - 32px);
+    max-height: 80vh; /* leave room for floating bottom bar */
     margin: var(--spacing);
   }
   

@@ -287,7 +287,11 @@ onMounted(async () => {
   /* Hide WeChat on mobile — only show WhatsApp, Tel, Email */
   .wechat-item { display: none !important; }
   .panel-item { flex: 1; border-bottom: none; border-right: 1px solid #f1f5f9; }
-  .panel-row { flex-direction: column; gap: 2px; padding: 8px 4px; justify-content: center; align-items: center; text-align: center; }
-  .row-num { font-size: 11px; max-width: 80px; }
+  .panel-item:last-child { border-right: none; }
+  .panel-row { flex-direction: column; gap: 2px; padding: 6px 4px; justify-content: center; align-items: center; text-align: center; }
+  /* Hide labels (WhatsApp, TEL, Email), show only icon + number */
+  .row-label { display: none; }
+  .row-num { font-size: 10px; max-width: 100%; white-space: normal; word-break: break-all; line-height: 1.3; text-align: center; }
+  .row-icon { width: 20px; height: 20px; }
 }
 </style>

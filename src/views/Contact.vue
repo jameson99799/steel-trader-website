@@ -655,6 +655,11 @@ textarea.form-control {
   }
 }
 
+/* Mobile: add padding so floating bottom bar doesn't cover content */
+@media (max-width: 768px) {
+  .contact-page { padding-bottom: 70px; }
+}
+
 @media (max-width: 640px) {
   .info-item {
     flex-direction: column;
