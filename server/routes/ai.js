@@ -287,20 +287,54 @@ CRITICAL: ALL content MUST be 100% about "${product_name}" only. Return ONLY val
         // ── Step 2: Generate detail_content if template provided ──
         if (detail_template && detail_template.trim().length > 100) {
             try {
-                const templatePrompt = `You are a product detail page content generator for a steel company.
+                const detailPrompt = `You are a steel product content expert. Generate DETAILED page content for "${product_name}".
+Return ONLY valid JSON with these fields (all in English):
 
-TASK: Replace ALL text content in the HTML template below with content specific to "${product_name}".
+{
+  "hero_title": "Short product name for hero banner",
+  "hero_subtitle": "One line product tagline with key selling points",
+  "overview_title": "What Is [Product Name]?",
+  "overview_p1": "First overview paragraph (50-80 words)",
+  "overview_p2": "Second paragraph about applications (50-80 words)",
+  "overview_p3": "Third paragraph about options/treatments (40-60 words)",
+  "spec_table": [["Product","Full product name"],["Coating","Coating details"],["Thickness","Range"],["Width","Range"],["Standard","Standards"],["Surface","Options"],["Steel Grade","Grades"],["Coil ID","508/610mm"],["Coil Weight","Weight range"]],
+  "app1_title": "Application Area 1",
+  "app1_icon": "🏗️",
+  "app1_desc": "Description",
+  "app2_title": "Application Area 2",
+  "app2_icon": "🏠",
+  "app2_desc": "Description",
+  "app3_title": "Application Area 3",
+  "app3_icon": "🔧",
+  "app3_desc": "Description",
+  "app4_title": "Application Area 4",
+  "app4_icon": "🚗",
+  "app4_desc": "Description",
+  "compare_title": "Product Type A vs Type B",
+  "compare_a_name": "Type A name",
+  "compare_a_desc": "Type A description",
+  "compare_b_name": "Type B name",
+  "compare_b_desc": "Type B description",
+  "compare_table": [["Feature","Type A value","Type B value"],["Feature 2","Value","Value"],["Best For","Use A","Use B"]],
+  "advantages": ["Advantage 1 title — detail","Advantage 2 — detail","Advantage 3 — detail","Advantage 4 — detail","Advantage 5 — detail","Advantage 6 — detail"],
+  "why_cards": [{"title":"Card1","desc":"Detail"},{"title":"Card2","desc":"Detail"},{"title":"Card3","desc":"Detail"},{"title":"Card4","desc":"Detail"}],
+  "factory_p1": "Factory paragraph 1",
+  "factory_p2": "Factory paragraph 2",
+  "factory_points": ["Point 1","Point 2","Point 3","Point 4"],
+  "qc_step1_title": "QC Step 1 title",
+  "qc_step1_desc": "Description",
+  "qc_step2_title": "QC Step 2 title",
+  "qc_step2_desc": "Description",
+  "qc_cards": [{"title":"QC Card1","desc":"Detail"},{"title":"QC Card2","desc":"Detail"},{"title":"QC Card3","desc":"Detail"},{"title":"QC Card4","desc":"Detail"}],
+  "pack_steps": ["Step 1: detail","Step 2: detail","Step 3: detail","Step 4: detail","Step 5: detail"],
+  "ship_container": "Container shipping description",
+  "ship_bulk": "Bulk vessel description",
+  "faqs": [{"q":"Question 1?","a":"Answer 1"},{"q":"Q2?","a":"A2"},{"q":"Q3?","a":"A3"},{"q":"Q4?","a":"A4"},{"q":"Q5?","a":"A5"},{"q":"Q6?","a":"A6"},{"q":"Q7?","a":"A7"}],
+  "cta_title": "Looking for a Reliable [Product] Supplier?",
+  "cta_desc": "CTA description"
+}
 
-RULES:
-1. Keep the EXACT same HTML structure, CSS classes, and layout - do NOT change any HTML tags or attributes
-2. Replace ALL text content (headings, paragraphs, table data, FAQ questions/answers, etc.) with content about "${product_name}"
-3. Keep all image src, placeholder paths, and {{template_variables}} exactly as they are
-4. All text content must be in English
-5. Content must be 100% accurate for "${product_name}" - do NOT mix in content from other products
-6. Return ONLY the HTML code, no explanations, no markdown code blocks
-
-HTML TEMPLATE:
-${detail_template.substring(0, 30000)}`
+ALL content must be 100% about "${product_name}". NO markdown, ONLY JSON.`
 
                 const detailResult = await httpRequest(apiUrl, {
                     method: 'POST',
@@ -311,25 +345,98 @@ ${detail_template.substring(0, 30000)}`
                 }, {
                     model: modelName,
                     messages: [
-                        { role: 'system', content: templatePrompt },
-                        { role: 'user', content: `Generate the product detail HTML for: ${product_name}. Keep the same HTML structure, only replace text content.` }
+                        { role: 'system', content: detailPrompt },
+                        { role: 'user', content: `Generate all detail page content JSON for: ${product_name}` }
                     ],
-                    temperature: 0.3,
+                    temperature: 0.4,
                     stream: false
                 })
 
                 if (detailResult.status === 200) {
-                    let html = detailResult.body?.choices?.[0]?.message?.content || ''
-                    // Strip markdown code blocks if present
-                    const htmlMatch = html.match(/```(?:html)?\s*([\s\S]*?)```/)
-                    if (htmlMatch) html = htmlMatch[1].trim()
-                    // Basic validation: must contain HTML tags
-                    if (html.includes('<') && html.length > 200) {
+                    let rawContent = detailResult.body?.choices?.[0]?.message?.content || ''
+                    let contentStr = rawContent.trim()
+                    const codeMatch = contentStr.match(/```(?:json)?\s*([\s\S]*?)```/)
+                    if (codeMatch) contentStr = codeMatch[1].trim()
+                    const braceMatch2 = contentStr.match(/\{[\s\S]*\}/)
+                    if (braceMatch2) contentStr = braceMatch2[0]
+
+                    try {
+                        const d = JSON.parse(contentStr)
+                        // Merge into template
+                        let html = detail_template
+                        const nameEn = productData.name_en || product_name
+
+                        // Hero
+                        html = html.replace(/PRODUCT_NAME/g, d.hero_title || nameEn)
+                        html = html.replace(/>Product subtitle and key selling points</, `>${d.hero_subtitle || ''}<`)
+
+                        // Overview
+                        html = html.replace(/>What Is PRODUCT_NAME\?</, `>${d.overview_title || 'What Is ' + nameEn + '?'}<`)
+                        html = html.replace(/<p><strong>PRODUCT_NAME<\/strong> overview paragraph 1\.<\/p>/, `<p><strong>${d.hero_title || nameEn}</strong> ${d.overview_p1 || ''}</p>`)
+                        html = html.replace(/>Overview paragraph 2 with applications\.</, `>${d.overview_p2 || ''}<`)
+                        html = html.replace(/>Overview paragraph 3 with edge conditions and treatments\.</, `>${d.overview_p3 || ''}<`)
+
+                        // Spec table
+                        if (d.spec_table?.length) {
+                            let specRows = d.spec_table.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join('')
+                            html = html.replace(/<tbody><tr><th>Product<\/th>[\s\S]*?<\/tbody>/, `<tbody>${specRows}</tbody>`)
+                        }
+
+                        // Applications
+                        const apps = [
+                            { t: 'app1_title', i: 'app1_icon', d: 'app1_desc', pt: 'Application Area 1', pd: 'Description of application area 1.' },
+                            { t: 'app2_title', i: 'app2_icon', d: 'app2_desc', pt: 'Application Area 2', pd: 'Description of application area 2.' },
+                            { t: 'app3_title', i: 'app3_icon', d: 'app3_desc', pt: 'Application Area 3', pd: 'Description of application area 3.' },
+                            { t: 'app4_title', i: 'app4_icon', d: 'app4_desc', pt: 'Application Area 4', pd: 'Description of application area 4.' }
+                        ]
+                        for (const app of apps) {
+                            if (d[app.t]) html = html.replace(new RegExp('>' + app.pt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '<'), `>${(d[app.i]||'') + ' ' + d[app.t]}<`)
+                            if (d[app.d]) html = html.replace(new RegExp('>' + app.pd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '<'), `>${d[app.d]}<`)
+                        }
+
+                        // Comparison
+                        if (d.compare_title) html = html.replace(/>Product Comparison</, `>${d.compare_title}<`)
+                        if (d.compare_a_name) html = html.replace(/>Product Type A<\/h3>/g, `>${d.compare_a_name}</h3>`)
+                        if (d.compare_b_name) html = html.replace(/>Product Type B<\/h3>/g, `>${d.compare_b_name}</h3>`)
+
+                        // Advantages
+                        if (d.advantages?.length) {
+                            let advHtml = d.advantages.map(a => {
+                                const parts = a.split(' — ')
+                                return `<li><strong>${parts[0]}</strong>${parts.length > 1 ? ' — ' + parts[1] : ''}</li>`
+                            }).join('')
+                            html = html.replace(/<li><strong>Advantage 1<\/strong>[\s\S]*?<\/ul>/, advHtml + '</ul>')
+                        }
+
+                        // Why cards
+                        if (d.why_cards?.length) {
+                            let cardsHtml = d.why_cards.map(c => `<div class="card"><h3>${c.title}</h3><p>${c.desc}</p></div>`).join('')
+                            html = html.replace(/<div class="card"><h3>Reason 1[\s\S]*?<\/div><\/div>/, cardsHtml + '</div>')
+                        }
+
+                        // Factory
+                        if (d.factory_p1) html = html.replace(/>Factory description paragraph 1\.</, `>${d.factory_p1}<`)
+                        if (d.factory_p2) html = html.replace(/>Factory description paragraph 2\.</, `>${d.factory_p2}<`)
+
+                        // FAQ
+                        if (d.faqs?.length) {
+                            let faqHtml = d.faqs.map(f => `<div class="faq-item"><h3>${f.q}</h3><p>${f.a}</p></div>`).join('')
+                            html = html.replace(/<div class="faq-list">[\s\S]*?<\/div>\s*<\/section>/, `<div class="faq-list">${faqHtml}</div></section>`)
+                        }
+
+                        // CTA
+                        if (d.cta_title) html = html.replace(/>Looking for a Reliable PRODUCT_NAME Supplier\?</, `>${d.cta_title}<`)
+                        if (d.cta_desc) html = html.replace(/>Contact us for pricing, specifications[\s\S]*?<\/p>/, `>${d.cta_desc}</p>`)
+
+                        // Final cleanup: replace any remaining PRODUCT_NAME
+                        html = html.replace(/PRODUCT_NAME/g, d.hero_title || nameEn)
+
                         productData.detail_content = html
+                    } catch (parseErr) {
+                        console.error('Detail JSON parse error:', parseErr.message)
                     }
                 }
             } catch (e) {
-                // detail_content generation failed, continue without it
                 console.error('Detail content generation error:', e.message)
             }
         }
