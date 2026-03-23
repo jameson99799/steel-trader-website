@@ -34,7 +34,7 @@
     <!-- Selection Action Bar -->
     <div v-if="selectedIds.length" class="selection-bar">
       <span>已选择 <strong>{{ selectedIds.length }}</strong> 个客户</span>
-      <button class="btn btn-sm btn-primary" @click="openEmailModal(selectedIds)">📧 发送营销邮件</button>
+      <button class="btn btn-sm btn-primary" @click="bulkEmailViaMailer(selectedIds)">📧 发送营销邮件</button>
       <button class="btn btn-sm btn-secondary" @click="selectedIds = []; allSelected = false">取消选择</button>
     </div>
 
@@ -226,7 +226,7 @@
         <div class="modal-body">
           <div class="company-toolbar">
             <label><input type="checkbox" v-model="companyAllSelected" @change="toggleCompanyAll" /> 全选</label>
-            <button v-if="companySelectedIds.length" class="btn btn-sm btn-primary" @click="sendMailToCompany">📧 发送营销邮件 ({{ companySelectedIds.length }})</button>
+            <button v-if="companySelectedIds.length" class="btn btn-sm btn-primary" @click="bulkEmailViaMailer(companySelectedIds)">📧 发送营销邮件 ({{ companySelectedIds.length }})</button>
           </div>
           <div v-for="c in companyCustomers" :key="c.id" class="company-card" :class="{ excluded: c._excluded }">
             <input type="checkbox" :value="c.id" v-model="companySelectedIds" :disabled="c._excluded" />
@@ -255,40 +255,7 @@
       </div>
     </div>
 
-    <!-- Email Marketing Modal -->
-    <div v-if="showEmailModal" class="modal-overlay">
-      <div class="modal modal-lg">
-        <div class="modal-header">
-          <h3>📧 营销邮件</h3>
-          <button class="modal-close" @click="showEmailModal = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="email-recipients">
-            <label>收件人 ({{ emailTargetIds.length }} 个客户)</label>
-            <div class="recipient-chips">
-              <span v-for="id in emailTargetIds.slice(0, 10)" :key="id" class="recipient-chip">
-                {{ getCustomerName(id) }}
-              </span>
-              <span v-if="emailTargetIds.length > 10" class="recipient-chip more">+{{ emailTargetIds.length - 10 }} 更多</span>
-            </div>
-          </div>
-          <div class="form-group">
-            <label>邮件主题</label>
-            <input v-model="emailForm.subject" placeholder="例如：SunSea Steel - 最新报价" />
-          </div>
-          <div class="form-group">
-            <label>邮件内容（支持 {{name}} {{company}} 变量）</label>
-            <div ref="emailEditorRef" class="rich-editor" contenteditable="true" style="min-height:200px;"></div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showEmailModal = false">取消</button>
-          <button class="btn btn-primary" :disabled="emailSending" @click="sendMarketingEmail">
-            {{ emailSending ? '发送中...' : '🚀 发送' }}
-          </button>
-        </div>
-      </div>
-    </div>
+
 
     <!-- Send Records Panel -->
     <div v-if="showSendRecords" class="modal-overlay">
@@ -468,47 +435,18 @@ function excludeCompanyMatch(c) {
 }
 
 function sendMailToCompany() {
-  openEmailModal(companySelectedIds.value)
+  bulkEmailViaMailer(companySelectedIds.value)
 }
 
-// Email marketing
-const showEmailModal = ref(false)
-const emailTargetIds = ref([])
-const emailForm = reactive({ subject: '', html_body: '' })
-const emailEditorRef = ref(null)
-const emailSending = ref(false)
+// Email via Mailer: navigate to mailer with pre-selected customer IDs
+function bulkEmailViaMailer(ids) {
+  if (!ids.length) { alert('请先选择客户'); return }
+  router.push(`/crm/mailer?customers=${ids.join(',')}`)
+}
+
+// Send Records
 const showSendRecords = ref(false)
 const sendRecords = ref([])
-
-function openEmailModal(ids) {
-  emailTargetIds.value = [...ids]
-  emailForm.subject = ''
-  showEmailModal.value = true
-}
-
-function getCustomerName(id) {
-  const c = customers.value.find(c => c.id === id)
-  return c ? (c.name || c.email || `#${id}`) : `#${id}`
-}
-
-async function sendMarketingEmail() {
-  const html_body = emailEditorRef.value?.innerHTML || ''
-  if (!emailForm.subject || !html_body.trim()) { alert('请填写主题和内容'); return }
-  emailSending.value = true
-  try {
-    const result = await crmApi.sendEmail({
-      customer_ids: emailTargetIds.value,
-      subject: emailForm.subject,
-      html_body
-    })
-    alert(result.message || '发送完成')
-    showEmailModal.value = false
-    selectedIds.value = []
-    allSelected.value = false
-    loadSendRecords()
-  } catch (e) { alert(e.message || '发送失败') }
-  emailSending.value = false
-}
 
 async function loadSendRecords() {
   try { sendRecords.value = await crmApi.getSendRecords() } catch (e) { sendRecords.value = [] }

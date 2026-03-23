@@ -1,13 +1,14 @@
 <template>
   <div class="mailer-page">
-    <h1>📤 批量发邮件</h1>
+    <h1>📤 {{ isCRM ? '邮件系统' : '批量发邮件' }}</h1>
 
     <!-- Tabs -->
     <div class="tabs">
       <button :class="['tab', tab === 'templates' && 'active']" @click="tab='templates'">📝 模板</button>
-      <button :class="['tab', tab === 'contacts' && 'active']" @click="tab='contacts'">👥 联系人</button>
+      <button v-if="!isCRM" :class="['tab', tab === 'contacts' && 'active']" @click="tab='contacts'">👥 联系人</button>
       <button :class="['tab', tab === 'tasks' && 'active']" @click="tab='tasks'">🚀 发送任务</button>
       <button :class="['tab', tab === 'logs' && 'active']" @click="tab='logs'">📋 发送记录</button>
+      <button :class="['tab', tab === 'accounts' && 'active']" @click="tab='accounts'">📮 发件账号</button>
     </div>
 
     <!-- ═══ Templates Tab ═══ -->
@@ -33,14 +34,16 @@
         </div>
       </div>
       <div v-if="!templates.length" class="empty">暂无模板</div>
-      <div v-for="t in templates" :key="t.id" class="list-card">
+      <div v-for="t in templates" :key="t.id" class="list-card" :style="t.is_default ? 'border-left:3px solid #2563eb' : ''">
         <div class="lc-main">
           <strong>{{ t.name }}</strong>
+          <span v-if="t.is_default" class="log-badge" style="background:#dbeafe;color:#1d4ed8;font-size:10px;margin-left:6px">默认</span>
           <span class="log-badge" :style="t.template_type==='html' ? 'background:#fef3c7;color:#92400e' : 'background:#e0f2fe;color:#0369a1'" style="font-size:10px;margin-left:6px">{{ t.template_type === 'html' ? 'HTML' : '富文本' }}</span>
           <span class="lc-sub">主题：{{ t.subject }}</span>
           <span v-if="t.note" class="lc-note">{{ t.note }}</span>
         </div>
         <div class="lc-actions">
+          <button v-if="!t.is_default" class="btn btn-sm btn-outline" style="color:#2563eb;border-color:#93c5fd" @click="setDefaultTpl(t.id)">⭐ 设为默认</button>
           <button class="btn btn-sm btn-outline" @click="openTplEditor(t)">编辑</button>
           <button class="btn btn-sm btn-outline" @click="duplicateTemplate(t.id)">📋 复制</button>
           <button class="btn btn-sm btn-outline" @click="previewTpl(t)">预览</button>
@@ -340,14 +343,38 @@
         </div>
 
         <div class="form-group">
-          <label>选择联系人</label>
+          <label>选择{{ isCRM ? '客户' : '联系人' }}</label>
           <!-- Follow-up: contacts locked to parent task -->
           <div v-if="newTask.parent_task_id" class="followup-contacts-locked">
             <span>🔒 跟进邮件自动发送给上次任务的相同收件人 ({{ newTask.contact_ids.length }} 人)</span>
             <p class="form-hint">跟进邮件收件人与上次任务相同，无需重新选择，确保不会搞错跟进对象。</p>
           </div>
+          <div v-else-if="newTask._preselected" class="followup-contacts-locked" style="background:#eff6ff">
+            <span>✅ 已从客户管理页面选择 {{ newTask.contact_ids.length }} 位客户</span>
+          </div>
+          <!-- CRM mode: CRM customer picker with filters -->
+          <div v-else-if="isCRM">
+            <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+              <input v-model="crmFilter.search" class="form-control" placeholder="🔍 搜索名称/公司..." style="flex:1;min-width:150px;max-width:200px" @input="loadCrmCustomers" />
+              <select v-model="crmFilter.country" class="form-control" style="width:auto;min-width:100px" @change="loadCrmCustomers"><option value="">全部国家</option><option v-for="c in crmMeta.countries" :key="c">{{ c }}</option></select>
+              <select v-model="crmFilter.status" class="form-control" style="width:auto;min-width:100px" @change="loadCrmCustomers"><option value="">全部状态</option><option v-for="s in crmMeta.statuses" :key="s">{{ s }}</option></select>
+              <select v-model="crmFilter.tag" class="form-control" style="width:auto;min-width:100px" @change="loadCrmCustomers"><option value="">全部标签</option><option v-for="t in crmMeta.tags" :key="t">{{ t }}</option></select>
+            </div>
+            <div class="check-list" style="max-height:200px">
+              <div class="check-item-header">
+                <label><input type="checkbox" @change="toggleAllCrmCustomers" :checked="crmAllSelected" /> 全选有邮箱的客户</label>
+                <span style="margin-left:8px;color:#64748b;font-size:12px">已选 {{ newTask.contact_ids.length }} 位</span>
+              </div>
+              <label v-for="c in crmCustomers" :key="c.id" class="check-item" :style="!c.email ? 'opacity:0.4' : ''">
+                <input type="checkbox" v-model="newTask.contact_ids" :value="c.id" :disabled="!c.email" />
+                {{ c.first_name || c.name }} {{ c.last_name || '' }} <span v-if="c.email" style="color:#64748b">&lt;{{ c.email }}&gt;</span><span v-else style="color:#ef4444;font-size:11px">无邮箱</span>
+                <span v-if="c.country" class="log-badge" style="font-size:10px;margin-left:4px">{{ c.country }}</span>
+                <span v-if="c.status" class="log-badge" style="font-size:10px;margin-left:2px;background:#f0fdf4;color:#166534">{{ c.status }}</span>
+              </label>
+            </div>
+          </div>
+          <!-- Admin mode: mail_contacts picker -->
           <div v-else>
-            <!-- Group quick select + search -->
             <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
               <span v-for="g in contactGroups" :key="g.id" class="group-pill small" @click="selectGroupContacts(g.id)"
                     :title="'点击选择'+g.name+'下所有联系人'">📁 {{ g.name }}</span>
@@ -446,12 +473,139 @@
         <div class="modal-actions"><button class="btn btn-outline" @click="showPreview=false">关闭</button></div>
       </div>
     </div>
+
+    <!-- ═══ SMTP Accounts Tab ═══ -->
+    <div v-if="tab === 'accounts'" class="tab-body">
+      <div class="toolbar">
+        <button class="btn btn-primary" @click="openAcctEditor()">+ 添加发件账号</button>
+      </div>
+      <div v-if="!smtpAccounts.length" class="empty">暂无发件账号</div>
+      <div v-for="a in smtpAccounts" :key="a.id" class="list-card" :style="a.is_default ? 'border-left:3px solid #059669' : ''">
+        <div class="lc-main">
+          <strong>{{ a.name || a.smtp_user }}</strong>
+          <span v-if="a.is_default" class="log-badge" style="background:#ecfdf5;color:#059669;font-size:10px;margin-left:6px">默认</span>
+          <span v-if="a.enabled" class="log-badge" style="background:#f0fdf4;color:#166534;font-size:10px;margin-left:4px">启用</span>
+          <span v-else class="log-badge" style="background:#fef2f2;color:#dc2626;font-size:10px;margin-left:4px">禁用</span>
+          <span class="lc-sub">{{ a.smtp_host }}:{{ a.smtp_port }} | {{ a.smtp_user }}</span>
+          <span class="lc-note">密码: {{ a.smtp_pass }}</span>
+        </div>
+        <div class="lc-actions">
+          <button v-if="!a.is_default" class="btn btn-sm btn-outline" style="color:#059669;border-color:#86efac" @click="setDefaultAcct(a.id)">⭐ 默认</button>
+          <button class="btn btn-sm btn-outline" @click="testAcct(a.id)">🔌 测试</button>
+          <button class="btn btn-sm btn-outline" @click="openAcctEditor(a)">编辑</button>
+          <button class="btn btn-sm btn-outline err-btn" @click="deleteAcct(a.id)">删除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Account Editor Modal ═══ -->
+    <div class="modal-overlay" v-if="showAcctEditor" @click.self="showAcctEditor=false">
+      <div class="modal-box">
+        <h3>{{ editAcct.id ? '编辑发件账号' : '添加发件账号' }}</h3>
+        <div class="form-group"><label>名称</label><input v-model="editAcct.name" class="form-control" placeholder="如：公司邮箱" /></div>
+        <div class="grid grid-2">
+          <div class="form-group"><label>SMTP服务器</label><input v-model="editAcct.smtp_host" class="form-control" placeholder="smtp.example.com" /></div>
+          <div class="form-group"><label>端口</label><input v-model.number="editAcct.smtp_port" class="form-control" type="number" /></div>
+        </div>
+        <div class="grid grid-2">
+          <div class="form-group"><label>账号</label><input v-model="editAcct.smtp_user" class="form-control" placeholder="user@example.com" /></div>
+          <div class="form-group"><label>密码</label><input v-model="editAcct.smtp_pass" class="form-control" /></div>
+        </div>
+        <div class="grid grid-2">
+          <div class="form-group"><label>发件人名称</label><input v-model="editAcct.from_name" class="form-control" placeholder="SunSea Steel" /></div>
+          <div class="form-group" style="display:flex;align-items:center;gap:16px;padding-top:24px">
+            <label class="toggle-label"><input type="checkbox" v-model="editAcct.is_default" /><span>设为默认</span></label>
+            <label class="toggle-label"><input type="checkbox" v-model="editAcct.enabled" /><span>启用</span></label>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" @click="saveAcct">💾 保存</button>
+          <button class="btn btn-outline" @click="showAcctEditor=false">取消</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import api from '../../api'
+
+const route = useRoute()
+const isCRM = computed(() => !!window.__CRM_MAILER || window.location.pathname.startsWith('/crm'))
+
+// CRM customer picker state
+const crmCustomers = ref([])
+const crmFilter = reactive({ search: '', country: '', status: '', tag: '' })
+const crmMeta = reactive({ countries: [], statuses: [], tags: [] })
+const crmAllSelected = computed(() => {
+  const withEmail = crmCustomers.value.filter(c => c.email)
+  return withEmail.length > 0 && withEmail.every(c => newTask.contact_ids.includes(c.id))
+})
+async function loadCrmCustomers() {
+  try {
+    const params = new URLSearchParams()
+    if (crmFilter.search) params.set('search', crmFilter.search)
+    if (crmFilter.country) params.set('country', crmFilter.country)
+    if (crmFilter.status) params.set('status', crmFilter.status)
+    if (crmFilter.tag) params.set('tag', crmFilter.tag)
+    const data = await api.request(`/mailer/crm-customers?${params}`)
+    crmCustomers.value = data.customers || []
+    if (data.meta) { crmMeta.countries = data.meta.countries; crmMeta.statuses = data.meta.statuses; crmMeta.tags = data.meta.tags }
+  } catch (e) { console.error('loadCrmCustomers error', e) }
+}
+function toggleAllCrmCustomers(e) {
+  const ids = crmCustomers.value.filter(c => c.email).map(c => c.id)
+  if (e.target.checked) { newTask.contact_ids = [...new Set([...newTask.contact_ids, ...ids])] }
+  else { newTask.contact_ids = newTask.contact_ids.filter(id => !ids.includes(id)) }
+}
+
+// SMTP account editor
+const showAcctEditor = ref(false)
+const editAcct = reactive({ id: null, name: '', smtp_host: '', smtp_port: 465, smtp_user: '', smtp_pass: '', from_name: 'SunSea Steel', is_default: false, enabled: true })
+function openAcctEditor(a) {
+  if (a) Object.assign(editAcct, { ...a, is_default: !!a.is_default, enabled: !!a.enabled })
+  else Object.assign(editAcct, { id: null, name: '', smtp_host: '', smtp_port: 465, smtp_user: '', smtp_pass: '', from_name: 'SunSea Steel', is_default: false, enabled: true })
+  showAcctEditor.value = true
+}
+async function saveAcct() {
+  try {
+    if (editAcct.id) {
+      await api.request(`/email/accounts/${editAcct.id}`, { method: 'PUT', body: JSON.stringify(editAcct) })
+    } else {
+      await api.request('/email/accounts', { method: 'POST', body: JSON.stringify(editAcct) })
+    }
+    showAcctEditor.value = false
+    smtpAccounts.value = await api.request('/email/accounts') || []
+  } catch (e) { alert(e.message) }
+}
+async function deleteAcct(id) {
+  if (!confirm('确定删除此发件账号？')) return
+  await api.request(`/email/accounts/${id}`, { method: 'DELETE' })
+  smtpAccounts.value = await api.request('/email/accounts') || []
+}
+async function setDefaultAcct(id) {
+  const a = smtpAccounts.value.find(x => x.id === id)
+  if (a) await api.request(`/email/accounts/${id}`, { method: 'PUT', body: JSON.stringify({ ...a, is_default: true }) })
+  smtpAccounts.value = await api.request('/email/accounts') || []
+}
+async function testAcct(id) {
+  const to = prompt('请输入测试收件邮箱：')
+  if (!to) return
+  try {
+    const r = await api.request(`/email/accounts/${id}/test`, { method: 'POST', body: JSON.stringify({ to }) })
+    alert(r.message || '测试成功')
+  } catch (e) { alert('测试失败: ' + e.message) }
+}
+
+// Default template
+async function setDefaultTpl(id) {
+  try {
+    await api.request(`/mailer/templates/${id}/set-default`, { method: 'POST' })
+    templates.value = await api.request('/mailer/templates') || []
+  } catch (e) { alert(e.message) }
+}
 
 // ─── iframe-based native editor (Foxmail-style) ───────────────────────────────
 const editorFrame = ref(null)
@@ -851,11 +1005,22 @@ async function pollTasks() {
     if (freshTasks) tasks.value = freshTasks
   } catch (e) {}
 }
-onMounted(() => {
-  loadAll()
+onMounted(async () => {
+  await loadAll()
   loadLogs()
-  rtInterval = setInterval(pollRealtime, 1500)    // realtime countdown every 1.5s
-  taskPollInterval = setInterval(pollTasks, 3000) // task status every 3s always
+  if (isCRM.value) loadCrmCustomers()
+  rtInterval = setInterval(pollRealtime, 1500)
+  taskPollInterval = setInterval(pollTasks, 3000)
+  // Auto-open task creator if customers pre-selected via query params
+  const qIds = route.query.customers
+  if (qIds && isCRM.value) {
+    const ids = qIds.split(',').map(Number).filter(Boolean)
+    if (ids.length) {
+      newTask.contact_ids = ids
+      newTask._preselected = true
+      showTaskCreator.value = true
+    }
+  }
 })
 onUnmounted(() => { clearInterval(rtInterval); clearInterval(taskPollInterval) })
 

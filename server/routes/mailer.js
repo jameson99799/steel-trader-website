@@ -588,5 +588,33 @@ router.post('/logs/bulk-delete', authMiddleware, express.json(), (req, res) => {
     res.json({ message: `已删除 ${ids.length} 条记录` })
 })
 
+// ─── CRM Customer picker (for CRM context) ──────────────────────────────────
+router.get('/crm-customers', authMiddleware, (req, res) => {
+    const { search, country, status, tag } = req.query
+    let sql = `SELECT id, first_name, last_name, name, email, company, country, status, tags FROM crm_customers WHERE 1=1`
+    const params = []
+    if (search) { sql += ` AND (name LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR company LIKE ?)`; const s = `%${search}%`; params.push(s,s,s,s,s) }
+    if (country) { sql += ` AND country=?`; params.push(country) }
+    if (status) { sql += ` AND status=?`; params.push(status) }
+    if (tag) { sql += ` AND tags LIKE ?`; params.push(`%${tag}%`) }
+    sql += ` ORDER BY id DESC LIMIT 500`
+    const customers = getAll(sql, params)
+    // Also return filter options
+    const countries = getAll('SELECT DISTINCT country FROM crm_customers WHERE country!="" ORDER BY country')
+    const statuses = getAll('SELECT DISTINCT status FROM crm_customers WHERE status!="" ORDER BY status')
+    const allTags = new Set()
+    getAll('SELECT tags FROM crm_customers WHERE tags!="[]"').forEach(r => {
+        try { JSON.parse(r.tags).forEach(t => allTags.add(t)) } catch(e) {}
+    })
+    res.json({ customers, meta: { countries: countries.map(c=>c.country), statuses: statuses.map(s=>s.status), tags: [...allTags] } })
+})
+
+// ─── Default template toggle ─────────────────────────────────────────────────
+router.post('/templates/:id/set-default', authMiddleware, (req, res) => {
+    run('UPDATE mail_templates SET is_default=0')
+    run('UPDATE mail_templates SET is_default=1 WHERE id=?', [req.params.id])
+    res.json({ message: '已设为默认模板' })
+})
+
 export default router
 

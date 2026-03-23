@@ -5,21 +5,22 @@
 <script setup>
 /**
  * CRM Mailer Wrapper
- * Patches the global api.request to route /mailer/* calls through CRM auth
- * so the shared Mailer.vue component works with CRM tokens.
+ * Patches api.request so the shared Mailer.vue uses CRM auth and paths.
+ * Also sets window.__CRM_MAILER = true for CRM-specific UI detection.
  */
 import { onMounted, onUnmounted } from 'vue'
 import MailerPage from '../admin/Mailer.vue'
 import api from '../../api'
 
-const CRM_PREFIX = '/crm'
 let _origRequest = null
 
 onMounted(() => {
-  // Monkey-patch api.request to intercept /mailer/* calls for CRM auth
+  window.__CRM_MAILER = true
   _origRequest = api.request.bind(api)
+  
   api.request = async (url, options = {}) => {
-    if (url.startsWith('/mailer')) {
+    // Intercept both /mailer/* and /email/* calls for CRM auth
+    if (url.startsWith('/mailer') || url.startsWith('/email/')) {
       const crmToken = localStorage.getItem('crm_token')
       const headers = { ...(options.headers || {}) }
       if (!(options.body instanceof FormData)) {
@@ -28,7 +29,9 @@ onMounted(() => {
       if (crmToken) {
         headers['x-crm-token'] = crmToken
       }
-      const response = await fetch(`/api${CRM_PREFIX}${url}`, { ...options, headers })
+      // Route /mailer/* through /crm/mailer/*, /email/* stays as /email/*
+      const apiPath = url.startsWith('/mailer') ? `/api/crm${url}` : `/api${url}`
+      const response = await fetch(apiPath, { ...options, headers })
       const contentType = response.headers.get('content-type') || ''
       let data
       if (contentType.includes('application/json')) {
@@ -40,13 +43,12 @@ onMounted(() => {
       if (!response.ok) throw new Error(data.error || '请求失败')
       return data
     }
-    // Non-mailer calls pass through normally
     return _origRequest(url, options)
   }
 })
 
 onUnmounted(() => {
-  // Restore original request function  
+  window.__CRM_MAILER = false
   if (_origRequest) api.request = _origRequest
 })
 </script>
