@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
-import { upload, compressImage } from '../middleware/upload.js'
+import { upload, compressImage, attachmentUpload } from '../middleware/upload.js'
 
 const router = Router()
 const JWT_SECRET = process.env.JWT_SECRET || 'led-trade-secret-key-2024'
@@ -19,6 +19,7 @@ function dualAuthUpload(req, res, next) {
   return res.status(401).json({ error: 'Token无效' })
 }
 
+// Image upload with compression (images only)
 router.post('/', dualAuthUpload, upload.single('file'), compressImage, (req, res) => {
   if (!req.file) return res.status(400).json({ error: '请选择文件' })
   res.json({ url: `/uploads/${req.file.filename}` })
@@ -27,6 +28,12 @@ router.post('/', dualAuthUpload, upload.single('file'), compressImage, (req, res
 router.post('/image', dualAuthUpload, upload.single('image'), compressImage, (req, res) => {
   if (!req.file) return res.status(400).json({ error: '请选择文件' })
   res.json({ url: `/uploads/${req.file.filename}` })
+})
+
+// CRM file upload — accepts ALL file types (PDF, Excel, docs, images, etc.)
+router.post('/file', dualAuthUpload, attachmentUpload.single('file'), compressImage, (req, res) => {
+  if (!req.file) return res.status(400).json({ error: '请选择文件' })
+  res.json({ url: `/uploads/${req.file.filename}`, name: req.file.originalname })
 })
 
 export default router

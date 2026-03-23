@@ -84,17 +84,22 @@ export default {
   updateFollowup: (id, data) => request(`/customers/followups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteFollowup: (id) => request(`/customers/followups/${id}`, { method: 'DELETE' }),
 
-  // Upload (reuse existing upload endpoint)
+  // Upload image (images only, with compression)
   upload: async (file) => {
     const formData = new FormData()
     formData.append('file', file)
     const token = getToken()
-    const res = await fetch('/api/upload', {
+    const isImage = file.type?.startsWith('image/')
+    const url = isImage ? '/api/upload' : '/api/upload/file'
+    const res = await fetch(url, {
       method: 'POST',
       headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       body: formData
     })
-    if (!res.ok) throw new Error('上传失败')
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || '上传失败')
+    }
     return res.json()
   }
 }

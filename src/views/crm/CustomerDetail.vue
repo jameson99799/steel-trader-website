@@ -9,17 +9,17 @@
     <!-- Info Card -->
     <div class="info-card">
       <div class="info-grid">
-        <div class="info-item"><label>公司</label><span>{{ customer.company || '-' }}</span></div>
-        <div class="info-item"><label>国家</label><span>{{ customer.country || '-' }}</span></div>
-        <div class="info-item"><label>电话</label><span>{{ customer.phone || '-' }}</span></div>
-        <div class="info-item"><label>邮箱</label><span>{{ customer.email || '-' }}</span></div>
-        <div class="info-item"><label>WhatsApp</label><span>{{ customer.whatsapp || '-' }}</span></div>
-        <div class="info-item"><label>微信</label><span>{{ customer.wechat || '-' }}</span></div>
-        <div class="info-item"><label>负责人</label><span>{{ customer.owner_name || '-' }}</span></div>
-        <div class="info-item"><label>添加时间</label><span>{{ formatDate(customer.created_at) }}</span></div>
-        <div class="info-item"><label>公海次数</label><span>{{ customer.sea_pool_count || 0 }}</span></div>
+        <div class="info-item"><label>🏢 公司</label><span>{{ customer.company || '-' }}</span></div>
+        <div class="info-item"><label>🌍 国家</label><span>{{ customer.country || '-' }}</span></div>
+        <div class="info-item"><label>📞 电话</label><span>{{ customer.phone || '-' }}</span></div>
+        <div class="info-item"><label>✉️ 邮箱</label><span>{{ customer.email || '-' }}</span></div>
+        <div class="info-item"><label><svg viewBox="0 0 24 24" width="14" height="14" fill="#25D366" style="vertical-align:-2px"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.116.553 4.103 1.515 5.834L0 24l6.335-1.652A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.7 9.7 0 01-5.25-1.537l-.375-.225-3.885 1.02 1.035-3.795-.247-.393A9.72 9.72 0 012.25 12 9.75 9.75 0 0112 2.25 9.75 9.75 0 0121.75 12 9.75 9.75 0 0112 21.75z"/></svg> WhatsApp</label><span>{{ customer.whatsapp || '-' }}</span></div>
+        <div class="info-item"><label><svg viewBox="0 0 24 24" width="14" height="14" fill="#07C160" style="vertical-align:-2px"><path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.534c0 2.22 1.174 4.205 3.008 5.564l-.757 2.271 2.638-1.355c.88.251 1.825.39 2.802.39.317 0 .629-.018.937-.048a5.9 5.9 0 01-.234-1.634c0-3.526 3.281-6.387 7.33-6.387.32 0 .635.022.945.059C16.145 4.83 12.756 2.188 8.691 2.188zm-3.11 4.497a1.028 1.028 0 110 2.055 1.028 1.028 0 010-2.055zm5.2 0a1.028 1.028 0 110 2.055 1.028 1.028 0 010-2.055zM15.724 8.5c-3.506 0-6.353 2.431-6.353 5.432 0 3.001 2.847 5.432 6.353 5.432.694 0 1.363-.1 1.99-.28L20.1 20.5l-.615-1.843c1.548-1.146 2.539-2.835 2.539-4.724C22.024 10.931 19.23 8.5 15.724 8.5zm-2.669 3.38a.867.867 0 110 1.733.867.867 0 010-1.733zm4.385 0a.867.867 0 110 1.733.867.867 0 010-1.733z"/></svg> 微信</label><span>{{ customer.wechat || '-' }}</span></div>
+        <div class="info-item"><label>👤 负责人</label><span>{{ customer.owner_name || '-' }}</span></div>
+        <div class="info-item"><label>📅 添加时间</label><span>{{ formatDate(customer.created_at) }}</span></div>
+        <div class="info-item"><label>🔄 公海次数</label><span>{{ customer.sea_pool_count || 0 }}</span></div>
       </div>
-      <div v-if="customer.note" class="note-row"><label>备注:</label> {{ customer.note }}</div>
+      <div v-if="customer.note" class="note-row"><label>📝 备注:</label> {{ customer.note }}</div>
       <div v-if="customer.tags?.length" class="tag-row">
         <span v-for="t in customer.tags" :key="t" class="tag-badge">{{ t }}</span>
       </div>
@@ -103,13 +103,11 @@
         </div>
         <div class="modal-body">
           <div :class="['preview-split', { 'single-view': !hasMatchingPair }]">
-            <!-- Inquiry side -->
             <div v-if="combinedInquiry" class="preview-panel">
               <h4>📋 询盘内容</h4>
               <div class="preview-meta">{{ combinedInquiry.note }} · {{ formatDateTime(combinedInquiry.inquiry_time) }}</div>
               <div class="preview-html" v-html="combinedInquiry.content_html"></div>
             </div>
-            <!-- Quotation side -->
             <div v-if="combinedQuotation" class="preview-panel">
               <h4>💰 报价内容</h4>
               <div class="preview-meta">{{ combinedQuotation.note }} · {{ formatDateTime(combinedQuotation.quotation_time) }}</div>
@@ -152,6 +150,12 @@
       </div>
     </div>
 
+    <!-- ═══ Image Preview Overlay ═══ -->
+    <div v-if="previewImg" class="img-overlay" @click="previewImg = null">
+      <img :src="previewImg" @click.stop />
+      <button class="img-overlay-close" @click="previewImg = null">✕ 关闭</button>
+    </div>
+
     <!-- ═══ Inquiry Modal ═══ -->
     <div v-if="showInquiryModal" class="modal-overlay">
       <div class="modal modal-lg">
@@ -176,19 +180,19 @@
           </div>
           <div class="form-group">
             <label>上传图片</label>
-            <input type="file" accept="image/*" multiple @change="uploadInquiryImages" />
+            <input type="file" accept="image/*" multiple @change="uploadFiles($event, inqForm.images, 'image')" />
             <div class="img-grid">
-              <div v-for="(img, i) in inqForm.images" :key="i" class="img-thumb">
+              <div v-for="(img, i) in inqForm.images" :key="i" class="img-thumb" @click="previewImg = img">
                 <img :src="img" />
-                <button class="img-del" @click="inqForm.images.splice(i,1)">×</button>
+                <button class="img-del" @click.stop="inqForm.images.splice(i,1)">×</button>
               </div>
             </div>
           </div>
           <div class="form-group">
             <label>上传附件</label>
-            <input type="file" multiple @change="uploadInquiryFiles" />
+            <input type="file" multiple @change="uploadFiles($event, inqForm.files, 'file')" />
             <div v-for="(f, i) in inqForm.files" :key="i" class="file-item">
-              <a :href="f.url" download>📎 {{ f.name }}</a>
+              <a :href="f.url" target="_blank">📎 {{ f.name }}</a>
               <button class="btn-sm btn-danger" @click="inqForm.files.splice(i,1)">删除</button>
             </div>
           </div>
@@ -200,7 +204,7 @@
       </div>
     </div>
 
-    <!-- ═══ Quotation Modal (with inquiry reference) ═══ -->
+    <!-- ═══ Quotation Modal ═══ -->
     <div v-if="showQuotationModal" class="modal-overlay">
       <div class="modal modal-xl">
         <div class="modal-header">
@@ -209,9 +213,8 @@
         </div>
         <div class="modal-body">
           <div class="quotation-layout">
-            <!-- Left: inquiry reference + content -->
             <div class="quot-left">
-              <!-- Show last inquiry for reference -->
+              <!-- Inquiry reference -->
               <div v-if="inquiries.length" class="inquiry-ref">
                 <div class="ref-header">
                   <h4>📋 询盘参考</h4>
@@ -222,14 +225,8 @@
                 <div class="ref-content" v-html="inquiries[refInquiryIdx]?.content_html"></div>
               </div>
               <div class="form-row2">
-                <div class="form-group">
-                  <label>备注</label>
-                  <input v-model="qtForm.note" placeholder="报价备注..." />
-                </div>
-                <div class="form-group">
-                  <label>报价时间</label>
-                  <input v-model="qtForm.quotation_time" type="datetime-local" />
-                </div>
+                <div class="form-group"><label>备注</label><input v-model="qtForm.note" placeholder="报价备注..." /></div>
+                <div class="form-group"><label>报价时间</label><input v-model="qtForm.quotation_time" type="datetime-local" /></div>
               </div>
               <div class="form-group">
                 <label>报价内容（支持粘贴Excel表格、图片）</label>
@@ -237,9 +234,9 @@
               </div>
               <div class="form-group">
                 <label>报价图片</label>
-                <input type="file" accept="image/*" multiple @change="uploadQuotationImages" />
+                <input type="file" accept="image/*" multiple @change="uploadFiles($event, qtForm.images, 'image')" />
                 <div class="img-grid">
-                  <div v-for="(img, i) in qtForm.images" :key="i" class="img-thumb">
+                  <div v-for="(img, i) in qtForm.images" :key="i" class="img-thumb" @click="previewImg = img">
                     <img :src="img" />
                     <button class="img-del" @click.stop="qtForm.images.splice(i,1)">×</button>
                   </div>
@@ -247,9 +244,9 @@
               </div>
               <div class="form-group">
                 <label>附件文件</label>
-                <input type="file" multiple @change="uploadQuotationFiles" />
+                <input type="file" multiple @change="uploadFiles($event, qtForm.files, 'file')" />
                 <div v-for="(f, i) in qtForm.files" :key="i" class="file-item">
-                  <a :href="f.url" download>📎 {{ f.name }}</a>
+                  <a :href="f.url" target="_blank">📎 {{ f.name }}</a>
                   <button class="btn-sm btn-danger" @click="qtForm.files.splice(i,1)">删除</button>
                 </div>
               </div>
@@ -259,10 +256,7 @@
               <h4>运费信息</h4>
               <div class="form-group">
                 <label>运输方式</label>
-                <select v-model="qtForm.freight_type">
-                  <option value="container">集装箱</option>
-                  <option value="bulk">散货</option>
-                </select>
+                <select v-model="qtForm.freight_type"><option value="container">集装箱</option><option value="bulk">散货</option></select>
               </div>
               <div v-for="(p, i) in qtForm.ports" :key="i" class="port-row">
                 <input v-model="p.name" placeholder="港口名称" class="port-input" />
@@ -272,21 +266,40 @@
               <button class="btn btn-sm btn-secondary" @click="qtForm.ports.push({ name: '', freight: 0 })">+ 添加港口</button>
 
               <h4 style="margin-top:20px">价格计算</h4>
+              <!-- FOB Search -->
+              <div class="fob-search-bar">
+                <input v-model="fobSearchQuery" type="text" placeholder="🔍 搜索FOB价格..." class="fob-search-input" @input="searchFOB" />
+              </div>
+              <div v-if="fobSearchResults.length" class="fob-search-results">
+                <div class="fob-result-header">搜索结果 ({{ fobSearchResults.length }})</div>
+                <div v-for="r in fobSearchResults" :key="r.idx" class="fob-result-row">
+                  <span>行 {{ r.idx + 1 }}: FOB <strong>{{ r.fob }}</strong></span>
+                  <span>CFR <strong class="cfr-val">{{ r.cfr || '-' }}</strong></span>
+                </div>
+              </div>
+
               <div class="price-calc-header">
-                <span>FOB</span><span>港杂费</span><span>汇率</span><span>利润率</span><span>运费</span><span>CFR</span>
+                <span></span><span>FOB</span><span>港杂费</span><span>汇率</span><span>利润率</span><span>运费</span><span>CFR</span><span></span>
               </div>
               <div v-for="(r, i) in qtForm.price_rows" :key="i" class="price-calc-row">
-                <input v-model.number="r.fob" type="number" step="0.01" @input="calcCFR(r)" placeholder="FOB" />
+                <span class="row-num">{{ i + 1 }}</span>
+                <input :ref="el => { if(el) fobRefs[i] = el }" v-model.number="r.fob" type="number" step="0.01" @input="calcCFR(r)" @keydown.enter.prevent="focusNextFob(i)" placeholder="FOB" />
                 <input v-model.number="r.port_charge" type="number" step="0.01" @input="calcCFR(r)" placeholder="港杂费" />
                 <input v-model.number="r.exchange_rate" type="number" step="0.0001" @input="calcCFR(r)" placeholder="汇率" />
                 <input v-model.number="r.profit_rate" type="number" step="0.01" @input="calcCFR(r)" placeholder="利润率" />
                 <input v-model.number="r.freight" type="number" step="0.01" @input="calcCFR(r)" placeholder="运费" />
                 <input v-model="r.cfr" readonly class="cfr-input" placeholder="CFR" />
-                <button v-if="i > 0" class="btn-sm btn-danger" @click="qtForm.price_rows.splice(i,1)">×</button>
+                <div class="fill-btns">
+                  <button class="fill-down-btn" @click="fillDown(i, 'port_charge')" title="向下填充港杂费">⬇P</button>
+                  <button class="fill-down-btn" @click="fillDown(i, 'exchange_rate')" title="向下填充汇率">⬇E</button>
+                  <button class="fill-down-btn" @click="fillDown(i, 'profit_rate')" title="向下填充利润率">⬇R</button>
+                  <button class="fill-down-btn" @click="fillDown(i, 'freight')" title="向下填充运费">⬇F</button>
+                  <button v-if="i > 0" class="fill-down-btn del" @click="qtForm.price_rows.splice(i,1)">×</button>
+                </div>
               </div>
               <div class="price-row-actions">
                 <button class="btn btn-sm btn-secondary" @click="addPriceRow">+ 添加行</button>
-                <button class="btn btn-sm btn-outline" @click="fillAllRows">📋 填充</button>
+                <button class="btn btn-sm btn-outline" @click="fillAllRows">📋 全部填充</button>
               </div>
             </div>
           </div>
@@ -306,10 +319,7 @@
           <button class="modal-close" @click="showFollowupModal = false">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="form-group">
-            <label>跟进备注</label>
-            <input v-model="followForm.note" placeholder="跟进说明..." />
-          </div>
+          <div class="form-group"><label>跟进备注</label><input v-model="followForm.note" placeholder="跟进说明..." /></div>
           <div class="form-group">
             <label>跟进内容</label>
             <div ref="followEditorRef" class="rich-editor" contenteditable="true" @paste="handlePaste($event)" v-html="followForm.content_html"></div>
@@ -325,7 +335,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import crmApi from '../../api/crm'
 
@@ -348,12 +358,17 @@ const showQuotationModal = ref(false)
 const editQuotationId = ref(null)
 const qtEditorRef = ref(null)
 const refInquiryIdx = ref(0)
+const fobRefs = {}
 const qtForm = reactive({
   content_html: '', note: '', freight_type: 'container', quotation_time: '',
   ports: [{ name: '', freight: 0 }],
   price_rows: [{ fob: 0, port_charge: 0, exchange_rate: 7.2, profit_rate: 1.05, freight: 0, cfr: '' }],
   files: [], images: []
 })
+
+// FOB search
+const fobSearchQuery = ref('')
+const fobSearchResults = ref([])
 
 // Followup form
 const showFollowupModal = ref(false)
@@ -368,8 +383,9 @@ const combinedInquiry = ref(null)
 const combinedQuotation = ref(null)
 const hasMatchingPair = computed(() => combinedInquiry.value && combinedQuotation.value)
 
-// Followup preview
+// Followup preview & image preview
 const previewFollowup = ref(null)
+const previewImg = ref(null)
 
 function nowLocal() {
   const d = new Date()
@@ -391,7 +407,6 @@ function openCombinedPreview(record, type) {
   combinedPreviewType.value = type
   if (type === 'inquiry') {
     combinedInquiry.value = record
-    // Find matching quotation by closest time
     combinedQuotation.value = quotations.value.length ? quotations.value[0] : null
   } else {
     combinedQuotation.value = record
@@ -400,14 +415,25 @@ function openCombinedPreview(record, type) {
   showCombinedPreview.value = true
 }
 
+// ─── Unified upload ─────────────────────────────────────────────────────────────
+async function uploadFiles(e, targetArray, type) {
+  for (const f of Array.from(e.target.files || [])) {
+    try {
+      const res = await crmApi.upload(f)
+      if (type === 'image') targetArray.push(res.url)
+      else targetArray.push({ name: f.name, url: res.url })
+    } catch (err) { alert('上传失败: ' + err.message) }
+  }
+}
+
 // ─── Inquiry CRUD ───────────────────────────────────────────────────────────────
 function openInquiryModal(inq) {
   editInquiryId.value = inq?.id || null
   inqForm.content_html = inq?.content_html || ''
   inqForm.note = inq?.note || ''
   inqForm.inquiry_time = inq?.inquiry_time ? inq.inquiry_time.replace(' ', 'T').slice(0, 16) : nowLocal()
-  inqForm.images = inq?.images || []
-  inqForm.files = inq?.files || []
+  inqForm.images = inq?.images ? [...inq.images] : []
+  inqForm.files = inq?.files ? [...inq.files] : []
   showInquiryModal.value = true
 }
 
@@ -416,28 +442,11 @@ async function saveInquiry() {
   try {
     if (editInquiryId.value) await crmApi.updateInquiry(editInquiryId.value, data)
     else await crmApi.createInquiry(customerId, data)
-    showInquiryModal.value = false
-    loadData()
+    showInquiryModal.value = false; loadData()
   } catch (e) { alert(e.message) }
 }
 
-async function deleteInquiry(inq) {
-  if (!confirm('确定删除此询盘？')) return
-  await crmApi.deleteInquiry(inq.id)
-  loadData()
-}
-
-async function uploadInquiryImages(e) {
-  for (const f of Array.from(e.target.files || [])) {
-    try { const res = await crmApi.upload(f); inqForm.images.push(res.url) } catch (err) { alert('上传失败: ' + err.message) }
-  }
-}
-
-async function uploadInquiryFiles(e) {
-  for (const f of Array.from(e.target.files || [])) {
-    try { const res = await crmApi.upload(f); inqForm.files.push({ name: f.name, url: res.url }) } catch (err) { alert('上传失败: ' + err.message) }
-  }
-}
+async function deleteInquiry(inq) { if (confirm('确定删除？')) { await crmApi.deleteInquiry(inq.id); loadData() } }
 
 // ─── Quotation CRUD ─────────────────────────────────────────────────────────────
 function openQuotationModal(qt) {
@@ -446,11 +455,13 @@ function openQuotationModal(qt) {
   qtForm.note = qt?.note || ''
   qtForm.freight_type = qt?.freight_type || 'container'
   qtForm.quotation_time = qt?.quotation_time ? qt.quotation_time.replace(' ', 'T').slice(0, 16) : nowLocal()
-  qtForm.ports = qt?.ports?.length ? [...qt.ports] : [{ name: '', freight: 0 }]
-  qtForm.price_rows = qt?.price_rows?.length ? [...qt.price_rows] : [{ fob: 0, port_charge: 0, exchange_rate: 7.2, profit_rate: 1.05, freight: 0, cfr: '' }]
-  qtForm.files = qt?.files || []
-  qtForm.images = qt?.images || []
+  qtForm.ports = qt?.ports?.length ? qt.ports.map(p => ({...p})) : [{ name: '', freight: 0 }]
+  qtForm.price_rows = qt?.price_rows?.length ? qt.price_rows.map(r => ({...r})) : [{ fob: 0, port_charge: 0, exchange_rate: 7.2, profit_rate: 1.05, freight: 0, cfr: '' }]
+  qtForm.files = qt?.files ? [...qt.files] : []
+  qtForm.images = qt?.images ? [...qt.images] : []
   refInquiryIdx.value = 0
+  fobSearchQuery.value = ''
+  fobSearchResults.value = []
   showQuotationModal.value = true
 }
 
@@ -461,15 +472,46 @@ function calcCFR(r) {
 }
 
 function addPriceRow() {
-  qtForm.price_rows.push({ fob: 0, port_charge: 0, exchange_rate: 7.2, profit_rate: 1.05, freight: 0, cfr: '' })
+  const last = qtForm.price_rows[qtForm.price_rows.length - 1] || {}
+  qtForm.price_rows.push({
+    fob: 0, port_charge: last.port_charge || 0, exchange_rate: last.exchange_rate || 7.2,
+    profit_rate: last.profit_rate || 1.05, freight: last.freight || 0, cfr: ''
+  })
+  nextTick(() => { const ref = fobRefs[qtForm.price_rows.length - 1]; if (ref) ref.focus() })
+}
+
+function focusNextFob(currentIdx) {
+  if (currentIdx >= qtForm.price_rows.length - 1) addPriceRow()
+  else nextTick(() => { const ref = fobRefs[currentIdx + 1]; if (ref) ref.focus() })
+}
+
+function fillDown(fromIdx, field) {
+  const val = qtForm.price_rows[fromIdx]?.[field]
+  if (val === undefined) return
+  for (let i = fromIdx + 1; i < qtForm.price_rows.length; i++) {
+    qtForm.price_rows[i][field] = val
+    calcCFR(qtForm.price_rows[i])
+  }
 }
 
 function fillAllRows() {
   if (qtForm.price_rows.length < 2) return
   const f = qtForm.price_rows[0]
   for (let i = 1; i < qtForm.price_rows.length; i++) {
-    Object.assign(qtForm.price_rows[i], { port_charge: f.port_charge, exchange_rate: f.exchange_rate, profit_rate: f.profit_rate, freight: f.freight, fob: 0, cfr: '' })
+    qtForm.price_rows[i].port_charge = f.port_charge
+    qtForm.price_rows[i].exchange_rate = f.exchange_rate
+    qtForm.price_rows[i].profit_rate = f.profit_rate
+    qtForm.price_rows[i].freight = f.freight
+    calcCFR(qtForm.price_rows[i])
   }
+}
+
+function searchFOB() {
+  const q = parseFloat(fobSearchQuery.value)
+  if (isNaN(q)) { fobSearchResults.value = []; return }
+  fobSearchResults.value = qtForm.price_rows
+    .map((r, i) => ({ ...r, idx: i }))
+    .filter(r => r.fob && Math.abs(r.fob - q) < 0.01)
 }
 
 async function saveQuotation() {
@@ -477,28 +519,11 @@ async function saveQuotation() {
   try {
     if (editQuotationId.value) await crmApi.updateQuotation(editQuotationId.value, data)
     else await crmApi.createQuotation(customerId, data)
-    showQuotationModal.value = false
-    loadData()
+    showQuotationModal.value = false; loadData()
   } catch (e) { alert(e.message) }
 }
 
-async function deleteQuotation(qt) {
-  if (!confirm('确定删除此报价？')) return
-  await crmApi.deleteQuotation(qt.id)
-  loadData()
-}
-
-async function uploadQuotationImages(e) {
-  for (const f of Array.from(e.target.files || [])) {
-    try { const res = await crmApi.upload(f); qtForm.images.push(res.url) } catch (err) { alert('上传失败: ' + err.message) }
-  }
-}
-
-async function uploadQuotationFiles(e) {
-  for (const f of Array.from(e.target.files || [])) {
-    try { const res = await crmApi.upload(f); qtForm.files.push({ name: f.name, url: res.url }) } catch (err) { alert('上传失败: ' + err.message) }
-  }
-}
+async function deleteQuotation(qt) { if (confirm('确定删除？')) { await crmApi.deleteQuotation(qt.id); loadData() } }
 
 // ─── Followup CRUD ──────────────────────────────────────────────────────────────
 function openFollowupModal(f) {
@@ -513,69 +538,40 @@ async function saveFollowup() {
   try {
     if (editFollowupId.value) await crmApi.updateFollowup(editFollowupId.value, data)
     else await crmApi.createFollowup(customerId, data)
-    showFollowupModal.value = false
-    loadData()
+    showFollowupModal.value = false; loadData()
   } catch (e) { alert(e.message) }
 }
 
-async function deleteFollowup(f) {
-  if (!confirm('确定删除此跟进记录？')) return
-  await crmApi.deleteFollowup(f.id)
-  loadData()
-}
+async function deleteFollowup(f) { if (confirm('确定删除？')) { await crmApi.deleteFollowup(f.id); loadData() } }
 
-// ─── Paste handler: supports Excel, HTML tables, images ─────────────────────────
+// ─── Paste handler ──────────────────────────────────────────────────────────────
 async function handlePaste(e) {
   const items = e.clipboardData?.items
   if (!items) return
-
-  // Check for images first
   for (const item of items) {
     if (item.type.startsWith('image/')) {
       e.preventDefault()
-      const file = item.getAsFile()
       try {
-        const res = await crmApi.upload(file)
+        const res = await crmApi.upload(item.getAsFile())
         document.execCommand('insertHTML', false, `<img src="${res.url}" style="max-width:100%;height:auto;" />`)
       } catch (err) { console.error(err) }
       return
     }
   }
-
-  // Check for HTML content (Excel tables, rich text)
   const htmlData = e.clipboardData.getData('text/html')
   if (htmlData) {
     e.preventDefault()
-    // Clean up Excel HTML: keep tables and basic formatting
-    let clean = htmlData
-      .replace(/<meta[^>]*>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<xml[^>]*>[\s\S]*?<\/xml>/gi, '')
-      .replace(/<!--[\s\S]*?-->/g, '')
-      .replace(/class="[^"]*"/gi, '')
-      .replace(/style="[^"]*"/gi, (match) => {
-        // Keep border and basic styles for tables
-        if (match.includes('border') || match.includes('width') || match.includes('background')) return match
-        return ''
-      })
-    // Add table borders if missing
+    let clean = htmlData.replace(/<meta[^>]*>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<xml[^>]*>[\s\S]*?<\/xml>/gi, '').replace(/<!--[\s\S]*?-->/g, '').replace(/class="[^"]*"/gi, '')
     clean = clean.replace(/<table/gi, '<table style="border-collapse:collapse;width:100%"')
     clean = clean.replace(/<td(?=[> ])/gi, '<td style="border:1px solid #ddd;padding:4px 8px"')
     clean = clean.replace(/<th(?=[> ])/gi, '<th style="border:1px solid #ddd;padding:4px 8px;background:#f8fafc"')
     document.execCommand('insertHTML', false, clean)
-    return
   }
-
-  // Plain text fallback - just let default handle it
 }
 
-function getStatusClass(s) {
-  return { '开发中': 'status-dev', '联系中': 'status-contact', '已成交': 'status-closed', '公海池': 'status-pool' }[s] || ''
-}
-
+function getStatusClass(s) { return { '开发中': 'status-dev', '联系中': 'status-contact', '已成交': 'status-closed', '公海池': 'status-pool' }[s] || '' }
 function formatDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : '-' }
 function formatDateTime(d) { return d ? new Date(d).toLocaleString('zh-CN') : '-' }
-
 onMounted(loadData)
 </script>
 
@@ -584,17 +580,14 @@ onMounted(loadData)
 .detail-header h1 { margin: 0; font-size: 24px; }
 .btn-back { background: none; border: none; cursor: pointer; font-size: 16px; color: #2563eb; font-weight: 600; }
 .status-badge { padding: 4px 12px; border-radius: 10px; font-size: 13px; font-weight: 600; }
-.status-dev { background: #fef3c7; color: #92400e; }
-.status-contact { background: #ede9fe; color: #5b21b6; }
-.status-closed { background: #d1fae5; color: #065f46; }
-.status-pool { background: #f1f5f9; color: #64748b; }
+.status-dev { background: #fef3c7; color: #92400e; } .status-contact { background: #ede9fe; color: #5b21b6; }
+.status-closed { background: #d1fae5; color: #065f46; } .status-pool { background: #f1f5f9; color: #64748b; }
 
 .info-card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
 .info-item label { display: block; font-size: 12px; color: #64748b; margin-bottom: 2px; }
 .info-item span { font-size: 14px; font-weight: 600; color: #0f172a; }
 .note-row { margin-top: 12px; font-size: 13px; color: #475569; padding: 8px 12px; background: #f8fafc; border-radius: 6px; }
-.note-row label { font-weight: 600; }
 .tag-row { margin-top: 12px; display: flex; gap: 6px; }
 .tag-badge { background: #f0fdf4; color: #166534; padding: 3px 8px; border-radius: 4px; font-size: 12px; }
 
@@ -604,9 +597,8 @@ onMounted(loadData)
 
 .tab-content { background: #fff; border-radius: 0 12px 12px 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 .tab-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.tab-header h3 { margin: 0; font-size: 16px; }
+.tab-header h3 { margin: 0; }
 
-/* Record rows - compact with actions on right */
 .record-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; }
 .record-row:hover { background: #fafafe; }
 .record-left { flex: 1; }
@@ -617,36 +609,34 @@ onMounted(loadData)
 .record-right { display: flex; gap: 6px; flex-shrink: 0; }
 .empty { color: #94a3b8; text-align: center; padding: 20px; }
 
-/* Combined preview */
 .preview-split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .preview-split.single-view { grid-template-columns: 1fr; }
 .preview-panel { border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; max-height: 60vh; overflow-y: auto; }
 .preview-panel h4 { margin: 0 0 8px; font-size: 15px; }
 .preview-meta { font-size: 12px; color: #64748b; margin-bottom: 10px; }
 .preview-html { font-size: 14px; line-height: 1.6; }
-.preview-html :deep(img) { max-width: 100%; height: auto; }
+.preview-html :deep(img) { max-width: 100%; height: auto; cursor: pointer; }
 .preview-html :deep(table) { border-collapse: collapse; width: 100%; }
 .preview-html :deep(td), .preview-html :deep(th) { border: 1px solid #ddd; padding: 6px 8px; }
 .preview-price { margin-top: 12px; }
-
 .price-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .price-table th { background: #f8fafc; padding: 6px 8px; text-align: center; font-size: 12px; border: 1px solid #e2e8f0; }
 .price-table td { padding: 6px 8px; text-align: center; border: 1px solid #e2e8f0; }
 .cfr-val { font-weight: 700; color: #059669; }
 
-/* Action buttons */
+/* Image preview overlay */
+.img-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 3000; cursor: pointer; }
+.img-overlay img { max-width: 90vw; max-height: 85vh; object-fit: contain; border-radius: 8px; cursor: default; }
+.img-overlay-close { position: fixed; top: 20px; right: 30px; background: rgba(255,255,255,0.2); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+
 .btn-sm { padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
-.btn-edit { background: #eff6ff; color: #2563eb; }
-.btn-view { background: #f0fdf4; color: #15803d; }
-.btn-danger { background: #fef2f2; color: #dc2626; }
-.btn-outline { background: #fff; border: 1px solid #e2e8f0; color: #334155; }
+.btn-edit { background: #eff6ff; color: #2563eb; } .btn-view { background: #f0fdf4; color: #15803d; }
+.btn-danger { background: #fef2f2; color: #dc2626; } .btn-outline { background: #fff; border: 1px solid #e2e8f0; color: #334155; }
 .btn-sm:hover { opacity: 0.85; }
 
-/* Modals */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .modal { background: #fff; border-radius: 14px; max-height: 90vh; overflow-y: auto; }
-.modal-lg { width: 720px; max-width: 95vw; }
-.modal-xl { width: 1100px; max-width: 95vw; }
+.modal-lg { width: 720px; max-width: 95vw; } .modal-xl { width: 1200px; max-width: 95vw; }
 .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; background: #fff; z-index: 1; border-radius: 14px 14px 0 0; }
 .modal-header h3 { margin: 0; }
 .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b; }
@@ -659,25 +649,19 @@ onMounted(loadData)
 .form-group input:focus, .form-group select:focus { outline: none; border-color: #2563eb; }
 .form-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
-.rich-editor {
-  min-height: 180px; padding: 14px; border: 1px solid #e2e8f0; border-radius: 8px;
-  font-size: 14px; line-height: 1.6; overflow-y: auto; max-height: 400px;
-}
+.rich-editor { min-height: 180px; padding: 14px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; line-height: 1.6; overflow-y: auto; max-height: 400px; }
 .rich-editor:focus { outline: none; border-color: #2563eb; }
-.rich-editor img { max-width: 100%; height: auto; }
-.rich-editor table { border-collapse: collapse; width: 100%; }
+.rich-editor img { max-width: 100%; height: auto; } .rich-editor table { border-collapse: collapse; width: 100%; }
 .rich-editor td, .rich-editor th { border: 1px solid #ddd; padding: 4px 8px; }
 
-/* Quotation layout */
-.quotation-layout { display: grid; grid-template-columns: 1fr 400px; gap: 24px; }
-@media (max-width: 768px) { .quotation-layout { grid-template-columns: 1fr; } }
+.quotation-layout { display: grid; grid-template-columns: 1fr 480px; gap: 24px; }
+@media (max-width: 900px) { .quotation-layout { grid-template-columns: 1fr; } }
 .inquiry-ref { margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; background: #fafafe; }
 .ref-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .ref-header h4 { margin: 0; font-size: 14px; }
 .ref-select { font-size: 12px; padding: 4px 8px; border: 1px solid #e2e8f0; border-radius: 4px; max-width: 300px; }
 .ref-content { max-height: 200px; overflow-y: auto; font-size: 13px; line-height: 1.5; }
-.ref-content :deep(img) { max-width: 100%; }
-.ref-content :deep(table) { border-collapse: collapse; width: 100%; }
+.ref-content :deep(img) { max-width: 100%; } .ref-content :deep(table) { border-collapse: collapse; width: 100%; }
 .ref-content :deep(td), .ref-content :deep(th) { border: 1px solid #ddd; padding: 4px 6px; font-size: 12px; }
 
 .quot-right { background: #f8fafc; border-radius: 10px; padding: 16px; }
@@ -685,10 +669,24 @@ onMounted(loadData)
 .port-row { display: flex; gap: 6px; margin-bottom: 6px; }
 .port-input { flex: 1; padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 13px; }
 
-.price-calc-header { display: grid; grid-template-columns: repeat(6, 1fr) 32px; gap: 4px; font-size: 11px; font-weight: 600; color: #475569; text-align: center; margin-bottom: 4px; }
-.price-calc-row { display: grid; grid-template-columns: repeat(6, 1fr) 32px; gap: 4px; margin-bottom: 4px; }
+/* FOB search */
+.fob-search-bar { margin-bottom: 10px; }
+.fob-search-input { width: 100%; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; box-sizing: border-box; }
+.fob-search-input:focus { outline: none; border-color: #2563eb; }
+.fob-search-results { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+.fob-result-header { font-size: 12px; font-weight: 700; color: #92400e; margin-bottom: 6px; }
+.fob-result-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; border-bottom: 1px solid #fef3c7; }
+
+/* Price calc grid */
+.price-calc-header { display: grid; grid-template-columns: 30px repeat(6, 1fr) auto; gap: 4px; font-size: 11px; font-weight: 600; color: #475569; text-align: center; margin-bottom: 4px; }
+.price-calc-row { display: grid; grid-template-columns: 30px repeat(6, 1fr) auto; gap: 4px; margin-bottom: 4px; align-items: center; }
+.row-num { font-size: 11px; color: #94a3b8; text-align: center; font-weight: 600; }
 .price-calc-row input { padding: 6px 4px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 12px; text-align: center; width: 100%; box-sizing: border-box; }
 .cfr-input { background: #f0fdf4 !important; font-weight: 700; color: #059669; }
+.fill-btns { display: flex; flex-wrap: wrap; gap: 2px; }
+.fill-down-btn { padding: 2px 4px; border: 1px solid #e2e8f0; border-radius: 3px; background: #fff; cursor: pointer; font-size: 10px; color: #64748b; }
+.fill-down-btn:hover { background: #eff6ff; color: #2563eb; }
+.fill-down-btn.del { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
 .price-row-actions { display: flex; gap: 8px; margin-top: 8px; }
 
 .img-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
@@ -698,7 +696,6 @@ onMounted(loadData)
 .file-item { display: flex; align-items: center; gap: 8px; padding: 6px; background: #f8fafc; border-radius: 4px; margin-top: 4px; font-size: 13px; }
 
 .btn { padding: 9px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
-.btn-primary { background: #2563eb; color: #fff; }
-.btn-primary:hover { background: #1d4ed8; }
+.btn-primary { background: #2563eb; color: #fff; } .btn-primary:hover { background: #1d4ed8; }
 .btn-secondary { background: #f1f5f9; color: #334155; }
 </style>

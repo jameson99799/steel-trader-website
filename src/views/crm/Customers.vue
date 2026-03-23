@@ -60,7 +60,7 @@
             <!-- Contact: 2-per-row grid -->
             <td class="contact-cell">
               <div class="contact-grid">
-                <span v-for="item in getContactItems(c)" :key="item.label" :title="item.label">{{ item.icon }}{{ item.value }}</span>
+                <span v-for="item in getContactItems(c)" :key="item.label" :title="item.label" :class="item.cls">{{ item.icon }} {{ item.value }}</span>
               </div>
             </td>
             <!-- Merged: status + tags -->
@@ -213,14 +213,22 @@
             <button v-if="companySelectedIds.length" class="btn btn-sm btn-primary" @click="sendMailToCompany">📧 发送营销邮件 ({{ companySelectedIds.length }})</button>
           </div>
           <div v-for="c in companyCustomers" :key="c.id" class="company-card" :class="{ excluded: c._excluded }">
-            <div class="company-card-left">
-              <input type="checkbox" :value="c.id" v-model="companySelectedIds" :disabled="c._excluded" />
-              <div class="company-card-info">
-                <strong class="name-cell" @click="$router.push(`/crm/customer/${c.id}`)">{{ c.name }}</strong>
-                <span v-if="c.email">📧 {{ c.email }}</span>
-                <span class="company-sub">{{ c.company || '-' }} · {{ c.country || '-' }}</span>
-              </div>
+            <input type="checkbox" :value="c.id" v-model="companySelectedIds" :disabled="c._excluded" />
+            <div class="cc-name">
+              <strong class="name-cell" @click="$router.push(`/crm/customer/${c.id}`)">{{ c.name }}</strong>
+              <span class="cc-company">{{ c.company || '-' }}</span>
             </div>
+            <div class="cc-contacts">
+              <span v-if="c.phone" class="ct-phone" title="电话">📞 {{ c.phone }}</span>
+              <span v-if="c.email" class="ct-email" title="邮箱">✉️ {{ c.email }}</span>
+              <span v-if="c.whatsapp" class="ct-wa" title="WhatsApp">WA {{ c.whatsapp }}</span>
+              <span v-if="c.wechat" class="ct-wx" title="微信">WX {{ c.wechat }}</span>
+            </div>
+            <div class="cc-meta">
+              <span class="country-badge">{{ c.country || '-' }}</span>
+              <span :class="['status-badge', getStatusClass(c.status)]">{{ c.status }}</span>
+            </div>
+            <div class="cc-owner">{{ c.owner_name || '-' }}</div>
             <button class="btn-sm btn-danger" @click="excludeCompanyMatch(c)">✕</button>
           </div>
           <p v-if="!companyCustomers.length" class="empty-msg">没有匹配的关联客户</p>
@@ -298,10 +306,10 @@ async function loadCustomers() {
 
 function getContactItems(c) {
   const items = []
-  if (c.phone) items.push({ icon: '📞', label: '电话', value: c.phone })
-  if (c.email) items.push({ icon: '📧', label: '邮箱', value: c.email })
-  if (c.whatsapp) items.push({ icon: '💬', label: 'WhatsApp', value: c.whatsapp })
-  if (c.wechat) items.push({ icon: '💬', label: '微信', value: c.wechat })
+  if (c.phone) items.push({ icon: '📞', label: '电话', value: c.phone, cls: 'ct-phone' })
+  if (c.email) items.push({ icon: '✉️', label: '邮箱', value: c.email, cls: 'ct-email' })
+  if (c.whatsapp) items.push({ icon: 'WA', label: 'WhatsApp', value: c.whatsapp, cls: 'ct-wa' })
+  if (c.wechat) items.push({ icon: 'WX', label: '微信', value: c.wechat, cls: 'ct-wx' })
   return items
 }
 
@@ -490,12 +498,20 @@ td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
 
 /* Company panel */
 .company-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
-.company-card { display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; }
+.company-card { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; }
 .company-card.excluded { opacity: 0.4; text-decoration: line-through; }
-.company-card-left { display: flex; align-items: center; gap: 10px; }
-.company-card-info { display: flex; flex-direction: column; gap: 2px; }
-.company-card-info span { font-size: 12px; color: #64748b; }
-.company-sub { font-size: 11px !important; color: #94a3b8 !important; }
+.cc-name { min-width: 120px; }
+.cc-name strong { display: block; }
+.cc-company { font-size: 11px; color: #94a3b8; }
+.cc-contacts { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; font-size: 12px; flex: 1; min-width: 240px; }
+.cc-meta { display: flex; gap: 6px; align-items: center; min-width: 130px; }
+.cc-owner { font-size: 12px; color: #475569; min-width: 60px; text-align: center; }
+
+/* Contact icon colors */
+.ct-phone { color: #2563eb; }
+.ct-email { color: #d97706; }
+.ct-wa { color: #25D366; font-weight: 600; }
+.ct-wx { color: #07C160; font-weight: 600; }
 
 .btn { padding: 9px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
 .btn-primary { background: #2563eb; color: #fff; }
