@@ -402,6 +402,7 @@ async function initDb() {
       db.prepare("INSERT OR IGNORE INTO email_settings (id, to_emails, ssl_warn_days) VALUES (1,'',30)").run()
     }
   } catch (e) { }
+  try { db.exec("ALTER TABLE smtp_accounts ADD COLUMN assigned_users TEXT DEFAULT 'all'") } catch(e) {}
 
   // Bulk email: templates
   db.exec(`

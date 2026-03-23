@@ -101,15 +101,42 @@
               </div>
             </div>
           </div>
+          <!-- Enhanced Customer Picker -->
           <div class="form-group">
-            <label>选择收件客户 ({{ sendForm.customer_ids.length }})</label>
-            <input v-model="customerSearch" type="text" placeholder="搜索客户..." @input="searchCustomers" />
+            <label>选择收件客户 <strong>({{ sendForm.customer_ids.length }})</strong></label>
+            <div class="picker-filters">
+              <input v-model="pickerFilter.search" type="text" placeholder="搜索名称/邮箱/公司" @input="loadPickerCustomers" />
+              <select v-model="pickerFilter.country" @change="loadPickerCustomers">
+                <option value="">全部国家</option>
+                <option v-for="c in pickerMeta.countries" :key="c" :value="c">{{ c }}</option>
+              </select>
+              <select v-model="pickerFilter.status" @change="loadPickerCustomers">
+                <option value="">全部状态</option>
+                <option v-for="s in pickerMeta.statuses" :key="s" :value="s">{{ s }}</option>
+              </select>
+              <select v-model="pickerFilter.tag" @change="loadPickerCustomers">
+                <option value="">全部标签</option>
+                <option v-for="t in pickerMeta.tags" :key="t" :value="t">{{ t }}</option>
+              </select>
+            </div>
+            <div class="picker-toolbar" v-if="pickerCustomers.length">
+              <label class="pick-item"><input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" /> <strong>全选 ({{ pickerCustomers.length }})</strong></label>
+              <span class="picker-count">有邮箱: {{ pickerCustomers.filter(c=>c.email).length }}</span>
+            </div>
             <div class="customer-picker" v-if="pickerCustomers.length">
               <label v-for="c in pickerCustomers" :key="c.id" class="picker-item">
-                <input type="checkbox" :value="c.id" v-model="sendForm.customer_ids" />
-                <span>{{ c.name }} <small v-if="c.email">({{ c.email }})</small></span>
+                <input type="checkbox" :value="c.id" v-model="sendForm.customer_ids" :disabled="!c.email" />
+                <span :class="{ 'no-email': !c.email }">
+                  {{ c.name }}
+                  <small v-if="c.email">({{ c.email }})</small>
+                  <small v-else class="warn">无邮箱</small>
+                  <small v-if="c.country" class="tag-country">{{ c.country }}</small>
+                  <small v-if="c.status" class="tag-status">{{ c.status }}</small>
+                </span>
               </label>
             </div>
+            <p v-else-if="pickerFilter.search || pickerFilter.country || pickerFilter.status || pickerFilter.tag" class="empty-sm">无匹配客户，请调整筛选条件</p>
+            <p v-else class="empty-sm">请使用筛选条件选择客户</p>
           </div>
           <button class="btn btn-primary btn-lg" :disabled="sending" @click="doSend">
             {{ sending ? '发送中...' : '🚀 开始发送' }}
@@ -141,17 +168,16 @@
       <div class="panel-header"><h3>📊 发送记录</h3></div>
       <table v-if="records.length" class="records-table">
         <thead>
-          <tr><th>时间</th><th>收件人</th><th>主题</th><th>状态</th><th>操作</th></tr>
+          <tr><th>时间</th><th>来源</th><th>收件人</th><th>主题</th><th>状态</th><th>操作</th></tr>
         </thead>
         <tbody>
-          <tr v-for="r in records" :key="r.id">
+          <tr v-for="r in records" :key="r.id + r.source">
             <td>{{ formatDate(r.sent_at) }}</td>
+            <td><span :class="['source-badge', r.source === 'site' ? 'sys' : 'crm']">{{ r.source === 'site' ? '🌐网站' : '📬 CRM' }}</span></td>
             <td>{{ r.recipient_email }}</td>
-            <td>{{ r.subject }}</td>
-            <td>
-              <span :class="['status-badge', statusClass(r.status)]">{{ statusText(r.status) }}</span>
-            </td>
-            <td><button class="btn-sm btn-danger" @click="deleteRecord(r.id)">删除</button></td>
+            <td class="td-subject">{{ r.subject }}</td>
+            <td><span :class="['status-badge', statusClass(r.status)]">{{ statusText(r.status) }}</span></td>
+            <td><button class="btn-sm btn-danger" @click="deleteRecord(r.id, r.source)">删除</button></td>
           </tr>
         </tbody>
       </table>
@@ -277,8 +303,13 @@ const previewTpl = ref(null)
 // Send
 const sendForm = reactive({ account_id: '', template_id: '', subject: '', customer_ids: [], interval_min: 5, interval_max: 30 })
 const sendEditorRef = ref(null)
-const customerSearch = ref('')
+const pickerFilter = reactive({ search: '', country: '', status: '', tag: '' })
+const pickerMeta = ref({ countries: [], statuses: [], tags: [] })
 const pickerCustomers = ref([])
+const isAllSelected = computed(() => {
+  const emailCusts = pickerCustomers.value.filter(c => c.email)
+  return emailCusts.length > 0 && emailCusts.every(c => sendForm.customer_ids.includes(c.id))
+})
 
 const accountList = computed(() => accounts.value.accounts || [])
 const allAccounts = computed(() => accounts.value.accounts || [])
@@ -299,6 +330,7 @@ onMounted(async () => {
   } catch (e) {}
   loadAccounts()
   if (isAdmin.value) loadUsers()
+  loadPickerCustomers() // Pre-load filter options
 })
 onUnmounted(() => { if (progressTimer) clearInterval(progressTimer) })
 
@@ -456,12 +488,36 @@ function applyTemplate() {
   }
 }
 
-async function searchCustomers() {
-  if (!customerSearch.value.trim()) { pickerCustomers.value = []; return }
-  try {
-    const data = await safeFetch(`/customers?search=${encodeURIComponent(customerSearch.value)}&limit=50`)
-    pickerCustomers.value = (data?.customers || []).filter(c => c.email)
-  } catch (e) { pickerCustomers.value = [] }
+let pickerDebounce = null
+function loadPickerCustomers() {
+  clearTimeout(pickerDebounce)
+  pickerDebounce = setTimeout(async () => {
+    const params = new URLSearchParams()
+    if (pickerFilter.search) params.set('search', pickerFilter.search)
+    if (pickerFilter.country) params.set('country', pickerFilter.country)
+    if (pickerFilter.status) params.set('status', pickerFilter.status)
+    if (pickerFilter.tag) params.set('tag', pickerFilter.tag)
+    params.set('has_email', '1')
+    const data = await safeFetch(`/mailer/customers-picker?${params.toString()}`)
+    if (data) {
+      pickerCustomers.value = data.customers || []
+      pickerMeta.value = { countries: data.countries||[], statuses: data.statuses||[], tags: data.tags||[] }
+    }
+  }, 300)
+}
+
+function toggleSelectAll() {
+  const emailCusts = pickerCustomers.value.filter(c => c.email)
+  if (isAllSelected.value) {
+    // Deselect all visible
+    const visibleIds = new Set(emailCusts.map(c => c.id))
+    sendForm.customer_ids = sendForm.customer_ids.filter(id => !visibleIds.has(id))
+  } else {
+    // Select all visible with email
+    const existing = new Set(sendForm.customer_ids)
+    emailCusts.forEach(c => existing.add(c.id))
+    sendForm.customer_ids = [...existing]
+  }
 }
 
 async function doSend() {
@@ -495,8 +551,9 @@ async function loadRecords() {
   records.value = data || []
 }
 
-async function deleteRecord(id) {
-  await safeDel(`/mailer/records/${id}`)
+async function deleteRecord(id, source) {
+  const qs = source === 'site' ? '?source=site' : ''
+  await safeDel(`/mailer/records/${id}${qs}`)
   loadRecords()
 }
 
@@ -552,9 +609,19 @@ function formatDate(d) { return d ? new Date(d).toLocaleString('zh-CN') : '-' }
 .send-form h3 { margin: 0 0 16px; }
 .interval-row { display: flex; align-items: center; gap: 8px; }
 .interval-row input { width: 80px; }
-.customer-picker { max-height: 200px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin-top: 8px; }
+.customer-picker { max-height: 280px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin-top: 8px; }
 .picker-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; cursor: pointer; }
 .picker-item small { color: #64748b; }
+.picker-filters { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; }
+.picker-filters input, .picker-filters select { padding: 7px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; }
+.picker-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 8px 0 4px; font-size: 13px; }
+.picker-count { color: #059669; font-weight: 600; }
+.no-email { opacity: 0.5; }
+.warn { color: #dc2626; font-weight: 600; }
+.tag-country { background: #dbeafe; color: #1d4ed8; padding: 1px 6px; border-radius: 8px; margin-left: 4px; }
+.tag-status { background: #fef3c7; color: #92400e; padding: 1px 6px; border-radius: 8px; margin-left: 4px; }
+.empty-sm { text-align: center; padding: 16px; color: #94a3b8; font-size: 13px; }
+.td-subject { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .btn-lg { width: 100%; padding: 14px; font-size: 16px; margin-top: 16px; }
 .send-status { background: #f8fafc; border-radius: 10px; padding: 16px; }
 .send-status h4 { margin: 0 0 12px; }

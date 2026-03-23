@@ -1,6 +1,7 @@
 /**
- * CRM Mailer routes: SMTP accounts (synced from website + CRM-native),
- * templates with user assignment, async send tasks, real-time progress.
+ * CRM Mailer routes: uses SHARED smtp_accounts + mail_templates tables.
+ * Supports assignment, enhanced customer picker, send tasks with real-time progress,
+ * and comprehensive send records (mail_logs).
  */
 import { Router } from 'express'
 import nodemailer from 'nodemailer'
@@ -9,46 +10,21 @@ import { dualAuth } from './crm-customers.js'
 
 const router = Router()
 
-// Helper: check if user can access an account/template based on assigned_users
+// Helper: check if user can access based on assigned_users
 function canAccess(assigned, userId) {
-  if (!assigned || assigned === 'all') return true
+  if (!assigned || assigned === '' || assigned === 'all') return true
   return assigned.split(',').map(s => s.trim()).includes(String(userId))
 }
 
-// ─── Sync system accounts into CRM ─────────────────────────────────────────────
-function syncSystemAccounts() {
-  const systemAccts = getAll('SELECT * FROM smtp_accounts WHERE enabled=1')
-  for (const sa of systemAccts) {
-    const existing = getOne('SELECT id FROM crm_smtp_accounts WHERE source=? AND source_id=?', ['system', sa.id])
-    if (!existing) {
-      run(`INSERT INTO crm_smtp_accounts (owner_id, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, assigned_users, source, source_id)
-           VALUES (NULL,?,?,?,?,?,'all','system',?)`,
-        [sa.smtp_host, sa.smtp_port||465, sa.smtp_user, sa.smtp_pass, sa.from_name||'SunSea Steel', sa.id])
-    } else {
-      // Update synced fields
-      run(`UPDATE crm_smtp_accounts SET smtp_host=?,smtp_port=?,smtp_user=?,smtp_pass=?,from_name=? WHERE id=?`,
-        [sa.smtp_host, sa.smtp_port||465, sa.smtp_user, sa.smtp_pass, sa.from_name||'SunSea Steel', existing.id])
-    }
-  }
-}
-
-// ─── SMTP Accounts ─────────────────────────────────────────────────────────────
+// ─── SMTP Accounts (shared smtp_accounts table) ────────────────────────────────
 router.get('/accounts', dualAuth, (req, res) => {
-  // Auto-sync system accounts
-  try { syncSystemAccounts() } catch(e) {}
-
   const isAdmin = req.crmUser?.role === 'admin' || req.user
-  let accounts
-  if (isAdmin) {
-    accounts = getAll(`SELECT a.*, u.display_name as owner_name FROM crm_smtp_accounts a 
-      LEFT JOIN crm_users u ON a.owner_id = u.id ORDER BY a.source DESC, a.id DESC`)
-  } else {
-    // Sub-user: see accounts assigned to them
+  let accounts = getAll('SELECT * FROM smtp_accounts ORDER BY id DESC')
+  if (!isAdmin) {
     const userId = req.crmUser?.id
-    accounts = getAll(`SELECT * FROM crm_smtp_accounts ORDER BY id DESC`)
-      .filter(a => canAccess(a.assigned_users, userId))
+    accounts = accounts.filter(a => canAccess(a.assigned_users, userId))
   }
-  // Get CRM users for assignment dropdown
+  // Also get CRM users for assignment dropdown
   const users = isAdmin ? getAll('SELECT id, username, display_name FROM crm_users ORDER BY id') : []
   res.json({ accounts, users })
 })
@@ -56,43 +32,35 @@ router.get('/accounts', dualAuth, (req, res) => {
 router.post('/accounts', dualAuth, (req, res) => {
   const { smtp_host, smtp_port, smtp_user, smtp_pass, from_name, assigned_users } = req.body
   if (!smtp_host || !smtp_user || !smtp_pass) return res.status(400).json({ error: '请填写完整信息' })
-  const r = run(`INSERT INTO crm_smtp_accounts (owner_id, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, assigned_users, source) 
-    VALUES (?,?,?,?,?,?,?,'crm')`,
-    [req.crmUser?.id||null, smtp_host, parseInt(smtp_port)||465, smtp_user, smtp_pass, from_name||'', assigned_users||'all'])
+  const r = run(`INSERT INTO smtp_accounts (name, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, assigned_users, enabled) VALUES (?,?,?,?,?,?,?,1)`,
+    [smtp_user, smtp_host, parseInt(smtp_port)||465, smtp_user, smtp_pass, from_name||'SunSea Steel', assigned_users||'all'])
   res.json({ id: r.lastInsertRowid, message: '邮箱已添加' })
 })
 
 router.put('/accounts/:id', dualAuth, (req, res) => {
   const { smtp_host, smtp_port, smtp_user, smtp_pass, from_name, assigned_users } = req.body
-  if (req.crmUser?.role !== 'admin' && !req.user) {
-    const acct = getOne('SELECT owner_id FROM crm_smtp_accounts WHERE id=?', [req.params.id])
-    if (acct?.owner_id !== req.crmUser?.id) return res.status(403).json({ error: '无权限' })
-  }
-  run('UPDATE crm_smtp_accounts SET smtp_host=?,smtp_port=?,smtp_user=?,smtp_pass=?,from_name=?,assigned_users=? WHERE id=?',
+  if (req.crmUser?.role !== 'admin' && !req.user) return res.status(403).json({ error: '无权限' })
+  run('UPDATE smtp_accounts SET smtp_host=?,smtp_port=?,smtp_user=?,smtp_pass=?,from_name=?,assigned_users=? WHERE id=?',
     [smtp_host, parseInt(smtp_port)||465, smtp_user, smtp_pass, from_name||'', assigned_users||'all', req.params.id])
   res.json({ message: '已更新' })
 })
 
 router.delete('/accounts/:id', dualAuth, (req, res) => {
-  if (req.crmUser?.role !== 'admin' && !req.user) {
-    const acct = getOne('SELECT owner_id FROM crm_smtp_accounts WHERE id=?', [req.params.id])
-    if (acct?.owner_id !== req.crmUser?.id) return res.status(403).json({ error: '无权限' })
-  }
-  run('DELETE FROM crm_smtp_accounts WHERE id=?', [req.params.id])
+  if (req.crmUser?.role !== 'admin' && !req.user) return res.status(403).json({ error: '无权限' })
+  run('DELETE FROM smtp_accounts WHERE id=?', [req.params.id])
   res.json({ message: '已删除' })
 })
 
 // Test SMTP connection
 router.post('/accounts/:id/test', dualAuth, async (req, res) => {
-  const acct = getOne('SELECT * FROM crm_smtp_accounts WHERE id=?', [req.params.id])
+  const acct = getOne('SELECT * FROM smtp_accounts WHERE id=?', [req.params.id])
   if (!acct) return res.status(404).json({ error: '账号不存在' })
   try {
     const transport = nodemailer.createTransport({
       host: acct.smtp_host, port: parseInt(acct.smtp_port)||465,
       secure: parseInt(acct.smtp_port) === 465,
       auth: { user: acct.smtp_user, pass: acct.smtp_pass },
-      tls: { rejectUnauthorized: false },
-      connectionTimeout: 10000
+      tls: { rejectUnauthorized: false }, connectionTimeout: 10000
     })
     await transport.verify()
     res.json({ success: true, message: '✅ 连接成功' })
@@ -107,7 +75,7 @@ router.get('/templates', dualAuth, (req, res) => {
   let templates = getAll('SELECT * FROM mail_templates ORDER BY id DESC')
   if (!isAdmin) {
     const userId = req.crmUser?.id
-    templates = templates.filter(t => !t.assigned_users || t.assigned_users === '' || t.assigned_users === 'all' || canAccess(t.assigned_users, userId))
+    templates = templates.filter(t => canAccess(t.assigned_users, userId))
   }
   res.json(templates)
 })
@@ -136,6 +104,36 @@ router.delete('/templates/:id', dualAuth, (req, res) => {
   res.json({ message: '已删除' })
 })
 
+// ─── Enhanced Customer Picker ──────────────────────────────────────────────────
+router.get('/customers-picker', dualAuth, (req, res) => {
+  const { search, country, status, tag, has_email } = req.query
+  let where = ['1=1'], params = []
+  // Owner filter for sub-users
+  if (req.crmUser && req.crmUser.role !== 'admin') {
+    where.push('(c.owner_id = ? OR c.owner_id IS NULL)')
+    params.push(req.crmUser.id)
+  }
+  if (search) { where.push("(c.name LIKE ? OR c.email LIKE ? OR c.company LIKE ?)"); params.push(`%${search}%`,`%${search}%`,`%${search}%`) }
+  if (country) { where.push("c.country = ?"); params.push(country) }
+  if (status) { where.push("c.status = ?"); params.push(status) }
+  if (tag) { where.push("c.tags LIKE ?"); params.push(`%${tag}%`) }
+  if (has_email === '1') { where.push("c.email != '' AND c.email IS NOT NULL") }
+
+  const customers = getAll(`SELECT c.id, c.name, c.email, c.company, c.country, c.status, c.tags FROM crm_customers c
+    WHERE ${where.join(' AND ')} ORDER BY c.name ASC LIMIT 500`, params)
+  
+  // Get distinct values for filters
+  const countries = getAll("SELECT DISTINCT country FROM crm_customers WHERE country != '' ORDER BY country").map(r => r.country)
+  const statuses = getAll("SELECT DISTINCT status FROM crm_customers WHERE status != '' ORDER BY status").map(r => r.status)
+  // Get all tags
+  const allTags = new Set()
+  getAll("SELECT tags FROM crm_customers WHERE tags != '' AND tags != '[]'").forEach(r => {
+    try { JSON.parse(r.tags).forEach(t => allTags.add(t)) } catch(e) {}
+  })
+
+  res.json({ customers, countries, statuses, tags: [...allTags].sort() })
+})
+
 // ─── Send email to CRM customers ──────────────────────────────────────────────
 const activeTasks = new Map()
 const taskProgress = new Map()
@@ -144,9 +142,7 @@ router.post('/send', dualAuth, async (req, res) => {
   const { customer_ids, template_id, account_id, subject, html_body, interval_min, interval_max } = req.body
 
   let smtp
-  if (account_id) smtp = getOne('SELECT * FROM crm_smtp_accounts WHERE id=?', [account_id])
-  if (!smtp) smtp = getOne('SELECT * FROM crm_smtp_accounts WHERE assigned_users LIKE ? OR assigned_users="all" LIMIT 1',
-    [`%${req.crmUser?.id||0}%`])
+  if (account_id) smtp = getOne('SELECT * FROM smtp_accounts WHERE id=?', [account_id])
   if (!smtp) smtp = getOne('SELECT * FROM smtp_accounts WHERE enabled=1 LIMIT 1')
   if (!smtp) return res.status(400).json({ error: '未配置发送邮箱' })
 
@@ -224,15 +220,35 @@ router.post('/stop/:taskId', dualAuth, (req, res) => {
   res.json({ message: '已停止' })
 })
 
-// ─── Send records ──────────────────────────────────────────────────────────────
+// ─── Send records (CRM + website mail_logs) ────────────────────────────────────
 router.get('/records', dualAuth, (req, res) => {
-  let filter = '', params = []
-  if (req.crmUser && req.crmUser.role !== 'admin') { filter = 'WHERE sent_by = ?'; params = [req.crmUser.id] }
-  res.json(getAll(`SELECT * FROM crm_email_logs ${filter} ORDER BY sent_at DESC LIMIT 500`, params))
+  const isAdmin = req.crmUser?.role === 'admin' || req.user
+
+  // CRM email logs
+  let crmFilter = '', crmParams = []
+  if (!isAdmin) { crmFilter = 'WHERE sent_by = ?'; crmParams = [req.crmUser.id] }
+  const crmLogs = getAll(`SELECT id, recipient_email, subject, status, sent_at, sent_by, 'crm' as source FROM crm_email_logs ${crmFilter} ORDER BY sent_at DESC LIMIT 300`, crmParams)
+
+  // Website mail_logs (admin only sees these)
+  let siteLogs = []
+  if (isAdmin) {
+    try {
+      siteLogs = getAll(`SELECT id, contact_email as recipient_email, subject, status, sent_at, account_name as sent_by_name, 'site' as source FROM mail_logs ORDER BY sent_at DESC LIMIT 300`)
+    } catch(e) {}
+  }
+
+  // Merge and sort by date
+  const all = [...crmLogs, ...siteLogs].sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at)).slice(0, 500)
+  res.json(all)
 })
 
 router.delete('/records/:id', dualAuth, (req, res) => {
-  run('DELETE FROM crm_email_logs WHERE id=?', [req.params.id])
+  const { source } = req.query
+  if (source === 'site') {
+    run('DELETE FROM mail_logs WHERE id=?', [req.params.id])
+  } else {
+    run('DELETE FROM crm_email_logs WHERE id=?', [req.params.id])
+  }
   res.json({ message: '已删除' })
 })
 
