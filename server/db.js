@@ -219,11 +219,13 @@ async function initDb() {
       customer_id INTEGER NOT NULL,
       user_id INTEGER,
       content_html TEXT DEFAULT '',
+      note TEXT DEFAULT '',
       attachments TEXT DEFAULT '[]',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  try { db.exec("ALTER TABLE crm_followups ADD COLUMN note TEXT DEFAULT ''") } catch (e) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS crm_settings (

@@ -23,6 +23,13 @@
       <div v-if="customer.tags?.length" class="tag-row">
         <span v-for="t in customer.tags" :key="t" class="tag-badge">{{ t }}</span>
       </div>
+      <div v-if="customer.claim_history?.length" class="claim-history">
+        <label>📜 申领历史:</label>
+        <span v-for="(h, i) in customer.claim_history" :key="i" class="claim-item">
+          <span :class="{ 'pool-blue': h.action === 'auto_pool' }">{{ h.action === 'auto_pool' ? '→公海池' : h.to_name || '申领' }}</span>
+          <small>{{ formatDate(h.created_at) }}</small>
+        </span>
+      </div>
     </div>
 
     <!-- Tabs -->
@@ -179,9 +186,12 @@
     </div>
 
     <!-- ═══ Image Preview Overlay ═══ -->
-    <div v-if="previewImg" class="img-overlay" @click="previewImg = null">
+    <div v-if="previewImg" class="img-overlay" :class="{ pinned: imgPinned }" @click="!imgPinned && (previewImg = null)">
       <img :src="previewImg" @click.stop />
-      <button class="img-overlay-close" @click="previewImg = null">✕ 关闭</button>
+      <div class="img-overlay-toolbar">
+        <button class="img-toolbar-btn" @click.stop="imgPinned = !imgPinned">{{ imgPinned ? '📌 取消置顶' : '📌 置顶' }}</button>
+        <button class="img-toolbar-btn" @click.stop="previewImg = null; imgPinned = false">✕ 关闭</button>
+      </div>
     </div>
 
     <!-- ═══ Inquiry Modal ═══ -->
@@ -312,18 +322,12 @@
               <div v-for="(r, i) in qtForm.price_rows" :key="i" class="price-calc-row">
                 <span class="row-num">{{ i + 1 }}</span>
                 <input :ref="el => { if(el) fobRefs[i] = el }" v-model.number="r.fob" type="number" step="0.01" @input="calcCFR(r)" @keydown.enter.prevent="focusNextFob(i)" placeholder="FOB" />
-                <input v-model.number="r.port_charge" type="number" step="0.01" @input="calcCFR(r)" placeholder="港杂费" />
-                <input v-model.number="r.exchange_rate" type="number" step="0.0001" @input="calcCFR(r)" placeholder="汇率" />
-                <input v-model.number="r.profit_rate" type="number" step="0.01" @input="calcCFR(r)" placeholder="利润率" />
-                <input v-model.number="r.freight" type="number" step="0.01" @input="calcCFR(r)" placeholder="运费" />
+                <div class="cell-wrap"><input v-model.number="r.port_charge" type="number" step="0.01" @input="calcCFR(r)" placeholder="港杂费" /><button v-if="i < qtForm.price_rows.length - 1" class="cell-fill" @click="fillDown(i,'port_charge')" title="向下填充">⬇</button></div>
+                <div class="cell-wrap"><input v-model.number="r.exchange_rate" type="number" step="0.0001" @input="calcCFR(r)" placeholder="汇率" /><button v-if="i < qtForm.price_rows.length - 1" class="cell-fill" @click="fillDown(i,'exchange_rate')" title="向下填充">⬇</button></div>
+                <div class="cell-wrap"><input v-model.number="r.profit_rate" type="number" step="0.01" @input="calcCFR(r)" placeholder="利润率" /><button v-if="i < qtForm.price_rows.length - 1" class="cell-fill" @click="fillDown(i,'profit_rate')" title="向下填充">⬇</button></div>
+                <div class="cell-wrap"><input v-model.number="r.freight" type="number" step="0.01" @input="calcCFR(r)" placeholder="运费" /><button v-if="i < qtForm.price_rows.length - 1" class="cell-fill" @click="fillDown(i,'freight')" title="向下填充">⬇</button></div>
                 <input v-model="r.cfr" readonly class="cfr-input" placeholder="CFR" />
-                <div class="fill-btns">
-                  <button class="fill-down-btn" @click="fillDown(i, 'port_charge')" title="向下填充港杂费">⬇P</button>
-                  <button class="fill-down-btn" @click="fillDown(i, 'exchange_rate')" title="向下填充汇率">⬇E</button>
-                  <button class="fill-down-btn" @click="fillDown(i, 'profit_rate')" title="向下填充利润率">⬇R</button>
-                  <button class="fill-down-btn" @click="fillDown(i, 'freight')" title="向下填充运费">⬇F</button>
-                  <button v-if="i > 0" class="fill-down-btn del" @click="qtForm.price_rows.splice(i,1)">×</button>
-                </div>
+                <button v-if="i > 0" class="fill-down-btn del" @click="qtForm.price_rows.splice(i,1)">×</button>
               </div>
               <div class="price-row-actions">
                 <button class="btn btn-sm btn-secondary" @click="addPriceRow">+ 添加行</button>
@@ -351,6 +355,14 @@
           <div class="form-group">
             <label>跟进内容</label>
             <div ref="followEditorRef" class="rich-editor" contenteditable="true" @paste="handlePaste($event)" v-html="followForm.content_html"></div>
+          </div>
+          <div class="form-group">
+            <label>上传附件</label>
+            <input type="file" multiple @change="uploadFiles($event, followForm.attachments, 'file')" />
+            <div v-for="(f, i) in followForm.attachments" :key="i" class="file-item">
+              <a :href="f.url" target="_blank">📎 {{ f.name }}</a>
+              <button class="btn-sm btn-danger" @click="followForm.attachments.splice(i,1)">删除</button>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -402,7 +414,7 @@ const fobSearchResults = ref([])
 const showFollowupModal = ref(false)
 const editFollowupId = ref(null)
 const followEditorRef = ref(null)
-const followForm = reactive({ content_html: '', note: '' })
+const followForm = reactive({ content_html: '', note: '', attachments: [] })
 
 // Combined preview
 const showCombinedPreview = ref(false)
@@ -414,6 +426,7 @@ const hasMatchingPair = computed(() => combinedInquiry.value && combinedQuotatio
 // Followup preview & image preview
 const previewFollowup = ref(null)
 const previewImg = ref(null)
+const imgPinned = ref(false)
 
 function nowLocal() {
   const d = new Date()
@@ -573,11 +586,16 @@ function openFollowupModal(f) {
   editFollowupId.value = f?.id || null
   followForm.content_html = f?.content_html || ''
   followForm.note = f?.note || ''
+  followForm.attachments = f?.attachments ? [...f.attachments] : []
   showFollowupModal.value = true
 }
 
 async function saveFollowup() {
-  const data = { content_html: followEditorRef.value?.innerHTML || followForm.content_html, note: followForm.note }
+  const data = {
+    content_html: followEditorRef.value?.innerHTML || followForm.content_html,
+    note: followForm.note,
+    attachments: JSON.parse(JSON.stringify(followForm.attachments))
+  }
   try {
     if (editFollowupId.value) await crmApi.updateFollowup(editFollowupId.value, data)
     else await crmApi.createFollowup(customerId, data)
@@ -668,9 +686,26 @@ onMounted(loadData)
 .cfr-val { font-weight: 700; color: #059669; }
 
 /* Image preview overlay */
-.img-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 3000; cursor: pointer; }
-.img-overlay img { max-width: 90vw; max-height: 85vh; object-fit: contain; border-radius: 8px; cursor: default; }
-.img-overlay-close { position: fixed; top: 20px; right: 30px; background: rgba(255,255,255,0.2); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.img-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 3000; cursor: pointer; }
+.img-overlay.pinned { pointer-events: none; background: rgba(0,0,0,0.3); }
+.img-overlay.pinned img, .img-overlay.pinned .img-overlay-toolbar { pointer-events: auto; }
+.img-overlay img { max-width: 90vw; max-height: 80vh; object-fit: contain; border-radius: 8px; cursor: default; }
+.img-overlay-toolbar { display: flex; gap: 10px; margin-top: 12px; pointer-events: auto; }
+.img-toolbar-btn { background: rgba(255,255,255,0.2); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.img-toolbar-btn:hover { background: rgba(255,255,255,0.4); }
+
+/* Claim history */
+.claim-history { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+.claim-history label { font-weight: 600; color: #334155; }
+.claim-item { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: #f8fafc; border-radius: 4px; border: 1px solid #e2e8f0; }
+.claim-item small { color: #94a3b8; font-size: 11px; }
+.pool-blue { color: #2563eb; font-weight: 600; }
+
+/* Cell-wrap with fill-down button */
+.cell-wrap { position: relative; }
+.cell-wrap input { width: 100%; }
+.cell-fill { position: absolute; right: 1px; bottom: 1px; width: 16px; height: 16px; border: none; background: #2563eb; color: #fff; font-size: 9px; cursor: pointer; border-radius: 2px; opacity: 0; transition: opacity 0.15s; display: flex; align-items: center; justify-content: center; padding: 0; }
+.cell-wrap:hover .cell-fill { opacity: 1; }
 
 .btn-sm { padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
 .btn-edit { background: #eff6ff; color: #2563eb; } .btn-view { background: #f0fdf4; color: #15803d; }

@@ -307,24 +307,85 @@ router.get('/:id/followups', dualAuth, (req, res) => {
 })
 
 router.post('/:id/followups', dualAuth, (req, res) => {
-  const { content_html, attachments } = req.body
+  const { content_html, note, attachments } = req.body
   const now = new Date().toISOString()
-  const result = run(`INSERT INTO crm_followups (customer_id,user_id,content_html,attachments,created_at) VALUES (?,?,?,?,?)`,
-    [req.params.id, req.crmUser?.id||null, content_html||'', JSON.stringify(attachments||[]), now])
+  const result = run(`INSERT INTO crm_followups (customer_id,user_id,content_html,note,attachments,created_at) VALUES (?,?,?,?,?,?)`,
+    [req.params.id, req.crmUser?.id||null, content_html||'', note||'', JSON.stringify(attachments||[]), now])
   run('UPDATE crm_customers SET last_activity_at=? WHERE id=?', [now, req.params.id])
   res.json({ id: result.lastInsertRowid })
 })
 
 router.put('/followups/:fId', dualAuth, (req, res) => {
-  const { content_html, attachments } = req.body
-  run(`UPDATE crm_followups SET content_html=?,attachments=?,updated_at=? WHERE id=?`,
-    [content_html, JSON.stringify(attachments||[]), new Date().toISOString(), req.params.fId])
+  const { content_html, note, attachments } = req.body
+  run(`UPDATE crm_followups SET content_html=?,note=?,attachments=?,updated_at=? WHERE id=?`,
+    [content_html, note||'', JSON.stringify(attachments||[]), new Date().toISOString(), req.params.fId])
   res.json({ message: '更新成功' })
 })
 
 router.delete('/followups/:fId', dualAuth, (req, res) => {
   run('DELETE FROM crm_followups WHERE id=?', [req.params.fId])
   res.json({ message: '删除成功' })
+})
+
+// ─── CRM Email (reuse mailer SMTP) ─────────────────────────────────────────────
+router.post('/email/send', dualAuth, async (req, res) => {
+  const { customer_ids, subject, html_body } = req.body
+  if (!customer_ids?.length || !subject || !html_body) return res.status(400).json({ error: '请填写完整信息' })
+
+  // Get SMTP config: prefer CRM user's own, fall back to first system account
+  let smtp = null
+  if (req.crmUser) {
+    const crmUser = getOne('SELECT smtp_host,smtp_port,smtp_user,smtp_pass,from_name FROM crm_users WHERE id=?', [req.crmUser.id])
+    if (crmUser?.smtp_host && crmUser?.smtp_user && crmUser?.smtp_pass) smtp = crmUser
+  }
+  if (!smtp) {
+    smtp = getOne('SELECT smtp_host,smtp_port,smtp_user as smtp_user,smtp_pass,from_name FROM smtp_accounts WHERE enabled=1 LIMIT 1')
+  }
+  if (!smtp) return res.status(400).json({ error: '未配置邮箱账号' })
+
+  const customers = customer_ids.map(id => getOne('SELECT email,name,company FROM crm_customers WHERE id=?', [id])).filter(c => c?.email)
+  let sent = 0, failed = 0
+  const nodemailer = (await import('nodemailer')).default
+  const transport = nodemailer.createTransport({
+    host: smtp.smtp_host, port: parseInt(smtp.smtp_port)||465, secure: parseInt(smtp.smtp_port)===465,
+    auth: { user: smtp.smtp_user, pass: smtp.smtp_pass }, tls: { rejectUnauthorized: false }
+  })
+  for (const c of customers) {
+    try {
+      const subj = subject.replace(/\{\{name\}\}/g, c.name||'').replace(/\{\{company\}\}/g, c.company||'')
+      const body = html_body.replace(/\{\{name\}\}/g, c.name||'').replace(/\{\{company\}\}/g, c.company||'')
+      await transport.sendMail({
+        from: `"${smtp.from_name||'SunSea Steel'}" <${smtp.smtp_user}>`, to: c.email, subject: subj, html: body
+      })
+      sent++
+    } catch (e) { failed++ }
+  }
+  res.json({ message: `发送完成: 成功 ${sent}, 失败 ${failed}` })
+})
+
+// ─── Export all customers ───────────────────────────────────────────────────────
+router.get('/export/all', dualAuth, (req, res) => {
+  if (req.crmUser && req.crmUser.role !== 'admin' && !req.user) {
+    return res.status(403).json({ error: '需要管理员权限' })
+  }
+  const users = getAll('SELECT id,username,display_name FROM crm_users')
+  const exportData = { exported_at: new Date().toISOString(), users: [] }
+  for (const u of users) {
+    const customers = getAll(`SELECT c.* FROM crm_customers c WHERE c.owner_id=? ORDER BY c.created_at DESC`, [u.id])
+    const userData = { user: u, customers: [] }
+    for (const c of customers) {
+      try { c.tags = JSON.parse(c.tags||'[]') } catch(e) { c.tags = [] }
+      c.inquiries = getAll('SELECT * FROM crm_inquiries WHERE customer_id=? ORDER BY inquiry_time DESC', [c.id])
+      c.inquiries.forEach(i => { try { i.images = JSON.parse(i.images||'[]') } catch(e) { i.images = [] }; try { i.files = JSON.parse(i.files||'[]') } catch(e) { i.files = [] } })
+      c.quotations = getAll('SELECT * FROM crm_quotations WHERE customer_id=? ORDER BY quotation_time DESC', [c.id])
+      c.quotations.forEach(q => { try { q.ports = JSON.parse(q.ports||'[]') } catch(e) { q.ports = [] }; try { q.price_rows = JSON.parse(q.price_rows||'[]') } catch(e) { q.price_rows = [] }; try { q.files = JSON.parse(q.files||'[]') } catch(e) { q.files = [] }; try { q.images = JSON.parse(q.images||'[]') } catch(e) { q.images = [] } })
+      c.followups = getAll('SELECT f.*,u.display_name as user_name FROM crm_followups f LEFT JOIN crm_users u ON f.user_id=u.id WHERE f.customer_id=? ORDER BY f.created_at DESC', [c.id])
+      c.followups.forEach(f => { try { f.attachments = JSON.parse(f.attachments||'[]') } catch(e) { f.attachments = [] } })
+      userData.customers.push(c)
+    }
+    exportData.users.push(userData)
+  }
+  res.json(exportData)
 })
 
 export default router

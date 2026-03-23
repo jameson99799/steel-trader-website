@@ -94,6 +94,12 @@ export default {
   updateFollowup: (id, data) => request(`/customers/followups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteFollowup: (id) => request(`/customers/followups/${id}`, { method: 'DELETE' }),
 
+  // Email
+  sendEmail: (data) => request('/customers/email/send', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Export
+  exportAll: () => request('/customers/export/all'),
+
   // Upload — auto-detect image vs file
   upload: async (file) => {
     const formData = new FormData()

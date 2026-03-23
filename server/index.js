@@ -3,7 +3,7 @@ import cors from 'cors'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
-import { initDb } from './db.js'
+import { initDb, getAll, getOne, run } from './db.js'
 import authRoutes from './routes/auth.js'
 import categoriesRoutes from './routes/categories.js'
 import productsRoutes from './routes/products.js'
@@ -38,6 +38,27 @@ async function startServer() {
     // 初始化数据库
     await initDb()
     console.log('✓ Database initialized')
+
+    // Auto sea pool timer: check every 6 hours
+    function autoSeaPoolCheck() {
+      try {
+        const s = getOne('SELECT sea_pool_days FROM crm_settings WHERE id=1')
+        const days = s?.sea_pool_days || 30
+        const cutoff = new Date(Date.now() - days * 86400000).toISOString()
+        const inactive = getAll(
+          `SELECT id, owner_id FROM crm_customers WHERE status NOT IN ('公海池','已成交') AND last_activity_at < ?`, [cutoff]
+        )
+        const now = new Date().toISOString()
+        for (const c of inactive) {
+          run(`UPDATE crm_customers SET status='公海池', sea_pool_count = sea_pool_count + 1 WHERE id=?`, [c.id])
+          run(`INSERT INTO crm_customer_history (customer_id,from_user_id,to_user_id,action,created_at) VALUES (?,?,NULL,'auto_pool',?)`,
+            [c.id, c.owner_id, now])
+        }
+        if (inactive.length) console.log(`✓ Auto sea pool: moved ${inactive.length} inactive customers`)
+      } catch (e) { /* crm tables may not exist */ }
+    }
+    setTimeout(autoSeaPoolCheck, 3000)
+    setInterval(autoSeaPoolCheck, 6 * 60 * 60 * 1000)
 
     // CORS 配置
     const corsOptions = {
