@@ -17,35 +17,29 @@
         <h3>发送邮箱管理</h3>
         <button class="btn btn-primary" @click="openAccountModal()">➕ 添加邮箱</button>
       </div>
-      <div v-if="accounts.crm?.length" class="account-list">
-        <div v-for="a in accounts.crm" :key="a.id" class="account-card">
+      <div v-if="accountList.length" class="account-list">
+        <div v-for="a in accountList" :key="a.id" :class="['account-card', a.source === 'system' ? 'system' : '']">
           <div class="acc-main">
+            <span v-if="a.source === 'system'" class="source-badge sys">🌐 同步</span>
+            <span v-else class="source-badge crm">📬 CRM</span>
             <div class="acc-host">{{ a.smtp_host }}:{{ a.smtp_port }}</div>
             <div class="acc-user">{{ a.smtp_user }}</div>
             <div class="acc-pass">{{ a.smtp_pass }}</div>
             <div class="acc-name">{{ a.from_name || '-' }}</div>
-            <div class="acc-owner" v-if="isAdmin">{{ a.owner_name || '未分配' }}</div>
+          </div>
+          <div class="acc-assign" v-if="isAdmin">
+            <span v-if="!a.assigned_users || a.assigned_users === 'all'" class="assign-badge all">全部可用</span>
+            <span v-else class="assign-badge specific">指定: {{ getAssignNames(a.assigned_users) }}</span>
           </div>
           <div class="acc-actions">
             <button class="btn-sm btn-view" @click="testAccount(a.id)">🔌 测试</button>
             <button class="btn-sm btn-edit" @click="openAccountModal(a)">编辑</button>
-            <button class="btn-sm btn-danger" @click="deleteAccount(a.id)">删除</button>
+            <button v-if="a.source !== 'system'" class="btn-sm btn-danger" @click="deleteAccount(a.id)">删除</button>
           </div>
           <div v-if="a._testResult" :class="['test-result', a._testResult.success ? 'ok' : 'fail']">{{ a._testResult.message }}</div>
         </div>
       </div>
       <p v-else class="empty">暂无邮箱账号</p>
-      <div v-if="isAdmin && accounts.system?.length" style="margin-top:24px">
-        <h4>🌐 系统邮箱（网站后台）</h4>
-        <div v-for="s in accounts.system" :key="'s'+s.id" class="account-card system">
-          <div class="acc-main">
-            <div class="acc-host">{{ s.smtp_host }}:{{ s.smtp_port }}</div>
-            <div class="acc-user">{{ s.smtp_user }}</div>
-            <div class="acc-pass">{{ s.smtp_pass }}</div>
-            <div class="acc-name">{{ s.from_name || '-' }}</div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- ═══ Templates Tab ═══ -->
@@ -58,6 +52,9 @@
         <div class="tpl-info">
           <strong>{{ t.name }}</strong>
           <span class="tpl-subject">{{ t.subject }}</span>
+          <span v-if="isAdmin" class="assign-badge" :class="!t.assigned_users || t.assigned_users === '' || t.assigned_users === 'all' ? 'all' : 'specific'">
+            {{ !t.assigned_users || t.assigned_users === '' || t.assigned_users === 'all' ? '全部可用' : '指定: ' + getAssignNames(t.assigned_users) }}
+          </span>
         </div>
         <div class="tpl-actions">
           <button class="btn-sm btn-view" @click="previewTpl = t">预览</button>
@@ -175,10 +172,17 @@
           <div class="form-group"><label>密码</label><input v-model="accForm.smtp_pass" type="text" placeholder="明文密码" /></div>
           <div class="form-group"><label>发件人名称</label><input v-model="accForm.from_name" placeholder="SunSea Steel" /></div>
           <div v-if="isAdmin" class="form-group">
-            <label>分配给</label>
-            <select v-model="accForm.assign_to">
-              <option v-for="u in crmUsers" :key="u.id" :value="u.id">{{ u.display_name || u.username }}</option>
+            <label>分配给子账户</label>
+            <select v-model="accForm.assign_mode">
+              <option value="all">全部子账户可用</option>
+              <option value="specific">指定子账户</option>
             </select>
+            <div v-if="accForm.assign_mode === 'specific'" class="assign-picks">
+              <label v-for="u in crmUsers" :key="u.id" class="pick-item">
+                <input type="checkbox" :value="String(u.id)" v-model="accForm.assign_ids" />
+                {{ u.display_name || u.username }}
+              </label>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -199,6 +203,19 @@
           <div class="form-row2">
             <div class="form-group"><label>模板名称</label><input v-model="tplForm.name" placeholder="模板名称" /></div>
             <div class="form-group"><label>邮件主题</label><input v-model="tplForm.subject" placeholder="邮件主题" /></div>
+          </div>
+          <div v-if="isAdmin" class="form-group">
+            <label>分配给子账户</label>
+            <select v-model="tplForm.assign_mode">
+              <option value="all">全部子账户可用</option>
+              <option value="specific">指定子账户</option>
+            </select>
+            <div v-if="tplForm.assign_mode === 'specific'" class="assign-picks">
+              <label v-for="u in crmUsers" :key="u.id" class="pick-item">
+                <input type="checkbox" :value="String(u.id)" v-model="tplForm.assign_ids" />
+                {{ u.display_name || u.username }}
+              </label>
+            </div>
           </div>
           <div class="form-group">
             <label>邮件内容（支持 {{name}} {{company}} 变量）</label>
@@ -237,7 +254,7 @@ import crmApi from '../../api/crm'
 
 const tab = ref('accounts')
 const isAdmin = ref(false)
-const accounts = ref({ crm: [], system: [] })
+const accounts = ref({ accounts: [], users: [] })
 const templates = ref([])
 const records = ref([])
 const crmUsers = ref([])
@@ -248,12 +265,12 @@ let progressTimer = null
 // Account
 const showAccountModal = ref(false)
 const editAccountId = ref(null)
-const accForm = reactive({ smtp_host: '', smtp_port: 465, smtp_user: '', smtp_pass: '', from_name: '', assign_to: null })
+const accForm = reactive({ smtp_host: '', smtp_port: 465, smtp_user: '', smtp_pass: '', from_name: '', assign_mode: 'all', assign_ids: [] })
 
 // Template
 const showTplModal = ref(false)
 const editTplId = ref(null)
-const tplForm = reactive({ name: '', subject: '', html_body: '' })
+const tplForm = reactive({ name: '', subject: '', html_body: '', assign_mode: 'all', assign_ids: [] })
 const tplEditorRef = ref(null)
 const previewTpl = ref(null)
 
@@ -263,7 +280,17 @@ const sendEditorRef = ref(null)
 const customerSearch = ref('')
 const pickerCustomers = ref([])
 
-const allAccounts = computed(() => [...(accounts.value.crm||[]), ...(accounts.value.system||[])])
+const accountList = computed(() => accounts.value.accounts || [])
+const allAccounts = computed(() => accounts.value.accounts || [])
+
+function getAssignNames(assigned) {
+  if (!assigned || assigned === 'all') return '全部'
+  const ids = assigned.split(',').map(s => s.trim())
+  return ids.map(id => {
+    const u = crmUsers.value.find(u => String(u.id) === id)
+    return u ? (u.display_name || u.username) : `#${id}`
+  }).join(', ')
+}
 
 onMounted(async () => {
   try {
@@ -341,7 +368,9 @@ function startProgressPoll() {
 
 async function loadAccounts() {
   const data = await safeFetch('/mailer/accounts')
-  accounts.value = data || { crm: [], system: [] }
+  accounts.value = data || { accounts: [], users: [] }
+  // Merge users from accounts response
+  if (data?.users?.length) crmUsers.value = data.users
 }
 
 async function loadUsers() {
@@ -351,18 +380,23 @@ async function loadUsers() {
 
 function openAccountModal(a) {
   editAccountId.value = a?.id || null
+  const au = a?.assigned_users || 'all'
   Object.assign(accForm, {
     smtp_host: a?.smtp_host || '', smtp_port: a?.smtp_port || 465,
     smtp_user: a?.smtp_user || '', smtp_pass: a?.smtp_pass || '',
-    from_name: a?.from_name || '', assign_to: a?.owner_id || null
+    from_name: a?.from_name || '',
+    assign_mode: (!au || au === 'all') ? 'all' : 'specific',
+    assign_ids: (!au || au === 'all') ? [] : au.split(',').map(s => s.trim())
   })
   showAccountModal.value = true
 }
 
 async function saveAccount() {
+  const assigned_users = accForm.assign_mode === 'all' ? 'all' : accForm.assign_ids.join(',')
+  const payload = { ...accForm, assigned_users }
   try {
-    if (editAccountId.value) await safePut(`/mailer/accounts/${editAccountId.value}`, accForm)
-    else await safePost('/mailer/accounts', accForm)
+    if (editAccountId.value) await safePut(`/mailer/accounts/${editAccountId.value}`, payload)
+    else await safePost('/mailer/accounts', payload)
     showAccountModal.value = false; loadAccounts()
   } catch (e) { alert(e.message) }
 }
@@ -373,7 +407,7 @@ async function deleteAccount(id) {
 }
 
 async function testAccount(id) {
-  const acct = accounts.value.crm.find(a => a.id === id)
+  const acct = accountList.value.find(a => a.id === id)
   if (acct) acct._testResult = { success: false, message: '测试中...' }
   try {
     const res = await safePost(`/mailer/accounts/${id}/test`, {})
@@ -389,12 +423,18 @@ async function loadTemplates() {
 
 function openTplModal(t) {
   editTplId.value = t?.id || null
-  Object.assign(tplForm, { name: t?.name || '', subject: t?.subject || '', html_body: t?.html_body || '' })
+  const au = t?.assigned_users || ''
+  Object.assign(tplForm, {
+    name: t?.name || '', subject: t?.subject || '', html_body: t?.html_body || '',
+    assign_mode: (!au || au === '' || au === 'all') ? 'all' : 'specific',
+    assign_ids: (!au || au === '' || au === 'all') ? [] : au.split(',').map(s => s.trim())
+  })
   showTplModal.value = true
 }
 
 async function saveTpl() {
-  const data = { name: tplForm.name, subject: tplForm.subject, html_body: tplEditorRef.value?.innerHTML || tplForm.html_body }
+  const assigned_users = tplForm.assign_mode === 'all' ? 'all' : tplForm.assign_ids.join(',')
+  const data = { name: tplForm.name, subject: tplForm.subject, html_body: tplEditorRef.value?.innerHTML || tplForm.html_body, assigned_users }
   try {
     if (editTplId.value) await safePut(`/mailer/templates/${editTplId.value}`, data)
     else await safePost('/mailer/templates', data)
@@ -487,6 +527,15 @@ function formatDate(d) { return d ? new Date(d).toLocaleString('zh-CN') : '-' }
 .acc-name { color: #475569; }
 .acc-owner { background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
 .acc-actions { display: flex; gap: 6px; }
+.acc-assign { font-size: 12px; }
+.source-badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; margin-right: 8px; }
+.source-badge.sys { background: #dbeafe; color: #1d4ed8; }
+.source-badge.crm { background: #fef3c7; color: #92400e; }
+.assign-badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; margin-left: 8px; }
+.assign-badge.all { background: #d1fae5; color: #065f46; }
+.assign-badge.specific { background: #fef3c7; color: #92400e; }
+.assign-picks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
+.pick-item { display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
 .test-result { width: 100%; padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-top: 4px; }
 .test-result.ok { background: #f0fdf4; color: #15803d; }
 .test-result.fail { background: #fef2f2; color: #dc2626; }

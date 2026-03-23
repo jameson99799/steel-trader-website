@@ -248,10 +248,17 @@ async function initDb() {
       smtp_user TEXT,
       smtp_pass TEXT,
       from_name TEXT DEFAULT '',
+      assigned_users TEXT DEFAULT 'all',
+      source TEXT DEFAULT 'crm',
+      source_id INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (owner_id) REFERENCES crm_users(id)
     )
   `)
+  try { db.exec("ALTER TABLE crm_smtp_accounts ADD COLUMN assigned_users TEXT DEFAULT 'all'") } catch(e) {}
+  try { db.exec("ALTER TABLE crm_smtp_accounts ADD COLUMN source TEXT DEFAULT 'crm'") } catch(e) {}
+  try { db.exec("ALTER TABLE crm_smtp_accounts ADD COLUMN source_id INTEGER") } catch(e) {}
+  try { db.exec("ALTER TABLE mail_templates ADD COLUMN assigned_users TEXT DEFAULT ''") } catch(e) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS crm_settings (

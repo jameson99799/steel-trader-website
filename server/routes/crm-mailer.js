@@ -1,6 +1,6 @@
 /**
- * CRM Mailer routes: proxies existing mailer endpoints with CRM dual-auth.
- * Supports SMTP accounts per CRM user, templates, send tasks, real-time status.
+ * CRM Mailer routes: SMTP accounts (synced from website + CRM-native),
+ * templates with user assignment, async send tasks, real-time progress.
  */
 import { Router } from 'express'
 import nodemailer from 'nodemailer'
@@ -9,43 +9,67 @@ import { dualAuth } from './crm-customers.js'
 
 const router = Router()
 
+// Helper: check if user can access an account/template based on assigned_users
+function canAccess(assigned, userId) {
+  if (!assigned || assigned === 'all') return true
+  return assigned.split(',').map(s => s.trim()).includes(String(userId))
+}
+
+// ─── Sync system accounts into CRM ─────────────────────────────────────────────
+function syncSystemAccounts() {
+  const systemAccts = getAll('SELECT * FROM smtp_accounts WHERE enabled=1')
+  for (const sa of systemAccts) {
+    const existing = getOne('SELECT id FROM crm_smtp_accounts WHERE source=? AND source_id=?', ['system', sa.id])
+    if (!existing) {
+      run(`INSERT INTO crm_smtp_accounts (owner_id, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, assigned_users, source, source_id)
+           VALUES (NULL,?,?,?,?,?,'all','system',?)`,
+        [sa.smtp_host, sa.smtp_port||465, sa.smtp_user, sa.smtp_pass, sa.from_name||'SunSea Steel', sa.id])
+    } else {
+      // Update synced fields
+      run(`UPDATE crm_smtp_accounts SET smtp_host=?,smtp_port=?,smtp_user=?,smtp_pass=?,from_name=? WHERE id=?`,
+        [sa.smtp_host, sa.smtp_port||465, sa.smtp_user, sa.smtp_pass, sa.from_name||'SunSea Steel', existing.id])
+    }
+  }
+}
+
 // ─── SMTP Accounts ─────────────────────────────────────────────────────────────
-// CRM users can have their own SMTP accounts stored in crm_smtp_accounts
 router.get('/accounts', dualAuth, (req, res) => {
+  // Auto-sync system accounts
+  try { syncSystemAccounts() } catch(e) {}
+
+  const isAdmin = req.crmUser?.role === 'admin' || req.user
   let accounts
-  if (req.crmUser?.role === 'admin' || req.user) {
-    // Admin sees all accounts grouped by owner
+  if (isAdmin) {
     accounts = getAll(`SELECT a.*, u.display_name as owner_name FROM crm_smtp_accounts a 
-      LEFT JOIN crm_users u ON a.owner_id = u.id ORDER BY a.owner_id, a.id DESC`)
+      LEFT JOIN crm_users u ON a.owner_id = u.id ORDER BY a.source DESC, a.id DESC`)
   } else {
-    accounts = getAll('SELECT * FROM crm_smtp_accounts WHERE owner_id = ? ORDER BY id DESC', [req.crmUser.id])
+    // Sub-user: see accounts assigned to them
+    const userId = req.crmUser?.id
+    accounts = getAll(`SELECT * FROM crm_smtp_accounts ORDER BY id DESC`)
+      .filter(a => canAccess(a.assigned_users, userId))
   }
-  // Also include system SMTP accounts for admin
-  if (req.crmUser?.role === 'admin' || req.user) {
-    const system = getAll('SELECT *, "system" as owner_name FROM smtp_accounts ORDER BY id DESC')
-    return res.json({ crm: accounts, system })
-  }
-  res.json({ crm: accounts, system: [] })
+  // Get CRM users for assignment dropdown
+  const users = isAdmin ? getAll('SELECT id, username, display_name FROM crm_users ORDER BY id') : []
+  res.json({ accounts, users })
 })
 
 router.post('/accounts', dualAuth, (req, res) => {
-  const { smtp_host, smtp_port, smtp_user, smtp_pass, from_name, assign_to } = req.body
+  const { smtp_host, smtp_port, smtp_user, smtp_pass, from_name, assigned_users } = req.body
   if (!smtp_host || !smtp_user || !smtp_pass) return res.status(400).json({ error: '请填写完整信息' })
-  const ownerId = assign_to || req.crmUser?.id || null
-  const r = run('INSERT INTO crm_smtp_accounts (owner_id, smtp_host, smtp_port, smtp_user, smtp_pass, from_name) VALUES (?,?,?,?,?,?)',
-    [ownerId, smtp_host, parseInt(smtp_port)||465, smtp_user, smtp_pass, from_name||''])
+  const r = run(`INSERT INTO crm_smtp_accounts (owner_id, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, assigned_users, source) 
+    VALUES (?,?,?,?,?,?,?,'crm')`,
+    [req.crmUser?.id||null, smtp_host, parseInt(smtp_port)||465, smtp_user, smtp_pass, from_name||'', assigned_users||'all'])
   res.json({ id: r.lastInsertRowid, message: '邮箱已添加' })
 })
 
 router.put('/accounts/:id', dualAuth, (req, res) => {
-  const { smtp_host, smtp_port, smtp_user, smtp_pass, from_name, assign_to } = req.body
-  // Check ownership (admin can edit all)
+  const { smtp_host, smtp_port, smtp_user, smtp_pass, from_name, assigned_users } = req.body
   if (req.crmUser?.role !== 'admin' && !req.user) {
     const acct = getOne('SELECT owner_id FROM crm_smtp_accounts WHERE id=?', [req.params.id])
     if (acct?.owner_id !== req.crmUser?.id) return res.status(403).json({ error: '无权限' })
   }
-  run('UPDATE crm_smtp_accounts SET smtp_host=?,smtp_port=?,smtp_user=?,smtp_pass=?,from_name=?,owner_id=? WHERE id=?',
-    [smtp_host, parseInt(smtp_port)||465, smtp_user, smtp_pass, from_name||'', assign_to||req.crmUser?.id, req.params.id])
+  run('UPDATE crm_smtp_accounts SET smtp_host=?,smtp_port=?,smtp_user=?,smtp_pass=?,from_name=?,assigned_users=? WHERE id=?',
+    [smtp_host, parseInt(smtp_port)||465, smtp_user, smtp_pass, from_name||'', assigned_users||'all', req.params.id])
   res.json({ message: '已更新' })
 })
 
@@ -77,20 +101,33 @@ router.post('/accounts/:id/test', dualAuth, async (req, res) => {
   }
 })
 
-// ─── Templates (reuse existing mail_templates table) ───────────────────────────
+// ─── Templates (shared mail_templates with assignment) ──────────────────────────
 router.get('/templates', dualAuth, (req, res) => {
-  res.json(getAll('SELECT * FROM mail_templates ORDER BY id DESC'))
+  const isAdmin = req.crmUser?.role === 'admin' || req.user
+  let templates = getAll('SELECT * FROM mail_templates ORDER BY id DESC')
+  if (!isAdmin) {
+    const userId = req.crmUser?.id
+    templates = templates.filter(t => !t.assigned_users || t.assigned_users === '' || t.assigned_users === 'all' || canAccess(t.assigned_users, userId))
+  }
+  res.json(templates)
 })
 
 router.post('/templates', dualAuth, (req, res) => {
-  const { name, subject, html_body } = req.body
-  const r = run('INSERT INTO mail_templates (name, subject, html_body) VALUES (?,?,?)', [name, subject, html_body||''])
+  const { name, subject, html_body, assigned_users } = req.body
+  const r = run('INSERT INTO mail_templates (name, subject, html_body, assigned_users) VALUES (?,?,?,?)',
+    [name, subject, html_body||'', assigned_users||''])
   res.json({ id: r.lastInsertRowid, message: '模板已保存' })
 })
 
 router.put('/templates/:id', dualAuth, (req, res) => {
-  const { name, subject, html_body } = req.body
-  run('UPDATE mail_templates SET name=?,subject=?,html_body=?,updated_at=CURRENT_TIMESTAMP WHERE id=?', [name, subject, html_body, req.params.id])
+  const { name, subject, html_body, assigned_users } = req.body
+  if (assigned_users !== undefined) {
+    run('UPDATE mail_templates SET name=?,subject=?,html_body=?,assigned_users=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',
+      [name, subject, html_body, assigned_users, req.params.id])
+  } else {
+    run('UPDATE mail_templates SET name=?,subject=?,html_body=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',
+      [name, subject, html_body, req.params.id])
+  }
   res.json({ message: '已更新' })
 })
 
@@ -106,17 +143,13 @@ const taskProgress = new Map()
 router.post('/send', dualAuth, async (req, res) => {
   const { customer_ids, template_id, account_id, subject, html_body, interval_min, interval_max } = req.body
 
-  // Get SMTP account
   let smtp
-  if (account_id) {
-    smtp = getOne('SELECT * FROM crm_smtp_accounts WHERE id=?', [account_id])
-    if (!smtp) smtp = getOne('SELECT * FROM smtp_accounts WHERE id=?', [account_id])
-  }
-  if (!smtp) smtp = getOne('SELECT * FROM crm_smtp_accounts WHERE owner_id=? LIMIT 1', [req.crmUser?.id])
+  if (account_id) smtp = getOne('SELECT * FROM crm_smtp_accounts WHERE id=?', [account_id])
+  if (!smtp) smtp = getOne('SELECT * FROM crm_smtp_accounts WHERE assigned_users LIKE ? OR assigned_users="all" LIMIT 1',
+    [`%${req.crmUser?.id||0}%`])
   if (!smtp) smtp = getOne('SELECT * FROM smtp_accounts WHERE enabled=1 LIMIT 1')
   if (!smtp) return res.status(400).json({ error: '未配置发送邮箱' })
 
-  // Get template if provided
   let tpl = null
   if (template_id) tpl = getOne('SELECT * FROM mail_templates WHERE id=?', [template_id])
   const finalSubject = subject || tpl?.subject || 'SunSea Steel'
@@ -126,12 +159,10 @@ router.post('/send', dualAuth, async (req, res) => {
   const customers = (customer_ids || []).map(id => getOne('SELECT * FROM crm_customers WHERE id=?', [id])).filter(c => c?.email)
   if (!customers.length) return res.status(400).json({ error: '没有有效的收件人' })
 
-  // Create task record
   const taskResult = run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
     ['[task]', `批量发送: ${customers.length}封`, 'running', new Date().toISOString(), req.crmUser?.id||null])
   const taskId = taskResult.lastInsertRowid
 
-  // Run task async
   const ctx = { cancelled: false }
   activeTasks.set(taskId, ctx)
 
@@ -161,7 +192,6 @@ router.post('/send', dualAuth, async (req, res) => {
           [c.email, finalSubject, 'failed', new Date().toISOString(), req.crmUser?.id||null])
         failed++
       }
-      // Delay between sends
       if (i < customers.length - 1 && !ctx.cancelled) {
         const min = parseInt(interval_min) || 5
         const max = parseInt(interval_max) || 30
@@ -169,7 +199,6 @@ router.post('/send', dualAuth, async (req, res) => {
         await new Promise(r => setTimeout(r, delay))
       }
     }
-    // Update task record
     run('UPDATE crm_email_logs SET status=?, subject=? WHERE id=?',
       [ctx.cancelled ? 'cancelled' : 'done', `批量: 成功${sent} 失败${failed} / ${customers.length}封`, taskId])
     activeTasks.delete(taskId)
@@ -183,9 +212,7 @@ router.post('/send', dualAuth, async (req, res) => {
 // Real-time progress
 router.get('/progress', dualAuth, (req, res) => {
   const result = {}
-  for (const [id, prog] of taskProgress.entries()) {
-    result[id] = prog
-  }
+  for (const [id, prog] of taskProgress.entries()) result[id] = prog
   res.json(result)
 })
 
