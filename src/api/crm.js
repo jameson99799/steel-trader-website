@@ -11,7 +11,8 @@ async function request(url, options = {}) {
   if (token) headers['Authorization'] = `Bearer ${token}`
 
   const res = await fetch(`/api/crm${url}`, { ...options, headers })
-  if (res.status === 401) {
+  if (res.status === 401 && !url.startsWith('/auth/login')) {
+    // Only redirect to login for non-login requests
     localStorage.removeItem(CRM_TOKEN_KEY)
     window.location.href = '/crm/login'
     throw new Error('登录已过期')
@@ -22,8 +23,17 @@ async function request(url, options = {}) {
 }
 
 export default {
-  // Auth
-  login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+  // Auth - login uses raw fetch to avoid redirect on 401
+  login: async (credentials) => {
+    const res = await fetch('/api/crm/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credentials)
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '登录失败')
+    return data
+  },
   getMe: () => request('/auth/me'),
   changePassword: (data) => request('/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
 
@@ -84,7 +94,7 @@ export default {
   updateFollowup: (id, data) => request(`/customers/followups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteFollowup: (id) => request(`/customers/followups/${id}`, { method: 'DELETE' }),
 
-  // Upload image (images only, with compression)
+  // Upload — auto-detect image vs file
   upload: async (file) => {
     const formData = new FormData()
     formData.append('file', file)

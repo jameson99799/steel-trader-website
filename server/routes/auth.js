@@ -38,9 +38,9 @@ router.post('/change-password', authMiddleware, (req, res) => {
   const hashedPassword = bcrypt.hashSync(newPassword, 10)
   run('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, req.user.id])
   
-  // Sync CRM admin password: update CRM user with same username
+  // Sync CRM admin password: update CRM admin user whenever website admin changes password
   try {
-    const crmAdmin = getOne('SELECT id FROM crm_users WHERE username = ? AND role = ?', [user.username, 'admin'])
+    const crmAdmin = getOne('SELECT id FROM crm_users WHERE role = ?', ['admin'])
     if (crmAdmin) {
       run('UPDATE crm_users SET password = ? WHERE id = ?', [hashedPassword, crmAdmin.id])
     }

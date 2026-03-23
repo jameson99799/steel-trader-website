@@ -107,6 +107,20 @@
               <h4>📋 询盘内容</h4>
               <div class="preview-meta">{{ combinedInquiry.note }} · {{ formatDateTime(combinedInquiry.inquiry_time) }}</div>
               <div class="preview-html" v-html="combinedInquiry.content_html"></div>
+              <div v-if="combinedInquiry.images?.length" class="preview-attach">
+                <h5>📷 图片</h5>
+                <div class="img-grid">
+                  <div v-for="(img, i) in combinedInquiry.images" :key="i" class="img-thumb" @click="previewImg = img">
+                    <img :src="img" />
+                  </div>
+                </div>
+              </div>
+              <div v-if="combinedInquiry.files?.length" class="preview-attach">
+                <h5>📎 附件</h5>
+                <div v-for="(f, i) in combinedInquiry.files" :key="i" class="file-item">
+                  <a :href="f.url || f" target="_blank" download>📎 {{ f.name || '文件' }}</a>
+                </div>
+              </div>
             </div>
             <div v-if="combinedQuotation" class="preview-panel">
               <h4>💰 报价内容</h4>
@@ -123,6 +137,20 @@
                     </tr>
                   </tbody>
                 </table>
+              </div>
+              <div v-if="combinedQuotation.images?.length" class="preview-attach">
+                <h5>📷 图片</h5>
+                <div class="img-grid">
+                  <div v-for="(img, i) in combinedQuotation.images" :key="i" class="img-thumb" @click="previewImg = img">
+                    <img :src="img" />
+                  </div>
+                </div>
+              </div>
+              <div v-if="combinedQuotation.files?.length" class="preview-attach">
+                <h5>📎 附件</h5>
+                <div v-for="(f, i) in combinedQuotation.files" :key="i" class="file-item">
+                  <a :href="f.url || f" target="_blank" download>📎 {{ f.name || '文件' }}</a>
+                </div>
               </div>
             </div>
           </div>
@@ -438,7 +466,13 @@ function openInquiryModal(inq) {
 }
 
 async function saveInquiry() {
-  const data = { ...inqForm, content_html: inqEditorRef.value?.innerHTML || inqForm.content_html }
+  const data = {
+    content_html: inqEditorRef.value?.innerHTML || inqForm.content_html,
+    note: inqForm.note,
+    inquiry_time: inqForm.inquiry_time,
+    images: JSON.parse(JSON.stringify(inqForm.images)),
+    files: JSON.parse(JSON.stringify(inqForm.files))
+  }
   try {
     if (editInquiryId.value) await crmApi.updateInquiry(editInquiryId.value, data)
     else await crmApi.createInquiry(customerId, data)
@@ -515,7 +549,16 @@ function searchFOB() {
 }
 
 async function saveQuotation() {
-  const data = { ...qtForm, content_html: qtEditorRef.value?.innerHTML || qtForm.content_html }
+  const data = {
+    content_html: qtEditorRef.value?.innerHTML || qtForm.content_html,
+    note: qtForm.note,
+    freight_type: qtForm.freight_type,
+    quotation_time: qtForm.quotation_time,
+    ports: JSON.parse(JSON.stringify(qtForm.ports)),
+    price_rows: JSON.parse(JSON.stringify(qtForm.price_rows)),
+    files: JSON.parse(JSON.stringify(qtForm.files)),
+    images: JSON.parse(JSON.stringify(qtForm.images))
+  }
   try {
     if (editQuotationId.value) await crmApi.updateQuotation(editQuotationId.value, data)
     else await crmApi.createQuotation(customerId, data)
@@ -694,6 +737,10 @@ onMounted(loadData)
 .img-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .img-del { position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,0.6); color: #fff; border: none; border-radius: 50%; width: 18px; height: 18px; cursor: pointer; font-size: 12px; }
 .file-item { display: flex; align-items: center; gap: 8px; padding: 6px; background: #f8fafc; border-radius: 4px; margin-top: 4px; font-size: 13px; }
+.file-item a { color: #2563eb; text-decoration: none; font-weight: 500; }
+.file-item a:hover { text-decoration: underline; }
+.preview-attach { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
+.preview-attach h5 { margin: 0 0 8px; font-size: 13px; color: #64748b; }
 
 .btn { padding: 9px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
 .btn-primary { background: #2563eb; color: #fff; } .btn-primary:hover { background: #1d4ed8; }
