@@ -240,6 +240,20 @@ async function initDb() {
   `)
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS crm_smtp_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_id INTEGER,
+      smtp_host TEXT,
+      smtp_port INTEGER DEFAULT 465,
+      smtp_user TEXT,
+      smtp_pass TEXT,
+      from_name TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (owner_id) REFERENCES crm_users(id)
+    )
+  `)
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS crm_settings (
       id INTEGER PRIMARY KEY DEFAULT 1,
       sea_pool_days INTEGER DEFAULT 30

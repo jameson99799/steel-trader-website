@@ -103,6 +103,24 @@ export default {
   // Email records
   getSendRecords: () => request('/customers/email/records'),
 
+  // ─── CRM Mailer ──────────────────────────────────────
+  mailer: {
+    getAccounts: () => request('/mailer/accounts'),
+    addAccount: (data) => request('/mailer/accounts', { method: 'POST', body: JSON.stringify(data) }),
+    updateAccount: (id, data) => request(`/mailer/accounts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteAccount: (id) => request(`/mailer/accounts/${id}`, { method: 'DELETE' }),
+    testAccount: (id) => request(`/mailer/accounts/${id}/test`, { method: 'POST' }),
+    getTemplates: () => request('/mailer/templates'),
+    addTemplate: (data) => request('/mailer/templates', { method: 'POST', body: JSON.stringify(data) }),
+    updateTemplate: (id, data) => request(`/mailer/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteTemplate: (id) => request(`/mailer/templates/${id}`, { method: 'DELETE' }),
+    send: (data) => request('/mailer/send', { method: 'POST', body: JSON.stringify(data) }),
+    getProgress: () => request('/mailer/progress'),
+    stopTask: (id) => request(`/mailer/stop/${id}`, { method: 'POST' }),
+    getRecords: () => request('/mailer/records'),
+    deleteRecord: (id) => request(`/mailer/records/${id}`, { method: 'DELETE' }),
+  },
+
   // Upload — auto-detect image vs file
   upload: async (file) => {
     const formData = new FormData()

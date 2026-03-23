@@ -756,7 +756,7 @@ onMounted(loadData)
 .pool-blue { color: #2563eb; font-weight: 600; }
 
 /* Cell-wrap with fill-down button */
-.cell-wrap { position: relative; }
+.cell-wrap { position: relative; min-width: 0; }
 .cell-wrap input { width: 100%; }
 .cell-fill { position: absolute; right: 1px; bottom: 1px; width: 16px; height: 16px; border: none; background: #2563eb; color: #fff; font-size: 9px; cursor: pointer; border-radius: 2px; opacity: 0; transition: opacity 0.15s; display: flex; align-items: center; justify-content: center; padding: 0; }
 .cell-wrap:hover .cell-fill { opacity: 1; }
@@ -810,12 +810,11 @@ onMounted(loadData)
 .fob-result-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; border-bottom: 1px solid #fef3c7; }
 
 /* Price calc grid */
-.price-calc-header { display: grid; grid-template-columns: 30px repeat(6, 1fr) auto; gap: 4px; font-size: 11px; font-weight: 600; color: #475569; text-align: center; margin-bottom: 4px; }
-.price-calc-row { display: grid; grid-template-columns: 30px repeat(6, 1fr) auto; gap: 4px; margin-bottom: 4px; align-items: center; }
+.price-calc-header { display: grid; grid-template-columns: 30px 1fr 1fr 1fr 1fr 1fr 1fr 24px; gap: 4px; font-size: 11px; font-weight: 600; color: #475569; text-align: center; margin-bottom: 4px; }
+.price-calc-row { display: grid; grid-template-columns: 30px 1fr 1fr 1fr 1fr 1fr 1fr 24px; gap: 4px; margin-bottom: 4px; align-items: center; }
 .row-num { font-size: 11px; color: #94a3b8; text-align: center; font-weight: 600; }
-.price-calc-row input { padding: 6px 4px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 12px; text-align: center; width: 100%; box-sizing: border-box; }
+.price-calc-row input { padding: 6px 4px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 12px; text-align: center; width: 100%; box-sizing: border-box; min-width: 0; }
 .cfr-input { background: #f0fdf4 !important; font-weight: 700; color: #059669; }
-.fill-btns { display: flex; flex-wrap: wrap; gap: 2px; }
 .fill-down-btn { padding: 2px 4px; border: 1px solid #e2e8f0; border-radius: 3px; background: #fff; cursor: pointer; font-size: 10px; color: #64748b; }
 .fill-down-btn:hover { background: #eff6ff; color: #2563eb; }
 .fill-down-btn.del { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
