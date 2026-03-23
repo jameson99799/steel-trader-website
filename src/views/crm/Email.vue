@@ -271,13 +271,63 @@ onMounted(async () => {
     isAdmin.value = user.role === 'admin'
   } catch (e) {}
   loadAccounts()
-  startProgressPoll()
-  if (isAdmin.value) try { crmUsers.value = await crmApi.getUsers() } catch (e) {}
+  if (isAdmin.value) loadUsers()
 })
 onUnmounted(() => { if (progressTimer) clearInterval(progressTimer) })
 
+// Safe fetch helper — never redirects on 401
+async function safeFetch(url) {
+  const token = localStorage.getItem('crm_token')
+  try {
+    const res = await fetch(`/api/crm${url}`, {
+      headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
+    })
+    if (res.ok) return await res.json()
+    return null
+  } catch (e) { return null }
+}
+
+async function safePost(url, body) {
+  const token = localStorage.getItem('crm_token')
+  try {
+    const res = await fetch(`/api/crm${url}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+      body: JSON.stringify(body)
+    })
+    if (res.ok) return await res.json()
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || '请求失败')
+  } catch (e) { throw e }
+}
+
+async function safePut(url, body) {
+  const token = localStorage.getItem('crm_token')
+  try {
+    const res = await fetch(`/api/crm${url}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+      body: JSON.stringify(body)
+    })
+    if (res.ok) return await res.json()
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || '请求失败')
+  } catch (e) { throw e }
+}
+
+async function safeDel(url) {
+  const token = localStorage.getItem('crm_token')
+  try {
+    const res = await fetch(`/api/crm${url}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
+    })
+    if (res.ok) return await res.json()
+    return null
+  } catch (e) { return null }
+}
+
 function startProgressPoll() {
-  // Use silent fetch to avoid 401 redirect during polling
   const token = localStorage.getItem('crm_token')
   progressTimer = setInterval(async () => {
     try {
@@ -285,13 +335,18 @@ function startProgressPoll() {
         headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
       })
       if (res.ok) progress.value = await res.json()
-      // Silently ignore 401 — do NOT redirect
     } catch (e) {}
   }, 3000)
 }
 
 async function loadAccounts() {
-  try { accounts.value = await crmApi.mailer.getAccounts() } catch (e) { accounts.value = { crm:[], system:[] } }
+  const data = await safeFetch('/mailer/accounts')
+  accounts.value = data || { crm: [], system: [] }
+}
+
+async function loadUsers() {
+  const data = await safeFetch('/users')
+  crmUsers.value = data || []
 }
 
 function openAccountModal(a) {
@@ -306,29 +361,30 @@ function openAccountModal(a) {
 
 async function saveAccount() {
   try {
-    if (editAccountId.value) await crmApi.mailer.updateAccount(editAccountId.value, accForm)
-    else await crmApi.mailer.addAccount(accForm)
+    if (editAccountId.value) await safePut(`/mailer/accounts/${editAccountId.value}`, accForm)
+    else await safePost('/mailer/accounts', accForm)
     showAccountModal.value = false; loadAccounts()
   } catch (e) { alert(e.message) }
 }
 
 async function deleteAccount(id) {
   if (!confirm('确定删除？')) return
-  try { await crmApi.mailer.deleteAccount(id); loadAccounts() } catch (e) { alert(e.message) }
+  try { await safeDel(`/mailer/accounts/${id}`); loadAccounts() } catch (e) { alert(e.message) }
 }
 
 async function testAccount(id) {
   const acct = accounts.value.crm.find(a => a.id === id)
   if (acct) acct._testResult = { success: false, message: '测试中...' }
   try {
-    const res = await crmApi.mailer.testAccount(id)
-    if (acct) acct._testResult = res
+    const res = await safePost(`/mailer/accounts/${id}/test`, {})
+    if (acct) acct._testResult = res || { success: false, message: '测试失败' }
   } catch (e) { if (acct) acct._testResult = { success: false, message: e.message } }
 }
 
 // Templates
 async function loadTemplates() {
-  try { templates.value = await crmApi.mailer.getTemplates() } catch (e) { templates.value = [] }
+  const data = await safeFetch('/mailer/templates')
+  templates.value = data || []
 }
 
 function openTplModal(t) {
@@ -340,15 +396,15 @@ function openTplModal(t) {
 async function saveTpl() {
   const data = { name: tplForm.name, subject: tplForm.subject, html_body: tplEditorRef.value?.innerHTML || tplForm.html_body }
   try {
-    if (editTplId.value) await crmApi.mailer.updateTemplate(editTplId.value, data)
-    else await crmApi.mailer.addTemplate(data)
+    if (editTplId.value) await safePut(`/mailer/templates/${editTplId.value}`, data)
+    else await safePost('/mailer/templates', data)
     showTplModal.value = false; loadTemplates()
   } catch (e) { alert(e.message) }
 }
 
 async function deleteTpl(id) {
   if (!confirm('确定删除？')) return
-  try { await crmApi.mailer.deleteTemplate(id); loadTemplates() } catch (e) { alert(e.message) }
+  try { await safeDel(`/mailer/templates/${id}`); loadTemplates() } catch (e) { alert(e.message) }
 }
 
 // Send
@@ -363,8 +419,8 @@ function applyTemplate() {
 async function searchCustomers() {
   if (!customerSearch.value.trim()) { pickerCustomers.value = []; return }
   try {
-    const data = await crmApi.getCustomers({ search: customerSearch.value, limit: 50 })
-    pickerCustomers.value = (data.customers || []).filter(c => c.email)
+    const data = await safeFetch(`/customers?search=${encodeURIComponent(customerSearch.value)}&limit=50`)
+    pickerCustomers.value = (data?.customers || []).filter(c => c.email)
   } catch (e) { pickerCustomers.value = [] }
 }
 
@@ -374,7 +430,7 @@ async function doSend() {
   if (!sendForm.customer_ids.length) { alert('请选择收件客户'); return }
   sending.value = true
   try {
-    const res = await crmApi.mailer.send({
+    const res = await safePost('/mailer/send', {
       customer_ids: sendForm.customer_ids,
       account_id: sendForm.account_id || undefined,
       template_id: sendForm.template_id || undefined,
@@ -383,22 +439,25 @@ async function doSend() {
       interval_min: sendForm.interval_min,
       interval_max: sendForm.interval_max
     })
-    alert(res.message || '发送已开始')
+    alert(res?.message || '发送已开始')
+    startProgressPoll()
   } catch (e) { alert(e.message || '发送失败') }
   sending.value = false
 }
 
 async function stopTask(id) {
-  try { await crmApi.mailer.stopTask(id) } catch (e) {}
+  await safePost(`/mailer/stop/${id}`, {})
 }
 
 // Records
 async function loadRecords() {
-  try { records.value = await crmApi.mailer.getRecords() } catch (e) { records.value = [] }
+  const data = await safeFetch('/mailer/records')
+  records.value = data || []
 }
 
 async function deleteRecord(id) {
-  try { await crmApi.mailer.deleteRecord(id); loadRecords() } catch (e) { alert(e.message) }
+  await safeDel(`/mailer/records/${id}`)
+  loadRecords()
 }
 
 function statusClass(s) { return { sent: 'st-ok', failed: 'st-fail', done: 'st-ok', running: 'st-run', cancelled: 'st-fail' }[s] || '' }
