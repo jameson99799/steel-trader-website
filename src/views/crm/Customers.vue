@@ -40,7 +40,6 @@
             <th>公司</th>
             <th>国家</th>
             <th>联系方式</th>
-            <th>状态</th>
             <th>标签</th>
             <th>询盘</th>
             <th>报价</th>
@@ -52,33 +51,43 @@
         <tbody>
           <tr v-for="c in customers" :key="c.id" :class="{ 'pool-row': c.status === '公海池' }">
             <td><input type="checkbox" :value="c.id" v-model="selectedIds" /></td>
-            <td class="name-cell" @click="$router.push(`/crm/customer/${c.id}`)">{{ c.name }}</td>
-            <td>
+            <td class="center-cell"><span class="name-cell" @click="$router.push(`/crm/customer/${c.id}`)">{{ c.name }}</span></td>
+            <td class="center-cell">
               <span class="company-link" v-if="c.company" @click.stop="openCompanyPanel(c.company)">{{ c.company }}</span>
               <span v-else>-</span>
             </td>
-            <td><span class="country-badge">{{ c.country || '-' }}</span></td>
+            <td class="center-cell"><span class="country-badge">{{ c.country || '-' }}</span></td>
+            <!-- Contact: 2-per-row grid -->
             <td class="contact-cell">
-              <span v-if="c.email" title="Email">📧{{ c.email }}</span>
-              <span v-if="c.whatsapp" title="WhatsApp">💬{{ c.whatsapp }}</span>
+              <div class="contact-grid">
+                <span v-for="item in getContactItems(c)" :key="item.label" :title="item.label">{{ item.icon }}{{ item.value }}</span>
+              </div>
             </td>
-            <td>
+            <!-- Merged: status + tags -->
+            <td class="center-cell">
               <span :class="['status-badge', getStatusClass(c.status)]">{{ c.status }}</span>
-            </td>
-            <td>
-              <span v-for="t in parseTags(c.tags)" :key="t" class="tag-badge">{{ t }}</span>
+              <div v-if="parseTags(c.tags).length" class="tag-row-inline">
+                <span v-for="t in parseTags(c.tags)" :key="t" class="tag-badge">{{ t }}</span>
+              </div>
             </td>
             <td class="num-cell">{{ c.inquiry_count || 0 }}</td>
             <td class="num-cell">{{ c.quotation_count || 0 }}</td>
-            <td class="date-cell">{{ formatDate(c.created_at) }}</td>
-            <td>
+            <td class="date-cell center-cell">{{ formatDate(c.created_at) }}</td>
+            <td class="center-cell">
               <span :class="{ 'pool-owner': c.status === '公海池' }">{{ c.owner_name || '-' }}</span>
             </td>
             <td class="action-cell">
-              <button class="btn-sm btn-edit" @click="openEditModal(c)">编辑</button>
-              <button class="btn-sm btn-copy" @click="handleCopy(c)">复制</button>
-              <button class="btn-sm btn-view" @click="openPreviewModal(c)">预览</button>
-              <button class="btn-sm btn-danger" @click="handleDelete(c)">删除</button>
+              <div class="action-row">
+                <button class="btn-sm btn-edit" @click="openEditModal(c)">编辑</button>
+                <button class="btn-sm btn-copy" @click="handleCopy(c)">复制</button>
+                <button class="btn-sm btn-view" @click="openPreviewModal(c)">预览</button>
+              </div>
+              <div class="action-row">
+                <button class="btn-sm btn-inq" @click="$router.push(`/crm/customer/${c.id}?tab=inquiry`)">询盘</button>
+                <button class="btn-sm btn-quot" @click="$router.push(`/crm/customer/${c.id}?tab=quotation`)">报价</button>
+                <button class="btn-sm btn-follow" @click="$router.push(`/crm/customer/${c.id}?tab=followup`)">跟进</button>
+                <button class="btn-sm btn-danger" @click="handleDelete(c)">删除</button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -93,7 +102,7 @@
       <button :disabled="page >= totalPages" @click="page++; loadCustomers()">下一页</button>
     </div>
 
-    <!-- Add/Edit Modal (NO @click.self close) -->
+    <!-- Add/Edit Modal -->
     <div v-if="showModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
@@ -178,21 +187,14 @@
             <div><label>WhatsApp</label><span>{{ previewData.whatsapp || '-' }}</span></div>
             <div><label>微信</label><span>{{ previewData.wechat || '-' }}</span></div>
             <div><label>状态</label><span :class="['status-badge', getStatusClass(previewData.status)]">{{ previewData.status }}</span></div>
-            <div><label>负责人</label><span>{{ previewData.owner_name || '-' }}</span></div>
-            <div><label>添加时间</label><span>{{ formatDate(previewData.created_at) }}</span></div>
           </div>
           <div v-if="previewData.note" class="preview-note">
             <label>备注</label>
             <p>{{ previewData.note }}</p>
           </div>
-          <div v-if="parseTags(previewData.tags).length" class="preview-tags">
-            <label>标签</label>
-            <span v-for="t in parseTags(previewData.tags)" :key="t" class="tag-badge">{{ t }}</span>
-          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showPreview = false">关闭</button>
-          <button class="btn btn-primary" @click="showPreview = false; openEditModal(previewData)">编辑</button>
           <button class="btn btn-primary" @click="showPreview = false; $router.push(`/crm/customer/${previewData.id}`)">查看详情</button>
         </div>
       </div>
@@ -216,11 +218,10 @@
               <div class="company-card-info">
                 <strong class="name-cell" @click="$router.push(`/crm/customer/${c.id}`)">{{ c.name }}</strong>
                 <span v-if="c.email">📧 {{ c.email }}</span>
-                <span v-if="c.whatsapp">💬 {{ c.whatsapp }}</span>
                 <span class="company-sub">{{ c.company || '-' }} · {{ c.country || '-' }}</span>
               </div>
             </div>
-            <button class="btn-sm btn-danger" @click="excludeCompanyMatch(c)" title="标记不匹配">✕</button>
+            <button class="btn-sm btn-danger" @click="excludeCompanyMatch(c)">✕</button>
           </div>
           <p v-if="!companyCustomers.length" class="empty-msg">没有匹配的关联客户</p>
         </div>
@@ -295,6 +296,15 @@ async function loadCustomers() {
   } catch (e) { console.error(e) }
 }
 
+function getContactItems(c) {
+  const items = []
+  if (c.phone) items.push({ icon: '📞', label: '电话', value: c.phone })
+  if (c.email) items.push({ icon: '📧', label: '邮箱', value: c.email })
+  if (c.whatsapp) items.push({ icon: '💬', label: 'WhatsApp', value: c.whatsapp })
+  if (c.wechat) items.push({ icon: '💬', label: '微信', value: c.wechat })
+  return items
+}
+
 function openAddModal() {
   editingId.value = null
   Object.assign(form, { name: '', company: '', country: '', phone: '', email: '', whatsapp: '', wechat: '', status: '开发中', tags: [], note: '' })
@@ -313,22 +323,17 @@ function openEditModal(c) {
 
 async function handleSave() {
   try {
-    if (editingId.value) {
-      await crmApi.updateCustomer(editingId.value, form)
-    } else {
-      await crmApi.createCustomer(form)
-    }
+    if (editingId.value) await crmApi.updateCustomer(editingId.value, form)
+    else await crmApi.createCustomer(form)
     showModal.value = false
     loadCustomers()
   } catch (e) { alert(e.message) }
 }
 
-// Copy: create a new customer with same info
 async function handleCopy(c) {
   try {
     await crmApi.createCustomer({
-      name: c.name + ' (复制)',
-      company: c.company, country: c.country, phone: c.phone,
+      name: c.name + ' (复制)', company: c.company, country: c.country, phone: c.phone,
       email: c.email, whatsapp: c.whatsapp, wechat: c.wechat,
       status: c.status, tags: parseTags(c.tags), note: c.note || ''
     })
@@ -336,13 +341,11 @@ async function handleCopy(c) {
   } catch (e) { alert(e.message) }
 }
 
-// Preview
 function openPreviewModal(c) {
   previewData.value = c
   showPreview.value = true
 }
 
-// Company panel
 async function openCompanyPanel(companyName) {
   companySearchName.value = companyName
   companySelectedIds.value = []
@@ -365,16 +368,12 @@ function excludeCompanyMatch(c) {
 }
 
 function sendMailToCompany() {
-  // Navigate to mailer or future CRM mail with selected customers
   alert(`已选择 ${companySelectedIds.value.length} 个客户进行营销邮件（后续阶段实现）`)
 }
 
 async function handleDelete(c) {
-  if (!confirm(`确定删除客户 "${c.name}"？此操作将同时删除其所有询盘和报价记录。`)) return
-  try {
-    await crmApi.deleteCustomer(c.id)
-    loadCustomers()
-  } catch (e) { alert(e.message) }
+  if (!confirm(`确定删除客户 "${c.name}"？`)) return
+  try { await crmApi.deleteCustomer(c.id); loadCustomers() } catch (e) { alert(e.message) }
 }
 
 function toggleAll() {
@@ -390,10 +389,7 @@ function getStatusClass(s) {
   return { '开发中': 'status-dev', '联系中': 'status-contact', '已成交': 'status-closed', '公海池': 'status-pool' }[s] || ''
 }
 
-function formatDate(d) {
-  if (!d) return '-'
-  return new Date(d).toLocaleDateString('zh-CN')
-}
+function formatDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : '-' }
 
 onMounted(() => {
   if (route.query.search) filters.search = route.query.search
@@ -412,42 +408,51 @@ watch(() => route.query.search, (v) => { if (v) { filters.search = v; loadCustom
   background: #fff; padding: 16px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 .filter-input, .filter-select {
-  padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px;
-  background: #f8fafc;
+  padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; background: #f8fafc;
 }
 .filter-input { min-width: 160px; }
 .filter-input.date { min-width: 130px; }
 .filter-select { min-width: 120px; }
-.filter-input:focus, .filter-select:focus { outline: none; border-color: #2563eb; }
 
 .table-wrap {
   background: #fff; border-radius: 10px; overflow-x: auto;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { background: #f8fafc; padding: 12px 10px; text-align: left; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
-td { padding: 10px; border-bottom: 1px solid #f1f5f9; }
+th { background: #f8fafc; padding: 12px 10px; text-align: center; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.center-cell { text-align: center; }
 .name-cell { font-weight: 600; color: #2563eb; cursor: pointer; }
 .name-cell:hover { text-decoration: underline; }
 .company-link { color: #8b5cf6; cursor: pointer; font-weight: 500; text-decoration: underline dotted; }
-.company-link:hover { color: #7c3aed; }
 .country-badge { background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
-.contact-cell { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
-.status-badge { padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+/* Contact: 2-per-row grid */
+.contact-cell { min-width: 200px; }
+.contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; font-size: 12px; color: #475569; }
+.contact-grid span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+/* Merged status + tags */
+.status-badge { padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; display: inline-block; }
 .status-dev { background: #fef3c7; color: #92400e; }
 .status-contact { background: #ede9fe; color: #5b21b6; }
 .status-closed { background: #d1fae5; color: #065f46; }
 .status-pool { background: #f1f5f9; color: #64748b; }
-.tag-badge { background: #f0fdf4; color: #166534; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-right: 4px; }
+.tag-row-inline { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; }
+.tag-badge { background: #f0fdf4; color: #166534; padding: 1px 5px; border-radius: 3px; font-size: 10px; }
 .num-cell { text-align: center; font-weight: 600; }
 .date-cell { white-space: nowrap; color: #64748b; font-size: 12px; }
 .pool-owner { color: #2563eb; }
 .pool-row { background: #fafafa; }
-.action-cell { white-space: nowrap; }
-.btn-sm { padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px; }
+/* Action: 2-row layout */
+.action-cell { min-width: 240px; }
+.action-row { display: flex; gap: 4px; margin-bottom: 4px; }
+.action-row:last-child { margin-bottom: 0; }
+.btn-sm { padding: 3px 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; white-space: nowrap; }
 .btn-edit { background: #eff6ff; color: #2563eb; }
 .btn-copy { background: #f0fdf4; color: #15803d; }
 .btn-view { background: #fefce8; color: #a16207; }
+.btn-inq { background: #fdf2f8; color: #be185d; }
+.btn-quot { background: #ecfdf5; color: #059669; }
+.btn-follow { background: #f5f3ff; color: #7c3aed; }
 .btn-danger { background: #fef2f2; color: #dc2626; }
 .btn-sm:hover { opacity: 0.85; }
 .empty-msg { text-align: center; padding: 40px; color: #64748b; }
@@ -455,7 +460,7 @@ td { padding: 10px; border-bottom: 1px solid #f1f5f9; }
 .pagination button { padding: 6px 14px; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; background: #fff; }
 .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Modal - no click-outside close */
+/* Modal */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .modal { background: #fff; border-radius: 14px; width: 640px; max-width: 92vw; max-height: 90vh; overflow-y: auto; }
 .modal-lg { width: 800px; }
@@ -467,11 +472,9 @@ td { padding: 10px; border-bottom: 1px solid #f1f5f9; }
 .form-group { margin-bottom: 12px; }
 .form-group label { display: block; margin-bottom: 4px; font-size: 13px; font-weight: 600; color: #334155; }
 .form-group input, .form-group select, .form-group textarea {
-  width: 100%; padding: 9px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; box-sizing: border-box;
-  font-family: inherit;
+  width: 100%; padding: 9px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; box-sizing: border-box; font-family: inherit;
 }
 .form-group textarea { resize: vertical; }
-.form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: #2563eb; }
 .tag-select { display: flex; flex-wrap: wrap; gap: 12px; }
 .tag-option { display: flex; align-items: center; gap: 4px; font-size: 13px; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid #e2e8f0; }
@@ -484,13 +487,11 @@ td { padding: 10px; border-bottom: 1px solid #f1f5f9; }
 .preview-note { margin-top: 16px; padding: 12px; background: #f8fafc; border-radius: 8px; }
 .preview-note label { display: block; font-size: 12px; color: #64748b; margin-bottom: 4px; }
 .preview-note p { margin: 0; font-size: 14px; white-space: pre-wrap; }
-.preview-tags { margin-top: 12px; }
-.preview-tags label { display: block; font-size: 12px; color: #64748b; margin-bottom: 6px; }
 
 /* Company panel */
 .company-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
 .company-card { display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; }
-.company-card.excluded { opacity: 0.4; background: #fafafa; text-decoration: line-through; }
+.company-card.excluded { opacity: 0.4; text-decoration: line-through; }
 .company-card-left { display: flex; align-items: center; gap: 10px; }
 .company-card-info { display: flex; flex-direction: column; gap: 2px; }
 .company-card-info span { font-size: 12px; color: #64748b; }

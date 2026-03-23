@@ -234,22 +234,27 @@ router.delete('/:id', dualAuth, (req, res) => {
 
 // ─── Inquiries ──────────────────────────────────────────────────────────────────
 router.get('/:id/inquiries', dualAuth, (req, res) => {
-  res.json(getAll('SELECT * FROM crm_inquiries WHERE customer_id=? ORDER BY inquiry_time DESC', [req.params.id]))
+  const list = getAll('SELECT * FROM crm_inquiries WHERE customer_id=? ORDER BY inquiry_time DESC', [req.params.id])
+  list.forEach(i => {
+    try { i.images = JSON.parse(i.images||'[]') } catch(e) { i.images = [] }
+    try { i.files = JSON.parse(i.files||'[]') } catch(e) { i.files = [] }
+  })
+  res.json(list)
 })
 
 router.post('/:id/inquiries', dualAuth, (req, res) => {
-  const { content_html, note, inquiry_time } = req.body
+  const { content_html, note, inquiry_time, images, files } = req.body
   const now = new Date().toISOString()
-  const result = run(`INSERT INTO crm_inquiries (customer_id,content_html,note,inquiry_time,created_at) VALUES (?,?,?,?,?)`,
-    [req.params.id, content_html||'', note||'', inquiry_time||now, now])
+  const result = run(`INSERT INTO crm_inquiries (customer_id,content_html,note,images,files,inquiry_time,created_at) VALUES (?,?,?,?,?,?,?)`,
+    [req.params.id, content_html||'', note||'', JSON.stringify(images||[]), JSON.stringify(files||[]), inquiry_time||now, now])
   run('UPDATE crm_customers SET last_activity_at=? WHERE id=?', [now, req.params.id])
   res.json({ id: result.lastInsertRowid })
 })
 
 router.put('/inquiries/:inqId', dualAuth, (req, res) => {
-  const { content_html, note, inquiry_time } = req.body
-  run(`UPDATE crm_inquiries SET content_html=?,note=?,inquiry_time=?,updated_at=? WHERE id=?`,
-    [content_html, note||'', inquiry_time, new Date().toISOString(), req.params.inqId])
+  const { content_html, note, inquiry_time, images, files } = req.body
+  run(`UPDATE crm_inquiries SET content_html=?,note=?,images=?,files=?,inquiry_time=?,updated_at=? WHERE id=?`,
+    [content_html, note||'', JSON.stringify(images||[]), JSON.stringify(files||[]), inquiry_time, new Date().toISOString(), req.params.inqId])
   res.json({ message: '更新成功' })
 })
 

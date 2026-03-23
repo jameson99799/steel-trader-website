@@ -41,7 +41,7 @@ router.post('/login', (req, res) => {
   const { username, password } = req.body
   if (!username || !password) return res.status(400).json({ error: '用户名和密码不能为空' })
 
-  const user = getOne('SELECT * FROM crm_users WHERE username = ? AND status = 1', [username])
+  const user = getOne('SELECT * FROM crm_users WHERE LOWER(username) = LOWER(?) AND status = 1', [username])
   if (!user || !bcrypt.compareSync(password, user.password)) {
     return res.status(401).json({ error: '用户名或密码错误' })
   }

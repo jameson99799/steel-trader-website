@@ -185,11 +185,16 @@ async function initDb() {
       customer_id INTEGER NOT NULL,
       content_html TEXT DEFAULT '',
       note TEXT DEFAULT '',
+      images TEXT DEFAULT '[]',
+      files TEXT DEFAULT '[]',
       inquiry_time DATETIME DEFAULT CURRENT_TIMESTAMP,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  // Migration: add images/files to inquiries
+  try { db.exec("ALTER TABLE crm_inquiries ADD COLUMN images TEXT DEFAULT '[]'") } catch (e) {}
+  try { db.exec("ALTER TABLE crm_inquiries ADD COLUMN files TEXT DEFAULT '[]'") } catch (e) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS crm_quotations (
