@@ -1,6 +1,6 @@
 import express from 'express'
 import { getAll, getOne, run } from '../db.js'
-import { authMiddleware } from '../middleware/auth.js'
+import { dualAuthMiddleware as authMiddleware } from '../middleware/auth.js'
 import nodemailer from 'nodemailer'
 import { attachmentUpload } from '../middleware/upload.js'
 import { join, dirname, basename } from 'path'

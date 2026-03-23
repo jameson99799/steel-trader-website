@@ -77,6 +77,7 @@ const routes = [
       { path: 'customer/:id', name: 'CrmCustomerDetail', component: () => import('../views/crm/CustomerDetail.vue') },
       { path: 'sea-pool', name: 'CrmSeaPool', component: () => import('../views/crm/SeaPool.vue') },
       { path: 'email', name: 'CrmEmail', component: () => import('../views/crm/Email.vue') },
+      { path: 'mailer', name: 'CrmMailer', component: () => import('../views/crm/Mailer.vue') },
       { path: 'users', name: 'CrmUsers', component: () => import('../views/crm/Users.vue') }
     ]
   }

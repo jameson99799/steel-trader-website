@@ -19,6 +19,9 @@
         <router-link to="/crm/email" class="nav-item" active-class="active">
           <span class="nav-icon">📧</span><span v-if="!sidebarCollapsed" class="nav-label">邮件系统</span>
         </router-link>
+        <router-link to="/crm/mailer" class="nav-item" active-class="active">
+          <span class="nav-icon">📤</span><span v-if="!sidebarCollapsed" class="nav-label">批量发邮件</span>
+        </router-link>
         <router-link v-if="user?.role === 'admin'" to="/crm/users" class="nav-item" active-class="active">
           <span class="nav-icon">⚙️</span><span v-if="!sidebarCollapsed" class="nav-label">账户管理</span>
         </router-link>

@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'led-trade-secret-key-2024'
+const CRM_SECRET = process.env.CRM_JWT_SECRET || 'crm-jwt-secret-2024'
 
 export const generateToken = (user) => {
   return jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' })
@@ -20,6 +21,27 @@ export const authMiddleware = (req, res, next) => {
   } catch (error) {
     return res.status(401).json({ error: 'Token无效或已过期' })
   }
+}
+
+// Accepts both admin token (Authorization) and CRM token (x-crm-token)
+export const dualAuthMiddleware = (req, res, next) => {
+  // Try admin token first
+  const adminToken = req.headers.authorization?.replace('Bearer ', '')
+  if (adminToken) {
+    try {
+      req.user = jwt.verify(adminToken, JWT_SECRET)
+      return next()
+    } catch (e) {}
+  }
+  // Try CRM token
+  const crmToken = req.headers['x-crm-token']
+  if (crmToken) {
+    try {
+      req.crmUser = jwt.verify(crmToken, CRM_SECRET)
+      return next()
+    } catch (e) {}
+  }
+  return res.status(401).json({ error: '未授权访问' })
 }
 
 export default authMiddleware

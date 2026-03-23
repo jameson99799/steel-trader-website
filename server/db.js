@@ -420,7 +420,7 @@ async function initDb() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
-
+  try { db.exec("ALTER TABLE mail_templates ADD COLUMN is_default INTEGER DEFAULT 0") } catch(e) {}
   // Bulk email: contacts
   db.exec(`
     CREATE TABLE IF NOT EXISTS mail_contacts (

@@ -91,6 +91,7 @@
                 <button class="btn-sm btn-edit" @click="openEditModal(c)">编辑</button>
                 <button class="btn-sm btn-copy" @click="handleCopy(c)">复制</button>
                 <button class="btn-sm btn-view" @click="openPreviewModal(c)">预览</button>
+                <button class="btn-sm btn-mail" @click="quickSendEmail(c)" :disabled="!c.email || quickSending === c.id" :title="c.email ? '使用默认模板发送邮件' : '无邮箱'">{{ quickSending === c.id ? '发送中...' : '📧邮件' }}</button>
               </div>
               <div class="action-row">
                 <button class="btn-sm btn-inq" @click="$router.push(`/crm/customer/${c.id}?tab=inquiry`)">询盘</button>
@@ -357,6 +358,7 @@ const companySearchName = ref('')
 const companyCustomers = ref([])
 const companySelectedIds = ref([])
 const companyAllSelected = ref(false)
+const quickSending = ref(null)
 
 const filters = reactive({
   search: '', country: '', status: '', tag: '', start_date: '', end_date: ''
@@ -512,6 +514,18 @@ async function loadSendRecords() {
   try { sendRecords.value = await crmApi.getSendRecords() } catch (e) { sendRecords.value = [] }
 }
 
+async function quickSendEmail(c) {
+  if (!c.email) { alert('该客户没有邮箱'); return }
+  quickSending.value = c.id
+  try {
+    const res = await crmApi.request(`/customers/email/quick-send`, {
+      method: 'POST', body: JSON.stringify({ customer_id: c.id })
+    })
+    alert(res.message || '发送完成')
+  } catch (e) { alert(e.message || '发送失败') }
+  quickSending.value = null
+}
+
 async function handleDelete(c) {
   if (!confirm(`确定删除客户 "${c.name}"？`)) return
   try { await crmApi.deleteCustomer(c.id); loadCustomers() } catch (e) { alert(e.message) }
@@ -594,6 +608,8 @@ td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
 .btn-inq { background: #fdf2f8; color: #be185d; }
 .btn-quot { background: #ecfdf5; color: #059669; }
 .btn-follow { background: #f5f3ff; color: #7c3aed; }
+.btn-mail { background: #eff6ff; color: #2563eb; }
+.btn-mail:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-danger { background: #fef2f2; color: #dc2626; }
 .btn-sm:hover { opacity: 0.85; }
 .empty-msg { text-align: center; padding: 40px; color: #64748b; }

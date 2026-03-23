@@ -376,6 +376,56 @@ router.post('/email/send', dualAuth, async (req, res) => {
 })
 
 // ─── Export all customers ───────────────────────────────────────────────────────
+
+// Quick-send: one-click email to a single customer using default template
+router.post('/email/quick-send', dualAuth, async (req, res) => {
+  const { customer_id } = req.body
+  if (!customer_id) return res.status(400).json({ error: '缺少客户ID' })
+  
+  const customer = getOne('SELECT * FROM crm_customers WHERE id=?', [customer_id])
+  if (!customer?.email) return res.status(400).json({ error: '该客户没有邮箱' })
+
+  // Get default template (first template, or one marked as default)
+  const tpl = getOne("SELECT * FROM mail_templates WHERE is_default=1 LIMIT 1") 
+    || getOne("SELECT * FROM mail_templates ORDER BY id ASC LIMIT 1")
+  if (!tpl) return res.status(400).json({ error: '未设置默认邮件模板，请先在邮件系统中创建模板' })
+
+  // Get SMTP account (round-robin using modulo on customer_id)
+  const accounts = getAll('SELECT * FROM smtp_accounts WHERE enabled=1 ORDER BY id ASC')
+  if (!accounts.length) return res.status(400).json({ error: '未配置发送邮箱' })
+  const smtp = accounts[customer_id % accounts.length]
+
+  // Variable replacement
+  const vars = { 
+    name: customer.name||'', company: customer.company||'', 
+    first_name: customer.first_name||customer.name||'', last_name: customer.last_name||'' 
+  }
+  let subj = tpl.subject || '', body = tpl.html_body || ''
+  for (const [k, v] of Object.entries(vars)) {
+    subj = subj.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
+    body = body.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
+  }
+
+  try {
+    const nodemailer = (await import('nodemailer')).default
+    const transport = nodemailer.createTransport({
+      host: smtp.smtp_host, port: parseInt(smtp.smtp_port)||465, secure: parseInt(smtp.smtp_port)===465,
+      auth: { user: smtp.smtp_user, pass: smtp.smtp_pass }, tls: { rejectUnauthorized: false }
+    })
+    await transport.sendMail({
+      from: `"${smtp.from_name||'SunSea Steel'}" <${smtp.smtp_user}>`, to: customer.email, subject: subj, html: body
+    })
+    run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
+      [customer.email, subj, 'sent', new Date().toISOString(), req.crmUser?.id||null])
+    res.json({ message: `✅ 已发送给 ${customer.email}`, status: 'sent' })
+  } catch (e) {
+    run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
+      [customer.email, subj, 'failed', new Date().toISOString(), req.crmUser?.id||null])
+    res.json({ message: `❌ 发送失败: ${e.message}`, status: 'failed' })
+  }
+})
+
+
 router.get('/export/all', dualAuth, (req, res) => {
   if (req.crmUser && req.crmUser.role !== 'admin' && !req.user) {
     return res.status(403).json({ error: '需要管理员权限' })
