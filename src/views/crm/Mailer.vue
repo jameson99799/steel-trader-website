@@ -5,8 +5,8 @@
 <script setup>
 /**
  * CRM Mailer Wrapper
- * Patches api.request so the shared Mailer.vue uses CRM auth and paths.
- * Also sets window.__CRM_MAILER = true for CRM-specific UI detection.
+ * Patches api.request so the shared Mailer.vue routes /mailer/* and /email/*
+ * calls through CRM auth (Bearer token from localStorage crm_token).
  */
 import { onMounted, onUnmounted } from 'vue'
 import MailerPage from '../admin/Mailer.vue'
@@ -19,7 +19,7 @@ onMounted(() => {
   _origRequest = api.request.bind(api)
   
   api.request = async (url, options = {}) => {
-    // Intercept both /mailer/* and /email/* calls for CRM auth
+    // Intercept /mailer/* and /email/* calls for CRM auth
     if (url.startsWith('/mailer') || url.startsWith('/email/')) {
       const crmToken = localStorage.getItem('crm_token')
       const headers = { ...(options.headers || {}) }
@@ -27,11 +27,17 @@ onMounted(() => {
         headers['Content-Type'] = 'application/json'
       }
       if (crmToken) {
-        headers['x-crm-token'] = crmToken
+        headers['Authorization'] = `Bearer ${crmToken}`
       }
-      // Route /mailer/* through /crm/mailer/*, /email/* stays as /email/*
+      // Route /mailer/* through /api/crm/mailer/*, /email/* stays as /api/email/*
       const apiPath = url.startsWith('/mailer') ? `/api/crm${url}` : `/api${url}`
       const response = await fetch(apiPath, { ...options, headers })
+      // Handle 401 redirect to CRM login
+      if (response.status === 401) {
+        localStorage.removeItem('crm_token')
+        window.location.href = '/crm/login'
+        throw new Error('登录已过期')
+      }
       const contentType = response.headers.get('content-type') || ''
       let data
       if (contentType.includes('application/json')) {

@@ -23,6 +23,8 @@ async function request(url, options = {}) {
 }
 
 export default {
+  // Base request (for custom endpoints)
+  request,
   // Auth - login uses raw fetch to avoid redirect on 401
   login: async (credentials) => {
     const res = await fetch('/api/crm/auth/login', {
