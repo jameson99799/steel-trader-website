@@ -177,7 +177,20 @@
         </div>
         <div class="modal-body">
           <div class="preview-meta">{{ previewFollowup.user_name }} · {{ formatDateTime(previewFollowup.created_at) }}</div>
+          <div v-if="previewFollowup.note" class="preview-meta" style="margin-top:4px;color:#475569;">📌 {{ previewFollowup.note }}</div>
           <div class="preview-html" v-html="previewFollowup.content_html"></div>
+          <div v-if="previewFollowup.images?.length || previewFollowup.attachments?.length" class="preview-attach">
+            <h5 v-if="previewFollowup.images?.length">📷 图片</h5>
+            <div class="img-grid">
+              <div v-for="(img, i) in (previewFollowup.images||[])" :key="i" class="img-thumb" @click="previewImg = img">
+                <img :src="img" />
+              </div>
+            </div>
+            <h5 v-if="previewFollowup.attachments?.length" style="margin-top:12px">📎 附件</h5>
+            <div v-for="(f, i) in (previewFollowup.attachments||[])" :key="'f'+i" class="file-item">
+              <a :href="f.url" target="_blank">📎 {{ f.name }}</a>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="previewFollowup = null">关闭</button>
@@ -353,8 +366,18 @@
         <div class="modal-body">
           <div class="form-group"><label>跟进备注</label><input v-model="followForm.note" placeholder="跟进说明..." /></div>
           <div class="form-group">
-            <label>跟进内容</label>
-            <div ref="followEditorRef" class="rich-editor" contenteditable="true" @paste="handlePaste($event)" v-html="followForm.content_html"></div>
+            <label>跟进内容（支持粘贴截图）</label>
+            <div ref="followEditorRef" class="rich-editor" contenteditable="true" @paste="handleFollowupPaste($event)" v-html="followForm.content_html"></div>
+          </div>
+          <div class="form-group">
+            <label>上传图片</label>
+            <input type="file" accept="image/*" multiple @change="uploadFiles($event, followForm.images, 'image')" />
+            <div class="img-grid">
+              <div v-for="(img, i) in followForm.images" :key="i" class="img-thumb" @click="previewImg = img">
+                <img :src="img" />
+                <button class="img-del" @click.stop="followForm.images.splice(i,1)">×</button>
+              </div>
+            </div>
           </div>
           <div class="form-group">
             <label>上传附件</label>
@@ -414,7 +437,7 @@ const fobSearchResults = ref([])
 const showFollowupModal = ref(false)
 const editFollowupId = ref(null)
 const followEditorRef = ref(null)
-const followForm = reactive({ content_html: '', note: '', attachments: [] })
+const followForm = reactive({ content_html: '', note: '', images: [], attachments: [] })
 
 // Combined preview
 const showCombinedPreview = ref(false)
@@ -586,6 +609,7 @@ function openFollowupModal(f) {
   editFollowupId.value = f?.id || null
   followForm.content_html = f?.content_html || ''
   followForm.note = f?.note || ''
+  followForm.images = f?.images ? [...f.images] : []
   followForm.attachments = f?.attachments ? [...f.attachments] : []
   showFollowupModal.value = true
 }
@@ -594,6 +618,7 @@ async function saveFollowup() {
   const data = {
     content_html: followEditorRef.value?.innerHTML || followForm.content_html,
     note: followForm.note,
+    images: JSON.parse(JSON.stringify(followForm.images)),
     attachments: JSON.parse(JSON.stringify(followForm.attachments))
   }
   try {
@@ -604,6 +629,35 @@ async function saveFollowup() {
 }
 
 async function deleteFollowup(f) { if (confirm('确定删除？')) { await crmApi.deleteFollowup(f.id); loadData() } }
+
+// ─── Followup paste handler (images → both editor + gallery) ─────────────────
+async function handleFollowupPaste(e) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault()
+      try {
+        const res = await crmApi.upload(item.getAsFile())
+        // Add to inline editor
+        document.execCommand('insertHTML', false, `<img src="${res.url}" style="max-width:100%;height:auto;" />`)
+        // Also add to images gallery
+        followForm.images.push(res.url)
+      } catch (err) { console.error(err) }
+      return
+    }
+  }
+  // For non-image paste, handle as HTML (tables, text)
+  const htmlData = e.clipboardData.getData('text/html')
+  if (htmlData) {
+    e.preventDefault()
+    let clean = htmlData.replace(/<meta[^>]*>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<xml[^>]*>[\s\S]*?<\/xml>/gi, '').replace(/<!--[\s\S]*?-->/g, '').replace(/class="[^"]*"/gi, '')
+    clean = clean.replace(/<table/gi, '<table style="border-collapse:collapse;width:100%"')
+    clean = clean.replace(/<td(?=[> ])/gi, '<td style="border:1px solid #ddd;padding:4px 8px"')
+    clean = clean.replace(/<th(?=[> ])/gi, '<th style="border:1px solid #ddd;padding:4px 8px;background:#f8fafc"')
+    document.execCommand('insertHTML', false, clean)
+  }
+}
 
 // ─── Paste handler ──────────────────────────────────────────────────────────────
 async function handlePaste(e) {

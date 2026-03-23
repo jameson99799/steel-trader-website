@@ -302,23 +302,23 @@ router.get('/:id/followups', dualAuth, (req, res) => {
   const list = getAll(
     `SELECT f.*, u.display_name as user_name FROM crm_followups f
      LEFT JOIN crm_users u ON f.user_id=u.id WHERE f.customer_id=? ORDER BY f.created_at DESC`, [req.params.id])
-  list.forEach(f => { try { f.attachments = JSON.parse(f.attachments||'[]') } catch(e) { f.attachments = [] } })
+  list.forEach(f => { try { f.attachments = JSON.parse(f.attachments||'[]') } catch(e) { f.attachments = [] }; try { f.images = JSON.parse(f.images||'[]') } catch(e) { f.images = [] } })
   res.json(list)
 })
 
 router.post('/:id/followups', dualAuth, (req, res) => {
-  const { content_html, note, attachments } = req.body
+  const { content_html, note, images, attachments } = req.body
   const now = new Date().toISOString()
-  const result = run(`INSERT INTO crm_followups (customer_id,user_id,content_html,note,attachments,created_at) VALUES (?,?,?,?,?,?)`,
-    [req.params.id, req.crmUser?.id||null, content_html||'', note||'', JSON.stringify(attachments||[]), now])
+  const result = run(`INSERT INTO crm_followups (customer_id,user_id,content_html,note,images,attachments,created_at) VALUES (?,?,?,?,?,?,?)`,
+    [req.params.id, req.crmUser?.id||null, content_html||'', note||'', JSON.stringify(images||[]), JSON.stringify(attachments||[]), now])
   run('UPDATE crm_customers SET last_activity_at=? WHERE id=?', [now, req.params.id])
   res.json({ id: result.lastInsertRowid })
 })
 
 router.put('/followups/:fId', dualAuth, (req, res) => {
-  const { content_html, note, attachments } = req.body
-  run(`UPDATE crm_followups SET content_html=?,note=?,attachments=?,updated_at=? WHERE id=?`,
-    [content_html, note||'', JSON.stringify(attachments||[]), new Date().toISOString(), req.params.fId])
+  const { content_html, note, images, attachments } = req.body
+  run(`UPDATE crm_followups SET content_html=?,note=?,images=?,attachments=?,updated_at=? WHERE id=?`,
+    [content_html, note||'', JSON.stringify(images||[]), JSON.stringify(attachments||[]), new Date().toISOString(), req.params.fId])
   res.json({ message: '更新成功' })
 })
 
@@ -357,8 +357,14 @@ router.post('/email/send', dualAuth, async (req, res) => {
       await transport.sendMail({
         from: `"${smtp.from_name||'SunSea Steel'}" <${smtp.smtp_user}>`, to: c.email, subject: subj, html: body
       })
+      run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
+        [c.email, subj, 'sent', new Date().toISOString(), req.crmUser?.id||null])
       sent++
-    } catch (e) { failed++ }
+    } catch (e) {
+      run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
+        [c.email, subject, 'failed', new Date().toISOString(), req.crmUser?.id||null])
+      failed++
+    }
   }
   res.json({ message: `发送完成: 成功 ${sent}, 失败 ${failed}` })
 })
@@ -386,6 +392,14 @@ router.get('/export/all', dualAuth, (req, res) => {
     exportData.users.push(userData)
   }
   res.json(exportData)
+})
+
+// ─── Email send records ─────────────────────────────────────────────────────────
+router.get('/email/records', dualAuth, (req, res) => {
+  let filter = '', params = []
+  if (req.crmUser && req.crmUser.role !== 'admin') { filter = 'WHERE sent_by = ?'; params = [req.crmUser.id] }
+  const records = getAll(`SELECT * FROM crm_email_logs ${filter} ORDER BY sent_at DESC LIMIT 200`, params)
+  res.json(records)
 })
 
 export default router

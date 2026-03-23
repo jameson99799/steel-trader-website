@@ -226,6 +226,18 @@ async function initDb() {
     )
   `)
   try { db.exec("ALTER TABLE crm_followups ADD COLUMN note TEXT DEFAULT ''") } catch (e) {}
+  try { db.exec("ALTER TABLE crm_followups ADD COLUMN images TEXT DEFAULT '[]'") } catch (e) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS crm_email_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      recipient_email TEXT,
+      subject TEXT,
+      status TEXT DEFAULT 'sent',
+      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      sent_by INTEGER
+    )
+  `)
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS crm_settings (

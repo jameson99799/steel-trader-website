@@ -28,6 +28,14 @@
       </select>
       <input v-model="filters.start_date" type="date" @change="loadCustomers" class="filter-input date" />
       <input v-model="filters.end_date" type="date" @change="loadCustomers" class="filter-input date" />
+      <button class="btn btn-sm btn-outline" @click="showSendRecords = true" title="发送记录">📊 发送记录</button>
+    </div>
+
+    <!-- Selection Action Bar -->
+    <div v-if="selectedIds.length" class="selection-bar">
+      <span>已选择 <strong>{{ selectedIds.length }}</strong> 个客户</span>
+      <button class="btn btn-sm btn-primary" @click="openEmailModal(selectedIds)">📧 发送营销邮件</button>
+      <button class="btn btn-sm btn-secondary" @click="selectedIds = []; allSelected = false">取消选择</button>
     </div>
 
     <!-- Customer Table -->
@@ -238,6 +246,79 @@
         </div>
       </div>
     </div>
+
+    <!-- Email Marketing Modal -->
+    <div v-if="showEmailModal" class="modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <h3>📧 营销邮件</h3>
+          <button class="modal-close" @click="showEmailModal = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="email-recipients">
+            <label>收件人 ({{ emailTargetIds.length }} 个客户)</label>
+            <div class="recipient-chips">
+              <span v-for="id in emailTargetIds.slice(0, 10)" :key="id" class="recipient-chip">
+                {{ getCustomerName(id) }}
+              </span>
+              <span v-if="emailTargetIds.length > 10" class="recipient-chip more">+{{ emailTargetIds.length - 10 }} 更多</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>邮件主题</label>
+            <input v-model="emailForm.subject" placeholder="例如：SunSea Steel - 最新报价" />
+          </div>
+          <div class="form-group">
+            <label>邮件内容（支持 {{name}} {{company}} 变量）</label>
+            <div ref="emailEditorRef" class="rich-editor" contenteditable="true" style="min-height:200px;"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showEmailModal = false">取消</button>
+          <button class="btn btn-primary" :disabled="emailSending" @click="sendMarketingEmail">
+            {{ emailSending ? '发送中...' : '🚀 发送' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Send Records Panel -->
+    <div v-if="showSendRecords" class="modal-overlay">
+      <div class="modal modal-xl">
+        <div class="modal-header">
+          <h3>📊 邮件发送记录</h3>
+          <button class="modal-close" @click="showSendRecords = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="!sendRecords.length" class="empty-msg">暂无发送记录</div>
+          <table v-else class="records-table">
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>收件人</th>
+                <th>主题</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in sendRecords" :key="r.id">
+                <td>{{ formatDate(r.sent_at || r.created_at) }}</td>
+                <td>{{ r.recipient_email || r.contact_email }}</td>
+                <td>{{ r.subject }}</td>
+                <td>
+                  <span :class="['status-dot', r.status === 'sent' ? 'dot-ok' : 'dot-fail']">
+                    {{ r.status === 'sent' ? '✅ 已发送' : '❌ 失败' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showSendRecords = false">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -376,7 +457,50 @@ function excludeCompanyMatch(c) {
 }
 
 function sendMailToCompany() {
-  alert(`已选择 ${companySelectedIds.value.length} 个客户进行营销邮件（后续阶段实现）`)
+  openEmailModal(companySelectedIds.value)
+}
+
+// Email marketing
+const showEmailModal = ref(false)
+const emailTargetIds = ref([])
+const emailForm = reactive({ subject: '', html_body: '' })
+const emailEditorRef = ref(null)
+const emailSending = ref(false)
+const showSendRecords = ref(false)
+const sendRecords = ref([])
+
+function openEmailModal(ids) {
+  emailTargetIds.value = [...ids]
+  emailForm.subject = ''
+  showEmailModal.value = true
+}
+
+function getCustomerName(id) {
+  const c = customers.value.find(c => c.id === id)
+  return c ? (c.name || c.email || `#${id}`) : `#${id}`
+}
+
+async function sendMarketingEmail() {
+  const html_body = emailEditorRef.value?.innerHTML || ''
+  if (!emailForm.subject || !html_body.trim()) { alert('请填写主题和内容'); return }
+  emailSending.value = true
+  try {
+    const result = await crmApi.sendEmail({
+      customer_ids: emailTargetIds.value,
+      subject: emailForm.subject,
+      html_body
+    })
+    alert(result.message || '发送完成')
+    showEmailModal.value = false
+    selectedIds.value = []
+    allSelected.value = false
+    loadSendRecords()
+  } catch (e) { alert(e.message || '发送失败') }
+  emailSending.value = false
+}
+
+async function loadSendRecords() {
+  try { sendRecords.value = await crmApi.getSendRecords() } catch (e) { sendRecords.value = [] }
 }
 
 async function handleDelete(c) {
@@ -517,4 +641,27 @@ td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
 .btn-primary { background: #2563eb; color: #fff; }
 .btn-primary:hover { background: #1d4ed8; }
 .btn-secondary { background: #f1f5f9; color: #334155; }
+.btn-outline { background: #fff; border: 1px solid #e2e8f0; color: #334155; }
+
+/* Selection action bar */
+.selection-bar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; margin-bottom: 12px; }
+.selection-bar span { font-size: 13px; color: #1e40af; }
+
+/* Email modal */
+.modal-xl { width: 1000px; max-width: 95vw; }
+.email-recipients { margin-bottom: 14px; }
+.email-recipients label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+.recipient-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.recipient-chip { background: #eff6ff; color: #2563eb; padding: 3px 10px; border-radius: 12px; font-size: 12px; }
+.recipient-chip.more { background: #e2e8f0; color: #64748b; }
+.rich-editor { min-height: 120px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; line-height: 1.6; overflow-y: auto; max-height: 300px; }
+.rich-editor:focus { outline: none; border-color: #2563eb; }
+
+/* Send records table */
+.records-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.records-table th { background: #f8fafc; padding: 10px 12px; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; text-align: left; }
+.records-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+.status-dot { font-size: 12px; }
+.dot-ok { color: #059669; }
+.dot-fail { color: #dc2626; }
 </style>

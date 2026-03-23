@@ -100,6 +100,9 @@ export default {
   // Export
   exportAll: () => request('/customers/export/all'),
 
+  // Email records
+  getSendRecords: () => request('/customers/email/records'),
+
   // Upload — auto-detect image vs file
   upload: async (file) => {
     const formData = new FormData()
