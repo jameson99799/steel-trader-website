@@ -23,6 +23,9 @@ import indexingRoutes from './routes/indexing.js'
 import aiRoutes from './routes/ai.js'
 import mailerRoutes from './routes/mailer.js'
 import externalApiRoutes from './routes/external-api.js'
+import crmAuthRoutes from './routes/crm-auth.js'
+import crmUsersRoutes from './routes/crm-users.js'
+import crmCustomersRoutes from './routes/crm-customers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -101,6 +104,9 @@ async function startServer() {
     app.use('/api/ai', aiRoutes)
     app.use('/api/mailer', mailerRoutes)
     app.use('/api/external', externalApiRoutes)
+    app.use('/api/crm/auth', crmAuthRoutes)
+    app.use('/api/crm/users', crmUsersRoutes)
+    app.use('/api/crm/customers', crmCustomersRoutes)
 
     // 健康检查端点
     app.get('/health', (req, res) => {

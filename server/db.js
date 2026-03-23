@@ -124,6 +124,120 @@ async function initDb() {
   // Migration: add default_model to ai_channels
   try { db.exec("ALTER TABLE ai_channels ADD COLUMN default_model TEXT DEFAULT ''") } catch (e) { }
 
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // CRM Tables
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS crm_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      display_name TEXT NOT NULL DEFAULT '',
+      email TEXT DEFAULT '',
+      smtp_host TEXT DEFAULT '',
+      smtp_port INTEGER DEFAULT 465,
+      smtp_user TEXT DEFAULT '',
+      smtp_pass TEXT DEFAULT '',
+      from_name TEXT DEFAULT '',
+      role TEXT DEFAULT 'sub',
+      status INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS crm_customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_id INTEGER,
+      name TEXT NOT NULL,
+      country TEXT DEFAULT '',
+      phone TEXT DEFAULT '',
+      email TEXT DEFAULT '',
+      whatsapp TEXT DEFAULT '',
+      wechat TEXT DEFAULT '',
+      company TEXT DEFAULT '',
+      status TEXT DEFAULT '开发中',
+      tags TEXT DEFAULT '[]',
+      sea_pool_count INTEGER DEFAULT 0,
+      last_activity_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS crm_customer_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL,
+      from_user_id INTEGER,
+      to_user_id INTEGER,
+      action TEXT DEFAULT 'claim',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS crm_inquiries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL,
+      content_html TEXT DEFAULT '',
+      note TEXT DEFAULT '',
+      inquiry_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS crm_quotations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL,
+      content_html TEXT DEFAULT '',
+      note TEXT DEFAULT '',
+      freight_type TEXT DEFAULT 'container',
+      ports TEXT DEFAULT '[]',
+      price_rows TEXT DEFAULT '[]',
+      files TEXT DEFAULT '[]',
+      images TEXT DEFAULT '[]',
+      quotation_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS crm_followups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL,
+      user_id INTEGER,
+      content_html TEXT DEFAULT '',
+      attachments TEXT DEFAULT '[]',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS crm_settings (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      sea_pool_days INTEGER DEFAULT 30
+    )
+  `)
+  // Ensure settings row exists
+  try {
+    const crmS = db.prepare('SELECT id FROM crm_settings WHERE id = 1').get()
+    if (!crmS) db.prepare('INSERT INTO crm_settings (id, sea_pool_days) VALUES (1, 30)').run()
+  } catch (e) { }
+
+  // Seed default CRM admin user if none exist
+  try {
+    const crmUserCount = db.prepare('SELECT COUNT(*) as count FROM crm_users').get().count
+    if (crmUserCount === 0) {
+      const hashed = bcrypt.hashSync('admin123', 10)
+      db.prepare('INSERT INTO crm_users (username, password, display_name, role) VALUES (?,?,?,?)').run('crm_admin', hashed, 'CRM管理员', 'admin')
+    }
+  } catch (e) { }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS banners (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

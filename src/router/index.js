@@ -60,6 +60,24 @@ const routes = [
       { path: 'ai-settings', name: 'AdminAISettings', component: () => import('../views/admin/AISettings.vue') },
       { path: 'mailer', name: 'AdminMailer', component: () => import('../views/admin/Mailer.vue') }
     ]
+  },
+  // ─── CRM Routes ─────────────────────────────────────────────────────────────
+  {
+    path: '/crm/login',
+    name: 'CrmLogin',
+    component: () => import('../views/crm/Login.vue')
+  },
+  {
+    path: '/crm',
+    component: () => import('../views/crm/Layout.vue'),
+    meta: { requiresCrmAuth: true },
+    children: [
+      { path: '', name: 'CrmDashboard', component: () => import('../views/crm/Dashboard.vue') },
+      { path: 'customers', name: 'CrmCustomers', component: () => import('../views/crm/Customers.vue') },
+      { path: 'customer/:id', name: 'CrmCustomerDetail', component: () => import('../views/crm/CustomerDetail.vue') },
+      { path: 'sea-pool', name: 'CrmSeaPool', component: () => import('../views/crm/SeaPool.vue') },
+      { path: 'users', name: 'CrmUsers', component: () => import('../views/crm/Users.vue') }
+    ]
   }
 ]
 
@@ -84,6 +102,13 @@ router.beforeEach((to, from, next) => {
     const token = localStorage.getItem('token')
     if (!token) {
       next('/admin/login')
+    } else {
+      next()
+    }
+  } else if (to.matched.some(record => record.meta.requiresCrmAuth)) {
+    const crmToken = localStorage.getItem('crm_token')
+    if (!crmToken) {
+      next('/crm/login')
     } else {
       next()
     }
