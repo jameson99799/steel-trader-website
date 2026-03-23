@@ -27,6 +27,8 @@
       </nav>
       <div class="sidebar-footer">
         <a href="/" target="_blank">🌐 访问前台</a>
+        <a href="/crm" target="_blank">📊 访问CRM</a>
+        <a href="/crm/login" target="_blank">👤 子账户登录</a>
         <a href="#" @click.prevent="handleLogout">🚪 退出登录</a>
       </div>
     </aside>
@@ -59,7 +61,7 @@ const handleLogout = () => {
 
 onMounted(() => {
   loadUnreadCount()
-  pollTimer = setInterval(loadUnreadCount, 30000) // poll every 30s
+  pollTimer = setInterval(loadUnreadCount, 30000)
 })
 onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 </script>

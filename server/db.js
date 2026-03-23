@@ -159,11 +159,14 @@ async function initDb() {
       company TEXT DEFAULT '',
       status TEXT DEFAULT '开发中',
       tags TEXT DEFAULT '[]',
+      note TEXT DEFAULT '',
       sea_pool_count INTEGER DEFAULT 0,
       last_activity_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  // Migration: add note column
+  try { db.exec("ALTER TABLE crm_customers ADD COLUMN note TEXT DEFAULT ''") } catch (e) { }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS crm_customer_history (

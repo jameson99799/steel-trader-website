@@ -53,7 +53,10 @@
           <tr v-for="c in customers" :key="c.id" :class="{ 'pool-row': c.status === '公海池' }">
             <td><input type="checkbox" :value="c.id" v-model="selectedIds" /></td>
             <td class="name-cell" @click="$router.push(`/crm/customer/${c.id}`)">{{ c.name }}</td>
-            <td>{{ c.company || '-' }}</td>
+            <td>
+              <span class="company-link" v-if="c.company" @click.stop="openCompanyPanel(c.company)">{{ c.company }}</span>
+              <span v-else>-</span>
+            </td>
             <td><span class="country-badge">{{ c.country || '-' }}</span></td>
             <td class="contact-cell">
               <span v-if="c.email" title="Email">📧{{ c.email }}</span>
@@ -73,6 +76,8 @@
             </td>
             <td class="action-cell">
               <button class="btn-sm btn-edit" @click="openEditModal(c)">编辑</button>
+              <button class="btn-sm btn-copy" @click="handleCopy(c)">复制</button>
+              <button class="btn-sm btn-view" @click="openPreviewModal(c)">预览</button>
               <button class="btn-sm btn-danger" @click="handleDelete(c)">删除</button>
             </td>
           </tr>
@@ -88,8 +93,8 @@
       <button :disabled="page >= totalPages" @click="page++; loadCustomers()">下一页</button>
     </div>
 
-    <!-- Add/Edit Modal -->
-    <div v-if="showModal" class="modal-overlay" @click.self="showModal = false">
+    <!-- Add/Edit Modal (NO @click.self close) -->
+    <div v-if="showModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
           <h3>{{ editingId ? '编辑客户' : '添加客户' }}</h3>
@@ -136,6 +141,10 @@
               </div>
             </div>
             <div class="form-group">
+              <label>客户备注</label>
+              <textarea v-model="form.note" rows="3" placeholder="输入备注信息..."></textarea>
+            </div>
+            <div class="form-group">
               <label>标签</label>
               <div class="tag-select">
                 <label v-for="t in allTags" :key="t" class="tag-option">
@@ -149,6 +158,75 @@
             <button type="submit" class="btn btn-primary">{{ editingId ? '更新' : '保存' }}</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div v-if="showPreview" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>👁️ 客户预览</h3>
+          <button class="modal-close" @click="showPreview = false">&times;</button>
+        </div>
+        <div class="modal-body preview-body">
+          <div class="preview-grid">
+            <div><label>名称</label><span>{{ previewData.name }}</span></div>
+            <div><label>公司</label><span>{{ previewData.company || '-' }}</span></div>
+            <div><label>国家</label><span>{{ previewData.country || '-' }}</span></div>
+            <div><label>电话</label><span>{{ previewData.phone || '-' }}</span></div>
+            <div><label>邮箱</label><span>{{ previewData.email || '-' }}</span></div>
+            <div><label>WhatsApp</label><span>{{ previewData.whatsapp || '-' }}</span></div>
+            <div><label>微信</label><span>{{ previewData.wechat || '-' }}</span></div>
+            <div><label>状态</label><span :class="['status-badge', getStatusClass(previewData.status)]">{{ previewData.status }}</span></div>
+            <div><label>负责人</label><span>{{ previewData.owner_name || '-' }}</span></div>
+            <div><label>添加时间</label><span>{{ formatDate(previewData.created_at) }}</span></div>
+          </div>
+          <div v-if="previewData.note" class="preview-note">
+            <label>备注</label>
+            <p>{{ previewData.note }}</p>
+          </div>
+          <div v-if="parseTags(previewData.tags).length" class="preview-tags">
+            <label>标签</label>
+            <span v-for="t in parseTags(previewData.tags)" :key="t" class="tag-badge">{{ t }}</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showPreview = false">关闭</button>
+          <button class="btn btn-primary" @click="showPreview = false; openEditModal(previewData)">编辑</button>
+          <button class="btn btn-primary" @click="showPreview = false; $router.push(`/crm/customer/${previewData.id}`)">查看详情</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Company Panel -->
+    <div v-if="showCompanyPanel" class="modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <h3>🏢 公司关联: {{ companySearchName }}</h3>
+          <button class="modal-close" @click="showCompanyPanel = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="company-toolbar">
+            <label><input type="checkbox" v-model="companyAllSelected" @change="toggleCompanyAll" /> 全选</label>
+            <button v-if="companySelectedIds.length" class="btn btn-sm btn-primary" @click="sendMailToCompany">📧 发送营销邮件 ({{ companySelectedIds.length }})</button>
+          </div>
+          <div v-for="c in companyCustomers" :key="c.id" class="company-card" :class="{ excluded: c._excluded }">
+            <div class="company-card-left">
+              <input type="checkbox" :value="c.id" v-model="companySelectedIds" :disabled="c._excluded" />
+              <div class="company-card-info">
+                <strong class="name-cell" @click="$router.push(`/crm/customer/${c.id}`)">{{ c.name }}</strong>
+                <span v-if="c.email">📧 {{ c.email }}</span>
+                <span v-if="c.whatsapp">💬 {{ c.whatsapp }}</span>
+                <span class="company-sub">{{ c.company || '-' }} · {{ c.country || '-' }}</span>
+              </div>
+            </div>
+            <button class="btn-sm btn-danger" @click="excludeCompanyMatch(c)" title="标记不匹配">✕</button>
+          </div>
+          <p v-if="!companyCustomers.length" class="empty-msg">没有匹配的关联客户</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showCompanyPanel = false">关闭</button>
+        </div>
       </div>
     </div>
   </div>
@@ -172,13 +250,24 @@ const selectedIds = ref([])
 const allSelected = ref(false)
 const allTags = ['询盘客户', '开发客户', '重点客户', '成交客户']
 
+// Preview
+const showPreview = ref(false)
+const previewData = ref({})
+
+// Company panel
+const showCompanyPanel = ref(false)
+const companySearchName = ref('')
+const companyCustomers = ref([])
+const companySelectedIds = ref([])
+const companyAllSelected = ref(false)
+
 const filters = reactive({
   search: '', country: '', status: '', tag: '', start_date: '', end_date: ''
 })
 
 const form = reactive({
   name: '', company: '', country: '', phone: '', email: '',
-  whatsapp: '', wechat: '', status: '开发中', tags: []
+  whatsapp: '', wechat: '', status: '开发中', tags: [], note: ''
 })
 
 const totalPages = computed(() => Math.ceil(total.value / limit))
@@ -208,7 +297,7 @@ async function loadCustomers() {
 
 function openAddModal() {
   editingId.value = null
-  Object.assign(form, { name: '', company: '', country: '', phone: '', email: '', whatsapp: '', wechat: '', status: '开发中', tags: [] })
+  Object.assign(form, { name: '', company: '', country: '', phone: '', email: '', whatsapp: '', wechat: '', status: '开发中', tags: [], note: '' })
   showModal.value = true
 }
 
@@ -217,7 +306,7 @@ function openEditModal(c) {
   Object.assign(form, {
     name: c.name, company: c.company, country: c.country,
     phone: c.phone, email: c.email, whatsapp: c.whatsapp, wechat: c.wechat,
-    status: c.status, tags: parseTags(c.tags)
+    status: c.status, tags: parseTags(c.tags), note: c.note || ''
   })
   showModal.value = true
 }
@@ -232,6 +321,52 @@ async function handleSave() {
     showModal.value = false
     loadCustomers()
   } catch (e) { alert(e.message) }
+}
+
+// Copy: create a new customer with same info
+async function handleCopy(c) {
+  try {
+    await crmApi.createCustomer({
+      name: c.name + ' (复制)',
+      company: c.company, country: c.country, phone: c.phone,
+      email: c.email, whatsapp: c.whatsapp, wechat: c.wechat,
+      status: c.status, tags: parseTags(c.tags), note: c.note || ''
+    })
+    loadCustomers()
+  } catch (e) { alert(e.message) }
+}
+
+// Preview
+function openPreviewModal(c) {
+  previewData.value = c
+  showPreview.value = true
+}
+
+// Company panel
+async function openCompanyPanel(companyName) {
+  companySearchName.value = companyName
+  companySelectedIds.value = []
+  companyAllSelected.value = false
+  try {
+    const data = await crmApi.getCustomers({ company_fuzzy: companyName, limit: 200 })
+    companyCustomers.value = (data.customers || []).map(c => ({ ...c, _excluded: false }))
+  } catch (e) { console.error(e) }
+  showCompanyPanel.value = true
+}
+
+function toggleCompanyAll() {
+  companySelectedIds.value = companyAllSelected.value
+    ? companyCustomers.value.filter(c => !c._excluded).map(c => c.id) : []
+}
+
+function excludeCompanyMatch(c) {
+  c._excluded = true
+  companySelectedIds.value = companySelectedIds.value.filter(id => id !== c.id)
+}
+
+function sendMailToCompany() {
+  // Navigate to mailer or future CRM mail with selected customers
+  alert(`已选择 ${companySelectedIds.value.length} 个客户进行营销邮件（后续阶段实现）`)
 }
 
 async function handleDelete(c) {
@@ -294,6 +429,8 @@ th { background: #f8fafc; padding: 12px 10px; text-align: left; font-weight: 600
 td { padding: 10px; border-bottom: 1px solid #f1f5f9; }
 .name-cell { font-weight: 600; color: #2563eb; cursor: pointer; }
 .name-cell:hover { text-decoration: underline; }
+.company-link { color: #8b5cf6; cursor: pointer; font-weight: 500; text-decoration: underline dotted; }
+.company-link:hover { color: #7c3aed; }
 .country-badge { background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
 .contact-cell { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
 .status-badge { padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; }
@@ -309,6 +446,8 @@ td { padding: 10px; border-bottom: 1px solid #f1f5f9; }
 .action-cell { white-space: nowrap; }
 .btn-sm { padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px; }
 .btn-edit { background: #eff6ff; color: #2563eb; }
+.btn-copy { background: #f0fdf4; color: #15803d; }
+.btn-view { background: #fefce8; color: #a16207; }
 .btn-danger { background: #fef2f2; color: #dc2626; }
 .btn-sm:hover { opacity: 0.85; }
 .empty-msg { text-align: center; padding: 40px; color: #64748b; }
@@ -316,9 +455,10 @@ td { padding: 10px; border-bottom: 1px solid #f1f5f9; }
 .pagination button { padding: 6px 14px; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; background: #fff; }
 .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Modal */
+/* Modal - no click-outside close */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .modal { background: #fff; border-radius: 14px; width: 640px; max-width: 92vw; max-height: 90vh; overflow-y: auto; }
+.modal-lg { width: 800px; }
 .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid #e2e8f0; }
 .modal-header h3 { margin: 0; font-size: 18px; }
 .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b; }
@@ -326,13 +466,35 @@ td { padding: 10px; border-bottom: 1px solid #f1f5f9; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .form-group { margin-bottom: 12px; }
 .form-group label { display: block; margin-bottom: 4px; font-size: 13px; font-weight: 600; color: #334155; }
-.form-group input, .form-group select {
+.form-group input, .form-group select, .form-group textarea {
   width: 100%; padding: 9px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; box-sizing: border-box;
+  font-family: inherit;
 }
-.form-group input:focus, .form-group select:focus { outline: none; border-color: #2563eb; }
+.form-group textarea { resize: vertical; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: #2563eb; }
 .tag-select { display: flex; flex-wrap: wrap; gap: 12px; }
 .tag-option { display: flex; align-items: center; gap: 4px; font-size: 13px; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid #e2e8f0; }
+
+/* Preview */
+.preview-body { padding: 24px; }
+.preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.preview-grid div label { display: block; font-size: 12px; color: #64748b; }
+.preview-grid div span { font-size: 14px; font-weight: 600; }
+.preview-note { margin-top: 16px; padding: 12px; background: #f8fafc; border-radius: 8px; }
+.preview-note label { display: block; font-size: 12px; color: #64748b; margin-bottom: 4px; }
+.preview-note p { margin: 0; font-size: 14px; white-space: pre-wrap; }
+.preview-tags { margin-top: 12px; }
+.preview-tags label { display: block; font-size: 12px; color: #64748b; margin-bottom: 6px; }
+
+/* Company panel */
+.company-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+.company-card { display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; }
+.company-card.excluded { opacity: 0.4; background: #fafafa; text-decoration: line-through; }
+.company-card-left { display: flex; align-items: center; gap: 10px; }
+.company-card-info { display: flex; flex-direction: column; gap: 2px; }
+.company-card-info span { font-size: 12px; color: #64748b; }
+.company-sub { font-size: 11px !important; color: #94a3b8 !important; }
 
 .btn { padding: 9px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
 .btn-primary { background: #2563eb; color: #fff; }

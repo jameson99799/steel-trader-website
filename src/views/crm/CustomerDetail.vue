@@ -107,7 +107,7 @@
     </div>
 
     <!-- Inquiry Modal -->
-    <div v-if="showInquiryModal" class="modal-overlay" @click.self="showInquiryModal = false">
+    <div v-if="showInquiryModal" class="modal-overlay">
       <div class="modal modal-lg">
         <div class="modal-header">
           <h3>{{ editInquiryId ? '编辑询盘' : '添加询盘' }}</h3>
@@ -135,7 +135,7 @@
     </div>
 
     <!-- Quotation Modal -->
-    <div v-if="showQuotationModal" class="modal-overlay" @click.self="showQuotationModal = false">
+    <div v-if="showQuotationModal" class="modal-overlay">
       <div class="modal modal-xl">
         <div class="modal-header">
           <h3>{{ editQuotationId ? '编辑报价' : '添加报价' }}</h3>
@@ -223,7 +223,7 @@
     </div>
 
     <!-- Followup Modal -->
-    <div v-if="showFollowupModal" class="modal-overlay" @click.self="showFollowupModal = false">
+    <div v-if="showFollowupModal" class="modal-overlay">
       <div class="modal modal-lg">
         <div class="modal-header">
           <h3>{{ editFollowupId ? '编辑跟进' : '添加跟进' }}</h3>

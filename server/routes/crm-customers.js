@@ -29,7 +29,7 @@ export function dualAuth(req, res, next) {
 
 // ─── List customers ─────────────────────────────────────────────────────────────
 router.get('/', dualAuth, (req, res) => {
-  const { search, country, status, tag, start_date, end_date, page = 1, limit = 50 } = req.query
+  const { search, country, status, tag, start_date, end_date, company_fuzzy, page = 1, limit = 50 } = req.query
   let where = ['1=1']
   let params = []
 
@@ -43,6 +43,15 @@ router.get('/', dualAuth, (req, res) => {
     where.push(`(c.name LIKE ? OR c.email LIKE ? OR c.company LIKE ? OR c.phone LIKE ? OR c.whatsapp LIKE ?)`)
     const s = `%${search}%`
     params.push(s, s, s, s, s)
+  }
+  // Company fuzzy match: extract core words, match any containing them
+  if (company_fuzzy) {
+    const core = company_fuzzy.replace(/\b(pte|ltd|co|inc|corp|llc|steel|trading|international)\b/gi, '').replace(/[.,\s]+/g, ' ').trim().split(/\s+/).filter(w => w.length > 1)
+    if (core.length) {
+      const clauses = core.map(() => 'LOWER(c.company) LIKE ?')
+      where.push(`(${clauses.join(' OR ')})`)
+      core.forEach(w => params.push(`%${w.toLowerCase()}%`))
+    }
   }
   if (country) { where.push('c.country = ?'); params.push(country) }
   if (status) { where.push('c.status = ?'); params.push(status) }
@@ -193,22 +202,22 @@ router.get('/:id', dualAuth, (req, res) => {
 
 // Create customer
 router.post('/', dualAuth, (req, res) => {
-  const { name, country, phone, email, whatsapp, wechat, company, status, tags } = req.body
+  const { name, country, phone, email, whatsapp, wechat, company, status, tags, note } = req.body
   if (!name) return res.status(400).json({ error: '客户名称不能为空' })
   const ownerId = req.crmUser?.id || null
   const now = new Date().toISOString()
   const result = run(
-    `INSERT INTO crm_customers (owner_id,name,country,phone,email,whatsapp,wechat,company,status,tags,last_activity_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [ownerId, name, country||'', phone||'', email||'', whatsapp||'', wechat||'', company||'', status||'开发中', JSON.stringify(tags||[]), now, now]
+    `INSERT INTO crm_customers (owner_id,name,country,phone,email,whatsapp,wechat,company,status,tags,note,last_activity_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [ownerId, name, country||'', phone||'', email||'', whatsapp||'', wechat||'', company||'', status||'开发中', JSON.stringify(tags||[]), note||'', now, now]
   )
   res.json({ id: result.lastInsertRowid, message: '添加成功' })
 })
 
 // Update customer
 router.put('/:id', dualAuth, (req, res) => {
-  const { name, country, phone, email, whatsapp, wechat, company, status, tags } = req.body
-  run(`UPDATE crm_customers SET name=?,country=?,phone=?,email=?,whatsapp=?,wechat=?,company=?,status=?,tags=? WHERE id=?`,
-    [name, country||'', phone||'', email||'', whatsapp||'', wechat||'', company||'', status||'开发中', JSON.stringify(tags||[]), req.params.id])
+  const { name, country, phone, email, whatsapp, wechat, company, status, tags, note } = req.body
+  run(`UPDATE crm_customers SET name=?,country=?,phone=?,email=?,whatsapp=?,wechat=?,company=?,status=?,tags=?,note=? WHERE id=?`,
+    [name, country||'', phone||'', email||'', whatsapp||'', wechat||'', company||'', status||'开发中', JSON.stringify(tags||[]), note||'', req.params.id])
   res.json({ message: '更新成功' })
 })
 
