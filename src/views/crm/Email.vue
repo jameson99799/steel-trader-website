@@ -277,9 +277,17 @@ onMounted(async () => {
 onUnmounted(() => { if (progressTimer) clearInterval(progressTimer) })
 
 function startProgressPoll() {
+  // Use silent fetch to avoid 401 redirect during polling
+  const token = localStorage.getItem('crm_token')
   progressTimer = setInterval(async () => {
-    try { progress.value = await crmApi.mailer.getProgress() } catch (e) {}
-  }, 2000)
+    try {
+      const res = await fetch('/api/crm/mailer/progress', {
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
+      })
+      if (res.ok) progress.value = await res.json()
+      // Silently ignore 401 — do NOT redirect
+    } catch (e) {}
+  }, 3000)
 }
 
 async function loadAccounts() {
