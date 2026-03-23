@@ -41,16 +41,40 @@ router.post('/login', (req, res) => {
   const { username, password } = req.body
   if (!username || !password) return res.status(400).json({ error: '用户名和密码不能为空' })
 
+  // Try CRM users first
   const user = getOne('SELECT * FROM crm_users WHERE LOWER(username) = LOWER(?) AND status = 1', [username])
-  if (!user || !bcrypt.compareSync(password, user.password)) {
-    return res.status(401).json({ error: '用户名或密码错误' })
+  if (user && bcrypt.compareSync(password, user.password)) {
+    const token = generateCrmToken(user)
+    return res.json({
+      token,
+      user: { id: user.id, username: user.username, display_name: user.display_name, role: user.role }
+    })
   }
 
-  const token = generateCrmToken(user)
-  res.json({
-    token,
-    user: { id: user.id, username: user.username, display_name: user.display_name, role: user.role }
-  })
+  // Fallback: check website admin users table
+  try {
+    const adminUser = getOne('SELECT * FROM users WHERE LOWER(username) = LOWER(?)', [username])
+    if (adminUser && bcrypt.compareSync(password, adminUser.password)) {
+      // Website admin can log in as CRM admin — auto-sync password
+      let crmAdmin = getOne('SELECT * FROM crm_users WHERE role = ?', ['admin'])
+      if (crmAdmin) {
+        // Sync password to CRM admin
+        run('UPDATE crm_users SET password = ? WHERE id = ?', [adminUser.password, crmAdmin.id])
+      } else {
+        // Create CRM admin from website admin
+        const r = run('INSERT INTO crm_users (username, password, display_name, role) VALUES (?,?,?,?)',
+          [adminUser.username, adminUser.password, 'CRM管理员', 'admin'])
+        crmAdmin = { id: r.lastInsertRowid, username: adminUser.username, display_name: 'CRM管理员', role: 'admin' }
+      }
+      const token = generateCrmToken(crmAdmin)
+      return res.json({
+        token,
+        user: { id: crmAdmin.id, username: crmAdmin.username, display_name: crmAdmin.display_name, role: crmAdmin.role }
+      })
+    }
+  } catch (e) { /* users table may not exist */ }
+
+  return res.status(401).json({ error: '用户名或密码错误' })
 })
 
 // ─── Current user ───────────────────────────────────────────────────────────────
