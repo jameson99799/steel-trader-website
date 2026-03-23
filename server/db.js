@@ -150,6 +150,8 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS crm_customers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       owner_id INTEGER,
+      first_name TEXT DEFAULT '',
+      last_name TEXT DEFAULT '',
       name TEXT NOT NULL,
       country TEXT DEFAULT '',
       phone TEXT DEFAULT '',
@@ -165,8 +167,10 @@ async function initDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
-  // Migration: add note column
+  // Migrations
   try { db.exec("ALTER TABLE crm_customers ADD COLUMN note TEXT DEFAULT ''") } catch (e) { }
+  try { db.exec("ALTER TABLE crm_customers ADD COLUMN first_name TEXT DEFAULT ''") } catch (e) { }
+  try { db.exec("ALTER TABLE crm_customers ADD COLUMN last_name TEXT DEFAULT ''") } catch (e) { }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS crm_customer_history (

@@ -175,8 +175,12 @@ router.post('/send', dualAuth, async (req, res) => {
       const c = customers[i]
       taskProgress.set(taskId, { nextEmail: c.email, remaining: customers.length - i, total: customers.length, sent, failed })
       try {
-        const subj = finalSubject.replace(/\{\{name\}\}/g, c.name||'').replace(/\{\{company\}\}/g, c.company||'')
-        const body = finalBody.replace(/\{\{name\}\}/g, c.name||'').replace(/\{\{company\}\}/g, c.company||'')
+        const vars = { name: c.name||'', company: c.company||'', first_name: c.first_name||c.name||'', last_name: c.last_name||'' }
+        let subj = finalSubject, body = finalBody
+        for (const [k, v] of Object.entries(vars)) {
+          subj = subj.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
+          body = body.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
+        }
         await transport.sendMail({
           from: `"${smtp.from_name||'SunSea Steel'}" <${smtp.smtp_user}>`, to: c.email, subject: subj, html: body
         })

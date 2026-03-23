@@ -202,22 +202,28 @@ router.get('/:id', dualAuth, (req, res) => {
 
 // Create customer
 router.post('/', dualAuth, (req, res) => {
-  const { name, country, phone, email, whatsapp, wechat, company, status, tags, note } = req.body
-  if (!name) return res.status(400).json({ error: '客户名称不能为空' })
+  const { first_name, last_name, name, country, phone, email, whatsapp, wechat, company, status, tags, note } = req.body
+  const fn = first_name || ''
+  const ln = last_name || ''
+  const fullName = name || `${fn} ${ln}`.trim() || '未命名'
+  if (!fullName) return res.status(400).json({ error: '客户名称不能为空' })
   const ownerId = req.crmUser?.id || null
   const now = new Date().toISOString()
   const result = run(
-    `INSERT INTO crm_customers (owner_id,name,country,phone,email,whatsapp,wechat,company,status,tags,note,last_activity_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [ownerId, name, country||'', phone||'', email||'', whatsapp||'', wechat||'', company||'', status||'开发中', JSON.stringify(tags||[]), note||'', now, now]
+    `INSERT INTO crm_customers (owner_id,first_name,last_name,name,country,phone,email,whatsapp,wechat,company,status,tags,note,last_activity_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [ownerId, fn, ln, fullName, country||'', phone||'', email||'', whatsapp||'', wechat||'', company||'', status||'开发中', JSON.stringify(tags||[]), note||'', now, now]
   )
   res.json({ id: result.lastInsertRowid, message: '添加成功' })
 })
 
 // Update customer
 router.put('/:id', dualAuth, (req, res) => {
-  const { name, country, phone, email, whatsapp, wechat, company, status, tags, note } = req.body
-  run(`UPDATE crm_customers SET name=?,country=?,phone=?,email=?,whatsapp=?,wechat=?,company=?,status=?,tags=?,note=? WHERE id=?`,
-    [name, country||'', phone||'', email||'', whatsapp||'', wechat||'', company||'', status||'开发中', JSON.stringify(tags||[]), note||'', req.params.id])
+  const { first_name, last_name, name, country, phone, email, whatsapp, wechat, company, status, tags, note } = req.body
+  const fn = first_name || ''
+  const ln = last_name || ''
+  const fullName = name || `${fn} ${ln}`.trim() || '未命名'
+  run(`UPDATE crm_customers SET first_name=?,last_name=?,name=?,country=?,phone=?,email=?,whatsapp=?,wechat=?,company=?,status=?,tags=?,note=? WHERE id=?`,
+    [fn, ln, fullName, country||'', phone||'', email||'', whatsapp||'', wechat||'', company||'', status||'开发中', JSON.stringify(tags||[]), note||'', req.params.id])
   res.json({ message: '更新成功' })
 })
 

@@ -44,7 +44,8 @@
         <thead>
           <tr>
             <th><input type="checkbox" v-model="allSelected" @change="toggleAll" /></th>
-            <th>客户名称</th>
+            <th>名字(First)</th>
+            <th>姓氏(Last)</th>
             <th>公司</th>
             <th>国家</th>
             <th>联系方式</th>
@@ -59,7 +60,8 @@
         <tbody>
           <tr v-for="c in customers" :key="c.id" :class="{ 'pool-row': c.status === '公海池' }">
             <td><input type="checkbox" :value="c.id" v-model="selectedIds" /></td>
-            <td class="center-cell"><span class="name-cell" @click="$router.push(`/crm/customer/${c.id}`)">{{ c.name }}</span></td>
+            <td class="center-cell"><span class="name-cell" @click="$router.push(`/crm/customer/${c.id}`)">{{ c.first_name || c.name }}</span></td>
+            <td class="center-cell">{{ c.last_name || '' }}</td>
             <td class="center-cell">
               <span class="company-link" v-if="c.company" @click.stop="openCompanyPanel(c.company)">{{ c.company }}</span>
               <span v-else>-</span>
@@ -121,8 +123,12 @@
           <div class="modal-body">
             <div class="form-grid">
               <div class="form-group">
-                <label>客户名称 *</label>
-                <input v-model="form.name" required />
+                <label>名字 (First Name) *</label>
+                <input v-model="form.first_name" required placeholder="名字" />
+              </div>
+              <div class="form-group">
+                <label>姓氏 (Last Name)</label>
+                <input v-model="form.last_name" placeholder="姓氏" />
               </div>
               <div class="form-group">
                 <label>公司</label>
@@ -187,7 +193,8 @@
         </div>
         <div class="modal-body preview-body">
           <div class="preview-grid">
-            <div><label>名称</label><span>{{ previewData.name }}</span></div>
+            <div><label>名字</label><span>{{ previewData.first_name || previewData.name }}</span></div>
+            <div><label>姓氏</label><span>{{ previewData.last_name || '-' }}</span></div>
             <div><label>公司</label><span>{{ previewData.company || '-' }}</span></div>
             <div><label>国家</label><span>{{ previewData.country || '-' }}</span></div>
             <div><label>电话</label><span>{{ previewData.phone || '-' }}</span></div>
@@ -356,7 +363,7 @@ const filters = reactive({
 })
 
 const form = reactive({
-  name: '', company: '', country: '', phone: '', email: '',
+  first_name: '', last_name: '', company: '', country: '', phone: '', email: '',
   whatsapp: '', wechat: '', status: '开发中', tags: [], note: ''
 })
 
@@ -396,14 +403,15 @@ function getContactItems(c) {
 
 function openAddModal() {
   editingId.value = null
-  Object.assign(form, { name: '', company: '', country: '', phone: '', email: '', whatsapp: '', wechat: '', status: '开发中', tags: [], note: '' })
+  Object.assign(form, { first_name: '', last_name: '', company: '', country: '', phone: '', email: '', whatsapp: '', wechat: '', status: '开发中', tags: [], note: '' })
   showModal.value = true
 }
 
 function openEditModal(c) {
   editingId.value = c.id
   Object.assign(form, {
-    name: c.name, company: c.company, country: c.country,
+    first_name: c.first_name || c.name || '', last_name: c.last_name || '',
+    company: c.company, country: c.country,
     phone: c.phone, email: c.email, whatsapp: c.whatsapp, wechat: c.wechat,
     status: c.status, tags: parseTags(c.tags), note: c.note || ''
   })
@@ -422,7 +430,8 @@ async function handleSave() {
 async function handleCopy(c) {
   try {
     await crmApi.createCustomer({
-      name: c.name + ' (复制)', company: c.company, country: c.country, phone: c.phone,
+      first_name: (c.first_name || c.name || '') + ' (复制)', last_name: c.last_name || '',
+      company: c.company, country: c.country, phone: c.phone,
       email: c.email, whatsapp: c.whatsapp, wechat: c.wechat,
       status: c.status, tags: parseTags(c.tags), note: c.note || ''
     })
