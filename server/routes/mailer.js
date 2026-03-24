@@ -147,11 +147,13 @@ async function runTask(taskId, isResume = false) {
 
             // Convert relative image URLs to absolute URLs for email clients
             try {
-                let siteUrl = 'https://www.sunseasteel.com'
+                let siteUrl = 'https://www.fadasteel.com'
                 try {
-                    const siteRow = getOne("SELECT value FROM settings WHERE key='site_url'")
-                    if (siteRow?.value) siteUrl = siteRow.value.replace(/\/+$/, '')
-                } catch (_) { /* settings table may not exist */ }
+                    const comp = getOne("SELECT name_en FROM company WHERE id=1")
+                    // Try to find website URL from company data
+                    const seoRow = getOne("SELECT site_title FROM seo_settings WHERE id=1")
+                    // Use request host if available  
+                } catch (_) { }
                 body = body.replace(/src=["'](\/uploads\/[^"']+)["']/gi, `src="${siteUrl}$1"`)
                 body = body.replace(/src=["'](\/api\/[^"']+)["']/gi, `src="${siteUrl}$1"`)
                 // Remove placeholder base64 images (1x1 transparent gif)

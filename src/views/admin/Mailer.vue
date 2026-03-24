@@ -275,6 +275,8 @@
               <button :class="['tab-btn', htmlEditorTab==='visual'&&'active']" @click="htmlEditorTab='visual';initHtmlVisual()">🖊 可视化编辑</button>
               <button :class="['tab-btn', htmlEditorTab==='preview'&&'active']" @click="htmlEditorTab='preview'">👁 预览</button>
               <span style="flex:1"></span>
+              <button class="btn btn-sm btn-outline" @click="htmlVisualInsertWhatsApp" title="插入WhatsApp按钮">💬 WhatsApp</button>
+              <button class="btn btn-sm btn-outline" @click="htmlVisualInsertLink" title="选择文字后点击添加超链接">🔗 超链接</button>
               <button class="btn btn-sm btn-outline" @click="htmlInsertImageGrid(2)" title="插入2张并排图片">🖼 2列并排</button>
               <button class="btn btn-sm btn-outline" @click="htmlInsertImageGrid(3)" title="插入3张并排图片">🖼 3列并排</button>
               <button class="btn btn-sm btn-outline" @click="htmlInsertImage" title="插入本地图片">🖼 插入图片</button>
@@ -1200,6 +1202,60 @@ function initHtmlVisual() {
   })
 }
 function onHtmlVisualLoad() { /* handled by initHtmlVisual */ }
+
+// WhatsApp phone number (persistent across edits)
+const whatsappPhone = ref(localStorage.getItem('mailer_whatsapp_phone') || '')
+
+function htmlVisualInsertWhatsApp() {
+  const phone = prompt('请输入WhatsApp手机号（含国际区号，如+8615553478959）:', whatsappPhone.value || '+86')
+  if (!phone) return
+  whatsappPhone.value = phone
+  localStorage.setItem('mailer_whatsapp_phone', phone)
+  const cleanPhone = phone.replace(/[^\d]/g, '')
+  const waLink = `https://wa.me/${cleanPhone}`
+  const btnHtml = `<a href="${waLink}" target="_blank" style="display:inline-block;padding:10px 20px;background:#25d366;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">💬 WhatsApp Us</a>`
+  if (htmlEditorTab.value === 'visual') {
+    const frame = htmlVisualFrame.value
+    if (!frame) return
+    const doc = frame.contentDocument || frame.contentWindow.document
+    doc.execCommand('insertHTML', false, btnHtml)
+    syncHtmlVisual()
+  } else {
+    editTpl.html_body = (editTpl.html_body || '') + '\n' + btnHtml
+  }
+}
+
+function htmlVisualInsertLink() {
+  if (htmlEditorTab.value === 'visual') {
+    const frame = htmlVisualFrame.value
+    if (!frame) return
+    const doc = frame.contentDocument || frame.contentWindow.document
+    const sel = doc.getSelection()
+    if (!sel || sel.isCollapsed) {
+      alert('请先选择要添加超链接的文字')
+      return
+    }
+    const url = prompt('请输入链接地址：', 'https://')
+    if (!url) return
+    doc.execCommand('createLink', false, url)
+    // Set target=_blank on the newly created link
+    try {
+      const anchor = sel.anchorNode?.parentElement?.closest?.('a') || sel.focusNode?.parentElement?.closest?.('a')
+      if (anchor) {
+        anchor.setAttribute('target', '_blank')
+        anchor.style.color = '#0563c1'
+        anchor.style.textDecoration = 'none'
+      }
+    } catch (e) { }
+    syncHtmlVisual()
+  } else {
+    const url = prompt('请输入链接地址：', 'https://')
+    if (url) {
+      const text = prompt('请输入链接文字：', url)
+      editTpl.html_body = (editTpl.html_body || '') + `\n<a href="${url}" target="_blank" style="color:#0563c1;text-decoration:none">${text || url}</a>`
+    }
+  }
+}
 function syncHtmlVisual() {
   try {
     const frame = htmlVisualFrame.value

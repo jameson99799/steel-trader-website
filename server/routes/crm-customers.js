@@ -4,6 +4,17 @@ import { getAll, getOne, run } from '../db.js'
 
 const router = Router()
 
+// Helper: convert relative image URLs to absolute for email clients
+function fixEmailImageUrls(html) {
+  const siteUrl = 'https://www.fadasteel.com'
+  let out = html
+  out = out.replace(/src=["'](\/uploads\/[^"']+)["']/gi, `src="${siteUrl}$1"`)
+  out = out.replace(/src=["'](\/api\/[^"']+)["']/gi, `src="${siteUrl}$1"`)
+  out = out.replace(/src=["']data:image\/gif;base64,[^"']*["']/gi, 'src=""')
+  out = out.replace(/<span\s+class=["']replace-tip["'][^>]*>.*?<\/span>/gi, '')
+  return out
+}
+
 const CRM_SECRET = process.env.CRM_JWT_SECRET || 'crm-steel-secret-2024'
 const ADMIN_SECRET = process.env.JWT_SECRET || 'led-trade-secret-key-2024'
 
@@ -450,6 +461,7 @@ router.post('/email/quick-send', dualAuth, async (req, res) => {
     subj = subj.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
     body = body.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
   }
+  body = fixEmailImageUrls(body)
 
   const now = new Date().toISOString()
   try {
@@ -511,6 +523,7 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
   for (const [k, v] of Object.entries(vars)) {
     body = body.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
   }
+  body = fixEmailImageUrls(body)
 
   // Find the original email's HTML body from mail_logs
   const origEmail = getOne('SELECT sent_html, subject, sent_at FROM mail_logs WHERE contact_email=? AND status=? ORDER BY id DESC LIMIT 1', [recipient_email, 'sent'])
