@@ -636,7 +636,11 @@ router.get('/crm-customers', authMiddleware, (req, res) => {
         if (!isAdmin) { mcWhere.push('mc.created_by = ?'); mcParams.push(userId) }
         if (search) { mcWhere.push("(mc.email LIKE ? OR mc.name LIKE ? OR mc.company LIKE ?)"); const q = `%${search}%`; mcParams.push(q,q,q) }
         if (country) {
-            mcWhere.push('(cg.name = ? OR mc.country = ?)'); mcParams.push(country, country)
+            if (country === '未分组') {
+                mcWhere.push('(mc.group_id IS NULL OR mc.group_id = 0)')
+            } else {
+                mcWhere.push('(cg.name = ? OR mc.country = ?)'); mcParams.push(country, country)
+            }
         }
         const mcRows = getAll(`SELECT mc.*, cg.name as group_name FROM mail_contacts mc LEFT JOIN contact_groups cg ON cg.id = mc.group_id WHERE ${mcWhere.join(' AND ')} ORDER BY mc.id DESC LIMIT 500`, mcParams)
         for (const mc of mcRows) {
@@ -650,11 +654,34 @@ router.get('/crm-customers', authMiddleware, (req, res) => {
         }
     }
 
-    // Build meta for filters
-    const countries = [...new Set(results.map(r => r.country).filter(Boolean))].sort()
-    const statuses = [...new Set(results.map(r => r.status).filter(Boolean))].sort()
+    // Build meta from FULL dataset (not filtered results) so filters always show all options
+    // CRM customer countries
+    const crmCountryRows = isAdmin
+        ? getAll('SELECT DISTINCT country FROM crm_customers WHERE country!="" ORDER BY country')
+        : getAll('SELECT DISTINCT country FROM crm_customers WHERE country!="" AND owner_id=? ORDER BY country', [userId])
+    const crmCountries = crmCountryRows.map(r => r.country)
+    // Mail contact group names (act as "country" filter for mail contacts)
+    const groupRows = isAdmin
+        ? getAll('SELECT DISTINCT cg.name FROM contact_groups cg INNER JOIN mail_contacts mc ON mc.group_id=cg.id ORDER BY cg.name')
+        : getAll('SELECT DISTINCT cg.name FROM contact_groups cg INNER JOIN mail_contacts mc ON mc.group_id=cg.id WHERE mc.created_by=? ORDER BY cg.name', [userId])
+    const groupNames = groupRows.map(r => r.name)
+    // Check for ungrouped mail contacts
+    const ungroupedCount = isAdmin
+        ? getOne('SELECT COUNT(*) as c FROM mail_contacts WHERE group_id IS NULL OR group_id=0')
+        : getOne('SELECT COUNT(*) as c FROM mail_contacts WHERE (group_id IS NULL OR group_id=0) AND created_by=?', [userId])
+    if (ungroupedCount?.c > 0) groupNames.unshift('未分组')
+    const countries = [...new Set([...crmCountries, ...groupNames])].sort()
+    // CRM statuses
+    const statusRows = isAdmin
+        ? getAll('SELECT DISTINCT status FROM crm_customers WHERE status!="" ORDER BY status')
+        : getAll('SELECT DISTINCT status FROM crm_customers WHERE status!="" AND owner_id=? ORDER BY status', [userId])
+    const statuses = statusRows.map(r => r.status)
+    // CRM tags
     let allTags = []
-    for (const r of results) { try { const t = JSON.parse(r.tags || '[]'); allTags.push(...t) } catch(e) {} }
+    const tagRows = isAdmin
+        ? getAll('SELECT tags FROM crm_customers WHERE tags!="[]"')
+        : getAll('SELECT tags FROM crm_customers WHERE tags!="[]" AND owner_id=?', [userId])
+    for (const r of tagRows) { try { const t = JSON.parse(r.tags || '[]'); allTags.push(...t) } catch(e) {} }
     const tags = [...new Set(allTags)].sort()
 
     res.json({ customers: results, meta: { countries, statuses, tags } })

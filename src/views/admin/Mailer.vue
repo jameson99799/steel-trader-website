@@ -53,7 +53,7 @@
             <option value="marketing">营销模板</option>
             <option value="followup">跟进模板</option>
           </select>
-          <select class="form-control" style="width:auto;font-size:11px;padding:2px 6px;border-radius:6px" @change="assignTemplate(t.id, $event.target.value); $event.target.value=''">
+          <select v-if="crmIsAdmin" class="form-control" style="width:auto;font-size:11px;padding:2px 6px;border-radius:6px" @change="assignTemplate(t.id, $event.target.value); $event.target.value=''">
             <option value="">👤 分配...</option>
             <option value="">不分配</option>
             <option v-for="u in crmUsers" :key="u.id" :value="u.id">{{ u.display_name }}</option>
@@ -79,12 +79,12 @@
           <option v-for="g in contactGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
         </select>
         <button v-if="selectedContacts.length && moveTargetGroup !== null" class="btn btn-sm btn-outline" style="color:#7c3aed;border-color:#c4b5fd" @click="moveToGroup">✅ 确认移动</button>
-        <!-- Assign to user -->
-        <select v-if="selectedContacts.length" v-model="assignTargetUser" class="form-control" style="width:auto;min-width:140px;font-size:12px;padding:4px 8px">
+        <!-- Assign to user (admin only) -->
+        <select v-if="selectedContacts.length && crmIsAdmin" v-model="assignTargetUser" class="form-control" style="width:auto;min-width:140px;font-size:12px;padding:4px 8px">
           <option :value="null">分配给...</option>
           <option v-for="u in crmUsers" :key="u.id" :value="String(u.id)">{{ u.display_name || u.username }} {{ u.role === 'admin' ? '(管理员)' : '' }}</option>
         </select>
-        <button v-if="selectedContacts.length && assignTargetUser !== null" class="btn btn-sm btn-outline" style="color:#059669;border-color:#6ee7b7" @click="assignContacts">👤 确认分配</button>
+        <button v-if="selectedContacts.length && assignTargetUser !== null && crmIsAdmin" class="btn btn-sm btn-outline" style="color:#059669;border-color:#6ee7b7" @click="assignContacts">👤 确认分配</button>
         <div style="flex:1"></div>
         <!-- Group management -->
         <button class="btn btn-sm btn-outline" @click="addGroup" style="color:#7c3aed;border-color:#c4b5fd">📁 新建分组</button>
@@ -536,7 +536,7 @@
                 <td><span :class="['log-badge', a.enabled ? '' : '']" :style="a.enabled ? 'background:#dcfce7;color:#15803d' : 'background:#f1f5f9;color:#64748b'">{{ a.enabled ? '启用' : '停用' }}</span></td>
                 <td>{{ a.is_default ? '⭐ 默认' : '' }}</td>
                 <td>{{ a.send_count || 0 }}</td>
-                <td>
+                <td v-if="crmIsAdmin">
                   <select class="form-control" style="width:auto;font-size:11px;padding:2px 6px" :value="a.assigned_users||''" @change="assignSmtp(a.id, $event.target.value)">
                     <option value="">未分配</option>
                     <option v-for="u in crmUsers" :key="u.id" :value="String(u.id)" :selected="String(a.assigned_users)===String(u.id)">{{ u.display_name }}</option>
@@ -697,6 +697,14 @@ import api from '../../api'
 
 const route = useRoute()
 const isCRM = computed(() => !!window.__CRM_MAILER || window.location.pathname.startsWith('/crm'))
+const crmIsAdmin = computed(() => {
+  if (!isCRM.value) return true // admin panel always has full access
+  try {
+    const key = window.location.pathname.startsWith('/crm/sub') ? 'crm_sub_user' : 'crm_admin_user'
+    const u = JSON.parse(localStorage.getItem(key) || '{}')
+    return u.role === 'admin'
+  } catch { return false }
+})
 
 // CRM customer picker state
 const crmCustomers = ref([])
