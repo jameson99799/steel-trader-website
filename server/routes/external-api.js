@@ -46,6 +46,86 @@ router.post('/key/generate', authMiddleware, (req, res) => {
     res.json({ key: newKey })
 })
 
+// ─── GET /api/external/products — list/search products ───────────────────────
+router.get('/products', apiKeyMiddleware, (req, res) => {
+    const { search, category_id, status, page = 1, limit = 50 } = req.query
+    let where = ['1=1'], params = []
+    if (search) {
+        where.push('(p.name LIKE ? OR p.name_en LIKE ? OR p.description_en LIKE ?)')
+        const s = `%${search}%`; params.push(s, s, s)
+    }
+    if (category_id) { where.push('p.category_id = ?'); params.push(parseInt(category_id)) }
+    if (status !== undefined) { where.push('p.status = ?'); params.push(parseInt(status)) }
+
+    const total = getOne(`SELECT COUNT(*) as c FROM products p WHERE ${where.join(' AND ')}`, params)?.c || 0
+    const offset = (parseInt(page) - 1) * parseInt(limit)
+    const products = getAll(
+        `SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.description_en, p.images, p.is_featured, p.status, p.created_at
+         FROM products p WHERE ${where.join(' AND ')} ORDER BY p.sort_order DESC, p.id DESC LIMIT ? OFFSET ?`,
+        [...params, parseInt(limit), offset]
+    )
+    res.json({ products, total, page: parseInt(page), limit: parseInt(limit) })
+})
+
+// ─── GET /api/external/products/:id — get single product ─────────────────────
+router.get('/products/:id', apiKeyMiddleware, (req, res) => {
+    const p = getOne('SELECT * FROM products WHERE id = ?', [req.params.id])
+    if (!p) return res.status(404).json({ error: 'Product not found' })
+    res.json(p)
+})
+
+// ─── GET /api/external/news — list/search news ──────────────────────────────
+router.get('/news', apiKeyMiddleware, (req, res) => {
+    const { search, status, page = 1, limit = 50 } = req.query
+    let where = ['1=1'], params = []
+    if (search) {
+        where.push('(n.title LIKE ? OR n.title_en LIKE ? OR n.summary_en LIKE ?)')
+        const s = `%${search}%`; params.push(s, s, s)
+    }
+    if (status !== undefined) { where.push('n.status = ?'); params.push(parseInt(status)) }
+
+    const total = getOne(`SELECT COUNT(*) as c FROM news n WHERE ${where.join(' AND ')}`, params)?.c || 0
+    const offset = (parseInt(page) - 1) * parseInt(limit)
+    const news = getAll(
+        `SELECT n.id, n.title, n.title_en, n.slug, n.summary_en, n.cover_image, n.status, n.created_at
+         FROM news n WHERE ${where.join(' AND ')} ORDER BY n.id DESC LIMIT ? OFFSET ?`,
+        [...params, parseInt(limit), offset]
+    )
+    res.json({ news, total, page: parseInt(page), limit: parseInt(limit) })
+})
+
+// ─── GET /api/external/news/:id — get single news article ───────────────────
+router.get('/news/:id', apiKeyMiddleware, (req, res) => {
+    const n = getOne('SELECT * FROM news WHERE id = ?', [req.params.id])
+    if (!n) return res.status(404).json({ error: 'News not found' })
+    res.json(n)
+})
+
+// ─── GET /api/external/templates — list/search email templates ──────────────
+router.get('/templates', apiKeyMiddleware, (req, res) => {
+    const { search, page = 1, limit = 50 } = req.query
+    let where = ['1=1'], params = []
+    if (search) {
+        where.push('(t.name LIKE ? OR t.note LIKE ? OR t.subject LIKE ?)')
+        const s = `%${search}%`; params.push(s, s, s)
+    }
+    const total = getOne(`SELECT COUNT(*) as c FROM mail_templates t WHERE ${where.join(' AND ')}`, params)?.c || 0
+    const offset = (parseInt(page) - 1) * parseInt(limit)
+    const templates = getAll(
+        `SELECT t.id, t.name, t.subject, t.note, t.template_type, t.is_default, t.created_at, t.updated_at
+         FROM mail_templates t WHERE ${where.join(' AND ')} ORDER BY t.id DESC LIMIT ? OFFSET ?`,
+        [...params, parseInt(limit), offset]
+    )
+    res.json({ templates, total, page: parseInt(page), limit: parseInt(limit) })
+})
+
+// ─── GET /api/external/templates/:id — get single template with html_body ───
+router.get('/templates/:id', apiKeyMiddleware, (req, res) => {
+    const t = getOne('SELECT * FROM mail_templates WHERE id = ?', [req.params.id])
+    if (!t) return res.status(404).json({ error: 'Template not found' })
+    res.json(t)
+})
+
 // ─── POST /api/external/products — create product ────────────────────────────
 router.post('/products', apiKeyMiddleware, (req, res) => {
     const {
@@ -384,6 +464,11 @@ router.get('/docs', (req, res) => {
         // ═══ API Endpoints ═══
         endpoints: {
             products: {
+                list: {
+                    method: 'GET', path: '/api/external/products',
+                    query_params: { search: '搜索产品名称(中/英)', category_id: '分类ID', status: '0=草稿 1=发布', page: '页码(默认1)', limit: '每页数量(默认50)' }
+                },
+                get_by_id: { method: 'GET', path: '/api/external/products/:id' },
                 create: {
                     method: 'POST',
                     path: '/api/external/products',
@@ -409,6 +494,11 @@ router.get('/docs', (req, res) => {
                 delete: { method: 'DELETE', path: '/api/external/products/:id' }
             },
             news: {
+                list: {
+                    method: 'GET', path: '/api/external/news',
+                    query_params: { search: '搜索文章标题(中/英)', status: '0=草稿 1=发布', page: '页码(默认1)', limit: '每页数量(默认50)' }
+                },
+                get_by_id: { method: 'GET', path: '/api/external/news/:id' },
                 create: {
                     method: 'POST',
                     path: '/api/external/news',
@@ -430,6 +520,11 @@ router.get('/docs', (req, res) => {
                 delete: { method: 'DELETE', path: '/api/external/news/:id' }
             },
             templates: {
+                list: {
+                    method: 'GET', path: '/api/external/templates',
+                    query_params: { search: '搜索模板名称/备注/主题', page: '页码(默认1)', limit: '每页数量(默认50)' }
+                },
+                get_by_id: { method: 'GET', path: '/api/external/templates/:id', note: '返回完整html_body' },
                 create: {
                     method: 'POST',
                     path: '/api/external/templates',
