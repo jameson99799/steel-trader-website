@@ -498,14 +498,14 @@ router.post('/email/quick-send', dualAuth, async (req, res) => {
     // Log to both tables for full visibility
     run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
       [customer.email, subj, 'sent', now, req.crmUser?.id||null])
-    run(`INSERT INTO mail_logs (task_id,template_id,account_id,contact_email,contact_name,subject,status,message_id,sent_html) VALUES (?,?,?,?,?,?,?,?,?)`,
-      [0, tpl.id, smtp.id, customer.email, customer.name||customer.first_name||'', subj, 'sent', '', body])
+    run(`INSERT INTO mail_logs (task_id,template_id,account_id,contact_email,contact_name,subject,status,message_id,sent_html,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [0, tpl.id, smtp.id, customer.email, customer.name||customer.first_name||'', subj, 'sent', '', body, String(req.crmUser?.id||'')])
     res.json({ message: `✅ 已发送给 ${customer.email}`, status: 'sent' })
   } catch (e) {
     run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
       [customer.email, subj, 'failed', now, req.crmUser?.id||null])
-    run(`INSERT INTO mail_logs (task_id,template_id,account_id,contact_email,contact_name,subject,status) VALUES (?,?,?,?,?,?,?)`,
-      [0, tpl.id, smtp.id, customer.email, customer.name||customer.first_name||'', subj, 'failed'])
+    run(`INSERT INTO mail_logs (task_id,template_id,account_id,contact_email,contact_name,subject,status,created_by) VALUES (?,?,?,?,?,?,?,?)`,
+      [0, tpl.id, smtp.id, customer.email, customer.name||customer.first_name||'', subj, 'failed', String(req.crmUser?.id||'')])
     res.json({ message: `❌ 发送失败: ${e.message}`, status: 'failed' })
   }
 })
@@ -577,8 +577,8 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
     await transport.sendMail(mailOpts)
     run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
       [recipient_email, subj, 'sent', now, req.crmUser?.id||null])
-    run(`INSERT INTO mail_logs (task_id,template_id,account_id,contact_email,contact_name,subject,status,sent_at,sent_html) VALUES (?,?,?,?,?,?,?,?,?)`,
-      [0, tpl.id, smtp.id, recipient_email, cust?.name||cust?.first_name||'', subj, 'sent', now, body])
+    run(`INSERT INTO mail_logs (task_id,template_id,account_id,contact_email,contact_name,subject,status,sent_at,sent_html,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [0, tpl.id, smtp.id, recipient_email, cust?.name||cust?.first_name||'', subj, 'sent', now, body, String(req.crmUser?.id||'')])
     res.json({ message: `✅ 跟进邮件已发送给 ${recipient_email}`, status: 'sent' })
   } catch (e) {
     run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
@@ -614,8 +614,11 @@ router.get('/export/all', dualAuth, (req, res) => {
 
 // ─── Email send records (merged from both tables) ───────────────────────────
 router.get('/email/records', dualAuth, (req, res) => {
+  const isAdmin = req.user || (req.crmUser?.role === 'admin')
+  const userId = req.crmUser?.id ? String(req.crmUser.id) : ''
   // Get records from mail_logs (mailer tasks) joined with mail_tasks for task_name
-  const mailerLogs = getAll(`SELECT ml.id, ml.contact_email as recipient_email, ml.subject, ml.status, 
+  const mailerLogs = isAdmin
+    ? getAll(`SELECT ml.id, ml.contact_email as recipient_email, ml.subject, ml.status, 
     ml.sent_at, 
     CASE 
       WHEN ml.task_id = 0 AND ml.subject LIKE 'Re:%' THEN '快速跟进'
@@ -623,10 +626,22 @@ router.get('/email/records', dualAuth, (req, res) => {
       ELSE COALESCE(mt.name,'邮件任务')
     END as task_name
     FROM mail_logs ml LEFT JOIN mail_tasks mt ON ml.task_id=mt.id ORDER BY ml.id DESC LIMIT 200`)
+    : getAll(`SELECT ml.id, ml.contact_email as recipient_email, ml.subject, ml.status, 
+    ml.sent_at, 
+    CASE 
+      WHEN ml.task_id = 0 AND ml.subject LIKE 'Re:%' THEN '快速跟进'
+      WHEN ml.task_id = 0 THEN '快速发送'
+      ELSE COALESCE(mt.name,'邮件任务')
+    END as task_name
+    FROM mail_logs ml LEFT JOIN mail_tasks mt ON ml.task_id=mt.id WHERE ml.created_by=? OR ml.created_by='' ORDER BY ml.id DESC LIMIT 200`, [userId])
   // Get records from crm_email_logs (quick-send / quick-followup)
-  const crmLogs = getAll(`SELECT id, recipient_email, subject, status, sent_at,
+  const crmLogs = isAdmin
+    ? getAll(`SELECT id, recipient_email, subject, status, sent_at,
     CASE WHEN subject LIKE 'Re:%' THEN '快速跟进' ELSE '快速发送' END as task_name
     FROM crm_email_logs ORDER BY sent_at DESC LIMIT 200`)
+    : getAll(`SELECT id, recipient_email, subject, status, sent_at,
+    CASE WHEN subject LIKE 'Re:%' THEN '快速跟进' ELSE '快速发送' END as task_name
+    FROM crm_email_logs WHERE sent_by=? ORDER BY sent_at DESC LIMIT 200`, [req.crmUser?.id || null])
   // Merge and sort by sent_at desc
   const merged = [...mailerLogs, ...crmLogs].sort((a, b) => (b.sent_at||'').localeCompare(a.sent_at||'')).slice(0, 200)
   res.json(merged)

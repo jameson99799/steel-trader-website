@@ -13,6 +13,16 @@ const uploadsDir = join(__dirname, '..', '..', 'uploads')
 const router = express.Router()
 router.use(express.json({ limit: '5mb' }))
 
+// ─── User identity helper for data isolation ────────────────────────────────
+function getUserId(req) {
+    if (req.user) return { userId: String(req.user.id), isAdmin: true } // website admin
+    if (req.crmUser) {
+        const isAdmin = req.crmUser.role === 'admin'
+        return { userId: String(req.crmUser.id), isAdmin }
+    }
+    return { userId: '', isAdmin: true }
+}
+
 // ─── In-memory task runner ────────────────────────────────────────────────────
 const activeTasks = new Map()   // taskId -> ctx
 const scheduledTasks = new Map() // taskId -> setTimeout handle
@@ -133,6 +143,7 @@ async function runTask(taskId, isResume = false) {
             nextSendAt: Date.now()
         })
 
+        const taskRow = getOne('SELECT created_by FROM mail_tasks WHERE id=?', [taskId])
         try {
             const transport = nodemailer.createTransport({
                 host:   account.smtp_host,
@@ -251,15 +262,15 @@ async function runTask(taskId, isResume = false) {
             const info = await transport.sendMail(mailOpts)
             const msgId = (info.messageId || '').replace(/[<>]/g, '')
 
-            run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, account_id, template_id, subject, status, message_id, sent_html, sent_at)
-                 VALUES (?,?,?,?,?,?,'sent',?,?,datetime('now'))`,
-                [taskId, contact.email, contact.name || '', account.id, template.id, subj, msgId, mailOpts.html])
+            run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, account_id, template_id, subject, status, message_id, sent_html, sent_at, created_by)
+                 VALUES (?,?,?,?,?,?,'sent',?,?,datetime('now'),?)`,
+                [taskId, contact.email, contact.name || '', account.id, template.id, subj, msgId, mailOpts.html, taskRow?.created_by || ''])
             run('UPDATE smtp_accounts SET send_count = send_count + 1 WHERE id=?', [account.id])
             run('UPDATE mail_tasks SET sent_count = sent_count + 1 WHERE id=?', [taskId])
         } catch (e) {
-            run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, account_id, template_id, subject, status, sent_at)
-                 VALUES (?,?,?,?,?,?,'failed',datetime('now'))`,
-                [taskId, contact.email, contact.name || '', account.id, template.id, template.subject])
+            run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, account_id, template_id, subject, status, sent_at, created_by)
+                 VALUES (?,?,?,?,?,?,'failed',datetime('now'),?)`,
+                [taskId, contact.email, contact.name || '', account.id, template.id, template.subject, taskRow?.created_by || ''])
         }
 
         // Delay before next send
@@ -312,13 +323,17 @@ setTimeout(restoreScheduledTasks, 2000)
 // ─── Templates ───────────────────────────────────────────────────────────────
 router.get('/templates', authMiddleware, (req, res) => {
     try { run('ALTER TABLE mail_templates ADD COLUMN assigned_users TEXT DEFAULT ""') } catch(e) {}
-    const templates = getAll('SELECT * FROM mail_templates ORDER BY id DESC')
+    const { userId, isAdmin } = getUserId(req)
+    const templates = isAdmin
+        ? getAll('SELECT * FROM mail_templates ORDER BY id DESC')
+        : getAll(`SELECT * FROM mail_templates WHERE created_by=? OR assigned_users=? OR created_by='' ORDER BY id DESC`, [userId, userId])
     const users = getAll('SELECT id, username, display_name, role FROM crm_users ORDER BY id')
     res.json({ templates, users })
 })
 router.post('/templates', authMiddleware, (req, res) => {
     const { name, subject, html_body, note, template_type } = req.body
-    const r = run('INSERT INTO mail_templates (name, subject, html_body, note, template_type) VALUES (?,?,?,?,?)', [name, subject, html_body, note || '', template_type || 'rich'])
+    const { userId } = getUserId(req)
+    const r = run('INSERT INTO mail_templates (name, subject, html_body, note, template_type, created_by) VALUES (?,?,?,?,?,?)', [name, subject, html_body, note || '', template_type || 'rich', userId])
     res.json({ id: r.lastInsertRowid, message: '模板已保存' })
 })
 router.put('/templates/:id', authMiddleware, (req, res) => {
@@ -334,8 +349,9 @@ router.delete('/templates/:id', authMiddleware, (req, res) => {
 router.post('/templates/:id/duplicate', authMiddleware, (req, res) => {
     const orig = getOne('SELECT * FROM mail_templates WHERE id=?', [req.params.id])
     if (!orig) return res.status(404).json({ error: '模板不存在' })
-    const r = run('INSERT INTO mail_templates (name, subject, html_body, note, template_type) VALUES (?,?,?,?,?)',
-        [orig.name + ' (副本)', orig.subject, orig.html_body, orig.note || '', orig.template_type || 'rich'])
+    const { userId } = getUserId(req)
+    const r = run('INSERT INTO mail_templates (name, subject, html_body, note, template_type, created_by) VALUES (?,?,?,?,?,?)',
+        [orig.name + ' (副本)', orig.subject, orig.html_body, orig.note || '', orig.template_type || 'rich', userId])
     res.json({ id: r.lastInsertRowid, message: '模板已复制' })
 })
 
@@ -370,15 +386,17 @@ router.delete('/contact-groups/:id', authMiddleware, (req, res) => {
 
 // ─── Contacts ────────────────────────────────────────────────────────────────
 router.get('/contacts', authMiddleware, (req, res) => {
-    res.json(getAll(`SELECT mc.*, cg.name as group_name
-                     FROM mail_contacts mc
-                     LEFT JOIN contact_groups cg ON cg.id = mc.group_id
-                     ORDER BY mc.id DESC`))
+    const { userId, isAdmin } = getUserId(req)
+    const sql = isAdmin
+        ? `SELECT mc.*, cg.name as group_name FROM mail_contacts mc LEFT JOIN contact_groups cg ON cg.id = mc.group_id ORDER BY mc.id DESC`
+        : `SELECT mc.*, cg.name as group_name FROM mail_contacts mc LEFT JOIN contact_groups cg ON cg.id = mc.group_id WHERE mc.created_by=? OR mc.created_by='' ORDER BY mc.id DESC`
+    res.json(isAdmin ? getAll(sql) : getAll(sql, [userId]))
 })
 router.post('/contacts', authMiddleware, (req, res) => {
     const { email, name, company, group_id } = req.body
     if (!email) return res.status(400).json({ error: '请填写邮箱' })
-    const r = run('INSERT INTO mail_contacts (email, name, company, group_id) VALUES (?,?,?,?)', [email, name || '', company || '', group_id || null])
+    const { userId } = getUserId(req)
+    const r = run('INSERT INTO mail_contacts (email, name, company, group_id, created_by) VALUES (?,?,?,?,?)', [email, name || '', company || '', group_id || null, userId])
     res.json({ id: r.lastInsertRowid, message: '联系人已添加' })
 })
 router.post('/contacts/import', authMiddleware, (req, res) => {
@@ -390,7 +408,7 @@ router.post('/contacts/import', authMiddleware, (req, res) => {
             // Check if email already exists
             const exists = getOne('SELECT id FROM mail_contacts WHERE email=?', [email.toLowerCase()])
             if (exists) { skipped++; continue }
-            try { run('INSERT INTO mail_contacts (email, name, company, group_id) VALUES (?,?,?,?)', [email.toLowerCase(), name || '', company || '', group_id || null]); added++ } catch (e) { skipped++ }
+            try { const { userId: uid } = getUserId(req); run('INSERT INTO mail_contacts (email, name, company, group_id, created_by) VALUES (?,?,?,?,?)', [email.toLowerCase(), name || '', company || '', group_id || null, uid]); added++ } catch (e) { skipped++ }
         }
     }
     res.json({ message: `已导入 ${added} 个联系人` + (skipped ? `，跳过 ${skipped} 个已存在邮箱` : '') })
@@ -421,8 +439,10 @@ router.post('/contacts/move-group', authMiddleware, (req, res) => {
 
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 router.get('/tasks', authMiddleware, (req, res) => {
-    const tasks = getAll('SELECT * FROM mail_tasks ORDER BY id DESC')
-    // Inject real-time countdown info
+    const { userId, isAdmin } = getUserId(req)
+    const tasks = isAdmin
+        ? getAll('SELECT * FROM mail_tasks ORDER BY id DESC')
+        : getAll(`SELECT * FROM mail_tasks WHERE created_by=? OR created_by='' ORDER BY id DESC`, [userId])
     const result = tasks.map(t => {
         const prog = taskProgress.get(t.id)
         return { ...t, _progress: prog || null }
@@ -450,9 +470,10 @@ router.delete('/attachments/:filename', authMiddleware, (req, res) => {
 
 router.post('/tasks', authMiddleware, (req, res) => {
     const { name, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id, skip_days, attachment_paths } = req.body
+    const { userId } = getUserId(req)
     const r = run(
-        `INSERT INTO mail_tasks (name, status, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id, skip_days, attachment_paths)
-         VALUES (?,'pending',?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO mail_tasks (name, status, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id, skip_days, attachment_paths, created_by)
+         VALUES (?,'pending',?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [name || 'New Task',
          JSON.stringify(template_ids || []), JSON.stringify(contact_ids || []),
          JSON.stringify(account_ids || []),
@@ -462,7 +483,8 @@ router.post('/tasks', authMiddleware, (req, res) => {
          priority ? 1 : 0,
          parent_task_id || null,
          skip_days || 0,
-         JSON.stringify(attachment_paths || [])]
+         JSON.stringify(attachment_paths || []),
+         userId]
     )
     const newId = r.lastInsertRowid
     // Auto-schedule if schedule_at given
@@ -559,10 +581,18 @@ router.get('/tasks/realtime', authMiddleware, (req, res) => {
 
 // ─── Logs ─────────────────────────────────────────────────────────────────────
 router.get('/logs', authMiddleware, (req, res) => {
+    const { userId, isAdmin } = getUserId(req)
     const taskId = req.query.task_id
-    const logs = taskId
-        ? getAll('SELECT * FROM mail_logs WHERE task_id=? ORDER BY id ASC', [taskId])
-        : getAll('SELECT * FROM mail_logs ORDER BY id DESC LIMIT 500')
+    let logs
+    if (taskId) {
+        logs = isAdmin
+            ? getAll('SELECT * FROM mail_logs WHERE task_id=? ORDER BY id ASC', [taskId])
+            : getAll(`SELECT * FROM mail_logs WHERE task_id=? AND (created_by=? OR created_by='') ORDER BY id ASC`, [taskId, userId])
+    } else {
+        logs = isAdmin
+            ? getAll('SELECT * FROM mail_logs ORDER BY id DESC LIMIT 500')
+            : getAll(`SELECT * FROM mail_logs WHERE created_by=? OR created_by='' ORDER BY id DESC LIMIT 500`, [userId])
+    }
     res.json(logs)
 })
 
@@ -623,9 +653,13 @@ router.get('/crm-customers', authMiddleware, (req, res) => {
 
 // Grouped view: one row per contact_email, with follow-up counts
 router.get('/logs/grouped', authMiddleware, (req, res) => {
+    const { userId, isAdmin } = getUserId(req)
     const taskId = req.query.task_id
-    // Get all logs for this task (or all tasks)
-    const where = taskId ? `WHERE ml.task_id=${+taskId}` : ''
+    let whereParts = []
+    let params = []
+    if (taskId) { whereParts.push(`ml.task_id=?`); params.push(+taskId) }
+    if (!isAdmin) { whereParts.push(`(ml.created_by=? OR ml.created_by='')`); params.push(userId) }
+    const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
     const rows = getAll(
         `SELECT ml.*, 
           CASE 
@@ -637,8 +671,8 @@ router.get('/logs/grouped', authMiddleware, (req, res) => {
          FROM mail_logs ml
          LEFT JOIN mail_tasks mt ON mt.id = ml.task_id
          LEFT JOIN mail_templates mt2 ON mt2.id = ml.template_id
-         ${where ? where.replace('ml.task_id', 'ml.task_id') : ''}
-         ORDER BY ml.contact_email, ml.id ASC`
+         ${where}
+         ORDER BY ml.contact_email, ml.id ASC`, params
     )
 
     // Also include crm_email_logs (quick-send / quick-followup) when showing all records
