@@ -6,11 +6,24 @@ import nodemailer from 'nodemailer'
 
 const router = express.Router()
 
+// ─── User identity helper for data isolation ────────────────────────────────
+function getUserId(req) {
+    if (req.user) return { userId: String(req.user.id), isAdmin: true }
+    if (req.crmUser) {
+        const isAdmin = req.crmUser.role === 'admin'
+        return { userId: String(req.crmUser.id), isAdmin }
+    }
+    return { userId: '', isAdmin: true }
+}
+
 // ─── SMTP Accounts CRUD ─────────────────────────────────────────────────────
 
 // GET all accounts (plaintext passwords for admin editing)
 router.get('/accounts', authMiddleware, (req, res) => {
-    const accounts = getAll('SELECT * FROM smtp_accounts ORDER BY is_default DESC, id ASC')
+    const { userId, isAdmin } = getUserId(req)
+    const accounts = isAdmin
+        ? getAll('SELECT * FROM smtp_accounts ORDER BY is_default DESC, id ASC')
+        : getAll(`SELECT * FROM smtp_accounts WHERE created_by=? OR created_by='' ORDER BY is_default DESC, id ASC`, [userId])
     res.json(accounts)
 })
 
@@ -19,9 +32,10 @@ router.post('/accounts', authMiddleware, express.json(), (req, res) => {
     const { name, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, is_default, enabled } = req.body
     if (!smtp_host || !smtp_user || !smtp_pass) return res.status(400).json({ error: '请填写SMTP服务器、账号和密码' })
     if (is_default) run('UPDATE smtp_accounts SET is_default = 0')
+    const { userId } = getUserId(req)
     const result = run(
-        `INSERT INTO smtp_accounts (name, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, is_default, enabled) VALUES (?,?,?,?,?,?,?,?)`,
-        [name || smtp_user, smtp_host, smtp_port || 465, smtp_user, smtp_pass, from_name || 'SunSea Steel', is_default ? 1 : 0, enabled !== false ? 1 : 0]
+        `INSERT INTO smtp_accounts (name, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, is_default, enabled, created_by) VALUES (?,?,?,?,?,?,?,?,?)`,
+        [name || smtp_user, smtp_host, smtp_port || 465, smtp_user, smtp_pass, from_name || 'SunSea Steel', is_default ? 1 : 0, enabled !== false ? 1 : 0, userId]
     )
     res.json({ id: result.lastInsertRowid, message: '账号已添加' })
 })

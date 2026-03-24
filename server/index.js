@@ -130,6 +130,7 @@ async function startServer() {
     app.use('/api/crm/users', crmUsersRoutes)
     app.use('/api/crm/customers', crmCustomersRoutes)
     app.use('/api/crm/mailer', mailerRoutes)  // Share same mailer routes
+    app.use('/api/crm/email', emailRoutes)    // Share same email/SMTP routes
 
     // 健康检查端点
     app.get('/health', (req, res) => {

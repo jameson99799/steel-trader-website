@@ -6,11 +6,12 @@
 /**
  * CRM Mailer Wrapper
  * Patches api.request so the shared Mailer.vue routes /mailer/* and /email/*
- * calls through CRM auth (Bearer token from sessionStorage crm_token).
+ * calls through CRM auth (Bearer token from crmApi).
  */
 import { onMounted, onUnmounted } from 'vue'
 import MailerPage from '../admin/Mailer.vue'
 import api from '../../api'
+import crmApi from '../../api/crm'
 
 let _origRequest = null
 
@@ -29,8 +30,8 @@ onMounted(() => {
       if (crmToken) {
         headers['Authorization'] = `Bearer ${crmToken}`
       }
-      // Route /mailer/* through /api/crm/mailer/*, /email/* stays as /api/email/*
-      const apiPath = url.startsWith('/mailer') ? `/api/crm${url}` : `/api${url}`
+      // Route both /mailer/* and /email/* through CRM auth path
+      const apiPath = `/api/crm${url}`
       const response = await fetch(apiPath, { ...options, headers })
       // Handle 401 redirect to CRM login
       if (response.status === 401) {
