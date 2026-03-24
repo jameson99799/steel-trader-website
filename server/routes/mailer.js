@@ -686,9 +686,14 @@ router.get('/logs/grouped', authMiddleware, (req, res) => {
 
     // Also include crm_email_logs (quick-send / quick-followup) when showing all records
     if (!taskId) {
-        const crmRows = getAll(`SELECT id, recipient_email as contact_email, '' as contact_name, subject, status, sent_at,
-            CASE WHEN subject LIKE 'Re:%' THEN '快速跟进' ELSE '快速发送' END as task_name
-            FROM crm_email_logs ORDER BY id ASC`)
+        const crmLogSql = isAdmin
+            ? `SELECT id, recipient_email as contact_email, '' as contact_name, subject, status, sent_at,
+                CASE WHEN subject LIKE 'Re:%' THEN '快速跟进' ELSE '快速发送' END as task_name
+                FROM crm_email_logs ORDER BY id ASC`
+            : `SELECT id, recipient_email as contact_email, '' as contact_name, subject, status, sent_at,
+                CASE WHEN subject LIKE 'Re:%' THEN '快速跟进' ELSE '快速发送' END as task_name
+                FROM crm_email_logs WHERE sent_by=? ORDER BY id ASC`
+        const crmRows = isAdmin ? getAll(crmLogSql) : getAll(crmLogSql, [userId])
         rows.push(...crmRows)
     }
 

@@ -20,10 +20,11 @@ function getUserId(req) {
 
 // GET all accounts (plaintext passwords for admin editing)
 router.get('/accounts', authMiddleware, (req, res) => {
+    try { run('ALTER TABLE smtp_accounts ADD COLUMN assigned_users TEXT DEFAULT ""') } catch(e) {}
     const { userId, isAdmin } = getUserId(req)
     const accounts = isAdmin
         ? getAll('SELECT * FROM smtp_accounts ORDER BY is_default DESC, id ASC')
-        : getAll(`SELECT * FROM smtp_accounts WHERE created_by=? ORDER BY is_default DESC, id ASC`, [userId])
+        : getAll(`SELECT * FROM smtp_accounts WHERE created_by=? OR assigned_users=? ORDER BY is_default DESC, id ASC`, [userId, userId])
     res.json(accounts)
 })
 
