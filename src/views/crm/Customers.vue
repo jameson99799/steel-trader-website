@@ -71,7 +71,10 @@
             <!-- Contact: 2-per-row grid -->
             <td class="contact-cell">
               <div class="contact-grid">
-                <span v-for="item in getContactItems(c)" :key="item.label" :title="item.label" :class="item.cls">{{ item.icon }} {{ item.value }}</span>
+                <span v-for="item in getContactItems(c)" :key="item.label" :title="点击复制" :class="[item.cls, 'ct-item']" @click="copyContact(item.value, $event)">
+                  <em class="ct-icon">{{ item.icon }}</em>
+                  <span class="ct-val">{{ item.value }}</span>
+                </span>
               </div>
             </td>
             <!-- Merged: status + tags -->
@@ -377,6 +380,13 @@ function getContactItems(c) {
   if (c.wechat) items.push({ icon: 'WX', label: '微信', value: c.wechat, cls: 'ct-wx' })
   return items
 }
+function copyContact(val, e) {
+  navigator.clipboard.writeText(val).then(() => {
+    const el = e.currentTarget
+    el.classList.add('ct-copied')
+    setTimeout(() => el.classList.remove('ct-copied'), 1200)
+  }).catch(() => {})
+}
 
 function openAddModal() {
   editingId.value = null
@@ -570,9 +580,18 @@ td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
 .company-link { color: #8b5cf6; cursor: pointer; font-weight: 500; text-decoration: underline dotted; }
 .country-badge { background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
 /* Contact: 2-per-row grid */
-.contact-cell { min-width: 200px; }
-.contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; font-size: 12px; color: #475569; }
-.contact-grid span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+.contact-cell { min-width: 280px; }
+.contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 12px; }
+.ct-item { display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: all 0.15s; color: #475569; white-space: nowrap; }
+.ct-item:hover { background: #eff6ff; color: #2563eb; }
+.ct-icon { font-style: normal; flex-shrink: 0; width: 20px; text-align: center; }
+.ct-val { overflow: visible; white-space: nowrap; }
+.ct-phone .ct-icon { color: #ef4444; }
+.ct-email .ct-icon { color: #3b82f6; }
+.ct-wa .ct-icon { color: #25d366; font-weight: 700; font-size: 11px; }
+.ct-wx .ct-icon { color: #07c160; font-weight: 700; font-size: 11px; }
+.ct-copied { background: #dcfce7 !important; color: #15803d !important; }
+.ct-copied::after { content: ' ✓已复制'; font-size: 10px; color: #15803d; }
 /* Merged status + tags */
 .status-badge { padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; display: inline-block; }
 .status-dev { background: #fef3c7; color: #92400e; }

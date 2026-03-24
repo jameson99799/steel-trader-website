@@ -34,16 +34,23 @@
         </div>
       </div>
       <div v-if="!templates.length" class="empty">暂无模板</div>
-      <div v-for="t in templates" :key="t.id" class="list-card" :style="t.is_default ? 'border-left:3px solid #2563eb' : ''">
+      <div v-for="t in templates" :key="t.id" class="list-card" :style="t.is_default ? 'border-left:3px solid #2563eb' : t.is_followup_default ? 'border-left:3px solid #7c3aed' : ''">
         <div class="lc-main">
-          <strong>{{ t.name }}</strong>
-          <span v-if="t.is_default" class="log-badge" style="background:#dbeafe;color:#1d4ed8;font-size:10px;margin-left:6px">默认</span>
-          <span class="log-badge" :style="t.template_type==='html' ? 'background:#fef3c7;color:#92400e' : 'background:#e0f2fe;color:#0369a1'" style="font-size:10px;margin-left:6px">{{ t.template_type === 'html' ? 'HTML' : '富文本' }}</span>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <strong>{{ t.name }}</strong>
+            <span class="log-badge" :style="t.template_type==='html' ? 'background:#fef3c7;color:#92400e' : 'background:#e0f2fe;color:#0369a1'" style="font-size:10px">{{ t.template_type === 'html' ? 'HTML' : '富文本' }}</span>
+            <span v-if="t.is_default" class="log-badge" style="background:#dbeafe;color:#1d4ed8;font-size:10px">默认营销模板</span>
+            <span v-if="t.is_followup_default" class="log-badge" style="background:#ede9fe;color:#7c3aed;font-size:10px">默认跟进模板</span>
+          </div>
           <span class="lc-sub">主题：{{ t.subject }}</span>
           <span v-if="t.note" class="lc-note">{{ t.note }}</span>
         </div>
         <div class="lc-actions">
-          <button v-if="!t.is_default" class="btn btn-sm btn-outline" style="color:#2563eb;border-color:#93c5fd" @click="setDefaultTpl(t.id)">⭐ 设为默认</button>
+          <select class="form-control" style="width:auto;font-size:11px;padding:2px 6px;border-radius:6px" @change="setTplDefault(t.id, $event.target.value); $event.target.value=''">
+            <option value="">⭐ 设为默认...</option>
+            <option value="marketing">营销模板</option>
+            <option value="followup">跟进模板</option>
+          </select>
           <button class="btn btn-sm btn-outline" @click="openTplEditor(t)">编辑</button>
           <button class="btn btn-sm btn-outline" @click="duplicateTemplate(t.id)">📋 复制</button>
           <button class="btn btn-sm btn-outline" @click="previewTpl(t)">预览</button>
@@ -615,9 +622,12 @@ async function testAcct(id) {
 }
 
 // Default template
-async function setDefaultTpl(id) {
+async function setTplDefault(id, role) {
+  if (!role) return
   try {
-    await api.request(`/mailer/templates/${id}/set-default`, { method: 'POST' })
+    await api.request(`/mailer/templates/${id}/set-default`, {
+      method: 'POST', body: JSON.stringify({ role })
+    })
     templates.value = await api.request('/mailer/templates') || []
   } catch (e) { alert(e.message) }
 }

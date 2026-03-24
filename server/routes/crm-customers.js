@@ -451,11 +451,6 @@ router.post('/email/quick-send', dualAuth, async (req, res) => {
 })
 
 
-router.get('/export/all', dualAuth, (req, res) => {
-  if (req.crmUser && req.crmUser.role !== 'admin' && !req.user) {
-    return res.status(403).json({ error: '需要管理员权限' })
-  }
-
 // Quick follow-up: send a reply to a previously sent email
 router.post('/email/quick-followup', dualAuth, async (req, res) => {
   const { recipient_email, original_subject, original_sent_at } = req.body
@@ -477,9 +472,7 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
     : tpl.subject || ''
 
   let body = tpl.html_body || ''
-  // Variable replacement (basic)
   const vars = { name: '', company: '', first_name: '', last_name: '' }
-  // Try to get customer info from email
   const cust = getOne('SELECT * FROM crm_customers WHERE email=?', [recipient_email])
   if (cust) {
     vars.name = cust.name || ''; vars.company = cust.company || ''
@@ -504,13 +497,11 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
     const mailOpts = {
       from: `"${smtp.from_name||'SunSea Steel'}" <${smtp.smtp_user}>`, to: recipient_email, subject: subj, html: body
     }
-    // Set In-Reply-To header if we can find the original message_id
     const origLog = getOne('SELECT message_id FROM mail_logs WHERE contact_email=? AND status=? ORDER BY id DESC LIMIT 1', [recipient_email, 'sent'])
     if (origLog?.message_id) {
       mailOpts.headers = { 'In-Reply-To': origLog.message_id, 'References': origLog.message_id }
     }
     await transport.sendMail(mailOpts)
-    // Log to both tables
     run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
       [recipient_email, subj, 'sent', now, req.crmUser?.id||null])
     run(`INSERT INTO mail_logs (task_id,template_id,account_id,contact_email,contact_name,subject,status,sent_at,sent_html) VALUES (?,?,?,?,?,?,?,?,?)`,
@@ -523,6 +514,11 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
   }
 })
 
+
+router.get('/export/all', dualAuth, (req, res) => {
+  if (req.crmUser && req.crmUser.role !== 'admin' && !req.user) {
+    return res.status(403).json({ error: '需要管理员权限' })
+  }
   const users = getAll('SELECT id,username,display_name FROM crm_users')
   const exportData = { exported_at: new Date().toISOString(), users: [] }
   for (const u of users) {

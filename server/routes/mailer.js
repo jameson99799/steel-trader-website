@@ -646,11 +646,21 @@ router.get('/crm-customers', authMiddleware, (req, res) => {
     })
 })
 
-// ─── Default template toggle ─────────────────────────────────────────────────
-router.post('/templates/:id/set-default', authMiddleware, (req, res) => {
-    run('UPDATE mail_templates SET is_default=0')
-    run('UPDATE mail_templates SET is_default=1 WHERE id=?', [req.params.id])
-    res.json({ message: '已设为默认模板' })
+// ─── Default template toggle (marketing + followup) ──────────────────────────
+router.post('/templates/:id/set-default', authMiddleware, express.json(), (req, res) => {
+    // Ensure is_followup_default column exists
+    try { run('ALTER TABLE mail_templates ADD COLUMN is_followup_default INTEGER DEFAULT 0') } catch(e) {}
+    
+    const role = req.body?.role || 'marketing'
+    if (role === 'followup') {
+        run('UPDATE mail_templates SET is_followup_default=0')
+        run('UPDATE mail_templates SET is_followup_default=1 WHERE id=?', [req.params.id])
+        res.json({ message: '已设为默认跟进模板' })
+    } else {
+        run('UPDATE mail_templates SET is_default=0')
+        run('UPDATE mail_templates SET is_default=1 WHERE id=?', [req.params.id])
+        res.json({ message: '已设为默认营销模板' })
+    }
 })
 
 export default router
