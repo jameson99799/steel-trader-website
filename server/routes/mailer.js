@@ -147,7 +147,7 @@ async function runTask(taskId, isResume = false) {
 
             // Convert relative image URLs to absolute URLs for email clients
             try {
-                let siteUrl = 'https://www.fadasteel.com'
+                let siteUrl = 'https://www.sunseasteel.com'
                 try {
                     const comp = getOne("SELECT name_en FROM company WHERE id=1")
                     // Try to find website URL from company data

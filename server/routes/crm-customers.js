@@ -6,7 +6,7 @@ const router = Router()
 
 // Helper: convert relative image URLs to absolute for email clients
 function fixEmailImageUrls(html) {
-  const siteUrl = 'https://www.fadasteel.com'
+  const siteUrl = 'https://www.sunseasteel.com'
   let out = html
   out = out.replace(/src=["'](\/uploads\/[^"']+)["']/gi, `src="${siteUrl}$1"`)
   out = out.replace(/src=["'](\/api\/[^"']+)["']/gi, `src="${siteUrl}$1"`)
