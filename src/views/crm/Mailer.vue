@@ -21,7 +21,7 @@ onMounted(() => {
   api.request = async (url, options = {}) => {
     // Intercept /mailer/* and /email/* calls for CRM auth
     if (url.startsWith('/mailer') || url.startsWith('/email/')) {
-      const crmToken = sessionStorage.getItem('crm_token')
+      const crmToken = crmApi.getToken()
       const headers = { ...(options.headers || {}) }
       if (!(options.body instanceof FormData)) {
         headers['Content-Type'] = 'application/json'
@@ -34,8 +34,9 @@ onMounted(() => {
       const response = await fetch(apiPath, { ...options, headers })
       // Handle 401 redirect to CRM login
       if (response.status === 401) {
-        sessionStorage.removeItem('crm_token')
-        window.location.href = '/crm/login'
+        crmApi.clearToken()
+        const loginPath = window.location.pathname.startsWith('/crm/sub') ? '/crm/sub/login' : '/crm/login'
+        window.location.href = loginPath
         throw new Error('登录已过期')
       }
       const contentType = response.headers.get('content-type') || ''

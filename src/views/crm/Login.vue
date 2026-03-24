@@ -26,10 +26,11 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import crmApi from '../../api/crm'
 
 const router = useRouter()
+const route = useRoute()
 const username = ref('')
 const password = ref('')
 const error = ref('')
@@ -41,8 +42,10 @@ async function handleLogin() {
   try {
     const data = await crmApi.login({ username: username.value, password: password.value })
     crmApi.setToken(data.token)
-    localStorage.setItem('crm_user', JSON.stringify(data.user))
-    router.push('/crm')
+    const userKey = crmApi.getUserKey()
+    localStorage.setItem(userKey, JSON.stringify(data.user))
+    const basePath = route.path.startsWith('/crm/sub') ? '/crm/sub' : '/crm'
+    router.push(basePath)
   } catch (e) {
     error.value = e.message || '登录失败'
   } finally {

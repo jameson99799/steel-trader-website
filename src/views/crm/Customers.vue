@@ -70,7 +70,7 @@
         <tbody>
           <tr v-for="c in customers" :key="c.id" :class="{ 'pool-row': c.status === '公海池' }">
             <td><input type="checkbox" :value="c.id" v-model="selectedIds" /></td>
-            <td class="center-cell"><span class="name-cell" @click="$router.push(`/crm/customer/${c.id}`)">{{ c.first_name || c.name }}</span></td>
+            <td class="center-cell"><span class="name-cell" @click="$router.push(`${basePath}/customer/${c.id}`)">{{ c.first_name || c.name }}</span></td>
             <td class="center-cell">{{ c.last_name || '' }}</td>
             <td class="center-cell">
               <span class="company-link" v-if="c.company" @click.stop="openCompanyPanel(c.company)">{{ c.company }}</span>
@@ -107,9 +107,9 @@
                 <button class="btn-sm btn-mail" @click="quickSendEmail(c)" :disabled="!c.email || quickSending === c.id" :title="c.email ? '使用默认模板发送邮件' : '无邮箱'">{{ quickSending === c.id ? '发送中...' : '📧邮件' }}</button>
               </div>
               <div class="action-row">
-                <button class="btn-sm btn-inq" @click="$router.push(`/crm/customer/${c.id}?tab=inquiry`)">询盘</button>
-                <button class="btn-sm btn-quot" @click="$router.push(`/crm/customer/${c.id}?tab=quotation`)">报价</button>
-                <button class="btn-sm btn-follow" @click="$router.push(`/crm/customer/${c.id}?tab=followup`)">跟进</button>
+                <button class="btn-sm btn-inq" @click="$router.push(`${basePath}/customer/${c.id}?tab=inquiry`)">询盘</button>
+                <button class="btn-sm btn-quot" @click="$router.push(`${basePath}/customer/${c.id}?tab=quotation`)">报价</button>
+                <button class="btn-sm btn-follow" @click="$router.push(`${basePath}/customer/${c.id}?tab=followup`)">跟进</button>
                 <button v-if="c.status !== '公海池'" class="btn-sm" style="background:#e0f2fe;color:#0369a1" @click="moveToPool(c)">🌊公海</button>
                 <button class="btn-sm btn-danger" @click="handleDelete(c)">删除</button>
               </div>
@@ -245,7 +245,7 @@
           <div v-for="c in companyCustomers" :key="c.id" class="company-card" :class="{ excluded: c._excluded }">
             <input type="checkbox" :value="c.id" v-model="companySelectedIds" :disabled="c._excluded" />
             <div class="cc-name">
-              <strong class="name-cell" @click="$router.push(`/crm/customer/${c.id}`)">{{ c.name }}</strong>
+              <strong class="name-cell" @click="$router.push(`${basePath}/customer/${c.id}`)">{{ c.name }}</strong>
               <span class="cc-company">{{ c.company || '-' }}</span>
             </div>
             <div class="cc-contacts">
@@ -283,6 +283,7 @@
           <table v-else class="records-table">
             <thead>
               <tr>
+                <th><input type="checkbox" @change="toggleAllRecords" :checked="allRecordsSelected" /></th>
                 <th>时间</th>
                 <th>收件人</th>
                 <th>主题</th>
@@ -293,6 +294,7 @@
             </thead>
             <tbody>
               <tr v-for="r in sendRecords" :key="r.id">
+                <td><input type="checkbox" v-model="selectedRecordIds" :value="r.id" /></td>
                 <td style="white-space:nowrap">{{ formatDateTime(r.sent_at || r.created_at) }}</td>
                 <td>{{ r.recipient_email || r.contact_email }}</td>
                 <td>{{ r.subject }}</td>
@@ -310,6 +312,7 @@
           </table>
         </div>
         <div class="modal-footer">
+          <button v-if="selectedRecordIds.length" class="btn btn-sm" style="background:#fef2f2;color:#dc2626;margin-right:auto" @click="bulkDeleteRecords">🗑️ 删除选中 ({{ selectedRecordIds.length }})</button>
           <button class="btn btn-secondary" @click="showSendRecords = false">关闭</button>
         </div>
       </div>
@@ -324,6 +327,7 @@ import crmApi from '../../api/crm'
 
 const route = useRoute()
 const router = useRouter()
+const basePath = computed(() => route.path.startsWith('/crm/sub') ? '/crm/sub' : '/crm')
 const customers = ref([])
 const countries = ref([])
 const page = ref(1)
@@ -486,7 +490,7 @@ function sendMailToCompany() {
 // Email via Mailer: navigate to mailer with pre-selected customer IDs
 function bulkEmailViaMailer(ids) {
   if (!ids.length) { alert('请先选择客户'); return }
-  router.push(`/crm/mailer?customers=${ids.join(',')}`)
+  router.push(`${basePath.value}/mailer?customers=${ids.join(',')}`)
 }
 
 // Move to sea pool
@@ -512,9 +516,22 @@ async function bulkMoveToPool() {
 // Send Records
 const showSendRecords = ref(false)
 const sendRecords = ref([])
+const selectedRecordIds = ref([])
+const allRecordsSelected = computed(() => sendRecords.value.length > 0 && sendRecords.value.every(r => selectedRecordIds.value.includes(r.id)))
+function toggleAllRecords(e) { selectedRecordIds.value = e.target.checked ? sendRecords.value.map(r => r.id) : [] }
 
 async function loadSendRecords() {
-  try { sendRecords.value = await crmApi.getSendRecords() } catch (e) { sendRecords.value = [] }
+  try { sendRecords.value = await crmApi.getSendRecords(); selectedRecordIds.value = [] } catch (e) { sendRecords.value = [] }
+}
+
+async function bulkDeleteRecords() {
+  if (!selectedRecordIds.value.length) return
+  if (!confirm(`确认删除 ${selectedRecordIds.value.length} 条发送记录？`)) return
+  try {
+    await crmApi.request('/customers/email/records/bulk-delete', { method: 'POST', body: JSON.stringify({ ids: selectedRecordIds.value }) })
+    selectedRecordIds.value = []
+    await loadSendRecords()
+  } catch (e) { alert('删除失败: ' + e.message) }
 }
 
 async function quickSendEmail(c) {

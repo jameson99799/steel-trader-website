@@ -1,7 +1,7 @@
 <template>
   <div class="customer-detail" v-if="customer">
     <div class="detail-header">
-      <button class="btn-back" @click="$router.push('/crm/customers')">← 返回</button>
+      <button class="btn-back" @click="$router.push(($route.path.startsWith('/crm/sub') ? '/crm/sub' : '/crm') + '/customers')">← 返回</button>
       <h1>{{ customer.name }}</h1>
       <span :class="['status-badge', getStatusClass(customer.status)]">{{ customer.status }}</span>
     </div>

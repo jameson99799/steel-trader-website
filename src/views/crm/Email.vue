@@ -336,7 +336,7 @@ onUnmounted(() => { if (progressTimer) clearInterval(progressTimer) })
 
 // Safe fetch helper — never redirects on 401
 async function safeFetch(url) {
-  const token = sessionStorage.getItem('crm_token')
+  const token = crmApi.getToken()
   try {
     const res = await fetch(`/api/crm${url}`, {
       headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
@@ -347,7 +347,7 @@ async function safeFetch(url) {
 }
 
 async function safePost(url, body) {
-  const token = sessionStorage.getItem('crm_token')
+  const token = crmApi.getToken()
   try {
     const res = await fetch(`/api/crm${url}`, {
       method: 'POST',
@@ -361,7 +361,7 @@ async function safePost(url, body) {
 }
 
 async function safePut(url, body) {
-  const token = sessionStorage.getItem('crm_token')
+  const token = crmApi.getToken()
   try {
     const res = await fetch(`/api/crm${url}`, {
       method: 'PUT',
@@ -375,7 +375,7 @@ async function safePut(url, body) {
 }
 
 async function safeDel(url) {
-  const token = sessionStorage.getItem('crm_token')
+  const token = crmApi.getToken()
   try {
     const res = await fetch(`/api/crm${url}`, {
       method: 'DELETE',
@@ -387,7 +387,7 @@ async function safeDel(url) {
 }
 
 function startProgressPoll() {
-  const token = sessionStorage.getItem('crm_token')
+  const token = crmApi.getToken()
   progressTimer = setInterval(async () => {
     try {
       const res = await fetch('/api/crm/mailer/progress', {

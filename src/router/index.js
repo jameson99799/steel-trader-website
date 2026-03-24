@@ -61,7 +61,7 @@ const routes = [
       { path: 'mailer', name: 'AdminMailer', component: () => import('../views/admin/Mailer.vue') }
     ]
   },
-  // ─── CRM Routes ─────────────────────────────────────────────────────────────
+  // ─── CRM Routes (Admin) ────────────────────────────────────────────────────
   {
     path: '/crm/login',
     name: 'CrmLogin',
@@ -78,6 +78,25 @@ const routes = [
       { path: 'sea-pool', name: 'CrmSeaPool', component: () => import('../views/crm/SeaPool.vue') },
       { path: 'mailer', name: 'CrmMailer', component: () => import('../views/crm/Mailer.vue') },
       { path: 'users', name: 'CrmUsers', component: () => import('../views/crm/Users.vue') }
+    ]
+  },
+  // ─── CRM Routes (Sub-account) ─────────────────────────────────────────────
+  {
+    path: '/crm/sub/login',
+    name: 'CrmSubLogin',
+    component: () => import('../views/crm/Login.vue')
+  },
+  {
+    path: '/crm/sub',
+    component: () => import('../views/crm/Layout.vue'),
+    meta: { requiresCrmAuth: true },
+    children: [
+      { path: '', name: 'CrmSubDashboard', component: () => import('../views/crm/Dashboard.vue') },
+      { path: 'customers', name: 'CrmSubCustomers', component: () => import('../views/crm/Customers.vue') },
+      { path: 'customer/:id', name: 'CrmSubCustomerDetail', component: () => import('../views/crm/CustomerDetail.vue') },
+      { path: 'sea-pool', name: 'CrmSubSeaPool', component: () => import('../views/crm/SeaPool.vue') },
+      { path: 'mailer', name: 'CrmSubMailer', component: () => import('../views/crm/Mailer.vue') },
+      { path: 'users', name: 'CrmSubUsers', component: () => import('../views/crm/Users.vue') }
     ]
   }
 ]
@@ -107,9 +126,12 @@ router.beforeEach((to, from, next) => {
       next()
     }
   } else if (to.matched.some(record => record.meta.requiresCrmAuth)) {
-    const crmToken = sessionStorage.getItem('crm_token')
+    // Path-aware CRM token check
+    const isSub = to.path.startsWith('/crm/sub')
+    const tokenKey = isSub ? 'crm_sub_token' : 'crm_admin_token'
+    const crmToken = localStorage.getItem(tokenKey)
     if (!crmToken) {
-      next('/crm/login')
+      next(isSub ? '/crm/sub/login' : '/crm/login')
     } else {
       next()
     }
@@ -119,3 +141,4 @@ router.beforeEach((to, from, next) => {
 })
 
 export default router
+

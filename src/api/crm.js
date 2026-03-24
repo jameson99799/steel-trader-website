@@ -1,8 +1,15 @@
-// CRM API module
-const CRM_TOKEN_KEY = 'crm_token'
+// CRM API module — path-aware token keys
+// Admin (/crm/*) uses 'crm_admin_token', Sub-account (/crm/sub/*) uses 'crm_sub_token'
+
+function getTokenKey() {
+  return window.location.pathname.startsWith('/crm/sub') ? 'crm_sub_token' : 'crm_admin_token'
+}
+function getUserKey() {
+  return window.location.pathname.startsWith('/crm/sub') ? 'crm_sub_user' : 'crm_admin_user'
+}
 
 function getToken() {
-  return sessionStorage.getItem(CRM_TOKEN_KEY)
+  return localStorage.getItem(getTokenKey())
 }
 
 async function request(url, options = {}) {
@@ -12,9 +19,9 @@ async function request(url, options = {}) {
 
   const res = await fetch(`/api/crm${url}`, { ...options, headers })
   if (res.status === 401 && !url.startsWith('/auth/login')) {
-    // Only redirect to login for non-login requests
-    sessionStorage.removeItem(CRM_TOKEN_KEY)
-    window.location.href = '/crm/login'
+    localStorage.removeItem(getTokenKey())
+    const loginPath = window.location.pathname.startsWith('/crm/sub') ? '/crm/sub/login' : '/crm/login'
+    window.location.href = loginPath
     throw new Error('登录已过期')
   }
   const data = await res.json()
@@ -40,10 +47,12 @@ export default {
   changePassword: (data) => request('/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
 
   // Token management
-  setToken(token) { sessionStorage.setItem(CRM_TOKEN_KEY, token) },
+  setToken(token) { localStorage.setItem(getTokenKey(), token) },
   getToken,
-  clearToken() { sessionStorage.removeItem(CRM_TOKEN_KEY) },
+  clearToken() { localStorage.removeItem(getTokenKey()) },
   isLoggedIn() { return !!getToken() },
+  getTokenKey,
+  getUserKey,
 
   // CRM Users (admin)
   getUsers: () => request('/users'),

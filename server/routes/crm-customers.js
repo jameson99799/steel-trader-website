@@ -647,4 +647,14 @@ router.get('/email/records', dualAuth, (req, res) => {
   res.json(merged)
 })
 
+router.post('/email/records/bulk-delete', dualAuth, (req, res) => {
+  const { ids } = req.body
+  if (!ids?.length) return res.status(400).json({ error: '无选中项' })
+  const placeholders = ids.map(() => '?').join(',')
+  // Delete from both tables since records are merged from mail_logs and crm_email_logs
+  run(`DELETE FROM mail_logs WHERE id IN (${placeholders})`, ids)
+  run(`DELETE FROM crm_email_logs WHERE id IN (${placeholders})`, ids)
+  res.json({ message: `已删除 ${ids.length} 条记录` })
+})
+
 export default router

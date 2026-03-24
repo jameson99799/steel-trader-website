@@ -97,7 +97,7 @@ const form = reactive({ username: '', password: '', display_name: '', email: '',
 async function loadUsers() {
   try {
     // Use admin token for this endpoint
-    const token = localStorage.getItem('token') || sessionStorage.getItem('crm_token')
+    const token = localStorage.getItem('token') || crmApi.getToken()
     const res = await fetch('/api/crm/users', { headers: { 'Authorization': `Bearer ${token}` } })
     users.value = await res.json()
   } catch (e) { console.error(e) }
@@ -116,7 +116,7 @@ function openModal(u) {
 
 async function handleSave() {
   try {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('crm_token')
+    const token = localStorage.getItem('token') || crmApi.getToken()
     const body = { ...form }
     if (!body.password) delete body.password
     const url = editId.value ? `/api/crm/users/${editId.value}` : '/api/crm/users'
@@ -135,7 +135,7 @@ async function handleSave() {
 async function handleDelete(u) {
   if (!confirm(`确定删除账户 "${u.display_name}"？其客户将变为无主。`)) return
   try {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('crm_token')
+    const token = localStorage.getItem('token') || crmApi.getToken()
     await fetch(`/api/crm/users/${u.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })
     loadUsers()
   } catch (e) { alert(e.message) }

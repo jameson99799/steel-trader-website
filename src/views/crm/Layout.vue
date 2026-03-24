@@ -7,19 +7,19 @@
         <button class="collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed">{{ sidebarCollapsed ? '→' : '←' }}</button>
       </div>
       <nav class="sidebar-nav">
-        <router-link to="/crm" class="nav-item" exact-active-class="active">
+        <router-link :to="basePath" class="nav-item" exact-active-class="active">
           <span class="nav-icon">📈</span><span v-if="!sidebarCollapsed" class="nav-label">仪表盘</span>
         </router-link>
-        <router-link to="/crm/customers" class="nav-item" active-class="active">
+        <router-link :to="basePath+'/customers'" class="nav-item" active-class="active">
           <span class="nav-icon">👥</span><span v-if="!sidebarCollapsed" class="nav-label">客户管理</span>
         </router-link>
-        <router-link to="/crm/sea-pool" class="nav-item" active-class="active">
+        <router-link :to="basePath+'/sea-pool'" class="nav-item" active-class="active">
           <span class="nav-icon">🌊</span><span v-if="!sidebarCollapsed" class="nav-label">公海池</span>
         </router-link>
-        <router-link to="/crm/mailer" class="nav-item" active-class="active">
+        <router-link :to="basePath+'/mailer'" class="nav-item" active-class="active">
           <span class="nav-icon">📧</span><span v-if="!sidebarCollapsed" class="nav-label">邮件系统</span>
         </router-link>
-        <router-link v-if="user?.role === 'admin'" to="/crm/users" class="nav-item" active-class="active">
+        <router-link v-if="user?.role === 'admin'" :to="basePath+'/users'" class="nav-item" active-class="active">
           <span class="nav-icon">⚙️</span><span v-if="!sidebarCollapsed" class="nav-label">账户管理</span>
         </router-link>
       </nav>
@@ -48,30 +48,37 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import crmApi from '../../api/crm'
 
 const router = useRouter()
+const route = useRoute()
 const sidebarCollapsed = ref(false)
 const globalSearch = ref('')
 const user = ref(null)
 
+const basePath = computed(() => {
+  return route.path.startsWith('/crm/sub') ? '/crm/sub' : '/crm'
+})
+
 onMounted(() => {
   try {
-    user.value = JSON.parse(localStorage.getItem('crm_user') || '{}')
+    const userKey = crmApi.getUserKey()
+    user.value = JSON.parse(localStorage.getItem(userKey) || '{}')
   } catch (e) { user.value = {} }
 })
 
 function handleLogout() {
   crmApi.clearToken()
-  localStorage.removeItem('crm_user')
-  router.push('/crm/login')
+  localStorage.removeItem(crmApi.getUserKey())
+  const loginPath = basePath.value === '/crm/sub' ? '/crm/sub/login' : '/crm/login'
+  router.push(loginPath)
 }
 
 function doGlobalSearch() {
   if (globalSearch.value.trim()) {
-    router.push({ path: '/crm/customers', query: { search: globalSearch.value.trim() } })
+    router.push({ path: basePath.value + '/customers', query: { search: globalSearch.value.trim() } })
   }
 }
 </script>
