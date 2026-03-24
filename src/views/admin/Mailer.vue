@@ -5,7 +5,7 @@
     <!-- Tabs -->
     <div class="tabs">
       <button :class="['tab', tab === 'templates' && 'active']" @click="tab='templates'">📝 模板</button>
-      <button v-if="!isCRM" :class="['tab', tab === 'contacts' && 'active']" @click="tab='contacts'">👥 联系人</button>
+      <button :class="['tab', tab === 'contacts' && 'active']" @click="tab='contacts'">👥 联系人</button>
       <button :class="['tab', tab === 'tasks' && 'active']" @click="tab='tasks'">🚀 发送任务</button>
       <button :class="['tab', tab === 'logs' && 'active']" @click="tab='logs'">📋 发送记录</button>
       <button :class="['tab', tab === 'accounts' && 'active']" @click="tab='accounts'">📮 发件账号</button>

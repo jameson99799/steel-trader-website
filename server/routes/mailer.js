@@ -230,14 +230,14 @@ async function runTask(taskId, isResume = false) {
             const info = await transport.sendMail(mailOpts)
             const msgId = (info.messageId || '').replace(/[<>]/g, '')
 
-            run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, account_id, template_id, subject, status, message_id, sent_html)
-                 VALUES (?,?,?,?,?,?,'sent',?,?)`,
+            run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, account_id, template_id, subject, status, message_id, sent_html, sent_at)
+                 VALUES (?,?,?,?,?,?,'sent',?,?,datetime('now'))`,
                 [taskId, contact.email, contact.name || '', account.id, template.id, subj, msgId, mailOpts.html])
             run('UPDATE smtp_accounts SET send_count = send_count + 1 WHERE id=?', [account.id])
             run('UPDATE mail_tasks SET sent_count = sent_count + 1 WHERE id=?', [taskId])
         } catch (e) {
-            run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, account_id, template_id, subject, status)
-                 VALUES (?,?,?,?,?,?,'failed')`,
+            run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, account_id, template_id, subject, status, sent_at)
+                 VALUES (?,?,?,?,?,?,'failed',datetime('now'))`,
                 [taskId, contact.email, contact.name || '', account.id, template.id, template.subject])
         }
 

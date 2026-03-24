@@ -455,6 +455,74 @@ router.get('/export/all', dualAuth, (req, res) => {
   if (req.crmUser && req.crmUser.role !== 'admin' && !req.user) {
     return res.status(403).json({ error: '需要管理员权限' })
   }
+
+// Quick follow-up: send a reply to a previously sent email
+router.post('/email/quick-followup', dualAuth, async (req, res) => {
+  const { recipient_email, original_subject, original_sent_at } = req.body
+  if (!recipient_email) return res.status(400).json({ error: '缺少收件人' })
+
+  // Get default template
+  const tpl = getOne("SELECT * FROM mail_templates WHERE is_default=1 LIMIT 1")
+    || getOne("SELECT * FROM mail_templates ORDER BY id ASC LIMIT 1")
+  if (!tpl) return res.status(400).json({ error: '未设置默认邮件模板' })
+
+  // Get SMTP account
+  const accounts = getAll('SELECT * FROM smtp_accounts WHERE enabled=1 ORDER BY id ASC')
+  if (!accounts.length) return res.status(400).json({ error: '未配置发送邮箱' })
+  const smtp = accounts[Math.floor(Math.random() * accounts.length)]
+
+  // Build follow-up subject
+  const subj = original_subject
+    ? (original_subject.startsWith('Re:') ? original_subject : `Re: ${original_subject}`)
+    : tpl.subject || ''
+
+  let body = tpl.html_body || ''
+  // Variable replacement (basic)
+  const vars = { name: '', company: '', first_name: '', last_name: '' }
+  // Try to get customer info from email
+  const cust = getOne('SELECT * FROM crm_customers WHERE email=?', [recipient_email])
+  if (cust) {
+    vars.name = cust.name || ''; vars.company = cust.company || ''
+    vars.first_name = cust.first_name || cust.name || ''; vars.last_name = cust.last_name || ''
+  }
+  for (const [k, v] of Object.entries(vars)) {
+    body = body.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
+  }
+
+  // Add Foxmail-style quoted reply
+  const fmtDate = original_sent_at ? new Date(original_sent_at).toLocaleString('zh-CN') : ''
+  const quotedBlock = `<br/><br/><div style="font-family:Arial;font-size:13px;color:#555"><div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #ccc;font-size:12px;color:#888">---- Replied Message ----<br/><b>From</b>&nbsp;&nbsp;&nbsp;&nbsp;<a href="mailto:${smtp.smtp_user}" style="color:#0563c1">${smtp.smtp_user}</a><br/><b>Date</b>&nbsp;&nbsp;&nbsp;&nbsp;${fmtDate}<br/><b>To</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="mailto:${recipient_email}" style="color:#0563c1">${recipient_email}</a><br/><b>Subject</b>&nbsp;${original_subject || ''}</div></div>`
+  body = body + quotedBlock
+
+  const now = new Date().toISOString()
+  try {
+    const nodemailer = (await import('nodemailer')).default
+    const transport = nodemailer.createTransport({
+      host: smtp.smtp_host, port: parseInt(smtp.smtp_port)||465, secure: parseInt(smtp.smtp_port)===465,
+      auth: { user: smtp.smtp_user, pass: smtp.smtp_pass }, tls: { rejectUnauthorized: false }
+    })
+    const mailOpts = {
+      from: `"${smtp.from_name||'SunSea Steel'}" <${smtp.smtp_user}>`, to: recipient_email, subject: subj, html: body
+    }
+    // Set In-Reply-To header if we can find the original message_id
+    const origLog = getOne('SELECT message_id FROM mail_logs WHERE contact_email=? AND status=? ORDER BY id DESC LIMIT 1', [recipient_email, 'sent'])
+    if (origLog?.message_id) {
+      mailOpts.headers = { 'In-Reply-To': origLog.message_id, 'References': origLog.message_id }
+    }
+    await transport.sendMail(mailOpts)
+    // Log to both tables
+    run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
+      [recipient_email, subj, 'sent', now, req.crmUser?.id||null])
+    run(`INSERT INTO mail_logs (task_id,template_id,account_id,contact_email,contact_name,subject,status,sent_at,sent_html) VALUES (?,?,?,?,?,?,?,?,?)`,
+      [0, tpl.id, smtp.id, recipient_email, cust?.name||cust?.first_name||'', subj, 'sent', now, body])
+    res.json({ message: `✅ 跟进邮件已发送给 ${recipient_email}`, status: 'sent' })
+  } catch (e) {
+    run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
+      [recipient_email, subj, 'failed', now, req.crmUser?.id||null])
+    res.json({ message: `❌ 发送失败: ${e.message}`, status: 'failed' })
+  }
+})
+
   const users = getAll('SELECT id,username,display_name FROM crm_users')
   const exportData = { exported_at: new Date().toISOString(), users: [] }
   for (const u of users) {

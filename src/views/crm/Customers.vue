@@ -261,7 +261,7 @@
 
     <!-- Send Records Panel -->
     <div v-if="showSendRecords" class="modal-overlay">
-      <div class="modal modal-xl">
+      <div class="modal" style="width:95vw;max-width:1200px">
         <div class="modal-header">
           <h3>📊 邮件发送记录</h3>
           <button class="modal-close" @click="showSendRecords = false">&times;</button>
@@ -519,13 +519,19 @@ function formatDateTime(d) {
   return `${date} ${time}`
 }
 function followUpRecord(r) {
-  // Navigate to CRM mailer with follow-up params
+  if (!confirm(`确认跟进发送邮件给 ${r.recipient_email || r.contact_email}？`)) return
   const email = r.recipient_email || r.contact_email || ''
-  const subject = r.subject || ''
-  router.push({
-    path: '/crm/mailer',
-    query: { followup: '1', email, subject, task_name: r.task_name || '' }
-  })
+  crmApi.request('/customers/email/quick-followup', {
+    method: 'POST',
+    body: JSON.stringify({
+      recipient_email: email,
+      original_subject: r.subject || '',
+      original_sent_at: r.sent_at || r.created_at || ''
+    })
+  }).then(res => {
+    alert(res.message || '跟进发送完成')
+    loadSendRecords()
+  }).catch(e => alert(e.message || '跟进发送失败'))
 }
 
 onMounted(() => {
@@ -603,6 +609,7 @@ td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .modal { background: #fff; border-radius: 14px; width: 640px; max-width: 92vw; max-height: 90vh; overflow-y: auto; }
 .modal-lg { width: 800px; }
+.tag-sm { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; background:#f1f5f9; color:#475569; }
 .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid #e2e8f0; }
 .modal-header h3 { margin: 0; font-size: 18px; }
 .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b; }
