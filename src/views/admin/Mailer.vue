@@ -366,7 +366,7 @@
                 <span style="margin-left:8px;color:#64748b;font-size:12px">已选 {{ newTask.contact_ids.length }} 位</span>
               </div>
               <label v-for="c in crmCustomers" :key="(c._source||'crm')+'_'+c.id" class="check-item" :style="!c.email ? 'opacity:0.4' : ''">
-                <input type="checkbox" v-model="newTask.contact_ids" :value="c.id" :disabled="!c.email" />
+                <input type="checkbox" v-model="newTask.contact_ids" :value="(c._source==='mailer'?'mc_':'crm_')+c.id" :disabled="!c.email" />
                 <span v-if="c._source==='crm'" class="log-badge" style="font-size:9px;margin-right:4px;background:#dbeafe;color:#1d4ed8">CRM</span>
                 <span v-else-if="c._source==='mailer'" class="log-badge" style="font-size:9px;margin-right:4px;background:#dcfce7;color:#166534">邮件</span>
                 {{ c.first_name || c.name }} {{ c.last_name || '' }} <span v-if="c.email" style="color:#64748b">&lt;{{ c.email }}&gt;</span><span v-else style="color:#ef4444;font-size:11px">无邮箱</span>
@@ -544,7 +544,10 @@ const crmFilter = reactive({ search: '', country: '', status: '', tag: '' })
 const crmMeta = reactive({ countries: [], statuses: [], tags: [] })
 const crmAllSelected = computed(() => {
   const withEmail = crmCustomers.value.filter(c => c.email)
-  return withEmail.length > 0 && withEmail.every(c => newTask.contact_ids.includes(c.id))
+  return withEmail.length > 0 && withEmail.every(c => {
+    const pid = (c._source === 'mailer' ? 'mc_' : 'crm_') + c.id
+    return newTask.contact_ids.includes(pid)
+  })
 })
 async function loadCrmCustomers() {
   try {
@@ -559,7 +562,7 @@ async function loadCrmCustomers() {
   } catch (e) { console.error('loadCrmCustomers error', e) }
 }
 function toggleAllCrmCustomers(e) {
-  const ids = crmCustomers.value.filter(c => c.email).map(c => c.id)
+  const ids = crmCustomers.value.filter(c => c.email).map(c => (c._source === 'mailer' ? 'mc_' : 'crm_') + c.id)
   if (e.target.checked) { newTask.contact_ids = [...new Set([...newTask.contact_ids, ...ids])] }
   else { newTask.contact_ids = newTask.contact_ids.filter(id => !ids.includes(id)) }
 }
@@ -1017,7 +1020,7 @@ onMounted(async () => {
   // Auto-open task creator if customers pre-selected via query params
   const qIds = route.query.customers
   if (qIds && isCRM.value) {
-    const ids = qIds.split(',').map(Number).filter(Boolean)
+    const ids = qIds.split(',').map(n => 'crm_' + n).filter(s => s !== 'crm_NaN')
     if (ids.length) {
       newTask.contact_ids = ids
       newTask._preselected = true

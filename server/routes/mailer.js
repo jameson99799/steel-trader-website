@@ -41,14 +41,20 @@ async function runTask(taskId, isResume = false) {
     const accountIds  = JSON.parse(task.account_ids  || '[]')
 
     const templates = templateIds.map(id => getOne('SELECT * FROM mail_templates WHERE id=?', [id])).filter(Boolean)
-    let   contacts  = contactIds.map(id => {
-        // Try mail_contacts first, fallback to crm_customers
-        let c = getOne('SELECT * FROM mail_contacts WHERE id=?', [id])
-        if (!c) {
+    let   contacts  = contactIds.map(cid => {
+        // Parse prefixed IDs: 'crm_5' → crm_customers, 'mc_3' → mail_contacts, plain number → mail_contacts (backward compat)
+        const str = String(cid)
+        if (str.startsWith('crm_')) {
+            const id = parseInt(str.slice(4))
             const crm = getOne('SELECT id, email, name, first_name, last_name, company FROM crm_customers WHERE id=?', [id])
-            if (crm) c = { id: crm.id, email: crm.email, name: crm.name || ((crm.first_name||'') + ' ' + (crm.last_name||'')).trim(), company: crm.company || '', _crm: true }
+            if (crm) return { id: crm.id, email: crm.email, name: crm.name || ((crm.first_name||'') + ' ' + (crm.last_name||'')).trim(), company: crm.company || '', _crm: true }
+            return null
         }
-        return c
+        if (str.startsWith('mc_')) {
+            return getOne('SELECT * FROM mail_contacts WHERE id=?', [parseInt(str.slice(3))])
+        }
+        // Plain number: mail_contacts (backward compatibility for old tasks)
+        return getOne('SELECT * FROM mail_contacts WHERE id=?', [cid])
     }).filter(c => c && c.email)
     let   accounts  = accountIds.length
         ? accountIds.map(id => getOne('SELECT * FROM smtp_accounts WHERE id=?', [id])).filter(Boolean)

@@ -425,6 +425,7 @@ router.post('/email/quick-send', dualAuth, async (req, res) => {
     body = body.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
   }
 
+  const now = new Date().toISOString()
   try {
     const nodemailer = (await import('nodemailer')).default
     const transport = nodemailer.createTransport({
@@ -434,12 +435,17 @@ router.post('/email/quick-send', dualAuth, async (req, res) => {
     await transport.sendMail({
       from: `"${smtp.from_name||'SunSea Steel'}" <${smtp.smtp_user}>`, to: customer.email, subject: subj, html: body
     })
+    // Log to both tables for full visibility
     run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
-      [customer.email, subj, 'sent', new Date().toISOString(), req.crmUser?.id||null])
+      [customer.email, subj, 'sent', now, req.crmUser?.id||null])
+    run(`INSERT INTO mail_logs (task_id,template_id,account_id,contact_email,contact_name,subject,status,message_id,sent_html) VALUES (?,?,?,?,?,?,?,?,?)`,
+      [0, tpl.id, smtp.id, customer.email, customer.name||customer.first_name||'', subj, 'sent', '', body])
     res.json({ message: `✅ 已发送给 ${customer.email}`, status: 'sent' })
   } catch (e) {
     run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
-      [customer.email, subj, 'failed', new Date().toISOString(), req.crmUser?.id||null])
+      [customer.email, subj, 'failed', now, req.crmUser?.id||null])
+    run(`INSERT INTO mail_logs (task_id,template_id,account_id,contact_email,contact_name,subject,status) VALUES (?,?,?,?,?,?,?)`,
+      [0, tpl.id, smtp.id, customer.email, customer.name||customer.first_name||'', subj, 'failed'])
     res.json({ message: `❌ 发送失败: ${e.message}`, status: 'failed' })
   }
 })
@@ -469,12 +475,16 @@ router.get('/export/all', dualAuth, (req, res) => {
   res.json(exportData)
 })
 
-// ─── Email send records ─────────────────────────────────────────────────────────
+// ─── Email send records (merged from both tables) ───────────────────────────
 router.get('/email/records', dualAuth, (req, res) => {
-  let filter = '', params = []
-  if (req.crmUser && req.crmUser.role !== 'admin') { filter = 'WHERE sent_by = ?'; params = [req.crmUser.id] }
-  const records = getAll(`SELECT * FROM crm_email_logs ${filter} ORDER BY sent_at DESC LIMIT 200`, params)
-  res.json(records)
+  // Get records from mail_logs (mailer tasks) joined with mail_tasks for task_name
+  const mailerLogs = getAll(`SELECT ml.id, ml.contact_email as recipient_email, ml.subject, ml.status, ml.sent_at, COALESCE(mt.name,'邮件任务') as task_name
+    FROM mail_logs ml LEFT JOIN mail_tasks mt ON ml.task_id=mt.id ORDER BY ml.sent_at DESC LIMIT 200`)
+  // Get records from crm_email_logs (quick-send)
+  const crmLogs = getAll(`SELECT id, recipient_email, subject, status, sent_at, '快速发送' as task_name FROM crm_email_logs ORDER BY sent_at DESC LIMIT 200`)
+  // Merge and sort by sent_at desc
+  const merged = [...mailerLogs, ...crmLogs].sort((a, b) => (b.sent_at||'').localeCompare(a.sent_at||'')).slice(0, 200)
+  res.json(merged)
 })
 
 export default router
