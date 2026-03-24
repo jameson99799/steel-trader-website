@@ -123,7 +123,7 @@ const html_body = `<div style="max-width:600px;margin:0 auto;font-family:'Segoe 
   <table cellpadding="0" cellspacing="0" border="0" style="margin:12px 0 20px">
     <tr>
       <td style="padding-right:10px">
-        <a href="mailto:{{email}}?subject=Steel%20Inquiry" style="display:inline-block;padding:10px 20px;background:#1f4e79;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">📧 Request Quote</a>
+        <a href="mailto:{{email}}?subject={{subject}}" style="display:inline-block;padding:10px 20px;background:#1f4e79;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">📧 Request Quote</a>
       </td>
       <td>
         <a href="{{whatsapp_link}}" target="_blank" style="display:inline-block;padding:10px 20px;background:#25d366;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">💬 WhatsApp Us</a>

@@ -482,6 +482,8 @@ router.post('/email/quick-send', dualAuth, async (req, res) => {
   body = fixEmailImageUrls(body)
   body = replaceSenderVars(body, smtp.smtp_user)
   body = replaceCustomVars(body)
+  body = body.replace(/\{\{subject\}\}/g, encodeURIComponent('Re: ' + subj))
+  body = body.replace(/\{\{subject_raw\}\}/g, subj)
 
   const now = new Date().toISOString()
   try {
@@ -546,6 +548,8 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
   body = fixEmailImageUrls(body)
   body = replaceSenderVars(body, smtp.smtp_user)
   body = replaceCustomVars(body)
+  body = body.replace(/\{\{subject\}\}/g, encodeURIComponent('Re: ' + (subject || '')))
+  body = body.replace(/\{\{subject_raw\}\}/g, subject || '')
 
   // Find the original email's HTML body from mail_logs
   const origEmail = getOne('SELECT sent_html, subject, sent_at FROM mail_logs WHERE contact_email=? AND status=? ORDER BY id DESC LIMIT 1', [recipient_email, 'sent'])

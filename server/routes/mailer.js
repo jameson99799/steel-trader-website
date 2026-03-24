@@ -157,6 +157,9 @@ async function runTask(taskId, isResume = false) {
                 body = body.replace(/\{\{whatsapp_link\}\}/g, waLink)
                 body = body.replace(/\{\{company_name\}\}/g, comp?.name_en || 'SunSea Steel')
             } catch (_) { }
+            // Replace {{subject}} with actual email subject (URL-encoded for mailto)
+            body = body.replace(/\{\{subject\}\}/g, encodeURIComponent('Re: ' + subj))
+            body = body.replace(/\{\{subject_raw\}\}/g, subj)
 
             // Convert relative image URLs to absolute URLs for email clients
             try {
