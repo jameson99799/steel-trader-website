@@ -477,49 +477,58 @@
       </div>
     </div>
 
-    <!-- ═══ SMTP Accounts Tab ═══ -->
+    <!-- ═══ SMTP Accounts Tab (same as admin Email.vue) ═══ -->
     <div v-if="tab === 'accounts'" class="tab-body">
-      <div class="toolbar">
-        <button class="btn btn-primary" @click="openAcctEditor()">+ 添加发件账号</button>
-      </div>
-      <div v-if="!smtpAccounts.length" class="empty">暂无发件账号</div>
-      <div v-for="a in smtpAccounts" :key="a.id" class="list-card" :style="a.is_default ? 'border-left:3px solid #059669' : ''">
-        <div class="lc-main">
-          <strong>{{ a.name || a.smtp_user }}</strong>
-          <span v-if="a.is_default" class="log-badge" style="background:#ecfdf5;color:#059669;font-size:10px;margin-left:6px">默认</span>
-          <span v-if="a.enabled" class="log-badge" style="background:#f0fdf4;color:#166534;font-size:10px;margin-left:4px">启用</span>
-          <span v-else class="log-badge" style="background:#fef2f2;color:#dc2626;font-size:10px;margin-left:4px">禁用</span>
-          <span class="lc-sub">{{ a.smtp_host }}:{{ a.smtp_port }} | {{ a.smtp_user }}</span>
-          <span class="lc-note">密码: {{ a.smtp_pass }}</span>
+      <div class="card" style="border:1px solid #e2e8f0;border-radius:12px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #e2e8f0">
+          <h3 style="margin:0;font-size:15px;font-weight:600">📮 SMTP 发件账号</h3>
+          <button class="btn btn-primary btn-sm" @click="openAcctEditor()">+ 添加账号</button>
         </div>
-        <div class="lc-actions">
-          <button v-if="!a.is_default" class="btn btn-sm btn-outline" style="color:#059669;border-color:#86efac" @click="setDefaultAcct(a.id)">⭐ 默认</button>
-          <button class="btn btn-sm btn-outline" @click="testAcct(a.id)">🔌 测试</button>
-          <button class="btn btn-sm btn-outline" @click="openAcctEditor(a)">编辑</button>
-          <button class="btn btn-sm btn-outline err-btn" @click="deleteAcct(a.id)">删除</button>
+        <div style="padding:0">
+          <div v-if="!smtpAccounts.length" style="padding:24px;text-align:center;color:#94a3b8;font-size:14px">暂无账号，请点击「添加账号」</div>
+          <table v-else class="smtp-table">
+            <thead>
+              <tr><th>名称</th><th>SMTP服务器</th><th>账号</th><th>状态</th><th>默认</th><th>发送量</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="a in smtpAccounts" :key="a.id" :style="a.is_default ? 'background:#eff6ff' : ''">
+                <td>{{ a.name || '-' }}</td>
+                <td>{{ a.smtp_host }}:{{ a.smtp_port }}</td>
+                <td>{{ a.smtp_user }}</td>
+                <td><span :class="['log-badge', a.enabled ? '' : '']" :style="a.enabled ? 'background:#dcfce7;color:#15803d' : 'background:#f1f5f9;color:#64748b'">{{ a.enabled ? '启用' : '停用' }}</span></td>
+                <td>{{ a.is_default ? '⭐ 默认' : '' }}</td>
+                <td>{{ a.send_count || 0 }}</td>
+                <td style="display:flex;gap:6px">
+                  <button class="btn btn-sm btn-outline" @click="openAcctEditor(a)">编辑</button>
+                  <button class="btn btn-sm btn-outline" style="color:#059669" @click="testAcct(a.id)">发送测试</button>
+                  <button class="btn btn-sm btn-outline err-btn" @click="deleteAcct(a.id)">删除</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
 
-    <!-- ═══ Account Editor Modal ═══ -->
+    <!-- ═══ Account Editor Modal (same as admin Email.vue) ═══ -->
     <div class="modal-overlay" v-if="showAcctEditor" @click.self="showAcctEditor=false">
       <div class="modal-box">
-        <h3>{{ editAcct.id ? '编辑发件账号' : '添加发件账号' }}</h3>
-        <div class="form-group"><label>名称</label><input v-model="editAcct.name" class="form-control" placeholder="如：公司邮箱" /></div>
+        <h3>{{ editAcct.id ? '编辑账号' : '添加账号' }}</h3>
         <div class="grid grid-2">
-          <div class="form-group"><label>SMTP服务器</label><input v-model="editAcct.smtp_host" class="form-control" placeholder="smtp.example.com" /></div>
-          <div class="form-group"><label>端口</label><input v-model.number="editAcct.smtp_port" class="form-control" type="number" /></div>
+          <div class="form-group"><label>账号名称</label><input v-model="editAcct.name" class="form-control" placeholder="如：Gmail主账号" /></div>
+          <div class="form-group"><label>发件人显示名称</label><input v-model="editAcct.from_name" class="form-control" placeholder="SunSea Steel" /></div>
         </div>
         <div class="grid grid-2">
-          <div class="form-group"><label>账号</label><input v-model="editAcct.smtp_user" class="form-control" placeholder="user@example.com" /></div>
-          <div class="form-group"><label>密码</label><input v-model="editAcct.smtp_pass" class="form-control" /></div>
+          <div class="form-group"><label>SMTP 服务器</label><input v-model="editAcct.smtp_host" class="form-control" placeholder="smtp.gmail.com" /></div>
+          <div class="form-group"><label>SMTP 端口</label><input v-model.number="editAcct.smtp_port" class="form-control" type="number" placeholder="465" /></div>
         </div>
         <div class="grid grid-2">
-          <div class="form-group"><label>发件人名称</label><input v-model="editAcct.from_name" class="form-control" placeholder="SunSea Steel" /></div>
-          <div class="form-group" style="display:flex;align-items:center;gap:16px;padding-top:24px">
-            <label class="toggle-label"><input type="checkbox" v-model="editAcct.is_default" /><span>设为默认</span></label>
-            <label class="toggle-label"><input type="checkbox" v-model="editAcct.enabled" /><span>启用</span></label>
-          </div>
+          <div class="form-group"><label>邮箱账号</label><input v-model="editAcct.smtp_user" class="form-control" type="email" placeholder="your@gmail.com" /></div>
+          <div class="form-group"><label>密码 / 应用专用密码</label><input v-model="editAcct.smtp_pass" class="form-control" type="text" placeholder="明文显示，便于修改" autocomplete="off" /></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:20px;margin-bottom:16px">
+          <label class="toggle-label"><input type="checkbox" v-model="editAcct.is_default" /><span>设为默认账号</span></label>
+          <label class="toggle-label"><input type="checkbox" v-model="editAcct.enabled" /><span>启用</span></label>
         </div>
         <div class="modal-actions">
           <button class="btn btn-primary" @click="saveAcct">💾 保存</button>
@@ -1545,6 +1554,16 @@ textarea.form-control { resize: vertical; font-family: inherit }
 .att-size { font-size: 11px; color: #94a3b8; flex-shrink: 0 }
 .att-del { background: none; border: none; color: #ef4444; cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; flex-shrink: 0 }
 .att-del:hover { background: #fef2f2 }
+
+/* SMTP accounts table (matching admin Email.vue) */
+.smtp-table { width: 100%; border-collapse: collapse; font-size: 13px }
+.smtp-table th { background: #f8fafc; padding: 10px 14px; text-align: left; font-weight: 600; color: #64748b; border-bottom: 1px solid #e2e8f0 }
+.smtp-table td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9 }
+.smtp-table tbody tr:hover { background: #f8fafc }
+.smtp-table tbody tr:last-child td { border-bottom: none }
+.grid { display: grid; gap: 16px }
+.grid-2 { grid-template-columns: 1fr 1fr }
+.toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px }
 
 </style>
 

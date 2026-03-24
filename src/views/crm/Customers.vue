@@ -28,7 +28,7 @@
       </select>
       <input v-model="filters.start_date" type="date" @change="loadCustomers" class="filter-input date" />
       <input v-model="filters.end_date" type="date" @change="loadCustomers" class="filter-input date" />
-      <button class="btn btn-sm btn-outline" @click="showSendRecords = true" title="发送记录">📊 发送记录</button>
+      <button class="btn btn-sm btn-outline" @click="loadSendRecords(); showSendRecords = true" title="发送记录">📊 发送记录</button>
     </div>
 
     <!-- Selection Action Bar -->
