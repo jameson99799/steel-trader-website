@@ -67,6 +67,7 @@ export default {
   // Sea Pool
   getSeaPool: () => request('/customers/pool/sea'),
   claimCustomer: (id) => request(`/customers/pool/claim/${id}`, { method: 'POST' }),
+  moveToPool: (ids) => request('/customers/pool/move', { method: 'POST', body: JSON.stringify({ customer_ids: Array.isArray(ids) ? ids : [ids] }) }),
 
   // Settings
   getSettings: () => request('/customers/settings/crm'),

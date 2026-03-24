@@ -365,11 +365,14 @@
                 <label><input type="checkbox" @change="toggleAllCrmCustomers" :checked="crmAllSelected" /> 全选有邮箱的客户</label>
                 <span style="margin-left:8px;color:#64748b;font-size:12px">已选 {{ newTask.contact_ids.length }} 位</span>
               </div>
-              <label v-for="c in crmCustomers" :key="c.id" class="check-item" :style="!c.email ? 'opacity:0.4' : ''">
+              <label v-for="c in crmCustomers" :key="(c._source||'crm')+'_'+c.id" class="check-item" :style="!c.email ? 'opacity:0.4' : ''">
                 <input type="checkbox" v-model="newTask.contact_ids" :value="c.id" :disabled="!c.email" />
+                <span v-if="c._source==='crm'" class="log-badge" style="font-size:9px;margin-right:4px;background:#dbeafe;color:#1d4ed8">CRM</span>
+                <span v-else-if="c._source==='mailer'" class="log-badge" style="font-size:9px;margin-right:4px;background:#dcfce7;color:#166534">邮件</span>
                 {{ c.first_name || c.name }} {{ c.last_name || '' }} <span v-if="c.email" style="color:#64748b">&lt;{{ c.email }}&gt;</span><span v-else style="color:#ef4444;font-size:11px">无邮箱</span>
-                <span v-if="c.country" class="log-badge" style="font-size:10px;margin-left:4px">{{ c.country }}</span>
+                <span v-if="c.country" class="log-badge" :style="c._source==='crm' ? 'font-size:10px;margin-left:4px;background:#dbeafe;color:#1d4ed8' : 'font-size:10px;margin-left:4px;background:#dcfce7;color:#166534'">{{ c.country }}</span>
                 <span v-if="c.status" class="log-badge" style="font-size:10px;margin-left:2px;background:#f0fdf4;color:#166534">{{ c.status }}</span>
+                <span v-if="c.group_name" class="log-badge" style="font-size:10px;margin-left:2px;background:#fef3c7;color:#92400e">{{ c.group_name }}</span>
               </label>
             </div>
           </div>

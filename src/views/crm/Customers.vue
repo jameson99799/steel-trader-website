@@ -35,6 +35,7 @@
     <div v-if="selectedIds.length" class="selection-bar">
       <span>已选择 <strong>{{ selectedIds.length }}</strong> 个客户</span>
       <button class="btn btn-sm btn-primary" @click="bulkEmailViaMailer(selectedIds)">📧 发送营销邮件</button>
+      <button class="btn btn-sm" style="background:#e0f2fe;color:#0369a1" @click="bulkMoveToPool">🌊 移入公海池</button>
       <button class="btn btn-sm btn-secondary" @click="selectedIds = []; allSelected = false">取消选择</button>
     </div>
 
@@ -97,6 +98,7 @@
                 <button class="btn-sm btn-inq" @click="$router.push(`/crm/customer/${c.id}?tab=inquiry`)">询盘</button>
                 <button class="btn-sm btn-quot" @click="$router.push(`/crm/customer/${c.id}?tab=quotation`)">报价</button>
                 <button class="btn-sm btn-follow" @click="$router.push(`/crm/customer/${c.id}?tab=followup`)">跟进</button>
+                <button v-if="c.status !== '公海池'" class="btn-sm" style="background:#e0f2fe;color:#0369a1" @click="moveToPool(c)">🌊公海</button>
                 <button class="btn-sm btn-danger" @click="handleDelete(c)">删除</button>
               </div>
             </td>
@@ -442,6 +444,26 @@ function sendMailToCompany() {
 function bulkEmailViaMailer(ids) {
   if (!ids.length) { alert('请先选择客户'); return }
   router.push(`/crm/mailer?customers=${ids.join(',')}`)
+}
+
+// Move to sea pool
+async function moveToPool(c) {
+  if (!confirm(`确定将 "${c.name || c.first_name || ''}" 移入公海池？`)) return
+  try {
+    await crmApi.moveToPool(c.id)
+    alert('已移入公海池')
+    loadCustomers()
+  } catch (e) { alert(e.message) }
+}
+async function bulkMoveToPool() {
+  if (!selectedIds.value.length) return
+  if (!confirm(`确定将 ${selectedIds.value.length} 位客户移入公海池？`)) return
+  try {
+    const res = await crmApi.moveToPool(selectedIds.value)
+    alert(res.message || '操作完成')
+    selectedIds.value = []; allSelected.value = false
+    loadCustomers()
+  } catch (e) { alert(e.message) }
 }
 
 // Send Records

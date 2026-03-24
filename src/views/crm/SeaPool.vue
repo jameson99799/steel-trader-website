@@ -1,7 +1,7 @@
 <template>
   <div class="sea-pool">
     <h1>🌊 公海池</h1>
-    <p class="subtitle">超过 {{ settings.sea_pool_days }} 天未活动的客户会自动进入公海池，所有子账户均可申领。</p>
+    <p v-if="settings" class="subtitle">超过 {{ settings.sea_pool_days }} 天未活动的客户会自动进入公海池，所有子账户均可申领。</p>
 
     <div class="pool-groups" v-if="grouped.length">
       <div v-for="g in grouped" :key="g.country" class="country-group">
@@ -46,7 +46,7 @@ import { ref, computed, onMounted } from 'vue'
 import crmApi from '../../api/crm'
 
 const customers = ref([])
-const settings = ref({ sea_pool_days: 30 })
+const settings = ref(null)
 const isAdmin = computed(() => {
   try { return JSON.parse(localStorage.getItem('crm_user') || '{}').role === 'admin' } catch { return false }
 })
@@ -63,9 +63,10 @@ const grouped = computed(() => {
 
 async function load() {
   try {
+    const s = await crmApi.getSettings()
+    settings.value = s || { sea_pool_days: 30 }
     customers.value = await crmApi.getSeaPool()
-    settings.value = await crmApi.getSettings()
-  } catch (e) { console.error(e) }
+  } catch (e) { console.error(e); if (!settings.value) settings.value = { sea_pool_days: 30 } }
 }
 
 async function handleClaim(c) {

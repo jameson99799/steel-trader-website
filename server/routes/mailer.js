@@ -41,7 +41,15 @@ async function runTask(taskId, isResume = false) {
     const accountIds  = JSON.parse(task.account_ids  || '[]')
 
     const templates = templateIds.map(id => getOne('SELECT * FROM mail_templates WHERE id=?', [id])).filter(Boolean)
-    let   contacts  = contactIds.map(id => getOne('SELECT * FROM mail_contacts WHERE id=?', [id])).filter(Boolean)
+    let   contacts  = contactIds.map(id => {
+        // Try mail_contacts first, fallback to crm_customers
+        let c = getOne('SELECT * FROM mail_contacts WHERE id=?', [id])
+        if (!c) {
+            const crm = getOne('SELECT id, email, name, first_name, last_name, company FROM crm_customers WHERE id=?', [id])
+            if (crm) c = { id: crm.id, email: crm.email, name: crm.name || ((crm.first_name||'') + ' ' + (crm.last_name||'')).trim(), company: crm.company || '', _crm: true }
+        }
+        return c
+    }).filter(c => c && c.email)
     let   accounts  = accountIds.length
         ? accountIds.map(id => getOne('SELECT * FROM smtp_accounts WHERE id=?', [id])).filter(Boolean)
         : getAll('SELECT * FROM smtp_accounts WHERE enabled=1 ORDER BY id ASC')
@@ -588,25 +596,48 @@ router.post('/logs/bulk-delete', authMiddleware, express.json(), (req, res) => {
     res.json({ message: `已删除 ${ids.length} 条记录` })
 })
 
-// ─── CRM Customer picker (for CRM context) ──────────────────────────────────
+// ─── CRM Customer + mail_contacts picker (for CRM context) ─────────────────
 router.get('/crm-customers', authMiddleware, (req, res) => {
-    const { search, country, status, tag } = req.query
-    let sql = `SELECT id, first_name, last_name, name, email, company, country, status, tags FROM crm_customers WHERE 1=1`
-    const params = []
-    if (search) { sql += ` AND (name LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR company LIKE ?)`; const s = `%${search}%`; params.push(s,s,s,s,s) }
-    if (country) { sql += ` AND country=?`; params.push(country) }
-    if (status) { sql += ` AND status=?`; params.push(status) }
-    if (tag) { sql += ` AND tags LIKE ?`; params.push(`%${tag}%`) }
-    sql += ` ORDER BY id DESC LIMIT 500`
-    const customers = getAll(sql, params)
-    // Also return filter options
+    const { search, country, status, tag, source } = req.query
+    let crmCustomers = [], mailContacts = []
+
+    // CRM customers (unless source=mailer)
+    if (source !== 'mailer') {
+        let sql = `SELECT id, first_name, last_name, name, email, company, country, status, tags FROM crm_customers WHERE 1=1`
+        const params = []
+        if (search) { sql += ` AND (name LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR company LIKE ?)`; const s = `%${search}%`; params.push(s,s,s,s,s) }
+        if (country) { sql += ` AND country=?`; params.push(country) }
+        if (status) { sql += ` AND status=?`; params.push(status) }
+        if (tag) { sql += ` AND tags LIKE ?`; params.push(`%${tag}%`) }
+        sql += ` ORDER BY id DESC LIMIT 500`
+        crmCustomers = getAll(sql, params).map(c => ({ ...c, _source: 'crm' }))
+    }
+
+    // Mail contacts (unless source=crm)
+    if (source !== 'crm') {
+        let mcSql = `SELECT mc.id, mc.email, mc.name, mc.company, mc.country, mg.name as group_name FROM mail_contacts mc LEFT JOIN mail_groups mg ON mc.group_id=mg.id WHERE 1=1`
+        const mcParams = []
+        if (search) { const s = `%${search}%`; mcSql += ` AND (mc.name LIKE ? OR mc.email LIKE ? OR mc.company LIKE ?)`; mcParams.push(s,s,s) }
+        if (country) { mcSql += ` AND mc.country=?`; mcParams.push(country) }
+        mcSql += ` ORDER BY mc.id DESC LIMIT 500`
+        mailContacts = getAll(mcSql, mcParams).map(c => ({ ...c, _source: 'mailer' }))
+    }
+
+    // Filter options
     const countries = getAll('SELECT DISTINCT country FROM crm_customers WHERE country!="" ORDER BY country')
     const statuses = getAll('SELECT DISTINCT status FROM crm_customers WHERE status!="" ORDER BY status')
     const allTags = new Set()
     getAll('SELECT tags FROM crm_customers WHERE tags!="[]"').forEach(r => {
         try { JSON.parse(r.tags).forEach(t => allTags.add(t)) } catch(e) {}
     })
-    res.json({ customers, meta: { countries: countries.map(c=>c.country), statuses: statuses.map(s=>s.status), tags: [...allTags] } })
+    // mail_contacts countries
+    const mcCountries = getAll('SELECT DISTINCT country FROM mail_contacts WHERE country!="" ORDER BY country').map(c=>c.country)
+    const mergedCountries = [...new Set([...countries.map(c=>c.country), ...mcCountries])].sort()
+
+    res.json({
+        customers: [...crmCustomers, ...mailContacts],
+        meta: { countries: mergedCountries, statuses: statuses.map(s=>s.status), tags: [...allTags] }
+    })
 })
 
 // ─── Default template toggle ─────────────────────────────────────────────────

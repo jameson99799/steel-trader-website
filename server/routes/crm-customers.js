@@ -156,6 +156,24 @@ router.put('/settings/crm', dualAuth, (req, res) => {
   res.json({ message: '设置已保存', moved_to_pool: inactive.length })
 })
 
+// Move customer(s) to sea pool
+router.post('/pool/move', dualAuth, (req, res) => {
+  const { customer_ids } = req.body
+  if (!customer_ids?.length) return res.status(400).json({ error: '请选择客户' })
+  const now = new Date().toISOString()
+  let moved = 0
+  for (const id of customer_ids) {
+    const c = getOne('SELECT id, owner_id, status FROM crm_customers WHERE id=?', [id])
+    if (c && c.status !== '公海池') {
+      run(`UPDATE crm_customers SET status='公海池', sea_pool_count = sea_pool_count + 1, last_activity_at=? WHERE id=?`, [now, id])
+      run(`INSERT INTO crm_customer_history (customer_id, from_user_id, to_user_id, action, created_at) VALUES (?,?,NULL,'manual_pool',?)`,
+        [id, c.owner_id, now])
+      moved++
+    }
+  }
+  res.json({ message: `已移入公海池 ${moved} 位客户`, moved })
+})
+
 // Global search
 router.get('/search/global', dualAuth, (req, res) => {
   const { q, date } = req.query
@@ -169,9 +187,10 @@ router.get('/search/global', dualAuth, (req, res) => {
   if (q) {
     const s = `%${q}%`
     results = [
-      ...getAll(`SELECT c.id, c.name, c.company, c.country, 'customer' as type FROM crm_customers c WHERE (c.name LIKE ? OR c.email LIKE ? OR c.company LIKE ? OR c.phone LIKE ?) ${ownerFilter} LIMIT 20`, [s, s, s, s, ...ownerParams]),
-      ...getAll(`SELECT i.id, i.customer_id, i.note, i.inquiry_time, 'inquiry' as type, c.name as customer_name FROM crm_inquiries i JOIN crm_customers c ON i.customer_id=c.id WHERE (i.content_html LIKE ? OR i.note LIKE ?) ${ownerFilter} ORDER BY i.inquiry_time DESC LIMIT 20`, [s, s, ...ownerParams]),
-      ...getAll(`SELECT q.id, q.customer_id, q.note, q.quotation_time, 'quotation' as type, c.name as customer_name FROM crm_quotations q JOIN crm_customers c ON q.customer_id=c.id WHERE (q.content_html LIKE ? OR q.note LIKE ?) ${ownerFilter} ORDER BY q.quotation_time DESC LIMIT 20`, [s, s, ...ownerParams])
+      ...getAll(`SELECT c.id, c.first_name, c.last_name, c.name, c.company, c.country, c.email, 'customer' as type FROM crm_customers c WHERE (c.name LIKE ? OR c.first_name LIKE ? OR c.last_name LIKE ? OR c.email LIKE ? OR c.company LIKE ? OR c.phone LIKE ? OR c.note LIKE ?) ${ownerFilter} LIMIT 20`, [s, s, s, s, s, s, s, ...ownerParams]),
+      ...getAll(`SELECT i.id, i.customer_id, i.note, i.inquiry_time, 'inquiry' as type, c.name as customer_name FROM crm_inquiries i JOIN crm_customers c ON i.customer_id=c.id WHERE (i.content_html LIKE ? OR i.note LIKE ?) ${ownerFilter.replace('c.owner_id', 'c.owner_id')} ORDER BY i.inquiry_time DESC LIMIT 20`, [s, s, ...ownerParams]),
+      ...getAll(`SELECT q.id, q.customer_id, q.note, q.quotation_time, 'quotation' as type, c.name as customer_name FROM crm_quotations q JOIN crm_customers c ON q.customer_id=c.id WHERE (q.content_html LIKE ? OR q.note LIKE ?) ${ownerFilter.replace('c.owner_id', 'c.owner_id')} ORDER BY q.quotation_time DESC LIMIT 20`, [s, s, ...ownerParams]),
+      ...getAll(`SELECT f.id, f.customer_id, f.content as note, f.created_at as followup_time, 'followup' as type, c.name as customer_name FROM crm_followups f JOIN crm_customers c ON f.customer_id=c.id WHERE (f.content LIKE ? OR f.subject LIKE ?) ${ownerFilter.replace('c.owner_id', 'c.owner_id')} ORDER BY f.created_at DESC LIMIT 20`, [s, s, ...ownerParams])
     ]
   }
   if (date) {
