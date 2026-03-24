@@ -580,21 +580,30 @@
       <div v-else>
         <div v-for="(group, gname) in groupedVars" :key="gname" style="margin-bottom:20px">
           <h4 style="margin:0 0 8px;font-size:14px;font-weight:600;color:#475569">{{ gname || '未分组' }}</h4>
-          <table class="smtp-table">
-            <thead><tr><th>名称</th><th>变量键</th><th>类型</th><th>值/配置</th><th>操作</th></tr></thead>
-            <tbody>
-              <tr v-for="v in group" :key="v.id">
-                <td>{{ v.name }}</td>
-                <td><code v-pre>{{</code>{{ v.var_key }}<code v-pre>}}</code></td>
-                <td><span class="log-badge" :style="varTypeBadge(v.var_type)">{{ varTypeLabel(v.var_type) }}</span></td>
-                <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ varValueDisplay(v) }}</td>
-                <td>
-                  <button class="btn btn-sm btn-outline" @click="openVarEditor(v)">编辑</button>
-                  <button class="btn btn-sm btn-outline" style="color:#ef4444" @click="deleteVar(v.id)">删除</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden">
+            <table class="smtp-table" style="table-layout:fixed;width:100%">
+              <colgroup>
+                <col style="width:18%">
+                <col style="width:22%">
+                <col style="width:14%">
+                <col style="width:30%">
+                <col style="width:16%">
+              </colgroup>
+              <thead><tr><th>名称</th><th>变量键</th><th>类型</th><th>值/配置</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr v-for="v in group" :key="v.id">
+                  <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ v.name }}</td>
+                  <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12px" v-pre>{{</code>{{ v.var_key }}<code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12px" v-pre>}}</code></td>
+                  <td><span class="log-badge" :style="varTypeBadge(v.var_type)" style="white-space:nowrap;font-size:11px">{{ varTypeLabel(v.var_type) }}</span></td>
+                  <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ varValueDisplay(v) }}</td>
+                  <td style="white-space:nowrap">
+                    <button class="btn btn-sm btn-outline" @click="openVarEditor(v)" style="margin-right:4px">编辑</button>
+                    <button class="btn btn-sm btn-outline" style="color:#ef4444" @click="deleteVar(v.id)">删除</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       <!-- Variable editor modal -->
