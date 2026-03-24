@@ -10,7 +10,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const dbPath = join(__dirname, '..', 'data', 'data.db')
+const dbPath = join(__dirname, '..', 'data', 'database.db')
 const db = new Database(dbPath)
 
 const name = 'Steel Products Cold Email - English'
