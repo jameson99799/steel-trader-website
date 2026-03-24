@@ -23,7 +23,7 @@ router.get('/accounts', authMiddleware, (req, res) => {
     const { userId, isAdmin } = getUserId(req)
     const accounts = isAdmin
         ? getAll('SELECT * FROM smtp_accounts ORDER BY is_default DESC, id ASC')
-        : getAll(`SELECT * FROM smtp_accounts WHERE created_by=? OR created_by='' ORDER BY is_default DESC, id ASC`, [userId])
+        : getAll(`SELECT * FROM smtp_accounts WHERE created_by=? ORDER BY is_default DESC, id ASC`, [userId])
     res.json(accounts)
 })
 

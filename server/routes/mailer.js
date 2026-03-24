@@ -606,12 +606,14 @@ router.get('/logs', authMiddleware, (req, res) => {
 // CRM customers + mail_contacts combined for task creation picker
 router.get('/crm-customers', authMiddleware, (req, res) => {
     const { search, country, status, tag, source } = req.query
+    const { userId, isAdmin } = getUserId(req)
     let results = []
 
-    // Load CRM customers
+    // Load CRM customers (with owner isolation for sub-accounts)
     if (source !== 'mailer_only') {
         let crmWhere = ['1=1']
         let crmParams = []
+        if (!isAdmin) { crmWhere.push('c.owner_id = ?'); crmParams.push(userId) }
         if (search) { crmWhere.push("(c.first_name LIKE ? OR c.last_name LIKE ? OR c.name LIKE ? OR c.company LIKE ? OR c.email LIKE ?)"); const q = `%${search}%`; crmParams.push(q,q,q,q,q) }
         if (country) { crmWhere.push('c.country = ?'); crmParams.push(country) }
         if (status) { crmWhere.push('c.status = ?'); crmParams.push(status) }
@@ -627,16 +629,16 @@ router.get('/crm-customers', authMiddleware, (req, res) => {
         }
     }
 
-    // Load mail_contacts
+    // Load mail_contacts (with created_by isolation for sub-accounts)
     if (source !== 'crm') {
         let mcWhere = ['1=1']
         let mcParams = []
+        if (!isAdmin) { mcWhere.push('mc.created_by = ?'); mcParams.push(userId) }
         if (search) { mcWhere.push("(mc.email LIKE ? OR mc.name LIKE ? OR mc.company LIKE ?)"); const q = `%${search}%`; mcParams.push(q,q,q) }
         if (country) {
-            // When source is mailer_only, 'country' filter actually matches group name
-            mcWhere.push('(mg.name = ? OR mc.country = ?)'); mcParams.push(country, country)
+            mcWhere.push('(cg.name = ? OR mc.country = ?)'); mcParams.push(country, country)
         }
-        const mcRows = getAll(`SELECT mc.*, mg.name as group_name FROM mail_contacts mc LEFT JOIN mail_contact_groups mg ON mg.id = mc.group_id WHERE ${mcWhere.join(' AND ')} ORDER BY mc.id DESC LIMIT 500`, mcParams)
+        const mcRows = getAll(`SELECT mc.*, cg.name as group_name FROM mail_contacts mc LEFT JOIN contact_groups cg ON cg.id = mc.group_id WHERE ${mcWhere.join(' AND ')} ORDER BY mc.id DESC LIMIT 500`, mcParams)
         for (const mc of mcRows) {
             results.push({
                 id: mc.id, name: mc.name || '', last_name: '',
@@ -750,48 +752,7 @@ router.post('/logs/bulk-delete', authMiddleware, express.json(), (req, res) => {
 })
 
 // ─── CRM Customer + mail_contacts picker (for CRM context) ─────────────────
-router.get('/crm-customers', authMiddleware, (req, res) => {
-    const { search, country, status, tag, source } = req.query
-    let crmCustomers = [], mailContacts = []
-
-    // CRM customers (unless source=mailer)
-    if (source !== 'mailer') {
-        let sql = `SELECT id, first_name, last_name, name, email, company, country, status, tags FROM crm_customers WHERE 1=1`
-        const params = []
-        if (search) { sql += ` AND (name LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR company LIKE ?)`; const s = `%${search}%`; params.push(s,s,s,s,s) }
-        if (country) { sql += ` AND country=?`; params.push(country) }
-        if (status) { sql += ` AND status=?`; params.push(status) }
-        if (tag) { sql += ` AND tags LIKE ?`; params.push(`%${tag}%`) }
-        sql += ` ORDER BY id DESC LIMIT 500`
-        crmCustomers = getAll(sql, params).map(c => ({ ...c, _source: 'crm' }))
-    }
-
-    // Mail contacts (unless source=crm)
-    if (source !== 'crm') {
-        let mcSql = `SELECT mc.id, mc.email, mc.name, mc.company, mc.country, mg.name as group_name FROM mail_contacts mc LEFT JOIN mail_groups mg ON mc.group_id=mg.id WHERE 1=1`
-        const mcParams = []
-        if (search) { const s = `%${search}%`; mcSql += ` AND (mc.name LIKE ? OR mc.email LIKE ? OR mc.company LIKE ?)`; mcParams.push(s,s,s) }
-        if (country) { mcSql += ` AND mc.country=?`; mcParams.push(country) }
-        mcSql += ` ORDER BY mc.id DESC LIMIT 500`
-        mailContacts = getAll(mcSql, mcParams).map(c => ({ ...c, _source: 'mailer' }))
-    }
-
-    // Filter options
-    const countries = getAll('SELECT DISTINCT country FROM crm_customers WHERE country!="" ORDER BY country')
-    const statuses = getAll('SELECT DISTINCT status FROM crm_customers WHERE status!="" ORDER BY status')
-    const allTags = new Set()
-    getAll('SELECT tags FROM crm_customers WHERE tags!="[]"').forEach(r => {
-        try { JSON.parse(r.tags).forEach(t => allTags.add(t)) } catch(e) {}
-    })
-    // mail_contacts countries
-    const mcCountries = getAll('SELECT DISTINCT country FROM mail_contacts WHERE country!="" ORDER BY country').map(c=>c.country)
-    const mergedCountries = [...new Set([...countries.map(c=>c.country), ...mcCountries])].sort()
-
-    res.json({
-        customers: [...crmCustomers, ...mailContacts],
-        meta: { countries: mergedCountries, statuses: statuses.map(s=>s.status), tags: [...allTags] }
-    })
-})
+// REMOVED: duplicate /crm-customers route (consolidated into the one above at line ~607)
 
 // ─── Default template toggle (marketing + followup) ──────────────────────────
 router.post('/templates/:id/set-default', authMiddleware, express.json(), (req, res) => {
