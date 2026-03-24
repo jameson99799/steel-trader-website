@@ -1000,6 +1000,24 @@ async function loadAll() {
     api.request('/mailer/contact-groups')
   ])
   templates.value = tpl || []; contacts.value = ct || []; tasks.value = tk || []; smtpAccounts.value = accts || []; contactGroups.value = grps || []
+
+  // In CRM mode, also load CRM customers and append to contacts list
+  if (isCRM.value) {
+    try {
+      const crmData = await api.request('/mailer/crm-customers?source=crm')
+      const crmContacts = (crmData.customers || []).filter(c => c.email).map(c => ({
+        id: 'crm_' + c.id,
+        email: c.email,
+        name: (c.first_name || c.name || '') + ' ' + (c.last_name || ''),
+        company: c.company || '',
+        group_name: 'CRM客户',
+        group_id: 'crm',
+        _source: 'crm',
+        country: c.country
+      }))
+      contacts.value = [...contacts.value, ...crmContacts]
+    } catch (e) { console.error('loadCrmContactsForTab', e) }
+  }
 }
 async function loadLogs() {
   const q = logTaskFilter.value ? `?task_id=${logTaskFilter.value}` : ''

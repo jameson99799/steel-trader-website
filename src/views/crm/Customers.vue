@@ -274,18 +274,24 @@
                 <th>时间</th>
                 <th>收件人</th>
                 <th>主题</th>
+                <th>任务</th>
                 <th>状态</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="r in sendRecords" :key="r.id">
-                <td>{{ formatDate(r.sent_at || r.created_at) }}</td>
+                <td style="white-space:nowrap">{{ formatDateTime(r.sent_at || r.created_at) }}</td>
                 <td>{{ r.recipient_email || r.contact_email }}</td>
                 <td>{{ r.subject }}</td>
+                <td><span v-if="r.task_name" class="tag-sm">{{ r.task_name }}</span></td>
                 <td>
                   <span :class="['status-dot', r.status === 'sent' ? 'dot-ok' : 'dot-fail']">
                     {{ r.status === 'sent' ? '✅ 已发送' : '❌ 失败' }}
                   </span>
+                </td>
+                <td>
+                  <button v-if="r.status === 'sent'" class="btn btn-xs btn-outline" style="color:#7c3aed;border-color:#c4b5fd;font-size:11px;padding:2px 8px" @click="followUpRecord(r)">🔄 跟进</button>
                 </td>
               </tr>
             </tbody>
@@ -505,6 +511,22 @@ function getStatusClass(s) {
 }
 
 function formatDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : '-' }
+function formatDateTime(d) {
+  if (!d) return '-'
+  const dt = new Date(d)
+  const date = dt.toLocaleDateString('zh-CN')
+  const time = dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+  return `${date} ${time}`
+}
+function followUpRecord(r) {
+  // Navigate to CRM mailer with follow-up params
+  const email = r.recipient_email || r.contact_email || ''
+  const subject = r.subject || ''
+  router.push({
+    path: '/crm/mailer',
+    query: { followup: '1', email, subject, task_name: r.task_name || '' }
+  })
+}
 
 onMounted(() => {
   if (route.query.search) filters.search = route.query.search
