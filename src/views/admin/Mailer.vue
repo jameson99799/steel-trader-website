@@ -1321,15 +1321,39 @@ function htmlVisualInsertWhatsApp() {
   localStorage.setItem('mailer_whatsapp_phone', phone)
   const cleanPhone = phone.replace(/[^\d]/g, '')
   const waLink = `https://api.whatsapp.com/send?phone=${cleanPhone}`
-  const btnHtml = `<a href="${waLink}" target="_blank" style="display:inline-block;padding:10px 20px;background:#25d366;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">💬 WhatsApp Us</a>`
-  if (htmlEditorTab.value === 'visual') {
-    const frame = htmlVisualFrame.value
-    if (!frame) return
-    const doc = frame.contentDocument || frame.contentWindow.document
-    doc.execCommand('insertHTML', false, btnHtml)
-    syncHtmlVisual()
+
+  // Replace all existing WhatsApp links in template HTML
+  let html = editTpl.html_body || ''
+  const waPattern = /href=["'](https?:\/\/(wa\.me|api\.whatsapp\.com)[^"']*|{{whatsapp_link}})["']/gi
+  const hasExisting = waPattern.test(html)
+
+  if (hasExisting) {
+    // Replace all WhatsApp hrefs
+    html = html.replace(/href=["'](https?:\/\/(wa\.me|api\.whatsapp\.com)[^"']*|{{whatsapp_link}})["']/gi, `href="${waLink}"`)
+    // Replace displayed phone text (like +86-15553478959 or {{phone}})
+    html = html.replace(/{{phone}}/g, phone)
+    editTpl.html_body = html
+    // Sync visual editor if active
+    if (htmlEditorTab.value === 'visual') {
+      const frame = htmlVisualFrame.value
+      if (frame) {
+        const doc = frame.contentDocument || frame.contentWindow.document
+        if (doc?.body) doc.body.innerHTML = html
+      }
+    }
+    alert(`✅ 已更新模板中所有WhatsApp链接为: ${phone}`)
   } else {
-    editTpl.html_body = (editTpl.html_body || '') + '\n' + btnHtml
+    // No existing links, insert new button
+    const btnHtml = `<a href="${waLink}" target="_blank" style="display:inline-block;padding:10px 20px;background:#25d366;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">💬 WhatsApp Us</a>`
+    if (htmlEditorTab.value === 'visual') {
+      const frame = htmlVisualFrame.value
+      if (!frame) return
+      const doc = frame.contentDocument || frame.contentWindow.document
+      doc.execCommand('insertHTML', false, btnHtml)
+      syncHtmlVisual()
+    } else {
+      editTpl.html_body = html + '\n' + btnHtml
+    }
   }
 }
 
@@ -1340,15 +1364,41 @@ function htmlVisualInsertEmail() {
   if (!email) return
   mailerEmail.value = email
   localStorage.setItem('mailer_email', email)
-  const btnHtml = `<a href="mailto:${email}" target="_blank" style="display:inline-block;padding:10px 20px;background:#1f4e79;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">📧 Email Us</a>`
-  if (htmlEditorTab.value === 'visual') {
-    const frame = htmlVisualFrame.value
-    if (!frame) return
-    const doc = frame.contentDocument || frame.contentWindow.document
-    doc.execCommand('insertHTML', false, btnHtml)
-    syncHtmlVisual()
+
+  // Replace all existing mailto links in template HTML
+  let html = editTpl.html_body || ''
+  const mailPattern = /href=["'](mailto:[^"']*|{{email}})["']/gi
+  const hasExisting = mailPattern.test(html)
+
+  if (hasExisting) {
+    // Replace all mailto hrefs
+    html = html.replace(/href=["']mailto:[^"']*["']/gi, `href="mailto:${email}"`)
+    // Replace displayed email text (like {{email}} or old email addresses in visible text)
+    html = html.replace(/{{email}}/g, email)
+    // Replace email text inside <a> tags that have mailto href
+    html = html.replace(/(href=["']mailto:[^"']*["'][^>]*>)([^<]*@[^<]*?)(<\/a>)/gi, `$1${email}$3`)
+    editTpl.html_body = html
+    // Sync visual editor if active
+    if (htmlEditorTab.value === 'visual') {
+      const frame = htmlVisualFrame.value
+      if (frame) {
+        const doc = frame.contentDocument || frame.contentWindow.document
+        if (doc?.body) doc.body.innerHTML = html
+      }
+    }
+    alert(`✅ 已更新模板中所有邮箱链接为: ${email}`)
   } else {
-    editTpl.html_body = (editTpl.html_body || '') + '\n' + btnHtml
+    // No existing links, insert new button
+    const btnHtml = `<a href="mailto:${email}" target="_blank" style="display:inline-block;padding:10px 20px;background:#1f4e79;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">📧 Email Us</a>`
+    if (htmlEditorTab.value === 'visual') {
+      const frame = htmlVisualFrame.value
+      if (!frame) return
+      const doc = frame.contentDocument || frame.contentWindow.document
+      doc.execCommand('insertHTML', false, btnHtml)
+      syncHtmlVisual()
+    } else {
+      editTpl.html_body = html + '\n' + btnHtml
+    }
   }
 }
 
