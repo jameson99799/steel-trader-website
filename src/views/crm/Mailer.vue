@@ -6,7 +6,7 @@
 /**
  * CRM Mailer Wrapper
  * Patches api.request so the shared Mailer.vue routes /mailer/* and /email/*
- * calls through CRM auth (Bearer token from localStorage crm_token).
+ * calls through CRM auth (Bearer token from sessionStorage crm_token).
  */
 import { onMounted, onUnmounted } from 'vue'
 import MailerPage from '../admin/Mailer.vue'
@@ -21,7 +21,7 @@ onMounted(() => {
   api.request = async (url, options = {}) => {
     // Intercept /mailer/* and /email/* calls for CRM auth
     if (url.startsWith('/mailer') || url.startsWith('/email/')) {
-      const crmToken = localStorage.getItem('crm_token')
+      const crmToken = sessionStorage.getItem('crm_token')
       const headers = { ...(options.headers || {}) }
       if (!(options.body instanceof FormData)) {
         headers['Content-Type'] = 'application/json'
@@ -34,7 +34,7 @@ onMounted(() => {
       const response = await fetch(apiPath, { ...options, headers })
       // Handle 401 redirect to CRM login
       if (response.status === 401) {
-        localStorage.removeItem('crm_token')
+        sessionStorage.removeItem('crm_token')
         window.location.href = '/crm/login'
         throw new Error('登录已过期')
       }

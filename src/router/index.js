@@ -107,7 +107,7 @@ router.beforeEach((to, from, next) => {
       next()
     }
   } else if (to.matched.some(record => record.meta.requiresCrmAuth)) {
-    const crmToken = localStorage.getItem('crm_token')
+    const crmToken = sessionStorage.getItem('crm_token')
     if (!crmToken) {
       next('/crm/login')
     } else {

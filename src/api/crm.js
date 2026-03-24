@@ -2,7 +2,7 @@
 const CRM_TOKEN_KEY = 'crm_token'
 
 function getToken() {
-  return localStorage.getItem(CRM_TOKEN_KEY)
+  return sessionStorage.getItem(CRM_TOKEN_KEY)
 }
 
 async function request(url, options = {}) {
@@ -13,7 +13,7 @@ async function request(url, options = {}) {
   const res = await fetch(`/api/crm${url}`, { ...options, headers })
   if (res.status === 401 && !url.startsWith('/auth/login')) {
     // Only redirect to login for non-login requests
-    localStorage.removeItem(CRM_TOKEN_KEY)
+    sessionStorage.removeItem(CRM_TOKEN_KEY)
     window.location.href = '/crm/login'
     throw new Error('登录已过期')
   }
@@ -40,9 +40,9 @@ export default {
   changePassword: (data) => request('/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
 
   // Token management
-  setToken(token) { localStorage.setItem(CRM_TOKEN_KEY, token) },
+  setToken(token) { sessionStorage.setItem(CRM_TOKEN_KEY, token) },
   getToken,
-  clearToken() { localStorage.removeItem(CRM_TOKEN_KEY) },
+  clearToken() { sessionStorage.removeItem(CRM_TOKEN_KEY) },
   isLoggedIn() { return !!getToken() },
 
   // CRM Users (admin)
