@@ -272,21 +272,22 @@
           <template v-else>
             <div class="html-editor-tabs">
               <button :class="['tab-btn', htmlEditorTab==='code'&&'active']" @click="htmlEditorTab='code'">📝 代码</button>
-              <button :class="['tab-btn', htmlEditorTab==='visual'&&'active']" @click="htmlEditorTab='visual';initHtmlVisual()">🖊 可视化编辑</button>
+              <button :class="['tab-btn', htmlEditorTab==='visual'&&'active']" @click="htmlEditorTab='visual';initHtmlVisual()">🖊 可视化</button>
               <button :class="['tab-btn', htmlEditorTab==='preview'&&'active']" @click="htmlEditorTab='preview'">👁 预览</button>
               <span style="flex:1"></span>
-              <button class="btn btn-sm btn-outline" @click="htmlVisualInsertWhatsApp" title="插入WhatsApp按钮">💬 WhatsApp</button>
-              <button class="btn btn-sm btn-outline" @click="htmlVisualInsertLink" title="选择文字后点击添加超链接">🔗 超链接</button>
-              <button class="btn btn-sm btn-outline" @click="htmlInsertImageGrid(2)" title="插入2张并排图片">🖼 2列并排</button>
-              <button class="btn btn-sm btn-outline" @click="htmlInsertImageGrid(3)" title="插入3张并排图片">🖼 3列并排</button>
-              <button class="btn btn-sm btn-outline" @click="htmlInsertImage" title="插入本地图片">🖼 插入图片</button>
+              <button class="btn btn-sm btn-outline" @click="htmlVisualInsertWhatsApp" title="插入WhatsApp按钮" style="white-space:nowrap">💬 WA</button>
+              <button class="btn btn-sm btn-outline" @click="htmlVisualInsertEmail" title="插入邮箱按钮" style="white-space:nowrap">📧 邮箱</button>
+              <button class="btn btn-sm btn-outline" @click="htmlVisualInsertLink" title="选择文字后点击添加超链接" style="white-space:nowrap">🔗 链接</button>
+              <button class="btn btn-sm btn-outline" @click="htmlInsertImageGrid(2)" title="2张并排" style="white-space:nowrap">🖼 2列</button>
+              <button class="btn btn-sm btn-outline" @click="htmlInsertImageGrid(3)" title="3张并排" style="white-space:nowrap">🖼 3列</button>
+              <button class="btn btn-sm btn-outline" @click="htmlInsertImage" title="插入图片" style="white-space:nowrap">🖼 图片</button>
             </div>
             <!-- Code tab -->
             <textarea v-show="htmlEditorTab==='code'" v-model="editTpl.html_body" class="html-code-editor" placeholder="在此粘贴或编写 HTML 代码..."></textarea>
             <!-- Visual edit tab (designMode iframe) -->
             <iframe v-show="htmlEditorTab==='visual'" ref="htmlVisualFrame" class="rte-frame" style="min-height:350px" @load="onHtmlVisualLoad"></iframe>
-            <!-- Preview tab -->
-            <iframe v-show="htmlEditorTab==='preview'" ref="htmlPreviewFrame" class="html-preview-frame" :srcdoc="editTpl.html_body"></iframe>
+            <!-- Preview tab (sandbox allows links to open in new tab) -->
+            <iframe v-show="htmlEditorTab==='preview'" ref="htmlPreviewFrame" class="html-preview-frame" :srcdoc="editTpl.html_body" sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"></iframe>
           </template>
         </div>
         <div class="modal-actions">
@@ -1212,8 +1213,27 @@ function htmlVisualInsertWhatsApp() {
   whatsappPhone.value = phone
   localStorage.setItem('mailer_whatsapp_phone', phone)
   const cleanPhone = phone.replace(/[^\d]/g, '')
-  const waLink = `https://wa.me/${cleanPhone}`
+  const waLink = `https://api.whatsapp.com/send?phone=${cleanPhone}`
   const btnHtml = `<a href="${waLink}" target="_blank" style="display:inline-block;padding:10px 20px;background:#25d366;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">💬 WhatsApp Us</a>`
+  if (htmlEditorTab.value === 'visual') {
+    const frame = htmlVisualFrame.value
+    if (!frame) return
+    const doc = frame.contentDocument || frame.contentWindow.document
+    doc.execCommand('insertHTML', false, btnHtml)
+    syncHtmlVisual()
+  } else {
+    editTpl.html_body = (editTpl.html_body || '') + '\n' + btnHtml
+  }
+}
+
+const mailerEmail = ref(localStorage.getItem('mailer_email') || '')
+
+function htmlVisualInsertEmail() {
+  const email = prompt('请输入邮箱地址:', mailerEmail.value || 'jameson@fadasteel.com')
+  if (!email) return
+  mailerEmail.value = email
+  localStorage.setItem('mailer_email', email)
+  const btnHtml = `<a href="mailto:${email}" target="_blank" style="display:inline-block;padding:10px 20px;background:#1f4e79;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">📧 Email Us</a>`
   if (htmlEditorTab.value === 'visual') {
     const frame = htmlVisualFrame.value
     if (!frame) return
@@ -1620,7 +1640,7 @@ textarea.form-control { resize: vertical; font-family: inherit }
 /* Modals */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000 }
 .modal-box { background: #fff; border-radius: 14px; padding: 28px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto }
-.modal-lg { width: 700px }
+.modal-lg { width: 95vw; max-width: 1200px }
 .modal-box h3 { margin: 0 0 18px; font-size: 18px; font-weight: 700 }
 .modal-actions { display: flex; gap: 10px; margin-top: 16px }
 
