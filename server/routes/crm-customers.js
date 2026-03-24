@@ -59,6 +59,10 @@ router.get('/', dualAuth, (req, res) => {
   if (start_date) { where.push("c.created_at >= ?"); params.push(start_date) }
   if (end_date) { where.push("c.created_at <= ?"); params.push(end_date + ' 23:59:59') }
 
+  // Admin can filter by specific owner
+  const { owner_id } = req.query
+  if (owner_id) { where.push('c.owner_id = ?'); params.push(owner_id) }
+
   const offset = (parseInt(page) - 1) * parseInt(limit)
 
   const total = getOne(
@@ -83,7 +87,10 @@ router.get('/', dualAuth, (req, res) => {
     `SELECT DISTINCT country FROM crm_customers WHERE country IS NOT NULL AND country != '' ORDER BY country`
   )
 
-  res.json({ customers, total, countries: countries.map(c => c.country), page: parseInt(page), limit: parseInt(limit) })
+  // Get CRM users for owner filter dropdown
+  const users = getAll('SELECT id, display_name FROM crm_users ORDER BY id')
+
+  res.json({ customers, total, countries: countries.map(c => c.country), users, page: parseInt(page), limit: parseInt(limit) })
 })
 
 // ─── Get single customer ────────────────────────────────────────────────────────

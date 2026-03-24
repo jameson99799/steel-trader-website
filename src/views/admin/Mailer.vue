@@ -41,6 +41,7 @@
             <span class="log-badge" :style="t.template_type==='html' ? 'background:#fef3c7;color:#92400e' : 'background:#e0f2fe;color:#0369a1'" style="font-size:10px">{{ t.template_type === 'html' ? 'HTML' : '富文本' }}</span>
             <span v-if="t.is_default" class="log-badge" style="background:#dbeafe;color:#1d4ed8;font-size:10px">默认营销模板</span>
             <span v-if="t.is_followup_default" class="log-badge" style="background:#ede9fe;color:#7c3aed;font-size:10px">默认跟进模板</span>
+            <span v-if="getOwnerName(t.assigned_users)" class="log-badge" style="background:#dcfce7;color:#15803d;font-size:10px">{{ getOwnerName(t.assigned_users) }}</span>
           </div>
           <span class="lc-sub">主题：{{ t.subject }}</span>
           <span v-if="t.note" class="lc-note">{{ t.note }}</span>
@@ -50,6 +51,11 @@
             <option value="">⭐ 设为默认...</option>
             <option value="marketing">营销模板</option>
             <option value="followup">跟进模板</option>
+          </select>
+          <select class="form-control" style="width:auto;font-size:11px;padding:2px 6px;border-radius:6px" @change="assignTemplate(t.id, $event.target.value); $event.target.value=''">
+            <option value="">👤 分配...</option>
+            <option value="">不分配</option>
+            <option v-for="u in crmUsers" :key="u.id" :value="u.id">{{ u.display_name }}</option>
           </select>
           <button class="btn btn-sm btn-outline" @click="openTplEditor(t)">编辑</button>
           <button class="btn btn-sm btn-outline" @click="duplicateTemplate(t.id)">📋 复制</button>
@@ -496,7 +502,7 @@
           <div v-if="!smtpAccounts.length" style="padding:24px;text-align:center;color:#94a3b8;font-size:14px">暂无账号，请点击「添加账号」</div>
           <table v-else class="smtp-table">
             <thead>
-              <tr><th>名称</th><th>SMTP服务器</th><th>账号</th><th>状态</th><th>默认</th><th>发送量</th><th>操作</th></tr>
+              <tr><th>名称</th><th>SMTP服务器</th><th>账号</th><th>状态</th><th>默认</th><th>发送量</th><th>归属人</th><th>操作</th></tr>
             </thead>
             <tbody>
               <tr v-for="a in smtpAccounts" :key="a.id" :style="a.is_default ? 'background:#eff6ff' : ''">
@@ -506,6 +512,12 @@
                 <td><span :class="['log-badge', a.enabled ? '' : '']" :style="a.enabled ? 'background:#dcfce7;color:#15803d' : 'background:#f1f5f9;color:#64748b'">{{ a.enabled ? '启用' : '停用' }}</span></td>
                 <td>{{ a.is_default ? '⭐ 默认' : '' }}</td>
                 <td>{{ a.send_count || 0 }}</td>
+                <td>
+                  <select class="form-control" style="width:auto;font-size:11px;padding:2px 6px" :value="a.assigned_users||''" @change="assignSmtp(a.id, $event.target.value)">
+                    <option value="">未分配</option>
+                    <option v-for="u in crmUsers" :key="u.id" :value="String(u.id)" :selected="String(a.assigned_users)===String(u.id)">{{ u.display_name }}</option>
+                  </select>
+                </td>
                 <td style="display:flex;gap:6px">
                   <button class="btn btn-sm btn-outline" @click="openAcctEditor(a)">编辑</button>
                   <button class="btn btn-sm btn-outline" style="color:#059669" @click="testAcct(a.id)">发送测试</button>
@@ -789,6 +801,7 @@ const templates = ref([])
 const contacts = ref([])
 const tasks = ref([])
 const smtpAccounts = ref([])
+const crmUsers = ref([])
 const selectedContacts = ref([])
 
 // Contact groups & search
@@ -1007,12 +1020,19 @@ function toggleAllNewTaskContacts(e) {
 }
 
 async function loadAll() {
-  const [tpl, ct, tk, accts, grps] = await Promise.all([
+  const [tplData, ct, tk, accts, grps] = await Promise.all([
     api.request('/mailer/templates'), api.request('/mailer/contacts'),
     api.request('/mailer/tasks'), api.request('/email/accounts'),
     api.request('/mailer/contact-groups')
   ])
-  templates.value = tpl || []; contacts.value = ct || []; tasks.value = tk || []; smtpAccounts.value = accts || []; contactGroups.value = grps || []
+  // /mailer/templates now returns { templates, users }
+  if (tplData && tplData.templates) {
+    templates.value = tplData.templates || []
+    crmUsers.value = tplData.users || []
+  } else {
+    templates.value = tplData || []
+  }
+  contacts.value = ct || []; tasks.value = tk || []; smtpAccounts.value = accts || []; contactGroups.value = grps || []
 
   // In CRM mode, also load CRM customers and append to contacts list
   if (isCRM.value) {
@@ -1286,6 +1306,23 @@ async function saveTpl() {
   finally { savingTpl.value = false }
 }
 async function deleteTpl(id) { if (!confirm('确认删除？')) return; await api.request(`/mailer/templates/${id}`, { method: 'DELETE' }); await loadAll() }
+function getOwnerName(assignedUsers) {
+  if (!assignedUsers || assignedUsers === '' || assignedUsers === 'all') return null
+  const u = crmUsers.value.find(u => String(u.id) === String(assignedUsers))
+  return u ? u.display_name : null
+}
+async function assignTemplate(tplId, userId) {
+  try {
+    await api.request(`/mailer/templates/${tplId}/assign`, { method: 'POST', body: JSON.stringify({ user_id: userId }) })
+    await loadAll()
+  } catch (e) { alert('分配失败: ' + e.message) }
+}
+async function assignSmtp(smtpId, userId) {
+  try {
+    await api.request(`/mailer/smtp/${smtpId}/assign`, { method: 'POST', body: JSON.stringify({ user_id: userId }) })
+    await loadAll()
+  } catch (e) { alert('分配失败: ' + e.message) }
+}
 function previewTpl(t) { previewHtml.value = t.html_body; showPreview.value = true }
 async function duplicateTemplate(id) {
   try {

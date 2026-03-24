@@ -28,6 +28,10 @@
       </select>
       <input v-model="filters.start_date" type="date" @change="loadCustomers" class="filter-input date" />
       <input v-model="filters.end_date" type="date" @change="loadCustomers" class="filter-input date" />
+      <select v-model="filters.owner_id" @change="loadCustomers" class="filter-select">
+        <option value="">全部负责人</option>
+        <option v-for="u in crmUsers" :key="u.id" :value="u.id">{{ u.display_name }}</option>
+      </select>
       <button class="btn btn-sm btn-outline" @click="loadSendRecords(); showSendRecords = true" title="发送记录">📊 发送记录</button>
     </div>
 
@@ -339,8 +343,9 @@ const companyAllSelected = ref(false)
 const quickSending = ref(null)
 
 const filters = reactive({
-  search: '', country: '', status: '', tag: '', start_date: '', end_date: ''
+  search: '', country: '', status: '', tag: '', start_date: '', end_date: '', owner_id: ''
 })
+const crmUsers = ref([])
 
 const form = reactive({
   first_name: '', last_name: '', company: '', country: '', phone: '', email: '',
@@ -364,11 +369,13 @@ async function loadCustomers() {
     if (filters.tag) params.tag = filters.tag
     if (filters.start_date) params.start_date = filters.start_date
     if (filters.end_date) params.end_date = filters.end_date
+    if (filters.owner_id) params.owner_id = filters.owner_id
 
     const data = await crmApi.getCustomers(params)
     customers.value = data.customers || []
     total.value = data.total || 0
     if (data.countries) countries.value = data.countries
+    if (data.users) crmUsers.value = data.users
   } catch (e) { console.error(e) }
 }
 

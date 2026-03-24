@@ -290,7 +290,10 @@ setTimeout(restoreScheduledTasks, 2000)
 
 // ─── Templates ───────────────────────────────────────────────────────────────
 router.get('/templates', authMiddleware, (req, res) => {
-    res.json(getAll('SELECT * FROM mail_templates ORDER BY id DESC'))
+    try { run('ALTER TABLE mail_templates ADD COLUMN assigned_users TEXT DEFAULT ""') } catch(e) {}
+    const templates = getAll('SELECT * FROM mail_templates ORDER BY id DESC')
+    const users = getAll('SELECT id, username, display_name, role FROM crm_users ORDER BY id')
+    res.json({ templates, users })
 })
 router.post('/templates', authMiddleware, (req, res) => {
     const { name, subject, html_body, note, template_type } = req.body
@@ -737,6 +740,32 @@ router.post('/templates/:id/set-default', authMiddleware, express.json(), (req, 
         run('UPDATE mail_templates SET is_default=1 WHERE id=?', [req.params.id])
         res.json({ message: '已设为默认营销模板' })
     }
+})
+
+// ─── Assign template to user ────────────────────────────────────────────────
+router.post('/templates/:id/assign', authMiddleware, express.json(), (req, res) => {
+    try { run('ALTER TABLE mail_templates ADD COLUMN assigned_users TEXT DEFAULT ""') } catch(e) {}
+    const userId = req.body?.user_id
+    if (userId === undefined) return res.status(400).json({ error: '缺少user_id' })
+    run('UPDATE mail_templates SET assigned_users=? WHERE id=?', [String(userId), req.params.id])
+    const user = userId ? getOne('SELECT display_name FROM crm_users WHERE id=?', [userId]) : null
+    res.json({ message: user ? `已分配给 ${user.display_name}` : '已取消分配' })
+})
+
+// ─── Assign SMTP account to user ────────────────────────────────────────────
+router.post('/smtp/:id/assign', authMiddleware, express.json(), (req, res) => {
+    try { run('ALTER TABLE smtp_accounts ADD COLUMN assigned_users TEXT DEFAULT ""') } catch(e) {}
+    const userId = req.body?.user_id
+    if (userId === undefined) return res.status(400).json({ error: '缺少user_id' })
+    run('UPDATE smtp_accounts SET assigned_users=? WHERE id=?', [String(userId), req.params.id])
+    const user = userId ? getOne('SELECT display_name FROM crm_users WHERE id=?', [userId]) : null
+    res.json({ message: user ? `已分配给 ${user.display_name}` : '已取消分配' })
+})
+
+// ─── CRM Users list for assignment dropdown ─────────────────────────────────
+router.get('/users', authMiddleware, (req, res) => {
+    const users = getAll('SELECT id, username, display_name, role FROM crm_users ORDER BY id')
+    res.json(users)
 })
 
 export default router
