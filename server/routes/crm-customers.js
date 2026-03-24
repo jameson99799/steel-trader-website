@@ -15,6 +15,23 @@ function fixEmailImageUrls(html) {
   return out
 }
 
+// Helper: replace sender variables (email, phone, whatsapp)
+function replaceSenderVars(html, smtpUser) {
+  try {
+    const comp = getOne('SELECT phone, email, whatsapp, name_en FROM company WHERE id=1')
+    const senderEmail = smtpUser || comp?.email || ''
+    const senderPhone = comp?.phone || comp?.whatsapp || ''
+    const cleanPhone = senderPhone.replace(/[^\d]/g, '')
+    const waLink = cleanPhone ? `https://api.whatsapp.com/send?phone=${cleanPhone}` : ''
+    let out = html
+    out = out.replace(/\{\{email\}\}/g, senderEmail)
+    out = out.replace(/\{\{phone\}\}/g, senderPhone)
+    out = out.replace(/\{\{whatsapp_link\}\}/g, waLink)
+    out = out.replace(/\{\{company_name\}\}/g, comp?.name_en || 'SunSea Steel')
+    return out
+  } catch (_) { return html }
+}
+
 const CRM_SECRET = process.env.CRM_JWT_SECRET || 'crm-steel-secret-2024'
 const ADMIN_SECRET = process.env.JWT_SECRET || 'led-trade-secret-key-2024'
 
@@ -462,6 +479,7 @@ router.post('/email/quick-send', dualAuth, async (req, res) => {
     body = body.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
   }
   body = fixEmailImageUrls(body)
+  body = replaceSenderVars(body, smtp.smtp_user)
 
   const now = new Date().toISOString()
   try {
@@ -524,6 +542,7 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
     body = body.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
   }
   body = fixEmailImageUrls(body)
+  body = replaceSenderVars(body, smtp.smtp_user)
 
   // Find the original email's HTML body from mail_logs
   const origEmail = getOne('SELECT sent_html, subject, sent_at FROM mail_logs WHERE contact_email=? AND status=? ORDER BY id DESC LIMIT 1', [recipient_email, 'sent'])

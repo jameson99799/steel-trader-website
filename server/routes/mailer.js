@@ -142,8 +142,21 @@ async function runTask(taskId, isResume = false) {
                 tls:    { rejectUnauthorized: false }
             })
 
-            const subj = template.subject.replace(/{{name}}/g, contact.name || '').replace(/{{company}}/g, contact.company || '')
-            let body = template.html_body.replace(/{{name}}/g, contact.name || '').replace(/{{company}}/g, contact.company || '')
+            const subj = template.subject.replace(/{{name}}/g, contact.name || '').replace(/{{company}}/g, contact.company || '').replace(/{{first_name}}/g, contact.name?.split(' ')[0] || '').replace(/{{last_name}}/g, contact.name?.split(' ').slice(1).join(' ') || '')
+            let body = template.html_body.replace(/{{name}}/g, contact.name || '').replace(/{{company}}/g, contact.company || '').replace(/{{first_name}}/g, contact.name?.split(' ')[0] || '').replace(/{{last_name}}/g, contact.name?.split(' ').slice(1).join(' ') || '')
+
+            // Replace sender variables (email, phone, whatsapp)
+            try {
+                const comp = getOne('SELECT phone, email, whatsapp, name_en FROM company WHERE id=1')
+                const senderEmail = account.smtp_user || comp?.email || ''
+                const senderPhone = comp?.phone || comp?.whatsapp || ''
+                const cleanPhone = senderPhone.replace(/[^\d]/g, '')
+                const waLink = cleanPhone ? `https://api.whatsapp.com/send?phone=${cleanPhone}` : ''
+                body = body.replace(/\{\{email\}\}/g, senderEmail)
+                body = body.replace(/\{\{phone\}\}/g, senderPhone)
+                body = body.replace(/\{\{whatsapp_link\}\}/g, waLink)
+                body = body.replace(/\{\{company_name\}\}/g, comp?.name_en || 'SunSea Steel')
+            } catch (_) { }
 
             // Convert relative image URLs to absolute URLs for email clients
             try {
