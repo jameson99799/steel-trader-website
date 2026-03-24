@@ -571,13 +571,17 @@ router.get('/crm-customers', authMiddleware, (req, res) => {
         let mcWhere = ['1=1']
         let mcParams = []
         if (search) { mcWhere.push("(mc.email LIKE ? OR mc.name LIKE ? OR mc.company LIKE ?)"); const q = `%${search}%`; mcParams.push(q,q,q) }
-        if (country) { mcWhere.push('mc.country = ?'); mcParams.push(country) }
-        const mcRows = getAll(`SELECT mc.* FROM mail_contacts mc WHERE ${mcWhere.join(' AND ')} ORDER BY mc.id DESC LIMIT 500`, mcParams)
+        if (country) {
+            // When source is mailer_only, 'country' filter actually matches group name
+            mcWhere.push('(mg.name = ? OR mc.country = ?)'); mcParams.push(country, country)
+        }
+        const mcRows = getAll(`SELECT mc.*, mg.name as group_name FROM mail_contacts mc LEFT JOIN mail_contact_groups mg ON mg.id = mc.group_id WHERE ${mcWhere.join(' AND ')} ORDER BY mc.id DESC LIMIT 500`, mcParams)
         for (const mc of mcRows) {
             results.push({
                 id: mc.id, name: mc.name || '', last_name: '',
                 email: mc.email || '', phone: '', company: mc.company || '',
-                country: mc.country || '', status: '', tags: '[]',
+                country: mc.group_name || mc.country || '', status: '', tags: '[]',
+                group_name: mc.group_name || '',
                 _source: 'mailer'
             })
         }
@@ -599,7 +603,7 @@ router.get('/logs/grouped', authMiddleware, (req, res) => {
     // Get all logs for this task (or all tasks)
     const where = taskId ? `WHERE ml.task_id=${+taskId}` : ''
     const rows = getAll(
-        `SELECT ml.*, mt.name AS task_name, mt2.name AS template_name
+        `SELECT ml.*, COALESCE(mt.name, '邮件任务') AS task_name, mt2.name AS template_name
          FROM mail_logs ml
          LEFT JOIN mail_tasks mt ON mt.id = ml.task_id
          LEFT JOIN mail_templates mt2 ON mt2.id = ml.template_id
@@ -607,27 +611,45 @@ router.get('/logs/grouped', authMiddleware, (req, res) => {
          ORDER BY ml.contact_email, ml.id ASC`
     )
 
+    // Also include crm_email_logs (quick-send / quick-followup) when showing all records
+    if (!taskId) {
+        const crmRows = getAll(`SELECT id, recipient_email as contact_email, '' as contact_name, subject, status, sent_at,
+            CASE WHEN subject LIKE 'Re:%' THEN '快速跟进' ELSE '快速发送' END as task_name
+            FROM crm_email_logs ORDER BY id ASC`)
+        rows.push(...crmRows)
+    }
+
     // Group by contact_email
     const grouped = {}
     for (const r of rows) {
-        if (!grouped[r.contact_email]) {
-            grouped[r.contact_email] = {
-                contact_email: r.contact_email,
+        const email = r.contact_email
+        if (!email) continue
+        if (!grouped[email]) {
+            grouped[email] = {
+                contact_email: email,
                 contact_name:  r.contact_name || '',
                 records: []
             }
         }
-        grouped[r.contact_email].records.push(r)
+        grouped[email].records.push(r)
+    }
+
+    // Sort records within each group by sent_at ASC (chronological for numbering)
+    for (const g of Object.values(grouped)) {
+        g.records.sort((a, b) => {
+            const ta = a.sent_at || a.id?.toString() || ''
+            const tb = b.sent_at || b.id?.toString() || ''
+            return ta.localeCompare(tb)
+        })
     }
 
     // Build summary row for each email
     const result = Object.values(grouped).map(g => {
         const total = g.records.length
-        // Follow-up = records from tasks that have a parent_task_id
-        // We detect this from task name containing "跟进" or by checking parent_task_id
         let sendCount = 0; let followCount = 0
         for (const r of g.records) {
-            if (r.task_name && r.task_name.includes('跟进')) followCount++
+            const tn = r.task_name || ''
+            if (tn.includes('跟进')) followCount++
             else sendCount++
         }
         return {
@@ -640,6 +662,9 @@ router.get('/logs/grouped', authMiddleware, (req, res) => {
             records:       g.records
         }
     })
+
+    // Sort groups by last_sent_at DESC (newest first)
+    result.sort((a, b) => (b.last_sent_at || '').localeCompare(a.last_sent_at || ''))
 
     res.json(result)
 })

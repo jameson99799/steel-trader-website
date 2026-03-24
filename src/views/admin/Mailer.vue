@@ -364,7 +364,7 @@
             <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
               <select v-model="crmFilter.source" class="form-control" style="width:auto;min-width:100px" @change="loadCrmCustomers"><option value="">全部来源</option><option value="crm">CRM客户</option><option value="mailer_only">邮件联系人</option></select>
               <input v-model="crmFilter.search" class="form-control" placeholder="🔍 搜索名称/公司/邮箱..." style="flex:1;min-width:150px;max-width:200px" @input="loadCrmCustomers" />
-              <select v-model="crmFilter.country" class="form-control" style="width:auto;min-width:100px" @change="loadCrmCustomers"><option value="">全部国家</option><option v-for="c in crmMeta.countries" :key="c">{{ c }}</option></select>
+              <select v-model="crmFilter.country" class="form-control" style="width:auto;min-width:100px" @change="loadCrmCustomers"><option value="">{{ crmFilter.source === 'mailer_only' ? '全部分组' : '全部国家' }}</option><option v-for="c in crmMeta.countries" :key="c">{{ c }}</option></select>
               <select v-if="crmFilter.source !== 'mailer_only'" v-model="crmFilter.status" class="form-control" style="width:auto;min-width:100px" @change="loadCrmCustomers"><option value="">全部状态</option><option v-for="s in crmMeta.statuses" :key="s">{{ s }}</option></select>
               <select v-if="crmFilter.source !== 'mailer_only'" v-model="crmFilter.tag" class="form-control" style="width:auto;min-width:100px" @change="loadCrmCustomers"><option value="">全部标签</option><option v-for="t in crmMeta.tags" :key="t">{{ t }}</option></select>
             </div>
@@ -967,16 +967,17 @@ function toggleGroupCheck(g, e) {
   }
 }
 function followLabel(g, idx) {
-  // Count how many follow-ups appear before this record
-  let followCount = 0
+  // Count occurrences of each type in chronological order (records sorted oldest-first)
+  let sendN = 0, followN = 0, quickSendN = 0, quickFollowN = 0
   for (let i = 0; i <= idx; i++) {
     const r = g.records[i]
-    if (r.task_name && r.task_name.includes('跟进')) {
-      if (i === idx) return `第${followCount + 1}次跟进`
-      followCount++
-    }
+    const tn = r.task_name || ''
+    if (tn === '快速跟进') { quickFollowN++; if (i === idx) return `第${quickFollowN}次快速跟进` }
+    else if (tn === '快速发送') { quickSendN++; if (i === idx) return `第${quickSendN}次快速发送` }
+    else if (tn.includes('跟进')) { followN++; if (i === idx) return `第${followN}次跟进` }
+    else { sendN++; if (i === idx) return `第${sendN}次发送` }
   }
-  return '第一次发送'
+  return `第${sendN}次发送`
 }
 async function bulkDeleteLogs() {
   if (!selectedLogIds.value.length) return

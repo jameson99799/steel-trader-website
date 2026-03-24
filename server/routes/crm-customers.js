@@ -551,8 +551,8 @@ router.get('/export/all', dualAuth, (req, res) => {
 router.get('/email/records', dualAuth, (req, res) => {
   // Get records from mail_logs (mailer tasks) joined with mail_tasks for task_name
   const mailerLogs = getAll(`SELECT ml.id, ml.contact_email as recipient_email, ml.subject, ml.status, 
-    COALESCE(ml.sent_at, ml.created_at) as sent_at, COALESCE(mt.name,'邮件任务') as task_name
-    FROM mail_logs ml LEFT JOIN mail_tasks mt ON ml.task_id=mt.id ORDER BY COALESCE(ml.sent_at, ml.created_at) DESC LIMIT 200`)
+    ml.sent_at, COALESCE(mt.name,'邮件任务') as task_name
+    FROM mail_logs ml LEFT JOIN mail_tasks mt ON ml.task_id=mt.id ORDER BY ml.id DESC LIMIT 200`)
   // Get records from crm_email_logs (quick-send / quick-followup)
   const crmLogs = getAll(`SELECT id, recipient_email, subject, status, sent_at,
     CASE WHEN subject LIKE 'Re:%' THEN '快速跟进' ELSE '快速发送' END as task_name
