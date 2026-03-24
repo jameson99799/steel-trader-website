@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 import { getAll, getOne, run } from '../db.js'
+import { replaceCustomVars } from './mailer.js'
 
 const router = Router()
 
@@ -480,6 +481,7 @@ router.post('/email/quick-send', dualAuth, async (req, res) => {
   }
   body = fixEmailImageUrls(body)
   body = replaceSenderVars(body, smtp.smtp_user)
+  body = replaceCustomVars(body)
 
   const now = new Date().toISOString()
   try {
@@ -543,6 +545,7 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
   }
   body = fixEmailImageUrls(body)
   body = replaceSenderVars(body, smtp.smtp_user)
+  body = replaceCustomVars(body)
 
   // Find the original email's HTML body from mail_logs
   const origEmail = getOne('SELECT sent_html, subject, sent_at FROM mail_logs WHERE contact_email=? AND status=? ORDER BY id DESC LIMIT 1', [recipient_email, 'sent'])

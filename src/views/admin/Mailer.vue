@@ -9,6 +9,7 @@
       <button :class="['tab', tab === 'tasks' && 'active']" @click="tab='tasks'">🚀 发送任务</button>
       <button :class="['tab', tab === 'logs' && 'active']" @click="tab='logs'">📋 发送记录</button>
       <button :class="['tab', tab === 'accounts' && 'active']" @click="tab='accounts'">📮 发件账号</button>
+      <button :class="['tab', tab === 'variables' && 'active']" @click="tab='variables';loadVariables()">🔤 变量</button>
     </div>
 
     <!-- ═══ Templates Tab ═══ -->
@@ -229,7 +230,13 @@
         <h3>{{ editTpl.id ? '编辑模板' : '新建模板' }}</h3>
         <div class="grid grid-2">
           <div class="form-group"><label>模板名称</label><input v-model="editTpl.name" class="form-control" placeholder="如：新产品推介" /></div>
-          <div class="form-group"><label>邮件主题</label><input v-model="editTpl.subject" class="form-control" placeholder="支持 {{name}} {{company}} 变量" /></div>
+          <div class="form-group" style="position:relative">
+            <label>邮件主题</label>
+            <div style="display:flex;gap:4px">
+              <input ref="subjectInput" v-model="editTpl.subject" class="form-control" placeholder="支持 {{name}} {{company}} 变量" style="flex:1" />
+              <button class="btn btn-sm btn-outline" @click.prevent="showVarDropdown($event,'subject')" title="插入变量" style="white-space:nowrap">🔤</button>
+            </div>
+          </div>
         </div>
         <div class="form-group"><label>备注</label><input v-model="editTpl.note" class="form-control" placeholder="选填" /></div>
         <div class="form-group">
@@ -275,6 +282,7 @@
               <button :class="['tab-btn', htmlEditorTab==='visual'&&'active']" @click="htmlEditorTab='visual';initHtmlVisual()">🖊 可视化</button>
               <button :class="['tab-btn', htmlEditorTab==='preview'&&'active']" @click="htmlEditorTab='preview'">👁 预览</button>
               <span style="flex:1"></span>
+              <button class="btn btn-sm btn-outline" @click.prevent="showVarDropdown($event,'html')" title="插入变量" style="white-space:nowrap">🔤 变量</button>
               <button class="btn btn-sm btn-outline" @click="htmlVisualInsertWhatsApp" title="插入WhatsApp按钮" style="white-space:nowrap">💬 WA</button>
               <button class="btn btn-sm btn-outline" @click="htmlVisualInsertEmail" title="插入邮箱按钮" style="white-space:nowrap">📧 邮箱</button>
               <button class="btn btn-sm btn-outline" @click="htmlVisualInsertLink" title="选择文字后点击添加超链接" style="white-space:nowrap">🔗 链接</button>
@@ -560,6 +568,104 @@
       </div>
     </div>
   </div>
+
+    <!-- ═══ Variables Tab ═══ -->
+    <div v-if="tab === 'variables'" class="tab-body">
+      <div class="toolbar" style="display:flex;gap:10px;align-items:center">
+        <button class="btn btn-primary" @click="openVarEditor()">+ 添加变量</button>
+        <span style="flex:1"></span>
+        <span style="color:#64748b;font-size:13px">在模板中使用 <code v-pre>{{变量键}}</code> 引用变量</span>
+      </div>
+      <div v-if="!customVars.length" style="padding:40px;text-align:center;color:#94a3b8;font-size:14px">暂无自定义变量</div>
+      <div v-else>
+        <div v-for="(group, gname) in groupedVars" :key="gname" style="margin-bottom:20px">
+          <h4 style="margin:0 0 8px;font-size:14px;font-weight:600;color:#475569">{{ gname || '未分组' }}</h4>
+          <table class="smtp-table">
+            <thead><tr><th>名称</th><th>变量键</th><th>类型</th><th>值/配置</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr v-for="v in group" :key="v.id">
+                <td>{{ v.name }}</td>
+                <td><code v-pre>{{</code>{{ v.var_key }}<code v-pre>}}</code></td>
+                <td><span class="log-badge" :style="varTypeBadge(v.var_type)">{{ varTypeLabel(v.var_type) }}</span></td>
+                <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ varValueDisplay(v) }}</td>
+                <td>
+                  <button class="btn btn-sm btn-outline" @click="openVarEditor(v)">编辑</button>
+                  <button class="btn btn-sm btn-outline" style="color:#ef4444" @click="deleteVar(v.id)">删除</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Variable editor modal -->
+      <div class="modal-overlay" v-if="showVarEditor" @click.self="showVarEditor=false">
+        <div class="modal-box" style="max-width:600px">
+          <h3>{{ editVar.id ? '编辑变量' : '添加变量' }}</h3>
+          <div class="grid grid-2">
+            <div class="form-group"><label>变量名称</label><input v-model="editVar.name" class="form-control" placeholder="如：问候表情" /></div>
+            <div class="form-group"><label>变量键（英文）</label><input v-model="editVar.var_key" class="form-control" placeholder="如：emoji_greeting" /></div>
+          </div>
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label>类型</label>
+              <select v-model="editVar.var_type" class="form-control">
+                <option value="text">文本</option>
+                <option value="emoji_group">表情分组（随机）</option>
+                <option value="random_number">随机数字</option>
+                <option value="random_alphanumeric">随机字母+数字</option>
+              </select>
+            </div>
+            <div class="form-group"><label>分组</label><input v-model="editVar.group_name" class="form-control" placeholder="如：表情变量" /></div>
+          </div>
+          <div class="form-group" v-if="editVar.var_type==='text'">
+            <label>值</label><input v-model="editVar.value" class="form-control" placeholder="固定替换文本" />
+          </div>
+          <div class="form-group" v-if="editVar.var_type==='emoji_group'">
+            <label>表情列表（每行一个或用空格分隔）</label>
+            <textarea v-model="editVar.value" class="form-control" rows="3" placeholder="👋 🤝 😊 🙏 ✨ 💪 🌟"></textarea>
+            <p class="form-hint">发送时会随机选择一个表情使用</p>
+          </div>
+          <div class="form-group" v-if="editVar.var_type==='random_number'">
+            <label>位数</label><input v-model="editVar.value" class="form-control" type="number" min="1" max="20" placeholder="6" />
+            <p class="form-hint">生成随机N位数字，如 <code>{<!-- -->{</code><span v-text="editVar.var_key||'xxx'"></span><code>}<!-- -->}</code> → 482917</p>
+          </div>
+          <div class="form-group" v-if="editVar.var_type==='random_alphanumeric'">
+            <label>位数</label><input v-model="editVar.value" class="form-control" type="number" min="1" max="20" placeholder="8" />
+            <p class="form-hint">生成随机N位字母+数字，如 <code>{<!-- -->{</code><span v-text="editVar.var_key||'xxx'"></span><code>}<!-- -->}</code> → aB3kR9xZ</p>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-primary" @click="saveVar">💾 保存</button>
+            <button class="btn btn-outline" @click="showVarEditor=false">取消</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Variable Insertion Dropdown (floating) ═══ -->
+    <div v-if="varDropdown.show" class="var-dropdown-overlay" @click="varDropdown.show=false">
+      <div class="var-dropdown" :style="{top:varDropdown.top+'px',left:varDropdown.left+'px'}" @click.stop>
+        <div class="var-dropdown-title">点击插入变量</div>
+        <div class="var-dropdown-group">
+          <div class="var-dropdown-group-title">📋 系统变量</div>
+          <div class="var-dropdown-item" @click="insertVar('name')"><code v-pre>{{name}}</code> 收件人姓名</div>
+          <div class="var-dropdown-item" @click="insertVar('company')"><code v-pre>{{company}}</code> 收件人公司</div>
+          <div class="var-dropdown-item" @click="insertVar('first_name')"><code v-pre>{{first_name}}</code> 名</div>
+          <div class="var-dropdown-item" @click="insertVar('last_name')"><code v-pre>{{last_name}}</code> 姓</div>
+          <div class="var-dropdown-item" @click="insertVar('email')"><code v-pre>{{email}}</code> 发件人邮箱</div>
+          <div class="var-dropdown-item" @click="insertVar('phone')"><code v-pre>{{phone}}</code> 电话</div>
+          <div class="var-dropdown-item" @click="insertVar('whatsapp_link')"><code v-pre>{{whatsapp_link}}</code> WhatsApp链接</div>
+          <div class="var-dropdown-item" @click="insertVar('company_name')"><code v-pre>{{company_name}}</code> 公司名</div>
+        </div>
+        <div v-for="(vars, gname) in groupedVars" :key="gname" class="var-dropdown-group">
+          <div class="var-dropdown-group-title">{{ gname || '自定义' }}</div>
+          <div class="var-dropdown-item" v-for="v in vars" :key="v.id" @click="insertVar(v.var_key)">
+            <code v-pre>{{</code>{{ v.var_key }}<code v-pre>}}</code> {{ v.name }}
+            <span style="color:#94a3b8;font-size:11px;margin-left:4px">{{ varTypeLabel(v.var_type) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
 </template>
 
 <script setup>
@@ -1077,6 +1183,7 @@ async function pollTasks() {
 onMounted(async () => {
   await loadAll()
   loadLogs()
+  loadVariables()
   if (isCRM.value) loadCrmCustomers()
   rtInterval = setInterval(pollRealtime, 1500)
   taskPollInterval = setInterval(pollTasks, 3000)
@@ -1285,6 +1392,125 @@ function syncHtmlVisual() {
     }
   } catch (e) {}
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Custom Variables System
+// ═══════════════════════════════════════════════════════════════════════════════
+const subjectInput = ref(null)
+const customVars = ref([])
+const showVarEditor = ref(false)
+const editVar = reactive({ id: null, name: '', var_key: '', var_type: 'text', value: '', group_name: '' })
+const varDropdown = reactive({ show: false, top: 0, left: 0, target: '' })
+
+const groupedVars = computed(() => {
+  const groups = {}
+  for (const v of customVars.value) {
+    const g = v.group_name || '未分组'
+    if (!groups[g]) groups[g] = []
+    groups[g].push(v)
+  }
+  return groups
+})
+
+async function loadVariables() {
+  try {
+    const token = localStorage.getItem('token')
+    const res = await fetch('/api/mailer/variables', { headers: { Authorization: `Bearer ${token}` } })
+    customVars.value = await res.json()
+  } catch (e) { console.error('loadVariables', e) }
+}
+
+function openVarEditor(v) {
+  if (v) {
+    Object.assign(editVar, { id: v.id, name: v.name, var_key: v.var_key, var_type: v.var_type, value: v.value, group_name: v.group_name })
+    // For emoji_group, convert JSON array back to space-separated string for editing
+    if (v.var_type === 'emoji_group') {
+      try { editVar.value = JSON.parse(v.value).join(' ') } catch (_) {}
+    }
+  } else {
+    Object.assign(editVar, { id: null, name: '', var_key: '', var_type: 'text', value: '', group_name: '' })
+  }
+  showVarEditor.value = true
+}
+
+async function saveVar() {
+  let val = editVar.value
+  if (editVar.var_type === 'emoji_group') {
+    const emojis = val.split(/[\s,]+/).filter(Boolean)
+    val = JSON.stringify(emojis)
+  }
+  const body = { name: editVar.name, var_key: editVar.var_key, var_type: editVar.var_type, value: val, group_name: editVar.group_name }
+  const token = localStorage.getItem('token')
+  try {
+    if (editVar.id) {
+      await fetch(`/api/mailer/variables/${editVar.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) })
+    } else {
+      const res = await fetch('/api/mailer/variables', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) })
+      const data = await res.json()
+      if (!res.ok) { alert(data.error); return }
+    }
+    showVarEditor.value = false
+    loadVariables()
+  } catch (e) { alert('保存失败: ' + e.message) }
+}
+
+async function deleteVar(id) {
+  if (!confirm('确认删除此变量？')) return
+  const token = localStorage.getItem('token')
+  await fetch(`/api/mailer/variables/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+  loadVariables()
+}
+
+function varTypeLabel(t) {
+  return { text: '文本', emoji_group: '表情随机', random_number: '随机数字', random_alphanumeric: '随机字母数字', builtin: '内置' }[t] || t
+}
+function varTypeBadge(t) {
+  return { text: 'background:#e0f2fe;color:#0369a1', emoji_group: 'background:#fef3c7;color:#b45309', random_number: 'background:#ede9fe;color:#6d28d9', random_alphanumeric: 'background:#fce7f3;color:#be185d', builtin: 'background:#f0fdf4;color:#15803d' }[t] || ''
+}
+function varValueDisplay(v) {
+  if (v.var_type === 'emoji_group') { try { return JSON.parse(v.value).join(' ') } catch (_) { return v.value } }
+  if (v.var_type === 'random_number') return `${v.value}位随机数字`
+  if (v.var_type === 'random_alphanumeric') return `${v.value}位随机字母数字`
+  if (v.var_type === 'builtin') return v.value === 'date' ? '当前日期' : v.value
+  return v.value
+}
+
+function showVarDropdown(evt, target) {
+  loadVariables()
+  const rect = evt.currentTarget.getBoundingClientRect()
+  varDropdown.top = rect.bottom + 4
+  varDropdown.left = Math.min(rect.left, window.innerWidth - 320)
+  varDropdown.target = target
+  varDropdown.show = true
+}
+
+function insertVar(key) {
+  const varText = `{{${key}}}`
+  varDropdown.show = false
+  if (varDropdown.target === 'subject') {
+    const input = subjectInput.value
+    if (input) {
+      const start = input.selectionStart || editTpl.subject.length
+      editTpl.subject = editTpl.subject.slice(0, start) + varText + editTpl.subject.slice(input.selectionEnd || start)
+      nextTick(() => { input.focus(); input.selectionStart = input.selectionEnd = start + varText.length })
+    } else {
+      editTpl.subject = (editTpl.subject || '') + varText
+    }
+  } else if (varDropdown.target === 'html') {
+    if (htmlEditorTab.value === 'visual') {
+      const frame = htmlVisualFrame.value
+      if (frame) {
+        const doc = frame.contentDocument || frame.contentWindow.document
+        doc.execCommand('insertText', false, varText)
+        syncHtmlVisual()
+      }
+    } else {
+      editTpl.html_body = (editTpl.html_body || '') + varText
+    }
+  }
+}
+
+
 function htmlInsertImage() {
   const input = document.createElement('input')
   input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.click()
@@ -1708,6 +1934,16 @@ textarea.form-control { resize: vertical; font-family: inherit }
 .grid { display: grid; gap: 16px }
 .grid-2 { grid-template-columns: 1fr 1fr }
 .toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px }
+
+/* Variable dropdown */
+.var-dropdown-overlay { position:fixed; inset:0; z-index:2000; background:rgba(0,0,0,0.1) }
+.var-dropdown { position:fixed; width:300px; max-height:400px; overflow-y:auto; background:#fff; border:1px solid #e2e8f0; border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,0.15); z-index:2001; padding:8px 0 }
+.var-dropdown-title { padding:8px 14px; font-size:13px; font-weight:700; color:#1e293b; border-bottom:1px solid #f1f5f9 }
+.var-dropdown-group { padding:4px 0 }
+.var-dropdown-group-title { padding:6px 14px 4px; font-size:11px; font-weight:600; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px }
+.var-dropdown-item { padding:6px 14px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; transition:background .15s }
+.var-dropdown-item:hover { background:#eff6ff; color:#1e40af }
+.var-dropdown-item code { background:#f1f5f9; padding:1px 4px; border-radius:3px; font-size:11px; color:#475569 }
 
 </style>
 

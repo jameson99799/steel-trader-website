@@ -175,6 +175,9 @@ async function runTask(taskId, isResume = false) {
                 body = body.replace(/<span\s+class=["']replace-tip["'][^>]*>.*?<\/span>/gi, '')
             } catch (urlErr) { console.error('URL conversion error', urlErr) }
 
+            // Replace custom variables (emoji groups, random, etc.)
+            body = replaceCustomVars(body)
+
             // Build attachment list from task's attachment_paths
             const taskAttachments = []
             try {
@@ -788,6 +791,94 @@ router.get('/users', authMiddleware, (req, res) => {
     const users = getAll('SELECT id, username, display_name, role FROM crm_users ORDER BY id')
     res.json(users)
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Custom Variables CRUD
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get('/variables', authMiddleware, (req, res) => {
+    try { run(`CREATE TABLE IF NOT EXISTS mail_variables (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL DEFAULT '',
+      var_key TEXT NOT NULL UNIQUE, var_type TEXT DEFAULT 'text',
+      value TEXT DEFAULT '', group_name TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`) } catch(e) {}
+    const vars = getAll('SELECT * FROM mail_variables ORDER BY group_name, id')
+    res.json(vars)
+})
+
+router.post('/variables', authMiddleware, express.json(), (req, res) => {
+    const { name, var_key, var_type, value, group_name } = req.body
+    if (!name || !var_key) return res.status(400).json({ error: '名称和变量键不能为空' })
+    const key = var_key.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
+    try {
+        run('INSERT INTO mail_variables (name, var_key, var_type, value, group_name) VALUES (?,?,?,?,?)',
+            [name, key, var_type || 'text', value || '', group_name || ''])
+        res.json({ message: '创建成功' })
+    } catch (e) {
+        if (e.message?.includes('UNIQUE')) return res.status(400).json({ error: '变量键已存在' })
+        res.status(500).json({ error: e.message })
+    }
+})
+
+router.put('/variables/:id', authMiddleware, express.json(), (req, res) => {
+    const { name, var_key, var_type, value, group_name } = req.body
+    const key = var_key ? var_key.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() : undefined
+    const sets = [], params = []
+    if (name !== undefined) { sets.push('name=?'); params.push(name) }
+    if (key) { sets.push('var_key=?'); params.push(key) }
+    if (var_type !== undefined) { sets.push('var_type=?'); params.push(var_type) }
+    if (value !== undefined) { sets.push('value=?'); params.push(value) }
+    if (group_name !== undefined) { sets.push('group_name=?'); params.push(group_name) }
+    if (!sets.length) return res.status(400).json({ error: '无更新内容' })
+    params.push(req.params.id)
+    run(`UPDATE mail_variables SET ${sets.join(',')} WHERE id=?`, params)
+    res.json({ message: '更新成功' })
+})
+
+router.delete('/variables/:id', authMiddleware, (req, res) => {
+    run('DELETE FROM mail_variables WHERE id=?', [req.params.id])
+    res.json({ message: '删除成功' })
+})
+
+// ─── Replace custom variables in email body ─────────────────────────────────
+export function replaceCustomVars(html) {
+    try {
+        const vars = getAll('SELECT * FROM mail_variables')
+        let out = html
+        for (const v of vars) {
+            const pattern = new RegExp(`\\{\\{${v.var_key}\\}\\}`, 'g')
+            let replacement = ''
+            switch (v.var_type) {
+                case 'text':
+                    replacement = v.value || ''
+                    break
+                case 'emoji_group': {
+                    const emojis = JSON.parse(v.value || '[]')
+                    replacement = emojis.length ? emojis[Math.floor(Math.random() * emojis.length)] : ''
+                    break
+                }
+                case 'random_number': {
+                    const len = parseInt(v.value) || 6
+                    replacement = Array.from({length: len}, () => Math.floor(Math.random() * 10)).join('')
+                    break
+                }
+                case 'random_alphanumeric': {
+                    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+                    const len2 = parseInt(v.value) || 8
+                    replacement = Array.from({length: len2}, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+                    break
+                }
+                case 'builtin':
+                    if (v.value === 'date') replacement = new Date().toISOString().split('T')[0]
+                    break
+                default:
+                    replacement = v.value || ''
+            }
+            out = out.replace(pattern, replacement)
+        }
+        return out
+    } catch (_) { return html }
+}
 
 export default router
 

@@ -489,6 +489,30 @@ async function initDb() {
   try { db.exec("ALTER TABLE mail_tasks ADD COLUMN attachment_paths TEXT DEFAULT '[]'") } catch (e) { }
   try { db.exec("ALTER TABLE mail_templates ADD COLUMN template_type TEXT DEFAULT 'rich'") } catch (e) { }
 
+  // Custom email variables
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mail_variables (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL DEFAULT '',
+      var_key TEXT NOT NULL UNIQUE,
+      var_type TEXT DEFAULT 'text',
+      value TEXT DEFAULT '',
+      group_name TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  // Seed built-in variables if table is empty
+  try {
+    const varCount = db.prepare('SELECT COUNT(*) as c FROM mail_variables').get().c
+    if (varCount === 0) {
+      const seedVars = db.prepare('INSERT OR IGNORE INTO mail_variables (name, var_key, var_type, value, group_name) VALUES (?,?,?,?,?)')
+      seedVars.run('随机6位数字', 'random_6digits', 'random_number', '6', '随机变量')
+      seedVars.run('随机8位字母数字', 'random_8alphanum', 'random_alphanumeric', '8', '随机变量')
+      seedVars.run('当前日期', 'current_date', 'builtin', 'date', '系统变量')
+      seedVars.run('问候表情', 'emoji_greeting', 'emoji_group', '["👋","🤝","😊","🙏","✨","💪","🌟"]', '表情变量')
+    }
+  } catch (e) { }
+
   // External API keys
   db.exec(`
     CREATE TABLE IF NOT EXISTS api_keys (

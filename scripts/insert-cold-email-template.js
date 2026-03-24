@@ -123,10 +123,10 @@ const html_body = `<div style="max-width:600px;margin:0 auto;font-family:'Segoe 
   <table cellpadding="0" cellspacing="0" border="0" style="margin:12px 0 20px">
     <tr>
       <td style="padding-right:10px">
-        <a href="mailto:{{email}}?subject=Steel%20Inquiry" style="display:inline-block;padding:10px 20px;background:#1f4e79;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">📧 Request Quote</a>
+        <a href="mailto:jameson@fadasteel.com?subject=Steel%20Inquiry" style="display:inline-block;padding:10px 20px;background:#1f4e79;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">📧 Request Quote</a>
       </td>
       <td>
-        <a href="{{whatsapp_link}}" style="display:inline-block;padding:10px 20px;background:#25d366;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">💬 WhatsApp Us</a>
+        <a href="https://api.whatsapp.com/send?phone=8615553478959" target="_blank" style="display:inline-block;padding:10px 20px;background:#25d366;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">💬 WhatsApp Us</a>
       </td>
     </tr>
   </table>
@@ -135,8 +135,8 @@ const html_body = `<div style="max-width:600px;margin:0 auto;font-family:'Segoe 
   <div style="margin-top:30px;padding-top:20px;border-top:2px solid #e0e6ed;font-family:Arial,sans-serif;font-size:13px;color:#555;line-height:1.8">
     <p style="margin:0 0 4px"><strong>Best Regards</strong></p>
     <p style="margin:0 0 12px;font-size:15px;font-weight:700;color:#1f4e79">Mr Jameson / Sales Manager / International Dept.</p>
-    <p style="margin:0 0 4px">📱 Mobile / WhatsApp / Wechat: <a href="{{whatsapp_link}}" style="color:#25d366;text-decoration:none">{{phone}}</a></p>
-    <p style="margin:0 0 12px">📧 Email: <a href="mailto:{{email}}" style="color:#0563c1;text-decoration:none">{{email}}</a></p>
+    <p style="margin:0 0 4px">📱 Mobile / WhatsApp / Wechat: <a href="https://api.whatsapp.com/send?phone=8615553478959" style="color:#25d366;text-decoration:none">+86-15553478959</a></p>
+    <p style="margin:0 0 12px">📧 Email: <a href="mailto:jameson@fadasteel.com" style="color:#0563c1;text-decoration:none">jameson@fadasteel.com</a></p>
     <p style="margin:0;font-weight:700;color:#1f4e79;font-size:13px">SHANDONG FADA STEEL CO., LTD</p>
     <p style="margin:0;font-size:12px;color:#777">SHANDONG YANGGU NEW GLOBAL STEEL CO., LTD</p>
     <p style="margin:0;font-size:12px;color:#777">FADA STEEL PTE. LTD. (SINGAPORE BRANCH)</p>
