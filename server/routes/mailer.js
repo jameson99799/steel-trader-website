@@ -542,6 +542,57 @@ router.get('/logs', authMiddleware, (req, res) => {
     res.json(logs)
 })
 
+// CRM customers + mail_contacts combined for task creation picker
+router.get('/crm-customers', authMiddleware, (req, res) => {
+    const { search, country, status, tag, source } = req.query
+    let results = []
+
+    // Load CRM customers
+    if (source !== 'mailer_only') {
+        let crmWhere = ['1=1']
+        let crmParams = []
+        if (search) { crmWhere.push("(c.first_name LIKE ? OR c.last_name LIKE ? OR c.name LIKE ? OR c.company LIKE ? OR c.email LIKE ?)"); const q = `%${search}%`; crmParams.push(q,q,q,q,q) }
+        if (country) { crmWhere.push('c.country = ?'); crmParams.push(country) }
+        if (status) { crmWhere.push('c.status = ?'); crmParams.push(status) }
+        if (tag) { crmWhere.push("c.tags LIKE ?"); crmParams.push(`%${tag}%`) }
+        const crmRows = getAll(`SELECT c.* FROM crm_customers c WHERE ${crmWhere.join(' AND ')} ORDER BY c.created_at DESC LIMIT 500`, crmParams)
+        for (const c of crmRows) {
+            results.push({
+                id: c.id, name: c.first_name || c.name || '', last_name: c.last_name || '',
+                email: c.email || '', phone: c.phone || '', company: c.company || '',
+                country: c.country || '', status: c.status || '', tags: c.tags || '[]',
+                _source: 'crm'
+            })
+        }
+    }
+
+    // Load mail_contacts
+    if (source !== 'crm') {
+        let mcWhere = ['1=1']
+        let mcParams = []
+        if (search) { mcWhere.push("(mc.email LIKE ? OR mc.name LIKE ? OR mc.company LIKE ?)"); const q = `%${search}%`; mcParams.push(q,q,q) }
+        if (country) { mcWhere.push('mc.country = ?'); mcParams.push(country) }
+        const mcRows = getAll(`SELECT mc.* FROM mail_contacts mc WHERE ${mcWhere.join(' AND ')} ORDER BY mc.id DESC LIMIT 500`, mcParams)
+        for (const mc of mcRows) {
+            results.push({
+                id: mc.id, name: mc.name || '', last_name: '',
+                email: mc.email || '', phone: '', company: mc.company || '',
+                country: mc.country || '', status: '', tags: '[]',
+                _source: 'mailer'
+            })
+        }
+    }
+
+    // Build meta for filters
+    const countries = [...new Set(results.map(r => r.country).filter(Boolean))].sort()
+    const statuses = [...new Set(results.map(r => r.status).filter(Boolean))].sort()
+    let allTags = []
+    for (const r of results) { try { const t = JSON.parse(r.tags || '[]'); allTags.push(...t) } catch(e) {} }
+    const tags = [...new Set(allTags)].sort()
+
+    res.json({ customers: results, meta: { countries, statuses, tags } })
+})
+
 // Grouped view: one row per contact_email, with follow-up counts
 router.get('/logs/grouped', authMiddleware, (req, res) => {
     const taskId = req.query.task_id

@@ -456,8 +456,12 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
   const { recipient_email, original_subject, original_sent_at } = req.body
   if (!recipient_email) return res.status(400).json({ error: '缺少收件人' })
 
-  // Get default template
-  const tpl = getOne("SELECT * FROM mail_templates WHERE is_default=1 LIMIT 1")
+  // Ensure is_followup_default column exists
+  try { run('ALTER TABLE mail_templates ADD COLUMN is_followup_default INTEGER DEFAULT 0') } catch(e) {}
+
+  // Get followup default template (fallback to marketing default, then first template)
+  const tpl = getOne("SELECT * FROM mail_templates WHERE is_followup_default=1 LIMIT 1")
+    || getOne("SELECT * FROM mail_templates WHERE is_default=1 LIMIT 1")
     || getOne("SELECT * FROM mail_templates ORDER BY id ASC LIMIT 1")
   if (!tpl) return res.status(400).json({ error: '未设置默认邮件模板' })
 
@@ -482,9 +486,13 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
     body = body.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
   }
 
-  // Add Foxmail-style quoted reply
-  const fmtDate = original_sent_at ? new Date(original_sent_at).toLocaleString('zh-CN') : ''
-  const quotedBlock = `<br/><br/><div style="font-family:Arial;font-size:13px;color:#555"><div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #ccc;font-size:12px;color:#888">---- Replied Message ----<br/><b>From</b>&nbsp;&nbsp;&nbsp;&nbsp;<a href="mailto:${smtp.smtp_user}" style="color:#0563c1">${smtp.smtp_user}</a><br/><b>Date</b>&nbsp;&nbsp;&nbsp;&nbsp;${fmtDate}<br/><b>To</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="mailto:${recipient_email}" style="color:#0563c1">${recipient_email}</a><br/><b>Subject</b>&nbsp;${original_subject || ''}</div></div>`
+  // Find the original email's HTML body from mail_logs
+  const origEmail = getOne('SELECT sent_html, subject, sent_at FROM mail_logs WHERE contact_email=? AND status=? ORDER BY id DESC LIMIT 1', [recipient_email, 'sent'])
+  const originalBody = origEmail?.sent_html || ''
+
+  // Add Foxmail-style quoted reply with original email content
+  const fmtDate = (origEmail?.sent_at || original_sent_at) ? new Date(origEmail?.sent_at || original_sent_at).toLocaleString('zh-CN') : ''
+  const quotedBlock = `<br/><br/><div style="font-family:Arial;font-size:13px;color:#555"><div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #ccc;font-size:12px;color:#888">---- Replied Message ----<br/><b>From</b>&nbsp;&nbsp;&nbsp;&nbsp;<a href="mailto:${smtp.smtp_user}" style="color:#0563c1">${smtp.smtp_user}</a><br/><b>Date</b>&nbsp;&nbsp;&nbsp;&nbsp;${fmtDate}<br/><b>To</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="mailto:${recipient_email}" style="color:#0563c1">${recipient_email}</a><br/><b>Subject</b>&nbsp;${original_subject || origEmail?.subject || ''}</div><blockquote style="margin:10px 0 0 0;padding:10px 15px;border-left:3px solid #ccc;color:#666">${originalBody}</blockquote></div>`
   body = body + quotedBlock
 
   const now = new Date().toISOString()
