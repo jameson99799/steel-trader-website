@@ -362,10 +362,11 @@
           <!-- CRM mode: CRM customer picker with filters -->
           <div v-else-if="isCRM">
             <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
-              <input v-model="crmFilter.search" class="form-control" placeholder="🔍 搜索名称/公司..." style="flex:1;min-width:150px;max-width:200px" @input="loadCrmCustomers" />
+              <select v-model="crmFilter.source" class="form-control" style="width:auto;min-width:100px" @change="loadCrmCustomers"><option value="">全部来源</option><option value="crm">CRM客户</option><option value="mailer_only">邮件联系人</option></select>
+              <input v-model="crmFilter.search" class="form-control" placeholder="🔍 搜索名称/公司/邮箱..." style="flex:1;min-width:150px;max-width:200px" @input="loadCrmCustomers" />
               <select v-model="crmFilter.country" class="form-control" style="width:auto;min-width:100px" @change="loadCrmCustomers"><option value="">全部国家</option><option v-for="c in crmMeta.countries" :key="c">{{ c }}</option></select>
-              <select v-model="crmFilter.status" class="form-control" style="width:auto;min-width:100px" @change="loadCrmCustomers"><option value="">全部状态</option><option v-for="s in crmMeta.statuses" :key="s">{{ s }}</option></select>
-              <select v-model="crmFilter.tag" class="form-control" style="width:auto;min-width:100px" @change="loadCrmCustomers"><option value="">全部标签</option><option v-for="t in crmMeta.tags" :key="t">{{ t }}</option></select>
+              <select v-if="crmFilter.source !== 'mailer_only'" v-model="crmFilter.status" class="form-control" style="width:auto;min-width:100px" @change="loadCrmCustomers"><option value="">全部状态</option><option v-for="s in crmMeta.statuses" :key="s">{{ s }}</option></select>
+              <select v-if="crmFilter.source !== 'mailer_only'" v-model="crmFilter.tag" class="form-control" style="width:auto;min-width:100px" @change="loadCrmCustomers"><option value="">全部标签</option><option v-for="t in crmMeta.tags" :key="t">{{ t }}</option></select>
             </div>
             <div class="check-list" style="max-height:200px">
               <div class="check-item-header">
@@ -556,7 +557,7 @@ const isCRM = computed(() => !!window.__CRM_MAILER || window.location.pathname.s
 
 // CRM customer picker state
 const crmCustomers = ref([])
-const crmFilter = reactive({ search: '', country: '', status: '', tag: '' })
+const crmFilter = reactive({ search: '', country: '', status: '', tag: '', source: '' })
 const crmMeta = reactive({ countries: [], statuses: [], tags: [] })
 const crmAllSelected = computed(() => {
   const withEmail = crmCustomers.value.filter(c => c.email)
@@ -572,6 +573,7 @@ async function loadCrmCustomers() {
     if (crmFilter.country) params.set('country', crmFilter.country)
     if (crmFilter.status) params.set('status', crmFilter.status)
     if (crmFilter.tag) params.set('tag', crmFilter.tag)
+    if (crmFilter.source) params.set('source', crmFilter.source)
     const data = await api.request(`/mailer/crm-customers?${params}`)
     crmCustomers.value = data.customers || []
     if (data.meta) { crmMeta.countries = data.meta.countries; crmMeta.statuses = data.meta.statuses; crmMeta.tags = data.meta.tags }
