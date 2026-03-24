@@ -606,7 +606,13 @@ router.get('/logs/grouped', authMiddleware, (req, res) => {
     // Get all logs for this task (or all tasks)
     const where = taskId ? `WHERE ml.task_id=${+taskId}` : ''
     const rows = getAll(
-        `SELECT ml.*, COALESCE(mt.name, '邮件任务') AS task_name, mt2.name AS template_name
+        `SELECT ml.*, 
+          CASE 
+            WHEN ml.task_id = 0 AND ml.subject LIKE 'Re:%' THEN '快速跟进'
+            WHEN ml.task_id = 0 THEN '快速发送'
+            ELSE COALESCE(mt.name, '邮件任务')
+          END AS task_name, 
+          mt2.name AS template_name
          FROM mail_logs ml
          LEFT JOIN mail_tasks mt ON mt.id = ml.task_id
          LEFT JOIN mail_templates mt2 ON mt2.id = ml.template_id

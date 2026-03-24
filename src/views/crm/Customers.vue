@@ -40,6 +40,11 @@
       <span>已选择 <strong>{{ selectedIds.length }}</strong> 个客户</span>
       <button class="btn btn-sm btn-primary" @click="bulkEmailViaMailer(selectedIds)">📧 发送营销邮件</button>
       <button class="btn btn-sm" style="background:#e0f2fe;color:#0369a1" @click="bulkMoveToPool">🌊 移入公海池</button>
+      <select v-model="assignTargetUser" class="filter-select" style="min-width:120px;font-size:12px;padding:4px 8px">
+        <option value="">👤 分配给...</option>
+        <option v-for="u in crmUsers" :key="u.id" :value="u.id">{{ u.display_name }}</option>
+      </select>
+      <button v-if="assignTargetUser" class="btn btn-sm" style="background:#dcfce7;color:#15803d" @click="bulkAssign">✅ 确认分配</button>
       <button class="btn btn-sm btn-secondary" @click="selectedIds = []; allSelected = false">取消选择</button>
     </div>
 
@@ -346,6 +351,7 @@ const filters = reactive({
   search: '', country: '', status: '', tag: '', start_date: '', end_date: '', owner_id: ''
 })
 const crmUsers = ref([])
+const assignTargetUser = ref('')
 
 const form = reactive({
   first_name: '', last_name: '', company: '', country: '', phone: '', email: '',
@@ -377,6 +383,20 @@ async function loadCustomers() {
     if (data.countries) countries.value = data.countries
     if (data.users) crmUsers.value = data.users
   } catch (e) { console.error(e) }
+}
+
+async function bulkAssign() {
+  if (!selectedIds.value.length || !assignTargetUser.value) return
+  try {
+    await crmApi.request(`/customers/bulk-assign`, {
+      method: 'POST',
+      body: JSON.stringify({ ids: selectedIds.value, owner_id: assignTargetUser.value })
+    })
+    const user = crmUsers.value.find(u => u.id === assignTargetUser.value)
+    alert(`✅ 已分配 ${selectedIds.value.length} 个客户给 ${user?.display_name || ''}`)
+    selectedIds.value = []; allSelected.value = false; assignTargetUser.value = ''
+    loadCustomers()
+  } catch (e) { alert('分配失败: ' + e.message) }
 }
 
 function getContactItems(c) {

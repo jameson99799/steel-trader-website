@@ -181,6 +181,25 @@ router.post('/pool/move', dualAuth, (req, res) => {
   res.json({ message: `已移入公海池 ${moved} 位客户`, moved })
 })
 
+// Bulk assign customers to a specific owner
+router.post('/bulk-assign', dualAuth, (req, res) => {
+  const { ids, owner_id } = req.body
+  if (!ids?.length) return res.status(400).json({ error: '请选择客户' })
+  if (owner_id === undefined) return res.status(400).json({ error: '请选择负责人' })
+  const now = new Date().toISOString()
+  let assigned = 0
+  for (const id of ids) {
+    const c = getOne('SELECT id, owner_id FROM crm_customers WHERE id = ?', [id])
+    if (c) {
+      run('UPDATE crm_customers SET owner_id = ? WHERE id = ?', [owner_id || null, id])
+      run(`INSERT INTO crm_customer_history (customer_id, from_user_id, to_user_id, action, created_at) VALUES (?,?,?,'assign',?)`,
+        [id, c.owner_id, owner_id || null, now])
+      assigned++
+    }
+  }
+  res.json({ message: `已分配 ${assigned} 位客户`, assigned })
+})
+
 // Global search
 router.get('/search/global', dualAuth, (req, res) => {
   const { q, date } = req.query
@@ -558,7 +577,12 @@ router.get('/export/all', dualAuth, (req, res) => {
 router.get('/email/records', dualAuth, (req, res) => {
   // Get records from mail_logs (mailer tasks) joined with mail_tasks for task_name
   const mailerLogs = getAll(`SELECT ml.id, ml.contact_email as recipient_email, ml.subject, ml.status, 
-    ml.sent_at, COALESCE(mt.name,'邮件任务') as task_name
+    ml.sent_at, 
+    CASE 
+      WHEN ml.task_id = 0 AND ml.subject LIKE 'Re:%' THEN '快速跟进'
+      WHEN ml.task_id = 0 THEN '快速发送'
+      ELSE COALESCE(mt.name,'邮件任务')
+    END as task_name
     FROM mail_logs ml LEFT JOIN mail_tasks mt ON ml.task_id=mt.id ORDER BY ml.id DESC LIMIT 200`)
   // Get records from crm_email_logs (quick-send / quick-followup)
   const crmLogs = getAll(`SELECT id, recipient_email, subject, status, sent_at,

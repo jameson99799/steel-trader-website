@@ -208,10 +208,10 @@
 
         <!-- Expanded: per-send history -->
         <div v-if="expandedGroups.has(g.contact_email)" class="log-records">
-          <div v-for="(r, idx) in g.records" :key="r.id" class="log-record">
+          <div v-for="(r, idx) in g.records.slice().reverse()" :key="r.id" class="log-record">
             <input type="checkbox" v-model="selectedLogIds" :value="r.id" style="margin-right:8px" />
             <div class="log-record-body">
-              <span class="log-round">{{ followLabel(g, idx) }}</span>
+              <span class="log-round">{{ followLabel(g, g.records.length - 1 - idx) }}</span>
               <span class="log-subj">{{ r.subject }}</span>
               <span :class="'check '+(r.status==='sent'?'gray':'red')">
                 {{ r.status === 'sent' ? '✓✓ 已发送' : '✗ 失败' }}
