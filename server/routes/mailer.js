@@ -326,7 +326,7 @@ router.get('/templates', authMiddleware, (req, res) => {
     const { userId, isAdmin } = getUserId(req)
     const templates = isAdmin
         ? getAll('SELECT * FROM mail_templates ORDER BY id DESC')
-        : getAll(`SELECT * FROM mail_templates WHERE created_by=? OR assigned_users=? OR created_by='' ORDER BY id DESC`, [userId, userId])
+        : getAll(`SELECT * FROM mail_templates WHERE created_by=? OR assigned_users=? ORDER BY id DESC`, [userId, userId])
     const users = getAll('SELECT id, username, display_name, role FROM crm_users ORDER BY id')
     res.json({ templates, users })
 })
@@ -389,7 +389,7 @@ router.get('/contacts', authMiddleware, (req, res) => {
     const { userId, isAdmin } = getUserId(req)
     const sql = isAdmin
         ? `SELECT mc.*, cg.name as group_name FROM mail_contacts mc LEFT JOIN contact_groups cg ON cg.id = mc.group_id ORDER BY mc.id DESC`
-        : `SELECT mc.*, cg.name as group_name FROM mail_contacts mc LEFT JOIN contact_groups cg ON cg.id = mc.group_id WHERE mc.created_by=? OR mc.created_by='' ORDER BY mc.id DESC`
+        : `SELECT mc.*, cg.name as group_name FROM mail_contacts mc LEFT JOIN contact_groups cg ON cg.id = mc.group_id WHERE mc.created_by=? ORDER BY mc.id DESC`
     res.json(isAdmin ? getAll(sql) : getAll(sql, [userId]))
 })
 router.post('/contacts', authMiddleware, (req, res) => {
@@ -429,6 +429,13 @@ router.post('/contacts/bulk-delete', authMiddleware, (req, res) => {
     run(`DELETE FROM mail_contacts WHERE id IN (${placeholders})`, ids)
     res.json({ message: `已删除 ${ids.length} 个联系人` })
 })
+router.post('/contacts/assign', authMiddleware, (req, res) => {
+    const { ids, user_id } = req.body
+    if (!ids?.length || !user_id) return res.status(400).json({ error: '缺少参数' })
+    const placeholders = ids.map(() => '?').join(',')
+    run(`UPDATE mail_contacts SET created_by=? WHERE id IN (${placeholders})`, [String(user_id), ...ids])
+    res.json({ message: `已分配 ${ids.length} 个联系人` })
+})
 router.post('/contacts/move-group', authMiddleware, (req, res) => {
     const { ids, group_id } = req.body
     if (!ids?.length) return res.status(400).json({ error: '无选中项' })
@@ -442,7 +449,7 @@ router.get('/tasks', authMiddleware, (req, res) => {
     const { userId, isAdmin } = getUserId(req)
     const tasks = isAdmin
         ? getAll('SELECT * FROM mail_tasks ORDER BY id DESC')
-        : getAll(`SELECT * FROM mail_tasks WHERE created_by=? OR created_by='' ORDER BY id DESC`, [userId])
+        : getAll(`SELECT * FROM mail_tasks WHERE created_by=? ORDER BY id DESC`, [userId])
     const result = tasks.map(t => {
         const prog = taskProgress.get(t.id)
         return { ...t, _progress: prog || null }
@@ -587,11 +594,11 @@ router.get('/logs', authMiddleware, (req, res) => {
     if (taskId) {
         logs = isAdmin
             ? getAll('SELECT * FROM mail_logs WHERE task_id=? ORDER BY id ASC', [taskId])
-            : getAll(`SELECT * FROM mail_logs WHERE task_id=? AND (created_by=? OR created_by='') ORDER BY id ASC`, [taskId, userId])
+            : getAll(`SELECT * FROM mail_logs WHERE task_id=? AND created_by=? ORDER BY id ASC`, [taskId, userId])
     } else {
         logs = isAdmin
             ? getAll('SELECT * FROM mail_logs ORDER BY id DESC LIMIT 500')
-            : getAll(`SELECT * FROM mail_logs WHERE created_by=? OR created_by='' ORDER BY id DESC LIMIT 500`, [userId])
+            : getAll(`SELECT * FROM mail_logs WHERE created_by=? ORDER BY id DESC LIMIT 500`, [userId])
     }
     res.json(logs)
 })
@@ -658,7 +665,7 @@ router.get('/logs/grouped', authMiddleware, (req, res) => {
     let whereParts = []
     let params = []
     if (taskId) { whereParts.push(`ml.task_id=?`); params.push(+taskId) }
-    if (!isAdmin) { whereParts.push(`(ml.created_by=? OR ml.created_by='')`); params.push(userId) }
+    if (!isAdmin) { whereParts.push(`ml.created_by=?`); params.push(userId) }
     const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
     const rows = getAll(
         `SELECT ml.*, 

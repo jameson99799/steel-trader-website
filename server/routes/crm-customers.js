@@ -633,7 +633,7 @@ router.get('/email/records', dualAuth, (req, res) => {
       WHEN ml.task_id = 0 THEN '快速发送'
       ELSE COALESCE(mt.name,'邮件任务')
     END as task_name
-    FROM mail_logs ml LEFT JOIN mail_tasks mt ON ml.task_id=mt.id WHERE ml.created_by=? OR ml.created_by='' ORDER BY ml.id DESC LIMIT 200`, [userId])
+    FROM mail_logs ml LEFT JOIN mail_tasks mt ON ml.task_id=mt.id WHERE ml.created_by=? ORDER BY ml.id DESC LIMIT 200`, [userId])
   // Get records from crm_email_logs (quick-send / quick-followup)
   const crmLogs = isAdmin
     ? getAll(`SELECT id, recipient_email, subject, status, sent_at,

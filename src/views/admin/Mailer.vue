@@ -79,6 +79,12 @@
           <option v-for="g in contactGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
         </select>
         <button v-if="selectedContacts.length && moveTargetGroup !== null" class="btn btn-sm btn-outline" style="color:#7c3aed;border-color:#c4b5fd" @click="moveToGroup">✅ 确认移动</button>
+        <!-- Assign to user -->
+        <select v-if="selectedContacts.length" v-model="assignTargetUser" class="form-control" style="width:auto;min-width:140px;font-size:12px;padding:4px 8px">
+          <option :value="null">分配给...</option>
+          <option v-for="u in crmUsers" :key="u.id" :value="String(u.id)">{{ u.display_name || u.username }} {{ u.role === 'admin' ? '(管理员)' : '' }}</option>
+        </select>
+        <button v-if="selectedContacts.length && assignTargetUser !== null" class="btn btn-sm btn-outline" style="color:#059669;border-color:#6ee7b7" @click="assignContacts">👤 确认分配</button>
         <div style="flex:1"></div>
         <!-- Group management -->
         <button class="btn btn-sm btn-outline" @click="addGroup" style="color:#7c3aed;border-color:#c4b5fd">📁 新建分组</button>
@@ -134,11 +140,15 @@
 
     <!-- ═══ Tasks Tab ═══ -->
     <div v-if="tab === 'tasks'" class="tab-body">
-      <div class="toolbar"><button class="btn btn-primary" @click="openTaskCreator()">+ 创建发送任务</button></div>
+      <div class="toolbar" style="gap:8px">
+        <button class="btn btn-primary" @click="openTaskCreator()">+ 创建发送任务</button>
+        <button v-if="selectedTaskIds.length" class="btn btn-outline err-btn" @click="bulkDeleteTasks">🗑️ 批量删除 ({{ selectedTaskIds.length }})</button>
+      </div>
       <div v-if="!tasks.length" class="empty">暂无任务</div>
       <div v-for="t in tasks" :key="t.id" class="list-card task-card">
         <div class="lc-main">
           <div style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" v-model="selectedTaskIds" :value="t.id" @click.stop />
             <strong>{{ t.name || '未命名任务' }}</strong>
             <span v-if="t.priority" class="tag-urgent">⚡ 紧急</span>
             <span v-if="t.schedule_at && t.status==='pending'" class="tag-sched">⏰ 定时中</span>
@@ -185,6 +195,9 @@
           <option value="">所有记录</option>
           <option v-for="t in tasks" :key="t.id" :value="t.id">{{ t.name || '任务#'+t.id }}</option>
         </select>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#94a3b8">
+          <input type="checkbox" @change="toggleAllLogs" :checked="allLogsSelected" /> 全选
+        </label>
         <button v-if="selectedLogIds.length" class="btn btn-outline err-btn" @click="bulkDeleteLogs">
           🗑️ 批量删除 ({{ selectedLogIds.length }})
         </button>
@@ -921,6 +934,8 @@ const tasks = ref([])
 const smtpAccounts = ref([])
 const crmUsers = ref([])
 const selectedContacts = ref([])
+const assignTargetUser = ref(null)
+const selectedTaskIds = ref([])
 
 // Contact groups & search
 const contactGroups = ref([])
@@ -1118,6 +1133,36 @@ async function bulkDeleteLogs() {
     selectedLogIds.value = []
     await loadLogs()
   } catch (e) { alert('删除失败: ' + e.message) }
+}
+const allLogsSelected = computed(() => {
+  const allIds = groupedLogs.value.flatMap(g => g.records.map(r => r.id))
+  return allIds.length > 0 && allIds.every(id => selectedLogIds.value.includes(id))
+})
+function toggleAllLogs(e) {
+  const allIds = groupedLogs.value.flatMap(g => g.records.map(r => r.id))
+  selectedLogIds.value = e.target.checked ? allIds : []
+}
+async function bulkDeleteTasks() {
+  if (!selectedTaskIds.value.length) return
+  const running = tasks.value.filter(t => selectedTaskIds.value.includes(t.id) && t.status === 'running')
+  if (running.length) return alert('请先停止运行中的任务')
+  if (!confirm(`确认删除 ${selectedTaskIds.value.length} 个任务？对应的发送记录也将被删除`)) return
+  try {
+    for (const id of selectedTaskIds.value) {
+      await api.request(`/mailer/tasks/${id}`, { method: 'DELETE' })
+    }
+    selectedTaskIds.value = []
+    await loadAll()
+  } catch (e) { alert('删除失败: ' + e.message) }
+}
+async function assignContacts() {
+  if (!selectedContacts.value.length || assignTargetUser.value === null) return
+  try {
+    await api.request('/mailer/contacts/assign', { method: 'POST', body: JSON.stringify({ ids: selectedContacts.value, user_id: assignTargetUser.value }) })
+    selectedContacts.value = []
+    assignTargetUser.value = null
+    await loadAll()
+  } catch (e) { alert('分配失败: ' + e.message) }
 }
 
 const allContactsSelected = computed(() => filteredContacts.value.length > 0 && filteredContacts.value.every(c => selectedContacts.value.includes(c.id)))
