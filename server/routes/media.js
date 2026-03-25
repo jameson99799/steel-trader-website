@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
-import { getDb } from '../db.js'
+import { getAll, getOne, run } from '../db.js'
 import { upload, compressImage } from '../middleware/upload.js'
 import fs from 'fs'
 import { join, dirname } from 'path'
@@ -18,10 +18,6 @@ function authMiddleware(req, res, next) {
   try { req.user = jwt.verify(token, JWT_SECRET); next() }
   catch { res.status(401).json({ error: 'Token无效' }) }
 }
-
-function getAll(sql, params = []) { return getDb().prepare(sql).all(...params) }
-function getOne(sql, params = []) { return getDb().prepare(sql).get(...params) }
-function run(sql, params = []) { return getDb().prepare(sql).run(...params) }
 
 // ─── Media Groups ───────────────────────────────────────────────────────────
 router.get('/groups', authMiddleware, (req, res) => {
