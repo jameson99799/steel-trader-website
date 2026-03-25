@@ -61,6 +61,18 @@ router.get('/', (req, res) => {
   res.json({ data: products, total, page: parseInt(page), limit: parseInt(limit) })
 })
 
+// Public API: Get all active products (no auth required)
+router.get('/public/all', (req, res) => {
+  const products = getAll(`
+    SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description_en, p.is_featured, p.status, p.sort_order,
+           c.name as category_name, c.name_en as category_name_en, c.sort_order as category_sort_order
+    FROM products p LEFT JOIN categories c ON p.category_id = c.id
+    WHERE p.status = 1
+    ORDER BY c.sort_order, p.sort_order DESC, p.id DESC
+  `)
+  res.json({ data: products, total: products.length })
+})
+
 router.get('/:slug', (req, res) => {
   const { slug } = req.params
   // Support both numeric ID (legacy) and slug

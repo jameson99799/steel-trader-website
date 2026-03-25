@@ -23,12 +23,12 @@
         <table class="table" v-if="filteredProducts.length">
           <thead>
             <tr>
-              <th style="width:70px">图片</th>
-              <th style="min-width:180px">名称</th>
-              <th>分组</th>
-              <th style="width:60px">推荐</th>
-              <th style="width:60px">状态</th>
-              <th style="width:200px">操作</th>
+              <th style="width:60px">图片</th>
+              <th>名称</th>
+              <th style="width:120px">分组</th>
+              <th style="width:50px;text-align:center">推荐</th>
+              <th style="width:50px;text-align:center">状态</th>
+              <th style="width:240px">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -38,12 +38,12 @@
               </td>
               <td><span class="product-name-en">{{ product.name_en || product.name }}</span></td>
               <td>{{ product.category_name || '-' }}</td>
-              <td>
+              <td style="text-align:center">
                 <span :class="['badge', product.is_featured ? 'badge-success' : 'badge-secondary']">
                   {{ product.is_featured ? '是' : '否' }}
                 </span>
               </td>
-              <td>
+              <td style="text-align:center">
                 <span :class="['badge', product.status ? 'badge-success' : 'badge-warning']">
                   {{ product.status ? '上架' : '下架' }}
                 </span>
@@ -357,23 +357,36 @@
 
     <!-- Import from other product Modal -->
     <div v-if="showImportPicker" class="modal-overlay" @click.self="showImportPicker=false">
-      <div class="modal" style="max-width:600px;">
+      <div class="modal" style="max-width:650px;">
         <div class="modal-header" style="background:#f0f9ff;color:#0284c7;">
           <h3>📥 导入其他产品图片</h3>
           <button class="modal-close" @click="showImportPicker=false">&times;</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
+            <label>选择分组</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+              <button v-for="g in importGroupOptions" :key="g.id" :class="['btn','btn-sm', importGroupFilter===String(g.id)?'btn-primary':'btn-outline']" @click="importGroupFilter=String(g.id)">{{ g.name }}</button>
+              <button :class="['btn','btn-sm', importGroupFilter==='all'?'btn-primary':'btn-outline']" @click="importGroupFilter='all'">📋 全部分组</button>
+            </div>
+          </div>
+          <div class="form-group">
             <label>选择产品</label>
             <select v-model="importProductId" class="form-control" @change="loadImportImages">
               <option value="">请选择...</option>
-              <option v-for="p in products" :key="p.id" :value="p.id">{{ p.name_en || p.name }}</option>
+              <option v-for="p in importProductList" :key="p.id" :value="p.id">{{ p.name_en || p.name }}</option>
             </select>
           </div>
-          <div v-if="importImages.length" class="import-grid">
-            <div v-for="(img, i) in importImages" :key="i" :class="['import-item', { selected: importSelected.includes(img) }]" @click="toggleImportSelect(img)">
-              <img :src="img" />
-              <div class="import-check">✓</div>
+          <div v-if="importImages.length">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="font-size:13px;color:#64748b;">共 {{ importImages.length }} 张图片</span>
+              <button class="btn btn-sm btn-outline" @click="toggleImportSelectAll">{{ importSelected.length === importImages.length ? '取消全选' : '☑ 全选' }}</button>
+            </div>
+            <div class="import-grid">
+              <div v-for="(img, i) in importImages" :key="i" :class="['import-item', { selected: importSelected.includes(img) }]" @click="toggleImportSelect(img)">
+                <img :src="img" />
+                <div class="import-check">✓</div>
+              </div>
             </div>
           </div>
         </div>
@@ -452,6 +465,15 @@ const filteredProducts = computed(() => {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(p => (p.name_en || '').toLowerCase().includes(q) || (p.name || '').toLowerCase().includes(q))
   }
+  // Sort by category sort_order then product sort_order (matching website display)
+  const catOrder = {}
+  flatCategories.value.forEach((c, i) => { catOrder[c.id] = i })
+  list = [...list].sort((a, b) => {
+    const ca = catOrder[a.category_id] ?? 999
+    const cb = catOrder[b.category_id] ?? 999
+    if (ca !== cb) return ca - cb
+    return (b.sort_order || 0) - (a.sort_order || 0)
+  })
   return list
 })
 
@@ -473,6 +495,41 @@ const showImportPicker = ref(false)
 const importProductId = ref('')
 const importImages = ref([])
 const importSelected = ref([])
+const importGroupFilter = ref('')
+
+// Group options based on current product's category
+const importGroupOptions = computed(() => {
+  return flatCategories.value.filter(c => !c.prefix) // top-level only
+})
+
+// Filter product list by selected group
+const importProductList = computed(() => {
+  if (importGroupFilter.value === 'all') return products.value
+  const gid = importGroupFilter.value
+  if (!gid) return products.value
+  // Include products in this category and its children
+  const ids = [parseInt(gid)]
+  flatCategories.value.forEach(c => { if (c.prefix && ids.includes(c.parent_id)) ids.push(c.id) })
+  return products.value.filter(p => ids.includes(p.category_id))
+})
+
+// Initialize import group filter to current product's category
+watch(showImportPicker, (v) => {
+  if (v && editingProduct.value?.category_id) {
+    // Find top-level parent of current product's category
+    const cat = flatCategories.value.find(c => c.id === editingProduct.value.category_id)
+    if (cat) {
+      // If it has a prefix (sub-category), find its parent
+      const parent = cat.prefix ? flatCategories.value.find(c => c.id === cat.parent_id) : cat
+      importGroupFilter.value = String((parent || cat).id)
+    } else {
+      importGroupFilter.value = 'all'
+    }
+    importProductId.value = ''
+    importImages.value = []
+    importSelected.value = []
+  }
+})
 
 async function loadImportImages() {
   importImages.value = []; importSelected.value = []
@@ -487,6 +544,14 @@ function toggleImportSelect(img) {
   const i = importSelected.value.indexOf(img)
   if (i >= 0) importSelected.value.splice(i, 1)
   else importSelected.value.push(img)
+}
+
+function toggleImportSelectAll() {
+  if (importSelected.value.length === importImages.value.length) {
+    importSelected.value = []
+  } else {
+    importSelected.value = [...importImages.value]
+  }
 }
 
 function doImportFromProduct() {
@@ -670,7 +735,7 @@ function copyVar(v) {
 
 const loadProducts = async () => {
   try {
-    const res = await api.getProducts({ limit: 100 })
+    const res = await api.getProducts({ limit: 500 })
     products.value = res.data
   } catch (e) {
     console.error(e)

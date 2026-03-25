@@ -1497,4 +1497,42 @@ onMounted(async () => {
 @media (max-width: 480px) {
   .categories-grid { grid-template-columns: 1fr; }
 }
+
+/* ─── Parallel images in detail content ─── */
+/* Tables/grids containing side-by-side images: normalize to same size */
+.detail-content table td img,
+.detail-content table th img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 6px;
+  display: block;
+}
+
+.detail-content table td,
+.detail-content table th {
+  vertical-align: middle;
+}
+
+/* Flex/grid image pairs in detail content */
+.detail-content .ps-img-pair,
+.detail-content .image-pair,
+.detail-content .img-row {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.detail-content .ps-img-pair img,
+.detail-content .image-pair img,
+.detail-content .img-row img {
+  flex: 1;
+  min-width: 0;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 6px;
+}
 </style>

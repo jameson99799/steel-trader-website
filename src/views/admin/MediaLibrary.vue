@@ -40,6 +40,7 @@
         <option value="">全部分组</option>
         <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }} ({{ g.image_count }})</option>
       </select>
+      <button class="btn btn-sm btn-outline" @click="toggleSelectAll">{{ selectedIds.length === items.length && items.length ? '取消全选' : '☑ 全选' }}</button>
       <div v-if="selectedIds.length" class="batch-bar">
         <span>已选 {{ selectedIds.length }} 张</span>
         <select v-model="batchGroupTarget" class="form-control form-control-sm" style="width:120px">
@@ -202,6 +203,14 @@ function toggleSelect(id) {
   const i = selectedIds.value.indexOf(id)
   if (i >= 0) selectedIds.value.splice(i, 1)
   else selectedIds.value.push(id)
+}
+
+function toggleSelectAll() {
+  if (selectedIds.value.length === items.value.length && items.value.length) {
+    selectedIds.value = []
+  } else {
+    selectedIds.value = items.value.map(i => i.id)
+  }
 }
 
 function formatSize(bytes) {
