@@ -33,14 +33,14 @@
                   </svg>
                   <span>{{ t('clickToZoom') }}</span>
                 </div>
-                <!-- Image nav arrows -->
-                <button v-if="images.length > 1" class="img-nav img-nav-prev" @click.stop="prevImage" aria-label="Previous image">
-                  <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                </button>
-                <button v-if="images.length > 1" class="img-nav img-nav-next" @click.stop="nextImage" aria-label="Next image">
-                  <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
-                </button>
               </div>
+              <!-- Image nav arrows — positioned on the stable container, not inside .main-image -->
+              <button v-if="images.length > 1" class="img-nav img-nav-prev" @click.stop="prevImage" aria-label="Previous image">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              </button>
+              <button v-if="images.length > 1" class="img-nav img-nav-next" @click.stop="nextImage" aria-label="Next image">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+              </button>
               <div class="product-badges">
                 <span v-if="product.is_featured" class="badge badge-featured">{{ t('featured') }}</span>
                 <span class="badge badge-category">{{ localizedValue(product, 'category_name') }}</span>
@@ -604,10 +604,13 @@ onMounted(async () => {
   background: var(--white);
   box-shadow: var(--shadow-lg);
   cursor: zoom-in;
-  transition: var(--transition);
+  transition: box-shadow 0.3s;
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Fixed aspect ratio — prevents height jumping between images */
+  aspect-ratio: 4 / 3;
+  min-height: 320px;
 }
 
 .main-image:hover {
@@ -616,8 +619,7 @@ onMounted(async () => {
 
 .main-image img {
   width: 100%;
-  height: auto;
-  max-height: 500px;
+  height: 100%;
   object-fit: contain;
   display: block;
   transition: var(--transition-slow);
@@ -653,14 +655,14 @@ onMounted(async () => {
   height: 16px;
 }
 
-/* Image Nav Arrows */
+/* Image Nav Arrows — positioned on .main-image-container (stable height) */
 .img-nav {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 40px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.75);
+  width: 44px;
+  height: 44px;
+  background: rgba(255, 255, 255, 0.85);
   border: none;
   border-radius: 50%;
   display: flex;
@@ -668,18 +670,19 @@ onMounted(async () => {
   justify-content: center;
   cursor: pointer;
   z-index: 5;
-  transition: background 0.2s, opacity 0.2s;
+  transition: background 0.2s, opacity 0.2s, transform 0.2s;
   opacity: 0;
   backdrop-filter: blur(4px);
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 
-.main-image:hover .img-nav {
+.main-image-container:hover .img-nav {
   opacity: 1;
 }
 
 .img-nav:hover {
-  background: rgba(255,255,255,0.95);
+  background: rgba(255,255,255,0.98);
+  transform: translateY(-50%) scale(1.1);
 }
 
 .img-nav svg {
@@ -688,8 +691,26 @@ onMounted(async () => {
   color: var(--gray-800);
 }
 
-.img-nav-prev { left: 10px; }
-.img-nav-next { right: 10px; }
+.img-nav-prev { left: 12px; }
+.img-nav-next { right: 12px; }
+
+@media (max-width: 768px) {
+  .main-image {
+    aspect-ratio: 4 / 3;
+    min-height: 220px;
+  }
+  .img-nav {
+    width: 36px;
+    height: 36px;
+    opacity: 0.7;
+  }
+  .img-nav svg {
+    width: 18px;
+    height: 18px;
+  }
+  .img-nav-prev { left: 6px; }
+  .img-nav-next { right: 6px; }
+}
 
 .product-badges {
   position: absolute;

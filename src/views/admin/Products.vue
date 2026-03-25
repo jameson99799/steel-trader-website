@@ -8,25 +8,35 @@
       </div>
     </div>
 
+    <!-- Search / Filter / Pagination toolbar -->
+    <div class="filter-bar">
+      <input v-model="searchQuery" class="form-control filter-search" placeholder="🔍 搜索商品名称..." @input="onFilterChange" />
+      <select v-model="filterCategoryId" class="form-control filter-select" @change="onFilterChange">
+        <option value="">全部分组</option>
+        <option v-for="cat in flatCategories" :key="cat.id" :value="cat.id">{{ cat.prefix }}{{ cat.name }}</option>
+      </select>
+      <div class="filter-count">共 {{ totalProducts }} 件商品</div>
+    </div>
+
     <div class="card">
       <div class="card-body">
-        <table class="table" v-if="products.length">
+        <table class="table" v-if="filteredProducts.length">
           <thead>
             <tr>
-              <th>图片</th>
-              <th>名称</th>
-              <th>分类</th>
-              <th>推荐</th>
-              <th>状态</th>
-              <th>操作</th>
+              <th style="width:70px">图片</th>
+              <th style="min-width:180px">名称</th>
+              <th>分组</th>
+              <th style="width:60px">推荐</th>
+              <th style="width:60px">状态</th>
+              <th style="width:200px">操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="product in products" :key="product.id">
+            <tr v-for="product in pagedProducts" :key="product.id">
               <td>
                 <img :src="product.images?.split(',')[0] || '/placeholder.svg'" class="product-thumb" />
               </td>
-              <td>{{ product.name }}</td>
+              <td><span class="product-name-en">{{ product.name_en || product.name }}</span></td>
               <td>{{ product.category_name || '-' }}</td>
               <td>
                 <span :class="['badge', product.is_featured ? 'badge-success' : 'badge-secondary']">
@@ -39,16 +49,26 @@
                 </span>
               </td>
               <td>
-                <button class="btn btn-sm btn-secondary" @click="openModal(product)">编辑</button>
-                <button class="btn btn-sm btn-outline" @click="duplicateProduct(product)" style="color:#0077b5;border-color:#0077b5;">复制</button>
-                <button class="btn btn-sm btn-outline" @click="translateProduct(product)" style="color:#059669;border-color:#059669;" :disabled="translatingId === product.id">{{ translatingId === product.id ? '翻译中...' : '🌐 翻译' }}</button>
-                <button class="btn btn-sm btn-danger" @click="handleDelete(product)">删除</button>
-                <button class="btn btn-sm btn-outline" @click="$router.push(`/admin/products/ai/${product.id}`)" style="color:#7c3aed;border-color:#7c3aed;">🤖 AI</button>
+                <div class="action-grid">
+                  <button class="btn btn-sm btn-secondary" @click="openModal(product)">✏️ 编辑</button>
+                  <button class="btn btn-sm btn-outline" @click="previewProduct(product)" style="color:#2563eb;border-color:#2563eb;">👁 预览</button>
+                  <button class="btn btn-sm btn-outline" @click="duplicateProduct(product)" style="color:#0077b5;border-color:#0077b5;">📋 复制</button>
+                  <button class="btn btn-sm btn-outline" @click="translateProduct(product)" style="color:#059669;border-color:#059669;" :disabled="translatingId === product.id">{{ translatingId === product.id ? '...' : '🌐 翻译' }}</button>
+                  <button class="btn btn-sm btn-outline" @click="$router.push(`/admin/products/ai/${product.id}`)" style="color:#7c3aed;border-color:#7c3aed;">🤖 AI</button>
+                  <button class="btn btn-sm btn-danger" @click="handleDelete(product)">🗑 删除</button>
+                </div>
               </td>
             </tr>
           </tbody>
         </table>
         <p v-else class="text-center" style="color: var(--secondary);">暂无商品</p>
+
+        <!-- Pagination -->
+        <div class="pagination" v-if="totalPages > 1">
+          <button class="btn btn-sm btn-outline" :disabled="currentPage <= 1" @click="currentPage--">‹ 上一页</button>
+          <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
+          <button class="btn btn-sm btn-outline" :disabled="currentPage >= totalPages" @click="currentPage++">下一页 ›</button>
+        </div>
       </div>
     </div>
 
@@ -355,6 +375,35 @@ const carouselUploadInput = ref(null)
 const faqItems = ref([])
 let replacingImg = null  // track image being replaced
 const translatingId = ref(null)
+
+// Search / Filter / Pagination
+const searchQuery = ref('')
+const filterCategoryId = ref('')
+const currentPage = ref(1)
+const perPage = 20
+
+const filteredProducts = computed(() => {
+  let list = products.value
+  if (filterCategoryId.value) list = list.filter(p => String(p.category_id) === String(filterCategoryId.value))
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase()
+    list = list.filter(p => (p.name_en || '').toLowerCase().includes(q) || (p.name || '').toLowerCase().includes(q))
+  }
+  return list
+})
+
+const totalProducts = computed(() => filteredProducts.value.length)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalProducts.value / perPage)))
+const pagedProducts = computed(() => {
+  const start = (currentPage.value - 1) * perPage
+  return filteredProducts.value.slice(start, start + perPage)
+})
+
+function onFilterChange() { currentPage.value = 1 }
+function previewProduct(product) {
+  const slug = product.slug || product.id
+  window.open(`/en/products/${slug}`, '_blank')
+}
 
 // AI Create state
 const showAICreate = ref(false)
@@ -1329,6 +1378,29 @@ onMounted(() => {
 .var-value { font-size: 11px; color: #6b7280; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vars-example { margin: 0; font-size: 12px; color: #6b7280; }
 .vars-example code { background: #f1f5f9; padding: 2px 5px; border-radius: 3px; }
+
+/* Filter bar */
+.filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-search { max-width: 260px; }
+.filter-select { max-width: 180px; }
+.filter-count { margin-left: auto; font-size: 13px; color: #64748b; white-space: nowrap; }
+
+/* English product name — 2-line clamp */
+.product-name-en {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; text-overflow: ellipsis;
+  font-size: 13px; line-height: 1.4; max-width: 220px;
+}
+
+/* Action grid — 2 rows × 3 columns */
+.action-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+}
+.action-grid .btn { font-size: 12px; padding: 3px 6px; white-space: nowrap; }
+
+/* Pagination */
+.pagination { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 16px 0; }
+.page-info { font-size: 13px; color: #64748b; }
 
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>
