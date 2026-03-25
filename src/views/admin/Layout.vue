@@ -9,6 +9,7 @@
         <router-link to="/admin/hero">🏠 首页内容</router-link>
         <router-link to="/admin/categories">📁 分类管理</router-link>
         <router-link to="/admin/products">📦 商品管理</router-link>
+        <router-link to="/admin/media">📷 图库管理</router-link>
         <router-link to="/admin/inquiries">
           📬 询盘管理
           <span v-if="unreadCount" class="badge badge-danger">{{ unreadCount }}</span>

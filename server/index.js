@@ -23,6 +23,7 @@ import indexingRoutes from './routes/indexing.js'
 import aiRoutes from './routes/ai.js'
 import mailerRoutes from './routes/mailer.js'
 import externalApiRoutes from './routes/external-api.js'
+import mediaRoutes from './routes/media.js'
 import crmAuthRoutes from './routes/crm-auth.js'
 import crmUsersRoutes from './routes/crm-users.js'
 import crmCustomersRoutes from './routes/crm-customers.js'
@@ -113,6 +114,7 @@ async function startServer() {
     app.use('/api/hero', heroRoutes)
     app.use('/api/inquiries', inquiriesRoutes)
     app.use('/api/upload', uploadRoutes)
+    app.use('/api/media', mediaRoutes)
     app.use('/api/pagetexts', pageTextsRoutes)
     app.use('/api/news', newsRoutes)
     app.use('/api/seo', seoRoutes)

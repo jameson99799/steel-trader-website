@@ -540,6 +540,63 @@ async function initDb() {
     }
   } catch (e) { console.log('contact_groups migration:', e.message) }
 
+  // ─── Media Library ─────────────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS media (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      original_filename TEXT DEFAULT '',
+      filename TEXT NOT NULL,
+      filepath TEXT NOT NULL,
+      mimetype TEXT DEFAULT 'image/webp',
+      filesize INTEGER DEFAULT 0,
+      width INTEGER DEFAULT 0,
+      height INTEGER DEFAULT 0,
+      group_id INTEGER DEFAULT NULL,
+      alt TEXT DEFAULT '',
+      status INTEGER DEFAULT 1,
+      replaced_by INTEGER DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS media_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      slug TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
+      is_system INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // Seed default media groups if empty
+  const mgCount = db.prepare('SELECT COUNT(*) as c FROM media_groups').get()
+  if (mgCount.c === 0) {
+    const seedGroups = [
+      { name: 'GI', slug: 'gi', sort_order: 1, is_system: 1 },
+      { name: 'GL', slug: 'gl', sort_order: 2, is_system: 1 },
+      { name: 'PPGI', slug: 'ppgi', sort_order: 3, is_system: 1 },
+      { name: 'ROOFING', slug: 'roofing', sort_order: 4, is_system: 1 },
+      { name: 'CRC', slug: 'crc', sort_order: 5, is_system: 1 }
+    ]
+    const ins = db.prepare('INSERT INTO media_groups (name, slug, sort_order, is_system) VALUES (?,?,?,?)')
+    for (const g of seedGroups) ins.run(g.name, g.slug, g.sort_order, g.is_system)
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS product_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER NOT NULL,
+      media_id INTEGER DEFAULT NULL,
+      image_url TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      is_main INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
   // External API keys
   db.exec(`
     CREATE TABLE IF NOT EXISTS api_keys (

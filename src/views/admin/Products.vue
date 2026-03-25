@@ -122,7 +122,11 @@
             <div class="form-group">
               <label>商品图片</label>
               <p class="form-hint">建议尺寸：800×800px，JPG/PNG格式，支持多图上传（最多10张）</p>
-              <input type="file" multiple @change="handleFileChange" accept="image/*" />
+              <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                <input type="file" multiple @change="handleFileChange" accept="image/*" />
+                <button type="button" class="btn btn-sm btn-outline" @click="showImportPicker=true" style="color:#0284c7;border-color:#0284c7;">📥 导入其他产品图片</button>
+                <button type="button" class="btn btn-sm btn-outline" @click="showMediaPicker=true" style="color:#7c3aed;border-color:#7c3aed;">📷 从图库选择</button>
+              </div>
               <div class="image-preview" v-if="existingImages.length">
                 <p class="form-hint">拖动图片可排序；第一张为主图（⭐点击设为主图）</p>
                 <div
@@ -350,11 +354,70 @@
         </div>
       </div>
     </div>
+
+    <!-- Import from other product Modal -->
+    <div v-if="showImportPicker" class="modal-overlay" @click.self="showImportPicker=false">
+      <div class="modal" style="max-width:600px;">
+        <div class="modal-header" style="background:#f0f9ff;color:#0284c7;">
+          <h3>📥 导入其他产品图片</h3>
+          <button class="modal-close" @click="showImportPicker=false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>选择产品</label>
+            <select v-model="importProductId" class="form-control" @change="loadImportImages">
+              <option value="">请选择...</option>
+              <option v-for="p in products" :key="p.id" :value="p.id">{{ p.name_en || p.name }}</option>
+            </select>
+          </div>
+          <div v-if="importImages.length" class="import-grid">
+            <div v-for="(img, i) in importImages" :key="i" :class="['import-item', { selected: importSelected.includes(img) }]" @click="toggleImportSelect(img)">
+              <img :src="img" />
+              <div class="import-check">✓</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="showImportPicker=false">取消</button>
+          <button type="button" class="btn btn-primary" style="background:#0284c7;" @click="doImportFromProduct" :disabled="!importSelected.length">导入 {{ importSelected.length }} 张</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Media Library Picker -->
+    <div v-if="showMediaPicker" class="modal-overlay" @click.self="showMediaPicker=false">
+      <div class="modal" style="max-width:700px;">
+        <div class="modal-header" style="background:#f5f3ff;color:#7c3aed;">
+          <h3>📷 从图库选择</h3>
+          <button class="modal-close" @click="showMediaPicker=false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <input v-model="mediaPickerSearch" class="form-control" placeholder="搜索文件名..." @input="loadMediaPicker" style="max-width:200px;" />
+            <select v-model="mediaPickerGroup" class="form-control" @change="loadMediaPicker" style="max-width:140px;">
+              <option value="">全部分组</option>
+              <option v-for="g in mediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            </select>
+          </div>
+          <div v-if="mediaPickerItems.length" class="import-grid">
+            <div v-for="item in mediaPickerItems" :key="item.id" :class="['import-item', { selected: mediaPickerSelected.includes(item.filepath) }]" @click="toggleMediaPickerSelect(item.filepath)">
+              <img :src="item.filepath" />
+              <div class="import-check">✓</div>
+            </div>
+          </div>
+          <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="showMediaPicker=false">取消</button>
+          <button type="button" class="btn btn-primary" style="background:#7c3aed;" @click="doImportFromMedia" :disabled="!mediaPickerSelected.length">选择 {{ mediaPickerSelected.length }} 张</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useLang } from '../../composables/useLang'
 import api from '../../api'
 import { DEFAULT_DETAIL_TEMPLATE } from '../../utils/defaultDetailTemplate'
@@ -404,6 +467,84 @@ function previewProduct(product) {
   const slug = product.slug || product.id
   window.open(`/en/products/${slug}`, '_blank')
 }
+
+// ─── Import from other product ────────────────────────────────────────────
+const showImportPicker = ref(false)
+const importProductId = ref('')
+const importImages = ref([])
+const importSelected = ref([])
+
+async function loadImportImages() {
+  importImages.value = []; importSelected.value = []
+  if (!importProductId.value) return
+  try {
+    const p = await api.getProduct(importProductId.value)
+    importImages.value = p.images ? p.images.split(',').filter(Boolean) : []
+  } catch (e) { console.error(e) }
+}
+
+function toggleImportSelect(img) {
+  const i = importSelected.value.indexOf(img)
+  if (i >= 0) importSelected.value.splice(i, 1)
+  else importSelected.value.push(img)
+}
+
+function doImportFromProduct() {
+  for (const img of importSelected.value) {
+    if (!existingImages.value.includes(img)) existingImages.value.push(img)
+  }
+  showImportPicker.value = false
+  importSelected.value = []
+}
+
+// ─── Media Library Picker ─────────────────────────────────────────────────
+const showMediaPicker = ref(false)
+const mediaPickerSearch = ref('')
+const mediaPickerGroup = ref('')
+const mediaPickerItems = ref([])
+const mediaPickerSelected = ref([])
+const mediaGroups = ref([])
+
+async function loadMediaPicker() {
+  const params = new URLSearchParams({ per_page: '50' })
+  if (mediaPickerSearch.value) params.set('search', mediaPickerSearch.value)
+  if (mediaPickerGroup.value) params.set('group_id', mediaPickerGroup.value)
+  try {
+    const res = await fetch(`/api/media?${params}`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    })
+    const data = await res.json()
+    mediaPickerItems.value = data.items || []
+  } catch (e) { console.error(e) }
+}
+
+async function loadMediaGroups() {
+  try {
+    const res = await fetch('/api/media/groups', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    })
+    mediaGroups.value = await res.json()
+  } catch (e) { console.error(e) }
+}
+
+function toggleMediaPickerSelect(fp) {
+  const i = mediaPickerSelected.value.indexOf(fp)
+  if (i >= 0) mediaPickerSelected.value.splice(i, 1)
+  else mediaPickerSelected.value.push(fp)
+}
+
+function doImportFromMedia() {
+  for (const fp of mediaPickerSelected.value) {
+    if (!existingImages.value.includes(fp)) existingImages.value.push(fp)
+  }
+  showMediaPicker.value = false
+  mediaPickerSelected.value = []
+}
+
+// Auto-load media data when picker opens
+watch(showMediaPicker, (v) => {
+  if (v) { loadMediaGroups(); loadMediaPicker(); mediaPickerSelected.value = [] }
+})
 
 // AI Create state
 const showAICreate = ref(false)
@@ -1401,6 +1542,17 @@ onMounted(() => {
 /* Pagination */
 .pagination { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 16px 0; }
 .page-info { font-size: 13px; color: #64748b; }
+
+/* Import image picker grid */
+.import-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; max-height: 400px; overflow-y: auto; }
+.import-item { position: relative; aspect-ratio: 1; border: 2px solid #e2e8f0; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.15s; }
+.import-item img { width: 100%; height: 100%; object-fit: cover; }
+.import-item:hover { border-color: #93c5fd; }
+.import-item.selected { border-color: #2563eb; }
+.import-item .import-check { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%;
+  background: #2563eb; color: #fff; font-size: 14px; display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.15s; }
+.import-item.selected .import-check { opacity: 1; }
 
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>
