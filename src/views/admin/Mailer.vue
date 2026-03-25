@@ -97,7 +97,6 @@
         <span v-for="g in contactGroups" :key="g.id" class="group-pill" :class="{ active: contactGroupFilter === g.id }"
               @click="contactGroupFilter=g.id" @dblclick="renameGroup(g)">
           {{ g.name }} ({{ g.contact_count }})
-          <span v-if="g.owner_name && crmIsAdmin" class="log-badge" style="font-size:9px;margin-left:2px;background:#eff6ff;color:#2563eb">{{ g.owner_name }}</span>
           <span class="group-del" @click.stop="deleteGroup(g.id)" title="删除分组">×</span>
         </span>
       </div>
@@ -128,7 +127,7 @@
             <tbody><tr v-for="c in dg.contacts" :key="c.id">
               <td><input type="checkbox" v-model="selectedContacts" :value="c.id" /></td>
               <td class="td-ellipsis">{{ c.email }}</td><td class="td-ellipsis">{{ c.name }}</td><td class="td-ellipsis">{{ c.company }}</td>
-              <td><span v-if="c.group_name" class="log-badge" style="font-size:11px">{{ c.group_name }}</span><span v-else style="color:#94a3b8;font-size:11px">—</span></td>
+              <td><span v-if="c.group_name" class="log-badge" style="font-size:11px">{{ c.group_name }}</span><span v-else style="color:#94a3b8;font-size:11px">—</span><span v-if="c.owner_name && crmIsAdmin" class="log-badge" style="font-size:10px;margin-left:3px;background:#eff6ff;color:#2563eb">{{ c.owner_name }}</span></td>
               <td class="row-actions">
                 <button class="btn btn-sm btn-outline" @click="openContactEditor(c)">编辑</button>
                 <button class="btn btn-sm btn-outline err-btn" @click="deleteContact(c.id)">删除</button>
@@ -964,13 +963,22 @@ function fuzzyMatch(text, query) {
 // Filtered contacts for contacts tab (group filter + fuzzy search)
 const filteredContacts = computed(() => {
   let list = contacts.value
-  // Group filter
+  // Group filter — handle merged groups (group_ids array)
   if (contactGroupFilter.value === 'none') list = list.filter(c => !c.group_id)
-  else if (contactGroupFilter.value) list = list.filter(c => c.group_id === contactGroupFilter.value)
+  else if (contactGroupFilter.value) {
+    // Find the group (may have group_ids array for merged admin view)
+    const g = contactGroups.value.find(g => g.id === contactGroupFilter.value)
+    if (g && g.group_ids && g.group_ids.length > 1) {
+      const ids = new Set(g.group_ids)
+      list = list.filter(c => ids.has(c.group_id))
+    } else {
+      list = list.filter(c => c.group_id === contactGroupFilter.value)
+    }
+  }
   // Fuzzy search
   if (contactSearch.value) {
     const q = contactSearch.value.toLowerCase()
-    list = list.filter(c => fuzzyMatch(c.email, q) || fuzzyMatch(c.name, q) || fuzzyMatch(c.company, q) || fuzzyMatch(c.group_name, q))
+    list = list.filter(c => fuzzyMatch(c.email, q) || fuzzyMatch(c.name, q) || fuzzyMatch(c.company, q) || fuzzyMatch(c.group_name, q) || fuzzyMatch(c.owner_name, q))
   }
   return list
 })

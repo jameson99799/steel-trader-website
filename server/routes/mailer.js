@@ -360,21 +360,22 @@ router.post('/templates/:id/duplicate', authMiddleware, (req, res) => {
 router.get('/contact-groups', authMiddleware, (req, res) => {
     const { userId, isAdmin } = getUserId(req)
     if (isAdmin) {
-        // Admin: show ALL groups with contact counts and owner info
-        const groups = getAll(`SELECT cg.*, COUNT(mc.id) as contact_count
+        // Admin: merge same-name groups, show combined contact count
+        const rawGroups = getAll(`SELECT cg.*, COUNT(mc.id) as contact_count
                                FROM contact_groups cg
                                LEFT JOIN mail_contacts mc ON mc.group_id = cg.id
                                GROUP BY cg.id ORDER BY cg.name`)
-        // Add owner display name for each group
-        for (const g of groups) {
-            if (g.created_by) {
-                const owner = getOne('SELECT display_name FROM crm_users WHERE id=?', [g.created_by])
-                g.owner_name = owner?.display_name || '子账户'
-            } else {
-                g.owner_name = '管理员'
+        // Merge by name
+        const merged = {}
+        for (const g of rawGroups) {
+            const key = g.name
+            if (!merged[key]) {
+                merged[key] = { id: g.id, name: g.name, contact_count: 0, group_ids: [], created_at: g.created_at }
             }
+            merged[key].contact_count += g.contact_count
+            merged[key].group_ids.push(g.id)
         }
-        res.json(groups)
+        res.json(Object.values(merged).sort((a, b) => a.name.localeCompare(b.name)))
     } else {
         // Sub-account: only see groups they created
         const groups = getAll(`SELECT cg.*, COUNT(mc.id) as contact_count
@@ -390,12 +391,12 @@ router.post('/contact-groups', authMiddleware, (req, res) => {
     if (!name) return res.status(400).json({ error: '请填写分组名称' })
     const { userId } = getUserId(req)
     try {
-        // Allow same group name for different users (remove UNIQUE constraint check — use created_by combo)
+        // Allow same group name for different users
         const existing = getOne('SELECT id FROM contact_groups WHERE name=? AND created_by=?', [name.trim(), userId])
         if (existing) return res.status(400).json({ error: '分组名已存在' })
         const r = run('INSERT INTO contact_groups (name, created_by) VALUES (?,?)', [name.trim(), userId])
         res.json({ id: r.lastInsertRowid, message: '分组已创建' })
-    } catch (e) { res.status(400).json({ error: '分组名已存在' }) }
+    } catch (e) { res.status(400).json({ error: '创建失败: ' + e.message }) }
 })
 router.put('/contact-groups/:id', authMiddleware, (req, res) => {
     const { name } = req.body
@@ -412,10 +413,27 @@ router.delete('/contact-groups/:id', authMiddleware, (req, res) => {
 // ─── Contacts ────────────────────────────────────────────────────────────────
 router.get('/contacts', authMiddleware, (req, res) => {
     const { userId, isAdmin } = getUserId(req)
-    const sql = isAdmin
-        ? `SELECT mc.*, cg.name as group_name FROM mail_contacts mc LEFT JOIN contact_groups cg ON cg.id = mc.group_id ORDER BY mc.id DESC`
-        : `SELECT mc.*, cg.name as group_name FROM mail_contacts mc LEFT JOIN contact_groups cg ON cg.id = mc.group_id WHERE mc.created_by=? ORDER BY mc.id DESC`
-    res.json(isAdmin ? getAll(sql) : getAll(sql, [userId]))
+    if (isAdmin) {
+        // Admin: show all contacts with owner_name
+        const contacts = getAll(`SELECT mc.*, cg.name as group_name FROM mail_contacts mc LEFT JOIN contact_groups cg ON cg.id = mc.group_id ORDER BY mc.id DESC`)
+        // Add owner_name to each contact
+        const userCache = {}
+        for (const c of contacts) {
+            if (c.created_by) {
+                if (!userCache[c.created_by]) {
+                    const u = getOne('SELECT display_name FROM crm_users WHERE id=?', [c.created_by])
+                    userCache[c.created_by] = u?.display_name || '子账户'
+                }
+                c.owner_name = userCache[c.created_by]
+            } else {
+                c.owner_name = '管理员'
+            }
+        }
+        res.json(contacts)
+    } else {
+        const contacts = getAll(`SELECT mc.*, cg.name as group_name FROM mail_contacts mc LEFT JOIN contact_groups cg ON cg.id = mc.group_id WHERE mc.created_by=? ORDER BY mc.id DESC`, [userId])
+        res.json(contacts)
+    }
 })
 router.post('/contacts', authMiddleware, (req, res) => {
     const { email, name, company, group_id } = req.body

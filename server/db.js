@@ -521,6 +521,25 @@ async function initDb() {
   try { db.exec("ALTER TABLE smtp_accounts ADD COLUMN created_by TEXT DEFAULT ''") } catch (e) { }
   try { db.exec("ALTER TABLE contact_groups ADD COLUMN created_by TEXT DEFAULT ''") } catch (e) { }
 
+  // Migration: remove UNIQUE constraint from contact_groups.name (allow same name for different users)
+  try {
+    // Check if the UNIQUE index still exists
+    const idxInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='contact_groups'").get()
+    if (idxInfo && idxInfo.sql && idxInfo.sql.includes('UNIQUE')) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS contact_groups_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          created_by TEXT DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+      db.exec(`INSERT INTO contact_groups_new (id, name, created_by, created_at) SELECT id, name, COALESCE(created_by,''), created_at FROM contact_groups`)
+      db.exec(`DROP TABLE contact_groups`)
+      db.exec(`ALTER TABLE contact_groups_new RENAME TO contact_groups`)
+    }
+  } catch (e) { console.log('contact_groups migration:', e.message) }
+
   // External API keys
   db.exec(`
     CREATE TABLE IF NOT EXISTS api_keys (
