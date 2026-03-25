@@ -325,7 +325,8 @@ function getAssignNames(assigned) {
 
 onMounted(async () => {
   try {
-    const user = JSON.parse(localStorage.getItem('crm_user') || '{}')
+    const key = window.location.pathname.startsWith('/crm/sub') ? 'crm_sub_user' : 'crm_admin_user'
+    const user = JSON.parse(localStorage.getItem(key) || '{}')
     isAdmin.value = user.role === 'admin'
   } catch (e) {}
   loadAccounts()

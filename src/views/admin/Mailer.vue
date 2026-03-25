@@ -97,6 +97,7 @@
         <span v-for="g in contactGroups" :key="g.id" class="group-pill" :class="{ active: contactGroupFilter === g.id }"
               @click="contactGroupFilter=g.id" @dblclick="renameGroup(g)">
           {{ g.name }} ({{ g.contact_count }})
+          <span v-if="g.owner_name && crmIsAdmin" class="log-badge" style="font-size:9px;margin-left:2px;background:#eff6ff;color:#2563eb">{{ g.owner_name }}</span>
           <span class="group-del" @click.stop="deleteGroup(g.id)" title="删除分组">×</span>
         </span>
       </div>

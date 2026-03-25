@@ -519,6 +519,7 @@ async function initDb() {
   try { db.exec("ALTER TABLE mail_tasks ADD COLUMN created_by TEXT DEFAULT ''") } catch (e) { }
   try { db.exec("ALTER TABLE mail_logs ADD COLUMN created_by TEXT DEFAULT ''") } catch (e) { }
   try { db.exec("ALTER TABLE smtp_accounts ADD COLUMN created_by TEXT DEFAULT ''") } catch (e) { }
+  try { db.exec("ALTER TABLE contact_groups ADD COLUMN created_by TEXT DEFAULT ''") } catch (e) { }
 
   // External API keys
   db.exec(`

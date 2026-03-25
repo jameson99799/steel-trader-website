@@ -48,7 +48,10 @@ import crmApi from '../../api/crm'
 const customers = ref([])
 const settings = ref(null)
 const isAdmin = computed(() => {
-  try { return JSON.parse(localStorage.getItem('crm_user') || '{}').role === 'admin' } catch { return false }
+  try {
+    const key = window.location.pathname.startsWith('/crm/sub') ? 'crm_sub_user' : 'crm_admin_user'
+    return JSON.parse(localStorage.getItem(key) || '{}').role === 'admin'
+  } catch { return false }
 })
 
 const grouped = computed(() => {

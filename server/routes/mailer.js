@@ -358,17 +358,42 @@ router.post('/templates/:id/duplicate', authMiddleware, (req, res) => {
 // ─── Contacts ─────────────────────────────────────────────────────────────────
 // ─── Contact Groups ──────────────────────────────────────────────────────────
 router.get('/contact-groups', authMiddleware, (req, res) => {
-    const groups = getAll(`SELECT cg.*, COUNT(mc.id) as contact_count
-                           FROM contact_groups cg
-                           LEFT JOIN mail_contacts mc ON mc.group_id = cg.id
-                           GROUP BY cg.id ORDER BY cg.name`)
-    res.json(groups)
+    const { userId, isAdmin } = getUserId(req)
+    if (isAdmin) {
+        // Admin: show ALL groups with contact counts and owner info
+        const groups = getAll(`SELECT cg.*, COUNT(mc.id) as contact_count
+                               FROM contact_groups cg
+                               LEFT JOIN mail_contacts mc ON mc.group_id = cg.id
+                               GROUP BY cg.id ORDER BY cg.name`)
+        // Add owner display name for each group
+        for (const g of groups) {
+            if (g.created_by) {
+                const owner = getOne('SELECT display_name FROM crm_users WHERE id=?', [g.created_by])
+                g.owner_name = owner?.display_name || '子账户'
+            } else {
+                g.owner_name = '管理员'
+            }
+        }
+        res.json(groups)
+    } else {
+        // Sub-account: only see groups they created
+        const groups = getAll(`SELECT cg.*, COUNT(mc.id) as contact_count
+                               FROM contact_groups cg
+                               LEFT JOIN mail_contacts mc ON mc.group_id = cg.id AND mc.created_by=?
+                               WHERE cg.created_by=?
+                               GROUP BY cg.id ORDER BY cg.name`, [userId, userId])
+        res.json(groups)
+    }
 })
 router.post('/contact-groups', authMiddleware, (req, res) => {
     const { name } = req.body
     if (!name) return res.status(400).json({ error: '请填写分组名称' })
+    const { userId } = getUserId(req)
     try {
-        const r = run('INSERT INTO contact_groups (name) VALUES (?)', [name.trim()])
+        // Allow same group name for different users (remove UNIQUE constraint check — use created_by combo)
+        const existing = getOne('SELECT id FROM contact_groups WHERE name=? AND created_by=?', [name.trim(), userId])
+        if (existing) return res.status(400).json({ error: '分组名已存在' })
+        const r = run('INSERT INTO contact_groups (name, created_by) VALUES (?,?)', [name.trim(), userId])
         res.json({ id: r.lastInsertRowid, message: '分组已创建' })
     } catch (e) { res.status(400).json({ error: '分组名已存在' }) }
 })
