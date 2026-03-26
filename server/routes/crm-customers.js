@@ -593,7 +593,7 @@ router.get('/export/all', dualAuth, (req, res) => {
     return res.status(403).json({ error: '需要管理员权限' })
   }
   const users = getAll('SELECT id,username,display_name FROM crm_users')
-  const exportData = { exported_at: new Date().toISOString(), users: [] }
+  const exportData = { exported_at: new Date().toISOString(), version: '1.0', users: [] }
   for (const u of users) {
     const customers = getAll(`SELECT c.* FROM crm_customers c WHERE c.owner_id=? ORDER BY c.created_at DESC`, [u.id])
     const userData = { user: u, customers: [] }
@@ -609,7 +609,252 @@ router.get('/export/all', dualAuth, (req, res) => {
     }
     exportData.users.push(userData)
   }
+  // Also include unassigned customers
+  const unassigned = getAll(`SELECT c.* FROM crm_customers c WHERE c.owner_id IS NULL ORDER BY c.created_at DESC`)
+  if (unassigned.length) {
+    const unData = { user: { id: null, username: 'unassigned', display_name: '未分配' }, customers: [] }
+    for (const c of unassigned) {
+      try { c.tags = JSON.parse(c.tags||'[]') } catch(e) { c.tags = [] }
+      c.inquiries = getAll('SELECT * FROM crm_inquiries WHERE customer_id=? ORDER BY inquiry_time DESC', [c.id])
+      c.inquiries.forEach(i => { try { i.images = JSON.parse(i.images||'[]') } catch(e) { i.images = [] }; try { i.files = JSON.parse(i.files||'[]') } catch(e) { i.files = [] } })
+      c.quotations = getAll('SELECT * FROM crm_quotations WHERE customer_id=? ORDER BY quotation_time DESC', [c.id])
+      c.quotations.forEach(q => { try { q.ports = JSON.parse(q.ports||'[]') } catch(e) { q.ports = [] }; try { q.price_rows = JSON.parse(q.price_rows||'[]') } catch(e) { q.price_rows = [] }; try { q.files = JSON.parse(q.files||'[]') } catch(e) { q.files = [] }; try { q.images = JSON.parse(q.images||'[]') } catch(e) { q.images = [] } })
+      c.followups = getAll('SELECT f.* FROM crm_followups f WHERE f.customer_id=? ORDER BY f.created_at DESC', [c.id])
+      c.followups.forEach(f => { try { f.attachments = JSON.parse(f.attachments||'[]') } catch(e) { f.attachments = [] } })
+      unData.customers.push(c)
+    }
+    exportData.users.push(unData)
+  }
   res.json(exportData)
+})
+
+// ─── Export as HTML file ────────────────────────────────────────────────────────
+router.get('/export/html', dualAuth, (req, res) => {
+  if (req.crmUser && req.crmUser.role !== 'admin' && !req.user) {
+    return res.status(403).json({ error: '需要管理员权限' })
+  }
+  // Reuse export/all logic to gather data
+  const users = getAll('SELECT id,username,display_name FROM crm_users')
+  const exportData = { exported_at: new Date().toISOString(), version: '1.0', users: [] }
+  const gatherCustomers = (ownerId) => {
+    const cond = ownerId ? 'c.owner_id=?' : 'c.owner_id IS NULL'
+    const params = ownerId ? [ownerId] : []
+    const customers = getAll(`SELECT c.* FROM crm_customers c WHERE ${cond} ORDER BY c.created_at DESC`, params)
+    return customers.map(c => {
+      try { c.tags = JSON.parse(c.tags||'[]') } catch(e) { c.tags = [] }
+      c.inquiries = getAll('SELECT * FROM crm_inquiries WHERE customer_id=? ORDER BY inquiry_time DESC', [c.id])
+      c.inquiries.forEach(i => { try { i.images = JSON.parse(i.images||'[]') } catch(e) { i.images = [] }; try { i.files = JSON.parse(i.files||'[]') } catch(e) { i.files = [] } })
+      c.quotations = getAll('SELECT * FROM crm_quotations WHERE customer_id=? ORDER BY quotation_time DESC', [c.id])
+      c.quotations.forEach(q => { try { q.ports = JSON.parse(q.ports||'[]') } catch(e) { q.ports = [] }; try { q.price_rows = JSON.parse(q.price_rows||'[]') } catch(e) { q.price_rows = [] }; try { q.files = JSON.parse(q.files||'[]') } catch(e) { q.files = [] }; try { q.images = JSON.parse(q.images||'[]') } catch(e) { q.images = [] } })
+      c.followups = getAll('SELECT f.* FROM crm_followups f WHERE f.customer_id=? ORDER BY f.created_at DESC', [c.id])
+      c.followups.forEach(f => { try { f.attachments = JSON.parse(f.attachments||'[]') } catch(e) { f.attachments = [] } })
+      return c
+    })
+  }
+  for (const u of users) {
+    exportData.users.push({ user: u, customers: gatherCustomers(u.id) })
+  }
+  const unassigned = gatherCustomers(null)
+  if (unassigned.length) exportData.users.push({ user: { id: null, username: 'unassigned', display_name: '未分配' }, customers: unassigned })
+
+  const totalCustomers = exportData.users.reduce((s, u) => s + u.customers.length, 0)
+  const jsonStr = JSON.stringify(exportData)
+
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>CRM客户数据导出 - ${new Date().toLocaleDateString('zh-CN')}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f1f5f9;color:#334155;line-height:1.6}
+.header{background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;padding:24px 32px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.header h1{font-size:22px;font-weight:700}.header .meta{font-size:13px;opacity:.85}
+.toolbar{background:#fff;padding:12px 32px;border-bottom:1px solid #e2e8f0;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.toolbar input,.toolbar select{padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;outline:none}
+.toolbar input:focus{border-color:#3b82f6}
+.toolbar button{padding:8px 18px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
+.btn-blue{background:#3b82f6;color:#fff}.btn-blue:hover{background:#2563eb}
+.btn-green{background:#16a34a;color:#fff}.btn-green:hover{background:#15803d}
+.container{max-width:1200px;margin:20px auto;padding:0 16px}
+.user-section{margin-bottom:24px}.user-title{font-size:16px;font-weight:700;color:#1e40af;padding:12px 16px;background:#eff6ff;border-radius:8px 8px 0 0;border:1px solid #bfdbfe}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e2e8f0;border-radius:0 0 8px 8px;overflow:hidden}
+th{background:#f8fafc;padding:10px 12px;text-align:left;font-size:12px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0}
+td{padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr:hover td{background:#f8fafc}.tag{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;background:#dbeafe;color:#1e40af;margin:1px}
+.status{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600}
+.s-dev{background:#fef3c7;color:#92400e}.s-contact{background:#dbeafe;color:#1e40af}.s-closed{background:#dcfce7;color:#15803d}.s-pool{background:#f1f5f9;color:#64748b}
+.detail-btn{background:none;border:1px solid #cbd5e1;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;color:#3b82f6}
+.detail-btn:hover{background:#eff6ff}
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:1000;display:none;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal{background:#fff;border-radius:12px;max-width:800px;width:95%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-head{padding:16px 20px;border-bottom:1px solid #e2e8f0;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+.modal-head .close{background:none;border:none;font-size:24px;cursor:pointer;color:#94a3b8}
+.modal-body{padding:20px}.modal-body h4{color:#1e40af;margin:16px 0 8px;font-size:14px}
+.record{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin:8px 0;font-size:13px}
+.record .time{color:#64748b;font-size:12px}
+.empty{color:#94a3b8;font-style:italic;padding:8px 0}
+.footer{text-align:center;padding:24px;color:#94a3b8;font-size:12px}
+.hidden{display:none}
+</style></head><body>
+<div class="header">
+  <div><h1>📊 CRM客户数据</h1><div class="meta">导出时间: ${new Date().toLocaleString('zh-CN')} | 共 ${totalCustomers} 位客户</div></div>
+  <div><button class="btn-green" onclick="downloadJSON()">💾 下载JSON (可导入)</button></div>
+</div>
+<div class="toolbar">
+  <input id="searchBox" placeholder="🔍 搜索客户名/公司/邮箱..." oninput="filterTable()" style="width:250px"/>
+  <select id="statusFilter" onchange="filterTable()"><option value="">全部状态</option><option>开发中</option><option>联系中</option><option>已成交</option><option>公海池</option></select>
+  <select id="countryFilter" onchange="filterTable()"><option value="">全部国家</option></select>
+  <span id="resultCount" style="font-size:13px;color:#64748b;margin-left:auto;"></span>
+</div>
+<div class="container" id="content"></div>
+<div class="footer">SunSea Steel CRM — 本文件可离线浏览，点击"下载JSON"获取可导入的数据文件</div>
+<div class="modal-overlay" id="detailModal"><div class="modal">
+  <div class="modal-head"><span id="modalTitle">客户详情</span><button class="close" onclick="closeModal()">&times;</button></div>
+  <div class="modal-body" id="modalBody"></div>
+</div></div>
+<script id="crmData" type="application/json">${jsonStr.replace(/<\//g,'<\\/')}</script>
+<script>
+const DATA=JSON.parse(document.getElementById('crmData').textContent);
+const allCustomers=[];DATA.users.forEach(u=>u.customers.forEach(c=>{c._owner=u.user.display_name;allCustomers.push(c)}));
+const countries=[...new Set(allCustomers.map(c=>c.country).filter(Boolean))].sort();
+const cf=document.getElementById('countryFilter');countries.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;cf.appendChild(o)});
+function statusClass(s){if(s==='开发中')return's-dev';if(s==='联系中')return's-contact';if(s==='已成交')return's-closed';if(s==='公海池')return's-pool';return''}
+function renderTable(list){
+  const grouped={};list.forEach(c=>{const o=c._owner||'未分配';if(!grouped[o])grouped[o]=[];grouped[o].push(c)});
+  let html='';for(const[owner,custs]of Object.entries(grouped)){
+    html+='<div class="user-section"><div class="user-title">👤 '+owner+' ('+custs.length+')</div><table><thead><tr><th>ID</th><th>姓名</th><th>公司</th><th>邮箱</th><th>电话</th><th>国家</th><th>状态</th><th>标签</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
+    custs.forEach(c=>{const tags=(Array.isArray(c.tags)?c.tags:[]).map(t=>'<span class="tag">'+t+'</span>').join('');
+      html+='<tr data-id="'+c.id+'"><td>'+c.id+'</td><td>'+(c.name||'')+'</td><td>'+(c.company||'')+'</td><td>'+(c.email||'')+'</td><td>'+(c.phone||c.whatsapp||'')+'</td><td>'+(c.country||'')+'</td><td><span class="status '+statusClass(c.status)+'">'+(c.status||'')+'</span></td><td>'+tags+'</td><td>'+(c.created_at||'').slice(0,10)+'</td><td><button class="detail-btn" onclick="showDetail('+c.id+')">详情</button></td></tr>'});
+    html+='</tbody></table></div>'}
+  document.getElementById('content').innerHTML=html||'<p style="text-align:center;padding:40px;color:#94a3b8">无匹配客户</p>';
+  document.getElementById('resultCount').textContent='显示 '+list.length+' / '+allCustomers.length+' 位客户'}
+function filterTable(){
+  const q=document.getElementById('searchBox').value.toLowerCase(),s=document.getElementById('statusFilter').value,co=document.getElementById('countryFilter').value;
+  const filtered=allCustomers.filter(c=>{if(s&&c.status!==s)return false;if(co&&c.country!==co)return false;if(q){const t=[c.name,c.company,c.email,c.phone,c.whatsapp,c.note].join(' ').toLowerCase();if(!t.includes(q))return false}return true});renderTable(filtered)}
+function showDetail(id){
+  const c=allCustomers.find(x=>x.id===id);if(!c)return;
+  document.getElementById('modalTitle').textContent=c.name+' - '+(c.company||'');
+  let h='<p><b>邮箱:</b> '+(c.email||'-')+' | <b>电话:</b> '+(c.phone||'-')+' | <b>WhatsApp:</b> '+(c.whatsapp||'-')+' | <b>WeChat:</b> '+(c.wechat||'-')+'</p>';
+  h+='<p><b>国家:</b> '+(c.country||'-')+' | <b>状态:</b> '+(c.status||'-')+' | <b>负责人:</b> '+(c._owner||'-')+'</p>';
+  if(c.note)h+='<p><b>备注:</b> '+c.note+'</p>';
+  h+='<h4>📋 询盘记录 ('+((c.inquiries||[]).length)+')</h4>';
+  (c.inquiries||[]).forEach(i=>{h+='<div class="record"><div class="time">'+i.inquiry_time+'</div>'+(i.note?'<div>'+i.note+'</div>':'')+(i.content_html?'<div style="margin-top:8px;padding:8px;background:#fff;border-radius:4px;font-size:12px">'+i.content_html+'</div>':'')+'</div>'});
+  if(!(c.inquiries||[]).length)h+='<p class="empty">暂无询盘</p>';
+  h+='<h4>💰 报价记录 ('+((c.quotations||[]).length)+')</h4>';
+  (c.quotations||[]).forEach(q=>{h+='<div class="record"><div class="time">'+q.quotation_time+'</div>'+(q.note?'<div>'+q.note+'</div>':'')+(q.content_html?'<div style="margin-top:8px;padding:8px;background:#fff;border-radius:4px;font-size:12px">'+q.content_html+'</div>':'')+'</div>'});
+  if(!(c.quotations||[]).length)h+='<p class="empty">暂无报价</p>';
+  h+='<h4>📝 跟进记录 ('+((c.followups||[]).length)+')</h4>';
+  (c.followups||[]).forEach(f=>{h+='<div class="record"><div class="time">'+f.created_at+'</div>'+(f.content_html||f.note||'')+'</div>'});
+  if(!(c.followups||[]).length)h+='<p class="empty">暂无跟进</p>';
+  document.getElementById('modalBody').innerHTML=h;document.getElementById('detailModal').classList.add('show')}
+function closeModal(){document.getElementById('detailModal').classList.remove('show')}
+function downloadJSON(){const b=new Blob([JSON.stringify(DATA,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='crm_export_'+new Date().toISOString().slice(0,10)+'.json';a.click()}
+renderTable(allCustomers);
+</script></body></html>`
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8')
+  res.setHeader('Content-Disposition', `attachment; filename="CRM_Export_${new Date().toISOString().slice(0,10)}.html"`)
+  res.send(html)
+})
+
+// ─── Import customers with merge ────────────────────────────────────────────────
+router.post('/import', dualAuth, (req, res) => {
+  if (req.crmUser && req.crmUser.role !== 'admin' && !req.user) {
+    return res.status(403).json({ error: '需要管理员权限' })
+  }
+  const data = req.body
+  if (!data?.users || !Array.isArray(data.users)) {
+    return res.status(400).json({ error: '无效的导入数据格式' })
+  }
+
+  let created = 0, updated = 0, skipped = 0
+  let inqCreated = 0, quotCreated = 0, fuCreated = 0
+  const now = new Date().toISOString()
+
+  for (const userData of data.users) {
+    const customers = userData.customers || []
+    for (const c of customers) {
+      // Match by email (primary key for dedup)
+      let existing = null
+      if (c.email) {
+        existing = getOne('SELECT * FROM crm_customers WHERE email=?', [c.email])
+      }
+      // Also try matching by name + company if no email match
+      if (!existing && c.name && c.company) {
+        existing = getOne('SELECT * FROM crm_customers WHERE name=? AND company=?', [c.name, c.company])
+      }
+
+      let customerId
+      if (existing) {
+        // Merge: keep the most recent data
+        const existingDate = existing.last_activity_at || existing.created_at || ''
+        const importDate = c.last_activity_at || c.created_at || ''
+        if (importDate > existingDate) {
+          // Import data is newer — update fields
+          run(`UPDATE crm_customers SET first_name=?,last_name=?,name=?,country=?,phone=?,email=?,whatsapp=?,wechat=?,company=?,status=?,tags=?,note=?,last_activity_at=? WHERE id=?`,
+            [c.first_name||existing.first_name, c.last_name||existing.last_name, c.name||existing.name,
+             c.country||existing.country, c.phone||existing.phone, c.email||existing.email,
+             c.whatsapp||existing.whatsapp, c.wechat||existing.wechat, c.company||existing.company,
+             c.status||existing.status, JSON.stringify(c.tags||[]),
+             c.note || existing.note, importDate || now, existing.id])
+          updated++
+        } else {
+          skipped++
+        }
+        customerId = existing.id
+      } else {
+        // Create new customer
+        const ownerId = req.crmUser?.id || null
+        const result = run(
+          `INSERT INTO crm_customers (owner_id,first_name,last_name,name,country,phone,email,whatsapp,wechat,company,status,tags,note,last_activity_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [ownerId, c.first_name||'', c.last_name||'', c.name||'未命名', c.country||'', c.phone||'', c.email||'',
+           c.whatsapp||'', c.wechat||'', c.company||'', c.status||'开发中', JSON.stringify(c.tags||[]),
+           c.note||'', c.last_activity_at||now, c.created_at||now])
+        customerId = result.lastInsertRowid
+        created++
+      }
+
+      // Import related records (avoid duplicates by checking unique content)
+      if (c.inquiries?.length) {
+        for (const inq of c.inquiries) {
+          const dup = getOne('SELECT id FROM crm_inquiries WHERE customer_id=? AND inquiry_time=? AND note=?',
+            [customerId, inq.inquiry_time||'', inq.note||''])
+          if (!dup) {
+            run(`INSERT INTO crm_inquiries (customer_id,content_html,note,images,files,inquiry_time,created_at) VALUES (?,?,?,?,?,?,?)`,
+              [customerId, inq.content_html||'', inq.note||'', JSON.stringify(inq.images||[]), JSON.stringify(inq.files||[]), inq.inquiry_time||now, inq.created_at||now])
+            inqCreated++
+          }
+        }
+      }
+      if (c.quotations?.length) {
+        for (const q of c.quotations) {
+          const dup = getOne('SELECT id FROM crm_quotations WHERE customer_id=? AND quotation_time=? AND note=?',
+            [customerId, q.quotation_time||'', q.note||''])
+          if (!dup) {
+            run(`INSERT INTO crm_quotations (customer_id,content_html,note,freight_type,ports,price_rows,files,images,quotation_time,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+              [customerId, q.content_html||'', q.note||'', q.freight_type||'container', JSON.stringify(q.ports||[]),
+               JSON.stringify(q.price_rows||[]), JSON.stringify(q.files||[]), JSON.stringify(q.images||[]), q.quotation_time||now, q.created_at||now])
+            quotCreated++
+          }
+        }
+      }
+      if (c.followups?.length) {
+        for (const f of c.followups) {
+          const dup = getOne('SELECT id FROM crm_followups WHERE customer_id=? AND created_at=?',
+            [customerId, f.created_at||''])
+          if (!dup) {
+            run(`INSERT INTO crm_followups (customer_id,user_id,content_html,note,images,attachments,created_at) VALUES (?,?,?,?,?,?,?)`,
+              [customerId, null, f.content_html||'', f.note||'', JSON.stringify(f.images||[]), JSON.stringify(f.attachments||[]), f.created_at||now])
+            fuCreated++
+          }
+        }
+      }
+    }
+  }
+
+  res.json({
+    message: `导入完成: 新增 ${created}, 更新 ${updated}, 跳过 ${skipped} 位客户，新增 ${inqCreated} 条询盘、${quotCreated} 条报价、${fuCreated} 条跟进`,
+    created, updated, skipped, inquiries: inqCreated, quotations: quotCreated, followups: fuCreated
+  })
 })
 
 // ─── Email send records (merged from both tables) ───────────────────────────

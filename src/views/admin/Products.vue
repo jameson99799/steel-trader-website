@@ -397,7 +397,7 @@
       </div>
     </div>
 
-    <!-- Media Library Picker -->
+    <!-- Media Library Picker (for product thumbnails) -->
     <div v-if="showMediaPicker" class="modal-overlay" @click.self="showMediaPicker=false">
       <div class="modal" style="max-width:700px;">
         <div class="modal-header" style="background:#f5f3ff;color:#7c3aed;">
@@ -426,6 +426,58 @@
         </div>
       </div>
     </div>
+
+    <!-- Image Source Chooser (for detail content visual editor) -->
+    <div v-if="showImgChooser" class="modal-overlay" @click.self="showImgChooser=false" style="z-index:2100">
+      <div class="modal" style="max-width:360px;">
+        <div class="modal-header" style="background:#f0fdf4;color:#16a34a;">
+          <h3>🖼️ 选择图片来源</h3>
+          <button class="modal-close" @click="showImgChooser=false">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:24px;">
+          <div class="img-chooser-grid">
+            <button class="img-chooser-btn" @click="pickFromComputer">
+              <span style="font-size:32px;">💻</span>
+              <span style="font-size:14px;font-weight:600;">从电脑上传</span>
+              <span style="font-size:12px;color:#94a3b8;">选择本地文件上传</span>
+            </button>
+            <button class="img-chooser-btn" @click="pickFromMediaLib">
+              <span style="font-size:32px;">📂</span>
+              <span style="font-size:14px;font-weight:600;">从图库选择</span>
+              <span style="font-size:12px;color:#94a3b8;">使用后台图库图片</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail Content Media Library Browser -->
+    <div v-if="showDetailMediaBrowser" class="modal-overlay" @click.self="showDetailMediaBrowser=false" style="z-index:2200">
+      <div class="modal" style="max-width:750px;">
+        <div class="modal-header" style="background:#f0fdf4;color:#16a34a;">
+          <h3>📂 从图库选择图片</h3>
+          <button class="modal-close" @click="showDetailMediaBrowser=false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+            <input v-model="detailMediaSearch" class="form-control" placeholder="搜索文件名..." @input="loadDetailMedia" style="max-width:200px;" />
+            <select v-model="detailMediaGroup" class="form-control" @change="loadDetailMedia" style="max-width:140px;">
+              <option value="">全部分组</option>
+              <option v-for="g in mediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            </select>
+          </div>
+          <div v-if="detailMediaItems.length" class="import-grid" style="max-height:450px;">
+            <div v-for="item in detailMediaItems" :key="item.id" class="import-item" style="cursor:pointer;" @click="selectDetailMediaImage(item)">
+              <img :src="item.filepath" />
+            </div>
+          </div>
+          <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="showDetailMediaBrowser=false">取消</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -448,6 +500,13 @@ const editorMode = ref('visual')  // 'visual' | 'html' | 'preview'
 const visualEditorEl = ref(null)
 const imgUploadInput = ref(null)
 const carouselUploadInput = ref(null)
+
+// Image source chooser state (for detail content visual editor)
+const showImgChooser = ref(false)
+const showDetailMediaBrowser = ref(false)
+const detailMediaSearch = ref('')
+const detailMediaGroup = ref('')
+const detailMediaItems = ref([])
 const faqItems = ref([])
 let replacingImg = null  // track image being replaced
 const translatingId = ref(null)
@@ -917,7 +976,6 @@ function onVisualClick(e) {
   const img = e.target.closest('img')
   const tip = e.target.closest('.replace-tip')
   if (tip) {
-    // Clicking a replace-tip: find the nearest preceding image to replace
     e.preventDefault()
     const parent = tip.parentElement
     const nearImg = parent ? parent.querySelector('img') : null
@@ -925,18 +983,73 @@ function onVisualClick(e) {
       visualEditorEl.value.querySelectorAll('img').forEach(i => i.style.outline = '')
       nearImg.style.outline = '3px solid #3b82f6'
       replacingImg = nearImg
-      replacingImg._replaceTipEl = tip  // mark the tip for removal
-      imgUploadInput.value?.click()
+      replacingImg._replaceTipEl = tip
+      openImageChooser()
     }
     return
   }
   if (img) {
     e.preventDefault()
-    // Highlight clicked image
     visualEditorEl.value.querySelectorAll('img').forEach(i => i.style.outline = '')
     img.style.outline = '3px solid #3b82f6'
     replacingImg = img
-    imgUploadInput.value?.click()
+    openImageChooser()
+  }
+}
+
+function openImageChooser() {
+  showImgChooser.value = true
+}
+
+function pickFromComputer() {
+  showImgChooser.value = false
+  imgUploadInput.value?.click()
+}
+
+async function loadDetailMedia() {
+  try {
+    const params = new URLSearchParams({ per_page: '200' })
+    if (detailMediaGroup.value) params.set('group_id', detailMediaGroup.value)
+    if (detailMediaSearch.value) params.set('search', detailMediaSearch.value)
+    const res = await api.get(`/media?${params}`)
+    detailMediaItems.value = res.items || []
+  } catch (e) { console.error('Failed to load media:', e) }
+}
+
+function pickFromMediaLib() {
+  showImgChooser.value = false
+  detailMediaSearch.value = ''
+  detailMediaGroup.value = ''
+  loadDetailMedia()
+  showDetailMediaBrowser.value = true
+}
+
+function selectDetailMediaImage(item) {
+  const url = item.filepath
+  showDetailMediaBrowser.value = false
+  if (replacingImg && replacingImg.parentElement) {
+    replacingImg.src = url
+    replacingImg.style.outline = ''
+    if (replacingImg._replaceTipEl) {
+      replacingImg._replaceTipEl.remove()
+      delete replacingImg._replaceTipEl
+    } else {
+      let nextEl = replacingImg.nextElementSibling
+      if (!nextEl && replacingImg.parentElement) nextEl = replacingImg.parentElement.querySelector('.replace-tip')
+      if (nextEl && nextEl.classList?.contains('replace-tip')) nextEl.remove()
+    }
+    replacingImg = null
+    syncFromVisual()
+  } else {
+    // Insert new image
+    replacingImg = null
+    if (editorMode.value === 'visual' && visualEditorEl.value) {
+      document.execCommand('insertImage', false, url)
+      syncFromVisual()
+    } else {
+      const imgTag = `<img src="${url}" style="max-width:100%;height:auto;border-radius:8px;" alt="" />`
+      form.detail_content = (form.detail_content || '') + imgTag
+    }
   }
 }
 
@@ -964,7 +1077,7 @@ async function onVisualPaste(e) {
 
 function insertImage() {
   replacingImg = null
-  imgUploadInput.value?.click()
+  openImageChooser()
 }
 
 function insertCarousel() {
@@ -1618,6 +1731,12 @@ onMounted(() => {
   background: #2563eb; color: #fff; font-size: 14px; display: flex; align-items: center; justify-content: center;
   opacity: 0; transition: opacity 0.15s; }
 .import-item.selected .import-check { opacity: 1; }
+
+/* Image source chooser */
+.img-chooser-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.img-chooser-btn { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 16px;
+  border: 2px solid #e2e8f0; border-radius: 12px; background: #fff; cursor: pointer; transition: all 0.2s; }
+.img-chooser-btn:hover { border-color: #16a34a; background: #f0fdf4; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
 
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>

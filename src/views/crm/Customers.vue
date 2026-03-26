@@ -2,7 +2,12 @@
   <div class="crm-customers">
     <div class="page-header">
       <h1>👥 客户管理</h1>
-      <button class="btn btn-primary" @click="openAddModal">➕ 添加客户</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-outline" @click="exportHTML" title="导出为HTML文件，可离线浏览和导入">📤 导出</button>
+        <button class="btn btn-outline" @click="$refs.importFileInput.click()" title="导入JSON数据，自动合并重复客户">📥 导入</button>
+        <input type="file" ref="importFileInput" accept=".json" style="display:none" @change="handleImport" />
+        <button class="btn btn-primary" @click="openAddModal">➕ 添加客户</button>
+      </div>
     </div>
 
     <!-- Filters -->
@@ -586,6 +591,65 @@ function followUpRecord(r) {
     alert(res.message || '跟进发送完成')
     loadSendRecords()
   }).catch(e => alert(e.message || '跟进发送失败'))
+}
+
+// Export / Import
+const importFileInput = ref(null)
+
+async function exportHTML() {
+  try {
+    const token = localStorage.getItem('crm_token') || localStorage.getItem('token')
+    const res = await fetch('/api/crm/customers/export/html', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    if (!res.ok) throw new Error('导出失败')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `CRM_Export_${new Date().toISOString().slice(0,10)}.html`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) { alert('导出失败: ' + e.message) }
+}
+
+async function handleImport(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  try {
+    const text = await file.text()
+    let data
+    if (file.name.endsWith('.json')) {
+      data = JSON.parse(text)
+    } else {
+      // Try to extract JSON from HTML file (avoid literal script tags in regex for Vue SFC parser)
+      const startTag = '<' + 'script id="crmData" type="application/json">'
+      const endTag = '</' + 'script>'
+      const startIdx = text.indexOf(startTag)
+      const endIdx = startIdx >= 0 ? text.indexOf(endTag, startIdx + startTag.length) : -1
+      if (startIdx >= 0 && endIdx > startIdx) {
+        const jsonStr = text.slice(startIdx + startTag.length, endIdx).replace(/\<\\\//g, '</')
+        data = JSON.parse(jsonStr)
+      } else {
+        throw new Error('无法识别文件格式，请使用导出的JSON或HTML文件')
+      }
+    }
+    if (!data?.users) throw new Error('数据格式无效')
+    const totalCustomers = data.users.reduce((s, u) => s + (u.customers?.length || 0), 0)
+    if (!confirm(`将导入 ${totalCustomers} 位客户数据，重复客户将自动合并（以最新时间为准）。\n\n是否继续？`)) {
+      if (importFileInput.value) importFileInput.value.value = ''
+      return
+    }
+    const res = await crmApi.request('/customers/import', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+    alert(`✅ ${res.message}`)
+    loadCustomers()
+  } catch (e) {
+    alert('导入失败: ' + e.message)
+  }
+  if (importFileInput.value) importFileInput.value.value = ''
 }
 
 onMounted(() => {
