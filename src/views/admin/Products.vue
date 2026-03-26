@@ -463,7 +463,7 @@
             <input v-model="detailMediaSearch" class="form-control" placeholder="搜索文件名..." @input="loadDetailMedia" style="max-width:200px;" />
             <select v-model="detailMediaGroup" class="form-control" @change="loadDetailMedia" style="max-width:140px;">
               <option value="">全部分组</option>
-              <option v-for="g in mediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+              <option v-for="g in detailMediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
             </select>
           </div>
           <div v-if="detailMediaItems.length" class="import-grid" style="max-height:450px;">
@@ -507,6 +507,7 @@ const showDetailMediaBrowser = ref(false)
 const detailMediaSearch = ref('')
 const detailMediaGroup = ref('')
 const detailMediaItems = ref([])
+const detailMediaGroups = ref([])
 const faqItems = ref([])
 let replacingImg = null  // track image being replaced
 const translatingId = ref(null)
@@ -1008,18 +1009,29 @@ function pickFromComputer() {
 
 async function loadDetailMedia() {
   try {
+    const token = localStorage.getItem('token')
     const params = new URLSearchParams({ per_page: '200' })
     if (detailMediaGroup.value) params.set('group_id', detailMediaGroup.value)
     if (detailMediaSearch.value) params.set('search', detailMediaSearch.value)
-    const res = await api.get(`/media?${params}`)
-    detailMediaItems.value = res.items || []
+    const res = await fetch(`/api/media?${params}`, { headers: { 'Authorization': `Bearer ${token}` } })
+    const data = await res.json()
+    detailMediaItems.value = data.items || []
   } catch (e) { console.error('Failed to load media:', e) }
+}
+
+async function loadDetailMediaGroups() {
+  try {
+    const token = localStorage.getItem('token')
+    const res = await fetch('/api/media/groups', { headers: { 'Authorization': `Bearer ${token}` } })
+    detailMediaGroups.value = await res.json()
+  } catch (e) { console.error(e) }
 }
 
 function pickFromMediaLib() {
   showImgChooser.value = false
   detailMediaSearch.value = ''
   detailMediaGroup.value = ''
+  loadDetailMediaGroups()
   loadDetailMedia()
   showDetailMediaBrowser.value = true
 }
