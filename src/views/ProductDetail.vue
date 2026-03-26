@@ -1498,13 +1498,16 @@ onMounted(async () => {
   .categories-grid { grid-template-columns: 1fr; }
 }
 
+</style>
+
+<!-- Non-scoped: overrides for v-html product detail content -->
+<style>
 /* ─── Product detail content: uniform parallel images ─── */
-/* Grid images in compare/QC/shipping/applications sections — ALL fixed 360px */
-.detail-content-section .grid-2 .image-box img,
-.detail-content-section .grid-3 .image-box img,
-.detail-content-section .compare-image-grid .fixed-image-frame img,
-.detail-content-section .qc-image-grid .fixed-image-frame img,
-.detail-content-section .shipping-image-grid .fixed-image-frame img {
+/* These rules MUST be non-scoped to reach v-html injected content */
+
+/* Grid images in compare/QC/shipping/applications — ALL fixed 360px */
+.product-detail-html .grid-2 .image-box img,
+.product-detail-html .grid-3 .image-box img {
   width: 100% !important;
   height: 360px !important;
   object-fit: contain !important;
@@ -1513,10 +1516,20 @@ onMounted(async () => {
   border: 1px solid #d8dee6;
   display: block;
   margin: 0 auto;
+  outline: none !important;
 }
 
-/* Fixed image frame container — enforce same height */
-.detail-content-section .fixed-image-frame {
+.product-detail-html .compare-image-grid .fixed-image-frame img,
+.product-detail-html .qc-image-grid .fixed-image-frame img,
+.product-detail-html .shipping-image-grid .fixed-image-frame img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  background: #fff !important;
+}
+
+/* Fixed frame containers — enforce same height */
+.product-detail-html .fixed-image-frame {
   height: 360px !important;
   background: #fff;
   display: flex;
@@ -1528,16 +1541,16 @@ onMounted(async () => {
 }
 
 /* Image-box inside grids — clean border */
-.detail-content-section .grid-2 .image-box,
-.detail-content-section .grid-3 .image-box {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+.product-detail-html .grid-2 .image-box,
+.product-detail-html .grid-3 .image-box {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
   border-radius: 8px;
 }
 
 /* Tables in detail content — uniform images */
-.detail-content-section table td img,
-.detail-content-section table th img {
+.product-detail-html table td img,
+.product-detail-html table th img {
   width: 100%;
   height: auto;
   aspect-ratio: 4 / 3;
@@ -1547,8 +1560,9 @@ onMounted(async () => {
   display: block;
 }
 
-.detail-content-section table td,
-.detail-content-section table th {
+.product-detail-html table td,
+.product-detail-html table th {
   vertical-align: middle;
 }
 </style>
+
