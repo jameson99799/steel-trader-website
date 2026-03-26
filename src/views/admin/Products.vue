@@ -20,15 +20,15 @@
 
     <div class="card">
       <div class="card-body">
-        <table class="table" v-if="filteredProducts.length">
+        <table class="table" style="table-layout:fixed;" v-if="filteredProducts.length">
           <thead>
             <tr>
-              <th style="width:60px">图片</th>
+              <th style="width:56px">图片</th>
               <th>名称</th>
-              <th style="width:120px">分组</th>
-              <th style="width:50px;text-align:center">推荐</th>
-              <th style="width:50px;text-align:center">状态</th>
-              <th style="width:240px">操作</th>
+              <th style="width:100px">分组</th>
+              <th style="width:44px;text-align:center">推荐</th>
+              <th style="width:44px;text-align:center">状态</th>
+              <th style="width:230px">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -37,7 +37,7 @@
                 <img :src="product.images?.split(',')[0] || '/placeholder.svg'" class="product-thumb" />
               </td>
               <td><span class="product-name-en">{{ product.name_en || product.name }}</span></td>
-              <td>{{ product.category_name || '-' }}</td>
+              <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ product.category_name || '-' }}</td>
               <td style="text-align:center">
                 <span :class="['badge', product.is_featured ? 'badge-success' : 'badge-secondary']">
                   {{ product.is_featured ? '是' : '否' }}
@@ -1595,7 +1595,7 @@ onMounted(() => {
 .product-name-en {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; text-overflow: ellipsis;
-  font-size: 13px; line-height: 1.4; max-width: 220px;
+  font-size: 13px; line-height: 1.4;
 }
 
 /* Action grid — 2 rows × 3 columns */
