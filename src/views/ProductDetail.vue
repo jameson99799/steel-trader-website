@@ -1498,10 +1498,46 @@ onMounted(async () => {
   .categories-grid { grid-template-columns: 1fr; }
 }
 
-/* ─── Parallel images in detail content ─── */
-/* Tables/grids containing side-by-side images: normalize to same size */
-.detail-content table td img,
-.detail-content table th img {
+/* ─── Product detail content: uniform parallel images ─── */
+/* Grid images in compare/QC/shipping/applications sections — ALL fixed 360px */
+.detail-content-section .grid-2 .image-box img,
+.detail-content-section .grid-3 .image-box img,
+.detail-content-section .compare-image-grid .fixed-image-frame img,
+.detail-content-section .qc-image-grid .fixed-image-frame img,
+.detail-content-section .shipping-image-grid .fixed-image-frame img {
+  width: 100% !important;
+  height: 360px !important;
+  object-fit: contain !important;
+  background: #fff !important;
+  border-radius: 6px;
+  border: 1px solid #d8dee6;
+  display: block;
+  margin: 0 auto;
+}
+
+/* Fixed image frame container — enforce same height */
+.detail-content-section .fixed-image-frame {
+  height: 360px !important;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+}
+
+/* Image-box inside grids — clean border */
+.detail-content-section .grid-2 .image-box,
+.detail-content-section .grid-3 .image-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+/* Tables in detail content — uniform images */
+.detail-content-section table td img,
+.detail-content-section table th img {
   width: 100%;
   height: auto;
   aspect-ratio: 4 / 3;
@@ -1511,28 +1547,8 @@ onMounted(async () => {
   display: block;
 }
 
-.detail-content table td,
-.detail-content table th {
+.detail-content-section table td,
+.detail-content-section table th {
   vertical-align: middle;
-}
-
-/* Flex/grid image pairs in detail content */
-.detail-content .ps-img-pair,
-.detail-content .image-pair,
-.detail-content .img-row {
-  display: flex;
-  gap: 12px;
-  align-items: stretch;
-}
-
-.detail-content .ps-img-pair img,
-.detail-content .image-pair img,
-.detail-content .img-row img {
-  flex: 1;
-  min-width: 0;
-  aspect-ratio: 4 / 3;
-  object-fit: contain;
-  background: #fff;
-  border-radius: 6px;
 }
 </style>

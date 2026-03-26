@@ -28,8 +28,9 @@ ul{margin:10px 0 24px 20px;padding:0}li{margin-bottom:10px}
 .grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;margin:30px 0}
 .card{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:24px;box-shadow:0 4px 10px rgba(0,0,0,0.03)}
 .card h3{margin-top:0;color:var(--heading);font-size:20px;border-bottom:1px solid var(--soft);padding-bottom:10px}
-.image-box{background:#e2e8f0;border:2px dashed #94a3b8;border-radius:8px;padding:20px;text-align:center;margin:30px 0;position:relative}
+.image-box{background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:20px;text-align:center;margin:30px 0;position:relative}
 .image-box img{width:auto;max-width:100%;max-height:520px;margin:0 auto;background:#fff;object-fit:contain;outline:1px solid #cbd5e1}
+.grid-2 .image-box img,.grid-3 .image-box img{width:100%;height:var(--img-window-h);object-fit:contain;background:#fff;border-radius:6px;border:1px solid #d8dee6}
 .compare-image-grid,.shipping-image-grid,.qc-image-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:30px;margin:30px 0}
 .fixed-image-card{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:18px;box-shadow:0 4px 10px rgba(0,0,0,0.03)}
 .fixed-image-frame{width:100%;height:var(--img-window-h);background:#fff;border:1px solid #d8dee6;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden}

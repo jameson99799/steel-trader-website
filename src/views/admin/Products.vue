@@ -20,15 +20,15 @@
 
     <div class="card">
       <div class="card-body">
-        <table class="table" style="table-layout:fixed;" v-if="filteredProducts.length">
+        <table class="table" v-if="filteredProducts.length">
           <thead>
             <tr>
               <th style="width:56px">图片</th>
-              <th>名称</th>
-              <th style="width:100px">分组</th>
-              <th style="width:44px;text-align:center">推荐</th>
-              <th style="width:44px;text-align:center">状态</th>
-              <th style="width:230px">操作</th>
+              <th style="min-width:200px">名称</th>
+              <th style="width:90px;white-space:nowrap">分组</th>
+              <th style="width:44px;text-align:center;white-space:nowrap">推荐</th>
+              <th style="width:44px;text-align:center;white-space:nowrap">状态</th>
+              <th style="width:260px;white-space:nowrap">操作</th>
             </tr>
           </thead>
           <tbody>
