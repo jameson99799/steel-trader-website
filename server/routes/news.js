@@ -72,7 +72,7 @@ router.post('/', authMiddleware, upload.single('cover_image'), (req, res) => {
     if (!title) return res.status(400).json({ error: '标题不能为空' })
 
     const slug = slugify(title_en || title)
-    const cover_image = req.file ? `/uploads/${req.file.filename}` : null
+    const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || null)
 
     const result = run(
         `INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status, sort_order, render_mode)
@@ -93,7 +93,7 @@ router.put('/:id', authMiddleware, upload.single('cover_image'), (req, res) => {
     if (!existing) return res.status(404).json({ error: '文章不存在' })
 
     const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status, sort_order, render_mode } = req.body
-    const cover_image = req.file ? `/uploads/${req.file.filename}` : existing.cover_image
+    const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || existing.cover_image)
     // Regenerate clean SEO slug on update
     const updatedSlug = slugify(title_en || title, id)
 

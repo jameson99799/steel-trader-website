@@ -139,11 +139,12 @@ router.post('/upload', authMiddleware, upload.array('files', 50), async (req, re
 
 // ─── Update Media ───────────────────────────────────────────────────────────
 router.put('/:id', authMiddleware, (req, res) => {
-  const { alt, group_id } = req.body
+  const { alt, group_id, original_filename } = req.body
   const sets = []
   const params = []
   if (alt !== undefined) { sets.push('alt=?'); params.push(alt) }
   if (group_id !== undefined) { sets.push('group_id=?'); params.push(group_id || null) }
+  if (original_filename !== undefined) { sets.push('original_filename=?'); params.push(original_filename) }
   if (sets.length) {
     sets.push("updated_at=datetime('now')")
     params.push(req.params.id)

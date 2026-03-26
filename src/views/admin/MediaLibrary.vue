@@ -63,7 +63,8 @@
           <div class="media-badge" v-if="item.ref_count">引用 {{ item.ref_count }}</div>
         </div>
         <div class="media-info">
-          <div class="media-name">{{ item.original_filename || item.filename }}</div>
+          <div class="media-name" v-if="renamingId !== item.id" @dblclick.stop="startRename(item)" title="双击修改文件名">{{ item.original_filename || item.filename }}</div>
+          <input v-else class="media-name-input" v-model="renameValue" @blur="saveRename(item)" @keyup.enter="saveRename(item)" @keyup.esc="renamingId=null" @click.stop ref="renameInput" />
           <div class="media-meta">
             <span v-if="item.group_name" class="meta-group">{{ item.group_name }}</span>
             <span>{{ formatSize(item.filesize) }}</span>
@@ -155,7 +156,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 
 const token = () => localStorage.getItem('token')
 const headers = () => ({ 'Authorization': `Bearer ${token()}`, 'Content-Type': 'application/json' })
@@ -181,6 +182,9 @@ const editGroupName = ref('')
 const newGroupName = ref('')
 const replaceTargetId = ref(null)
 const replaceInput = ref(null)
+const renamingId = ref(null)
+const renameValue = ref('')
+const renameInput = ref(null)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage)))
 
@@ -348,6 +352,30 @@ async function deleteGroup(g) {
   else alert(data.error)
 }
 
+async function startRename(item) {
+  renamingId.value = item.id
+  renameValue.value = item.original_filename || item.filename || ''
+  await nextTick()
+  renameInput.value?.focus()
+  renameInput.value?.select()
+}
+
+async function saveRename(item) {
+  const newName = renameValue.value.trim()
+  if (!newName || newName === (item.original_filename || item.filename)) {
+    renamingId.value = null
+    return
+  }
+  try {
+    await fetch(`/api/media/${item.id}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ original_filename: newName })
+    })
+    item.original_filename = newName
+  } catch (e) { console.error('Rename failed:', e) }
+  renamingId.value = null
+}
+
 onMounted(() => { loadGroups(); loadMedia() })
 </script>
 
@@ -386,7 +414,9 @@ onMounted(() => { loadGroups(); loadMedia() })
 .media-badge { position: absolute; top: 6px; right: 6px; background: #2563eb; color: #fff; padding: 1px 6px; border-radius: 10px; font-size: 10px; font-weight: 600; }
 
 .media-info { padding: 8px 10px 4px; }
-.media-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #0f172a; }
+.media-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #0f172a; cursor: text; }
+.media-name:hover { color: #2563eb; }
+.media-name-input { width: 100%; font-size: 12px; font-weight: 600; color: #0f172a; border: 1px solid #3b82f6; border-radius: 4px; padding: 2px 6px; outline: none; background: #eff6ff; box-sizing: border-box; }
 .media-meta { display: flex; gap: 6px; font-size: 11px; color: #94a3b8; margin-top: 2px; flex-wrap: wrap; }
 .meta-group { background: #dbeafe; color: #1d4ed8; padding: 0 4px; border-radius: 4px; font-weight: 600; }
 

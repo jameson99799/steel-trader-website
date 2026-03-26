@@ -68,7 +68,10 @@
             <div class="form-row">
               <div class="form-group">
                 <label>封面图片</label>
-                <input type="file" @change="handleCoverUpload" accept="image/*" class="form-control" />
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <input type="file" @change="handleCoverUpload" accept="image/*" class="form-control" style="flex:1" />
+                  <button type="button" class="btn btn-sm btn-outline" @click="pickCoverFromLib" style="white-space:nowrap;color:#7c3aed;border-color:#c4b5fd;">📂 从图库选择</button>
+                </div>
                 <img v-if="form.cover_preview" :src="form.cover_preview" class="preview-img" />
               </div>
               <div class="form-group">
@@ -159,6 +162,59 @@
         </div>
       </div>
     </div>
+
+    <!-- Image Source Chooser (for news content visual editor) -->
+    <div v-if="showNewsImgChooser" class="modal-overlay" @click.self="showNewsImgChooser=false" style="z-index:10100">
+      <div class="modal-wrap" style="max-width:360px;">
+        <div class="modal-header" style="background:#f0fdf4;color:#16a34a;">
+          <h3>🖼️ 选择图片来源</h3>
+          <button class="modal-close" @click="showNewsImgChooser=false">✕</button>
+        </div>
+        <div class="modal-body" style="padding:24px;">
+          <div class="img-chooser-grid">
+            <button class="img-chooser-btn" @click="newsPickFromComputer">
+              <span style="font-size:32px;">💻</span>
+              <span style="font-size:14px;font-weight:600;">从电脑上传</span>
+              <span style="font-size:12px;color:#94a3b8;">选择本地文件上传</span>
+            </button>
+            <button class="img-chooser-btn" @click="newsPickFromMediaLib">
+              <span style="font-size:32px;">📂</span>
+              <span style="font-size:14px;font-weight:600;">从图库选择</span>
+              <span style="font-size:12px;color:#94a3b8;">使用后台图库图片</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- News Media Library Browser -->
+    <div v-if="showNewsMediaBrowser" class="modal-overlay" @click.self="showNewsMediaBrowser=false" style="z-index:10200">
+      <div class="modal-wrap" style="max-width:750px;">
+        <div class="modal-header" style="background:#f0fdf4;color:#16a34a;">
+          <h3>📂 从图库选择图片</h3>
+          <button class="modal-close" @click="showNewsMediaBrowser=false">✕</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+            <input v-model="newsMediaSearch" class="form-control" placeholder="搜索文件名..." @input="loadNewsMedia" style="max-width:200px;" />
+            <select v-model="newsMediaGroup" class="form-control" @change="loadNewsMedia" style="max-width:140px;">
+              <option value="">全部分组</option>
+              <option v-for="g in newsMediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            </select>
+          </div>
+          <div v-if="newsMediaItems.length" class="news-media-grid">
+            <div v-for="item in newsMediaItems" :key="item.id" class="news-media-item" @click="selectNewsMediaImage(item)">
+              <img :src="item.filepath" />
+              <div class="news-media-name">{{ item.original_filename || item.filename }}</div>
+            </div>
+          </div>
+          <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" @click="showNewsMediaBrowser=false">取消</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -192,6 +248,15 @@ const newsEditorMode = ref('visual')
 const newsVisualEl = ref(null)
 const newsImgInput = ref(null)
 let newsReplacingImg = null
+
+// Image chooser state for news content editor
+const showNewsImgChooser = ref(false)
+const showNewsMediaBrowser = ref(false)
+const newsMediaSearch = ref('')
+const newsMediaGroup = ref('')
+const newsMediaItems = ref([])
+const newsMediaGroups = ref([])
+let newsImgChooserMode = 'content' // 'content' or 'cover'
 
 const form = ref({
   title: '', title_en: '',
@@ -265,7 +330,7 @@ function onNewsVisualClick(e) {
       nearImg.style.outline = '3px solid #3b82f6'
       newsReplacingImg = nearImg
       newsReplacingImg._replaceTipEl = tip
-      newsImgInput.value?.click()
+      openNewsImgChooser('content')
     }
     return
   }
@@ -274,7 +339,7 @@ function onNewsVisualClick(e) {
     newsVisualEl.value.querySelectorAll('img').forEach(i => i.style.outline = '')
     img.style.outline = '3px solid #3b82f6'
     newsReplacingImg = img
-    newsImgInput.value?.click()
+    openNewsImgChooser('content')
   }
 }
 
@@ -300,7 +365,92 @@ async function onNewsVisualPaste(e) {
 
 function insertNewsImage() {
   newsReplacingImg = null
+  openNewsImgChooser('content')
+}
+
+function openNewsImgChooser(mode) {
+  newsImgChooserMode = mode
+  showNewsImgChooser.value = true
+}
+
+function newsPickFromComputer() {
+  showNewsImgChooser.value = false
+  if (newsImgChooserMode === 'cover') {
+    // Trigger file input for cover — the existing handleCoverUpload on the input handles it
+    // We just close the chooser, user clicks the file input directly
+    return
+  }
   newsImgInput.value?.click()
+}
+
+async function loadNewsMedia() {
+  try {
+    const token = localStorage.getItem('token')
+    const params = new URLSearchParams({ per_page: '200' })
+    if (newsMediaGroup.value) params.set('group_id', newsMediaGroup.value)
+    if (newsMediaSearch.value) params.set('search', newsMediaSearch.value)
+    const res = await fetch(`/api/media?${params}`, { headers: { 'Authorization': `Bearer ${token}` } })
+    const data = await res.json()
+    newsMediaItems.value = data.items || []
+  } catch (e) { console.error(e) }
+}
+
+async function loadNewsMediaGroups() {
+  try {
+    const token = localStorage.getItem('token')
+    const res = await fetch('/api/media/groups', { headers: { 'Authorization': `Bearer ${token}` } })
+    newsMediaGroups.value = await res.json()
+  } catch (e) { console.error(e) }
+}
+
+function newsPickFromMediaLib() {
+  showNewsImgChooser.value = false
+  newsMediaSearch.value = ''
+  newsMediaGroup.value = ''
+  loadNewsMediaGroups()
+  loadNewsMedia()
+  showNewsMediaBrowser.value = true
+}
+
+function selectNewsMediaImage(item) {
+  const url = item.filepath
+  showNewsMediaBrowser.value = false
+
+  if (newsImgChooserMode === 'cover') {
+    form.value.cover_preview = url
+    form.value.cover_image = null // not a file, it's a URL
+    form.value.cover_url = url   // store URL separately for save
+    return
+  }
+
+  // Content mode
+  if (newsReplacingImg && newsReplacingImg.parentElement) {
+    newsReplacingImg.src = url
+    newsReplacingImg.style.outline = ''
+    if (newsReplacingImg._replaceTipEl) {
+      newsReplacingImg._replaceTipEl.remove()
+      delete newsReplacingImg._replaceTipEl
+    } else {
+      let nextEl = newsReplacingImg.nextElementSibling
+      if (!nextEl && newsReplacingImg.parentElement) nextEl = newsReplacingImg.parentElement.querySelector('.replace-tip')
+      if (nextEl && nextEl.classList?.contains('replace-tip')) nextEl.remove()
+    }
+    newsReplacingImg = null
+    syncNewsFromVisual()
+  } else {
+    newsReplacingImg = null
+    if (newsEditorMode.value === 'visual' && newsVisualEl.value) {
+      newsVisualEl.value.focus()
+      document.execCommand('insertImage', false, url)
+      syncNewsFromVisual()
+    } else {
+      form.value.content = (form.value.content || '') + `\n<img src="${url}" style="max-width:100%" />\n`
+    }
+  }
+}
+
+function pickCoverFromLib() {
+  openNewsImgChooser('cover')
 }
 
 async function handleNewsImgUpload(e) {
@@ -387,6 +537,7 @@ async function save() {
     fd.append('seo_description', form.value.seo_description || '')
     fd.append('seo_keywords', form.value.seo_keywords || '')
     if (form.value.cover_image) fd.append('cover_image', form.value.cover_image)
+    else if (form.value.cover_url) fd.append('cover_url', form.value.cover_url)
     fd.append('render_mode', form.value.render_mode || 'direct')
 
     if (editId.value) {
@@ -688,4 +839,17 @@ onMounted(loadNews)
 .btn-danger { background: white; color: var(--danger); border: 2px solid var(--danger); }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Image source chooser */
+.img-chooser-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.img-chooser-btn { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 16px;
+  border: 2px solid #e2e8f0; border-radius: 12px; background: #fff; cursor: pointer; transition: all 0.2s; }
+.img-chooser-btn:hover { border-color: #16a34a; background: #f0fdf4; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+
+/* News media library browser grid */
+.news-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; max-height: 450px; overflow-y: auto; }
+.news-media-item { border: 2px solid #e2e8f0; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.15s; }
+.news-media-item:hover { border-color: #16a34a; transform: scale(1.02); }
+.news-media-item img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.news-media-name { font-size: 10px; padding: 4px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #475569; text-align: center; }
 </style>
