@@ -11,6 +11,15 @@
     "start": "NODE_ENV=production node server/index.js"
   },
   "dependencies": {
+    "@vue/compiler-core": "^3.5.31",
+    "@vue/compiler-dom": "^3.5.31",
+    "@vue/compiler-sfc": "^3.5.31",
+    "@vue/reactivity": "^3.5.31",
+    "@vue/runtime-core": "^3.5.31",
+    "@vue/runtime-dom": "^3.5.31",
+    "@vue/shared": "^3.5.31",
+    "adm-zip": "^0.5.16",
+    "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.6.2",
     "cors": "^2.8.5",
@@ -24,8 +33,9 @@
     "quill-image-resize-module-react": "^3.0.0",
     "quill-resize-image": "^1.0.11",
     "sharp": "^0.34.5",
+    "source-map-js": "^1.1.0",
     "sql.js": "^1.10.3",
-    "vue": "^3.4.15",
+    "vue": "^3.5.31",
     "vue-router": "^4.2.5"
   },
   "devDependencies": {

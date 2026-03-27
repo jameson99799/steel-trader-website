@@ -74,6 +74,8 @@ async function startServer() {
     // 请求体解析
     app.use(express.json({ limit: '10mb' }))
     app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+    // Allow large raw body for ZIP imports
+    app.use('/api/crm/customers/import/zip', express.raw({ type: 'application/octet-stream', limit: '200mb' }))
 
     // 安全头部
     app.use((req, res, next) => {
