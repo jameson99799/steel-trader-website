@@ -4,10 +4,10 @@ import { getAll, getOne, run } from '../db.js'
 import { replaceCustomVars } from './mailer.js'
 import archiver from 'archiver'
 import AdmZip from 'adm-zip'
-import { join, basename } from 'path'
+import { join, basename, dirname } from 'path'
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
-const __dirname = join(fileURLToPath(import.meta.url), '..')
+const __dirname = dirname(fileURLToPath(import.meta.url))
 const UPLOADS_DIR = join(__dirname, '..', '..', 'uploads')
 
 const router = Router()
@@ -1122,70 +1122,79 @@ router.get('/export/zip', dualAuth, (req, res) => {
   if (req.crmUser && req.crmUser.role !== 'admin' && !req.user) {
     return res.status(403).json({ error: '需要管理员权限' })
   }
-  // Gather all CRM data
-  const users = getAll('SELECT id,username,display_name FROM crm_users')
-  const exportData = { exported_at: new Date().toISOString(), version: '2.0', users: [] }
-  const imageFiles = new Set()
-  const gatherCustomers = (ownerId) => {
-    const cond = ownerId ? 'c.owner_id=?' : 'c.owner_id IS NULL'
-    const params = ownerId ? [ownerId] : []
-    const customers = getAll(`SELECT c.* FROM crm_customers c WHERE ${cond} ORDER BY c.created_at DESC`, params)
-    return customers.map(c => {
-      try { c.tags = JSON.parse(c.tags||'[]') } catch(e) { c.tags = [] }
-      c.inquiries = getAll('SELECT * FROM crm_inquiries WHERE customer_id=? ORDER BY inquiry_time DESC', [c.id])
-      c.inquiries.forEach(i => {
-        try { i.images = JSON.parse(i.images||'[]') } catch(e) { i.images = [] }
-        try { i.files = JSON.parse(i.files||'[]') } catch(e) { i.files = [] }
-        i.images.forEach(p => { if (p) imageFiles.add(p) })
-        i.files.forEach(p => { if (p) imageFiles.add(p) })
+  try {
+    // Gather all CRM data
+    const users = getAll('SELECT id,username,display_name FROM crm_users')
+    const exportData = { exported_at: new Date().toISOString(), version: '2.0', users: [] }
+    const imageFiles = new Set()
+    const gatherCustomers = (ownerId) => {
+      const cond = ownerId ? 'c.owner_id=?' : 'c.owner_id IS NULL'
+      const params = ownerId ? [ownerId] : []
+      const customers = getAll(`SELECT c.* FROM crm_customers c WHERE ${cond} ORDER BY c.created_at DESC`, params)
+      return customers.map(c => {
+        try { c.tags = JSON.parse(c.tags||'[]') } catch(e) { c.tags = [] }
+        c.inquiries = getAll('SELECT * FROM crm_inquiries WHERE customer_id=? ORDER BY inquiry_time DESC', [c.id])
+        c.inquiries.forEach(i => {
+          try { i.images = JSON.parse(i.images||'[]') } catch(e) { i.images = [] }
+          try { i.files = JSON.parse(i.files||'[]') } catch(e) { i.files = [] }
+          i.images.forEach(p => { if (p) imageFiles.add(p) })
+          i.files.forEach(p => { if (p) imageFiles.add(p) })
+        })
+        c.quotations = getAll('SELECT * FROM crm_quotations WHERE customer_id=? ORDER BY quotation_time DESC', [c.id])
+        c.quotations.forEach(q => {
+          try { q.ports = JSON.parse(q.ports||'[]') } catch(e) { q.ports = [] }
+          try { q.price_rows = JSON.parse(q.price_rows||'[]') } catch(e) { q.price_rows = [] }
+          try { q.files = JSON.parse(q.files||'[]') } catch(e) { q.files = [] }
+          try { q.images = JSON.parse(q.images||'[]') } catch(e) { q.images = [] }
+          q.images.forEach(p => { if (p) imageFiles.add(p) })
+          q.files.forEach(p => { if (p) imageFiles.add(p) })
+        })
+        c.followups = getAll('SELECT f.* FROM crm_followups f WHERE f.customer_id=? ORDER BY f.created_at DESC', [c.id])
+        c.followups.forEach(f => {
+          try { f.attachments = JSON.parse(f.attachments||'[]') } catch(e) { f.attachments = [] }
+          f.attachments.forEach(p => { if (p) imageFiles.add(p) })
+        })
+        return c
       })
-      c.quotations = getAll('SELECT * FROM crm_quotations WHERE customer_id=? ORDER BY quotation_time DESC', [c.id])
-      c.quotations.forEach(q => {
-        try { q.ports = JSON.parse(q.ports||'[]') } catch(e) { q.ports = [] }
-        try { q.price_rows = JSON.parse(q.price_rows||'[]') } catch(e) { q.price_rows = [] }
-        try { q.files = JSON.parse(q.files||'[]') } catch(e) { q.files = [] }
-        try { q.images = JSON.parse(q.images||'[]') } catch(e) { q.images = [] }
-        q.images.forEach(p => { if (p) imageFiles.add(p) })
-        q.files.forEach(p => { if (p) imageFiles.add(p) })
-      })
-      c.followups = getAll('SELECT f.* FROM crm_followups f WHERE f.customer_id=? ORDER BY f.created_at DESC', [c.id])
-      c.followups.forEach(f => {
-        try { f.attachments = JSON.parse(f.attachments||'[]') } catch(e) { f.attachments = [] }
-        f.attachments.forEach(p => { if (p) imageFiles.add(p) })
-      })
-      return c
-    })
-  }
-  for (const u of users) {
-    exportData.users.push({ user: u, customers: gatherCustomers(u.id) })
-  }
-  const unassigned = gatherCustomers(null)
-  if (unassigned.length) exportData.users.push({ user: { id: null, username: 'unassigned', display_name: '未分配' }, customers: unassigned })
-
-  const totalC = exportData.users.reduce((s, u) => s + u.customers.length, 0)
-  const totalI = exportData.users.reduce((s, u) => s + u.customers.reduce((s2, c) => s2 + (c.inquiries?.length||0), 0), 0)
-  const totalQ = exportData.users.reduce((s, u) => s + u.customers.reduce((s2, c) => s2 + (c.quotations?.length||0), 0), 0)
-  const totalF = exportData.users.reduce((s, u) => s + u.customers.reduce((s2, c) => s2 + (c.followups?.length||0), 0), 0)
-
-  // Build the offline CRM SPA HTML
-  const spaHtml = buildOfflineCrmHtml(totalC, totalI, totalQ, totalF)
-
-  // Create ZIP
-  const archive = archiver('zip', { zlib: { level: 9 } })
-  res.setHeader('Content-Type', 'application/zip')
-  res.setHeader('Content-Disposition', `attachment; filename="CRM_Offline_${new Date().toISOString().slice(0,10)}.zip"`)
-  archive.pipe(res)
-  archive.append(spaHtml, { name: 'index.html' })
-  archive.append(JSON.stringify(exportData, null, 2), { name: 'data.json' })
-  // Add referenced images/files
-  for (const filePath of imageFiles) {
-    const clean = filePath.replace(/^\//, '')
-    const absPath = join(UPLOADS_DIR, '..', clean)
-    if (existsSync(absPath)) {
-      archive.file(absPath, { name: clean })
     }
+    for (const u of users) {
+      exportData.users.push({ user: u, customers: gatherCustomers(u.id) })
+    }
+    const unassigned = gatherCustomers(null)
+    if (unassigned.length) exportData.users.push({ user: { id: null, username: 'unassigned', display_name: '未分配' }, customers: unassigned })
+
+    const totalC = exportData.users.reduce((s, u) => s + u.customers.length, 0)
+    const totalI = exportData.users.reduce((s, u) => s + u.customers.reduce((s2, c) => s2 + (c.inquiries?.length||0), 0), 0)
+    const totalQ = exportData.users.reduce((s, u) => s + u.customers.reduce((s2, c) => s2 + (c.quotations?.length||0), 0), 0)
+    const totalF = exportData.users.reduce((s, u) => s + u.customers.reduce((s2, c) => s2 + (c.followups?.length||0), 0), 0)
+
+    // Build the offline CRM SPA HTML
+    const spaHtml = buildOfflineCrmHtml(totalC, totalI, totalQ, totalF)
+
+    // Create ZIP
+    const archive = archiver('zip', { zlib: { level: 9 } })
+    archive.on('error', (err) => {
+      console.error('Archive error:', err)
+      if (!res.headersSent) res.status(500).json({ error: 'ZIP创建失败: ' + err.message })
+    })
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="CRM_Offline_${new Date().toISOString().slice(0,10)}.zip"`)
+    archive.pipe(res)
+    archive.append(spaHtml, { name: 'index.html' })
+    archive.append(JSON.stringify(exportData, null, 2), { name: 'data.json' })
+    // Add referenced images/files
+    for (const filePath of imageFiles) {
+      const clean = filePath.replace(/^\//, '')
+      const absPath = join(UPLOADS_DIR, '..', clean)
+      if (existsSync(absPath)) {
+        archive.file(absPath, { name: clean })
+      }
+    }
+    archive.finalize()
+  } catch (e) {
+    console.error('ZIP export error:', e)
+    if (!res.headersSent) res.status(500).json({ error: '导出失败: ' + e.message })
   }
-  archive.finalize()
 })
 
 // ─── Import from ZIP ──────────────────────────────────────────────────────────
