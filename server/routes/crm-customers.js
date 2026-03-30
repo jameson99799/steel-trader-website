@@ -1184,7 +1184,9 @@ router.get('/export/zip', dualAuth, (req, res) => {
     archive.append(JSON.stringify(exportData, null, 2), { name: 'data.json' })
     // Add referenced images/files
     for (const filePath of imageFiles) {
-      const clean = filePath.replace(/^\//, '')
+      const p = typeof filePath === 'string' ? filePath : (filePath?.url || filePath?.path || '')
+      if (!p || typeof p !== 'string') continue
+      const clean = p.replace(/^\//, '')
       const absPath = join(UPLOADS_DIR, '..', clean)
       if (existsSync(absPath)) {
         archive.file(absPath, { name: clean })
