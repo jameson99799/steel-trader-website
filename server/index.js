@@ -141,10 +141,194 @@ async function startServer() {
       res.json({ status: 'ok', timestamp: new Date().toISOString() })
     })
 
-    // 生产环境 SPA 路由
+    // 生产环境 SPA 路由 — 动态SEO Meta注入
     if (NODE_ENV === 'production') {
+      const distIndexPath = join(__dirname, '..', 'dist', 'index.html')
+      let indexHtmlTemplate = ''
+      try { indexHtmlTemplate = require('fs').readFileSync(distIndexPath, 'utf8') } catch (e) { console.error('Failed to read dist/index.html:', e) }
+
+      // Helper: escape HTML entities in injected content
+      const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+      // Helper: build JSON-LD script tag
+      const jsonLd = (obj) => `<script type="application/ld+json">${JSON.stringify(obj)}</script>`
+
       app.get('*', (req, res) => {
-        res.sendFile(join(__dirname, '..', 'dist', 'index.html'))
+        if (!indexHtmlTemplate) return res.sendFile(distIndexPath)
+
+        const url = req.path
+        let html = indexHtmlTemplate
+
+        // Parse URL: /:lang/products/:slug, /:lang/news/:slug, /:lang, etc.
+        const langMatch = url.match(/^\/([a-z]{2})(\/.*)?$/)
+        const lang = langMatch ? langMatch[1] : 'en'
+        const subPath = langMatch ? (langMatch[2] || '') : url
+
+        // Default SEO values from seo_settings table
+        const seoSettings = getOne('SELECT * FROM seo_settings WHERE id = 1') || {}
+        const company = getOne('SELECT * FROM company WHERE id = 1') || {}
+        const siteUrl = 'https://www.sunseasteel.com'
+        const companyName = company.name_en || company.name || 'Shandong Sunsea Steel Co., Ltd'
+
+        let pageTitle = seoSettings.site_title || 'Shandong Sunsea Steel Co., Ltd'
+        let pageDesc = seoSettings.site_description || ''
+        let pageKeywords = seoSettings.site_keywords || ''
+        let pageCanonical = `${siteUrl}/${lang}${subPath}`
+        let pageImage = seoSettings.og_image ? `${siteUrl}${seoSettings.og_image}` : ''
+        let ogType = 'website'
+        let extraSchemas = ''
+        let extraMeta = ''
+
+        try {
+          // ── Product detail page ──
+          const productMatch = subPath.match(/^\/products\/(.+)$/)
+          if (productMatch) {
+            const slug = productMatch[1]
+            // Try slug first, then by ID
+            let product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.slug=?', [slug])
+            if (!product) {
+              const idMatch = slug.match(/-(\d+)$/)
+              if (idMatch) product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.id=?', [idMatch[1]])
+            }
+            if (product) {
+              pageTitle = product.seo_title || product.name_en || product.name || pageTitle
+              pageDesc = product.seo_description || product.description_en || product.description || pageDesc
+              pageKeywords = product.seo_keywords || pageKeywords
+              ogType = 'product'
+              const images = (product.images || '').split(',').filter(Boolean)
+              if (images.length) pageImage = images[0].startsWith('http') ? images[0] : `${siteUrl}${images[0]}`
+
+              // Product Schema
+              const productSchema = {
+                '@context': 'https://schema.org', '@type': 'Product',
+                name: product.name_en || product.name,
+                description: (product.seo_description || product.description_en || '').substring(0, 500),
+                url: pageCanonical,
+                brand: { '@type': 'Brand', name: companyName },
+                manufacturer: { '@type': 'Organization', name: companyName }
+              }
+              if (images.length) productSchema.image = images.map(i => i.startsWith('http') ? i : `${siteUrl}${i}`)
+              if (product.category_name_en) productSchema.category = product.category_name_en
+              // Add specs as additionalProperty
+              if (product.specs) {
+                try {
+                  const specsList = JSON.parse(product.specs)
+                  if (specsList.length) productSchema.additionalProperty = specsList.map(s => ({ '@type': 'PropertyValue', name: s.name, value: s.value }))
+                } catch (e) {}
+              }
+              extraSchemas += jsonLd(productSchema)
+              // FAQ Schema
+              if (product.faq_items) {
+                try {
+                  const faqs = JSON.parse(product.faq_items)
+                  if (faqs.length) extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faqs.map(f => ({ '@type': 'Question', name: f.question, acceptedAnswer: { '@type': 'Answer', text: f.answer } })) })
+                } catch (e) {}
+              }
+              // BreadcrumbList
+              extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+                { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
+                { '@type': 'ListItem', position: 2, name: 'Products', item: `${siteUrl}/${lang}/products` },
+                { '@type': 'ListItem', position: 3, name: product.name_en || product.name, item: pageCanonical }
+              ] })
+            }
+          }
+
+          // ── News detail page ──
+          const newsMatch = subPath.match(/^\/news\/(.+)$/)
+          if (newsMatch) {
+            const slug = newsMatch[1]
+            let article = getOne('SELECT * FROM news WHERE slug=?', [slug])
+            if (!article) {
+              const idMatch = slug.match(/-(\d+)$/)
+              if (idMatch) article = getOne('SELECT * FROM news WHERE id=?', [idMatch[1]])
+            }
+            if (article) {
+              pageTitle = article.seo_title || article.title_en || article.title || pageTitle
+              pageDesc = article.seo_description || article.summary_en || article.summary || pageDesc
+              pageKeywords = article.seo_keywords || pageKeywords
+              ogType = 'article'
+              if (article.cover_image) pageImage = article.cover_image.startsWith('http') ? article.cover_image : `${siteUrl}${article.cover_image}`
+
+              // Article Schema
+              extraSchemas += jsonLd({
+                '@context': 'https://schema.org', '@type': 'Article',
+                headline: (article.seo_title || article.title_en || article.title || '').substring(0, 110),
+                description: (article.seo_description || article.summary_en || article.summary || '').substring(0, 300),
+                url: pageCanonical,
+                datePublished: article.created_at,
+                ...(article.updated_at && { dateModified: article.updated_at }),
+                ...(pageImage && { image: pageImage }),
+                publisher: { '@type': 'Organization', name: companyName, logo: { '@type': 'ImageObject', url: `${siteUrl}/uploads/logo.png` } },
+                mainEntityOfPage: { '@type': 'WebPage', '@id': pageCanonical }
+              })
+              // BreadcrumbList
+              extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+                { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
+                { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
+                { '@type': 'ListItem', position: 3, name: article.title_en || article.title, item: pageCanonical }
+              ] })
+            }
+          }
+
+          // ── Static pages ──
+          if (subPath === '/products' || subPath === '/products/') {
+            pageTitle = `Products | ${companyName}`
+            pageDesc = `Browse our full range of steel products: Galvanized Steel Coil (GI), Galvalume (GL), PPGI, PPGL, CRC, and Corrugated Roofing Sheets. Factory direct pricing.`
+          } else if (subPath === '/news' || subPath === '/news/') {
+            pageTitle = `News & Industry Insights | ${companyName}`
+            pageDesc = `Latest steel industry news, technical guides, and market analysis from ${companyName}.`
+          } else if (subPath === '/about' || subPath === '/about/') {
+            pageTitle = `About Us | ${companyName}`
+            pageDesc = company.description_en || `Learn about ${companyName} — a professional steel coil manufacturer and exporter based in Shandong, China.`
+          } else if (subPath === '/contact' || subPath === '/contact/') {
+            pageTitle = `Contact Us | ${companyName}`
+            pageDesc = `Get in touch with ${companyName}. Request a quote, ask product questions, or schedule a factory visit.`
+          }
+
+        } catch (e) {
+          console.error('SEO meta injection error:', e)
+        }
+
+        // ── Build hreflang tags ──
+        const languages = getAll('SELECT code FROM languages WHERE is_active=1') || []
+        const langCodes = languages.map(l => l.code)
+        if (!langCodes.includes('en')) langCodes.unshift('en')
+        let hreflangTags = langCodes.map(code =>
+          `<link rel="alternate" hreflang="${esc(code)}" href="${siteUrl}/${code}${subPath}" />`
+        ).join('\n  ')
+        hreflangTags += `\n  <link rel="alternate" hreflang="x-default" href="${siteUrl}/en${subPath}" />`
+
+        // ── Build OG meta tags ──
+        extraMeta = `
+  <meta property="og:type" content="${esc(ogType)}" />
+  <meta property="og:title" content="${esc(pageTitle)}" />
+  <meta property="og:description" content="${esc(pageDesc.substring(0, 200))}" />
+  <meta property="og:url" content="${esc(pageCanonical)}" />
+  <meta property="og:site_name" content="${esc(companyName)}" />
+  ${pageImage ? `<meta property="og:image" content="${esc(pageImage)}" />` : ''}
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${esc(pageTitle)}" />
+  <meta name="twitter:description" content="${esc(pageDesc.substring(0, 200))}" />
+  ${pageImage ? `<meta name="twitter:image" content="${esc(pageImage)}" />` : ''}
+  ${hreflangTags}`
+
+        // ── Replace meta tags in HTML ──
+        // Replace <html lang="...">
+        html = html.replace(/<html\s+lang="[^"]*"/, `<html lang="${esc(lang)}"`)
+        // Replace <title>
+        html = html.replace(/<title>[^<]*<\/title>/, `<title>${esc(pageTitle)}</title>`)
+        // Replace <meta name="description">
+        html = html.replace(/<meta\s+name="description"\s+content="[^"]*"/, `<meta name="description" content="${esc(pageDesc)}"`)
+        // Replace <meta name="keywords">
+        html = html.replace(/<meta\s+name="keywords"\s+content="[^"]*"/, `<meta name="keywords" content="${esc(pageKeywords)}"`)
+        // Replace <link rel="canonical">
+        html = html.replace(/<link\s+rel="canonical"\s+href="[^"]*"/, `<link rel="canonical" href="${esc(pageCanonical)}"`)
+        // Inject OG/Twitter/hreflang + extra schemas before </head>
+        html = html.replace('</head>', `${extraMeta}\n  ${extraSchemas}\n</head>`)
+
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+        res.send(html)
       })
     }
 
