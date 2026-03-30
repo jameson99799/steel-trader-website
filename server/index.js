@@ -157,6 +157,7 @@ async function startServer() {
       app.get('*', (req, res) => {
         if (!indexHtmlTemplate) return res.sendFile(distIndexPath)
 
+        try {
         const url = req.path
         let html = indexHtmlTemplate
 
@@ -178,14 +179,11 @@ async function startServer() {
         let pageImage = seoSettings.og_image ? `${siteUrl}${seoSettings.og_image}` : ''
         let ogType = 'website'
         let extraSchemas = ''
-        let extraMeta = ''
 
-        try {
           // ── Product detail page ──
           const productMatch = subPath.match(/^\/products\/(.+)$/)
           if (productMatch) {
             const slug = productMatch[1]
-            // Try slug first, then by ID
             let product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.slug=?', [slug])
             if (!product) {
               const idMatch = slug.match(/-(\d+)$/)
@@ -199,7 +197,6 @@ async function startServer() {
               const images = (product.images || '').split(',').filter(Boolean)
               if (images.length) pageImage = images[0].startsWith('http') ? images[0] : `${siteUrl}${images[0]}`
 
-              // Product Schema
               const productSchema = {
                 '@context': 'https://schema.org', '@type': 'Product',
                 name: product.name_en || product.name,
@@ -210,7 +207,6 @@ async function startServer() {
               }
               if (images.length) productSchema.image = images.map(i => i.startsWith('http') ? i : `${siteUrl}${i}`)
               if (product.category_name_en) productSchema.category = product.category_name_en
-              // Add specs as additionalProperty
               if (product.specs) {
                 try {
                   const specsList = JSON.parse(product.specs)
@@ -218,14 +214,12 @@ async function startServer() {
                 } catch (e) {}
               }
               extraSchemas += jsonLd(productSchema)
-              // FAQ Schema
               if (product.faq_items) {
                 try {
                   const faqs = JSON.parse(product.faq_items)
                   if (faqs.length) extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faqs.map(f => ({ '@type': 'Question', name: f.question, acceptedAnswer: { '@type': 'Answer', text: f.answer } })) })
                 } catch (e) {}
               }
-              // BreadcrumbList
               extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
                 { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
                 { '@type': 'ListItem', position: 2, name: 'Products', item: `${siteUrl}/${lang}/products` },
@@ -250,7 +244,6 @@ async function startServer() {
               ogType = 'article'
               if (article.cover_image) pageImage = article.cover_image.startsWith('http') ? article.cover_image : `${siteUrl}${article.cover_image}`
 
-              // Article Schema
               extraSchemas += jsonLd({
                 '@context': 'https://schema.org', '@type': 'Article',
                 headline: (article.seo_title || article.title_en || article.title || '').substring(0, 110),
@@ -262,7 +255,6 @@ async function startServer() {
                 publisher: { '@type': 'Organization', name: companyName, logo: { '@type': 'ImageObject', url: `${siteUrl}/uploads/logo.png` } },
                 mainEntityOfPage: { '@type': 'WebPage', '@id': pageCanonical }
               })
-              // BreadcrumbList
               extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
                 { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
                 { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
@@ -286,50 +278,51 @@ async function startServer() {
             pageDesc = `Get in touch with ${companyName}. Request a quote, ask product questions, or schedule a factory visit.`
           }
 
+        // ── Build hreflang tags ──
+        let hreflangTags = ''
+        try {
+          const languages = getAll('SELECT code FROM languages WHERE is_active=1') || []
+          const langCodes = languages.map(l => l.code)
+          if (!langCodes.includes('en')) langCodes.unshift('en')
+          hreflangTags = langCodes.map(code =>
+            `<link rel="alternate" hreflang="${esc(code)}" href="${siteUrl}/${code}${subPath}" />`
+          ).join('\n  ')
+          hreflangTags += `\n  <link rel="alternate" hreflang="x-default" href="${siteUrl}/en${subPath}" />`
         } catch (e) {
-          console.error('SEO meta injection error:', e)
+          hreflangTags = `<link rel="alternate" hreflang="en" href="${siteUrl}/en${subPath}" />\n  <link rel="alternate" hreflang="x-default" href="${siteUrl}/en${subPath}" />`
         }
 
-        // ── Build hreflang tags ──
-        const languages = getAll('SELECT code FROM languages WHERE is_active=1') || []
-        const langCodes = languages.map(l => l.code)
-        if (!langCodes.includes('en')) langCodes.unshift('en')
-        let hreflangTags = langCodes.map(code =>
-          `<link rel="alternate" hreflang="${esc(code)}" href="${siteUrl}/${code}${subPath}" />`
-        ).join('\n  ')
-        hreflangTags += `\n  <link rel="alternate" hreflang="x-default" href="${siteUrl}/en${subPath}" />`
-
         // ── Build OG meta tags ──
-        extraMeta = `
+        const safeDesc = (pageDesc || '').substring(0, 200)
+        const extraMeta = `
   <meta property="og:type" content="${esc(ogType)}" />
   <meta property="og:title" content="${esc(pageTitle)}" />
-  <meta property="og:description" content="${esc(pageDesc.substring(0, 200))}" />
+  <meta property="og:description" content="${esc(safeDesc)}" />
   <meta property="og:url" content="${esc(pageCanonical)}" />
   <meta property="og:site_name" content="${esc(companyName)}" />
   ${pageImage ? `<meta property="og:image" content="${esc(pageImage)}" />` : ''}
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${esc(pageTitle)}" />
-  <meta name="twitter:description" content="${esc(pageDesc.substring(0, 200))}" />
+  <meta name="twitter:description" content="${esc(safeDesc)}" />
   ${pageImage ? `<meta name="twitter:image" content="${esc(pageImage)}" />` : ''}
   ${hreflangTags}`
 
         // ── Replace meta tags in HTML ──
-        // Replace <html lang="...">
         html = html.replace(/<html\s+lang="[^"]*"/, `<html lang="${esc(lang)}"`)
-        // Replace <title>
         html = html.replace(/<title>[^<]*<\/title>/, `<title>${esc(pageTitle)}</title>`)
-        // Replace <meta name="description">
         html = html.replace(/<meta\s+name="description"\s+content="[^"]*"/, `<meta name="description" content="${esc(pageDesc)}"`)
-        // Replace <meta name="keywords">
         html = html.replace(/<meta\s+name="keywords"\s+content="[^"]*"/, `<meta name="keywords" content="${esc(pageKeywords)}"`)
-        // Replace <link rel="canonical">
         html = html.replace(/<link\s+rel="canonical"\s+href="[^"]*"/, `<link rel="canonical" href="${esc(pageCanonical)}"`)
-        // Inject OG/Twitter/hreflang + extra schemas before </head>
         html = html.replace('</head>', `${extraMeta}\n  ${extraSchemas}\n</head>`)
 
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
         res.send(html)
+
+        } catch (e) {
+          console.error('SEO meta injection fatal error:', e)
+          res.sendFile(distIndexPath)
+        }
       })
     }
 
