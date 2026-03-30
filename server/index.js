@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import { readFileSync } from 'fs'
 
 import { initDb, getAll, getOne, run } from './db.js'
 import authRoutes from './routes/auth.js'
@@ -145,7 +146,7 @@ async function startServer() {
     if (NODE_ENV === 'production') {
       const distIndexPath = join(__dirname, '..', 'dist', 'index.html')
       let indexHtmlTemplate = ''
-      try { indexHtmlTemplate = require('fs').readFileSync(distIndexPath, 'utf8') } catch (e) { console.error('Failed to read dist/index.html:', e) }
+      try { indexHtmlTemplate = readFileSync(distIndexPath, 'utf8') } catch (e) { console.error('Failed to read dist/index.html:', e) }
 
       // Helper: escape HTML entities in injected content
       const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
