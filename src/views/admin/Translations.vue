@@ -206,6 +206,121 @@
       </div>
     </div>
 
+
+    <!-- ── Granular Translation (Products / Articles) ── -->
+    <div class="card" style="margin-top:20px">
+      <div class="card-header-row" style="cursor:pointer" @click="granularCollapsed = !granularCollapsed">
+        <h3>{{ granularCollapsed ? '▶' : '▼' }} 🎯 精细化翻译</h3>
+      </div>
+      <div class="card-body" v-show="!granularCollapsed">
+        <p class="page-desc">选择特定产品或文章，翻译到指定语言。支持批量选择、实时进度、失败重试。</p>
+
+        <!-- Tabs -->
+        <div class="gt-tabs">
+          <button class="gt-tab" :class="{ active: granularTab === 'product' }" @click="switchGranularTab('product')">📦 产品翻译</button>
+          <button class="gt-tab" :class="{ active: granularTab === 'news' }" @click="switchGranularTab('news')">📰 文章翻译</button>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="gt-toolbar">
+          <div class="form-group" v-if="granularTab === 'product'" style="flex:1;min-width:160px">
+            <label>产品分组</label>
+            <select v-model="gtCategoryId" class="form-control" @change="filterGranularItems">
+              <option value="">全部产品</option>
+              <option v-for="cat in gtCategories" :key="cat.id" :value="cat.id">{{ cat.name_en }}</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1;min-width:160px">
+            <label>目标语言</label>
+            <select v-model="gtSelectedLang" class="form-control">
+              <option value="all">🌍 全部语言</option>
+              <option v-for="l in gtLangs" :key="l.code" :value="l.code">{{ l.flag }} {{ l.name }}</option>
+            </select>
+          </div>
+          <div class="form-group" style="width:110px">
+            <label>并发数</label>
+            <select v-model="gtConcurrency" class="form-control">
+              <option v-for="n in 10" :key="n" :value="n">{{ n }} 并发</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Actions bar -->
+        <div class="gt-actions">
+          <label class="gt-select-all">
+            <input type="checkbox" :checked="gtAllSelected" @change="toggleGtSelectAll" /> 全选
+          </label>
+          <span class="gt-selected-count" v-if="gtSelectedIds.length">已选 {{ gtSelectedIds.length }} 项</span>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" @click="startGranularTranslation" :disabled="gtTranslating || !gtSelectedIds.length">
+            {{ gtTranslating ? '⏳ 翻译中...' : '🚀 开始翻译' }}
+          </button>
+          <button v-if="gtFailedIds.length" class="btn btn-warning" @click="retryGranularFailed" :disabled="gtTranslating">
+            🔄 重试失败 ({{ gtFailedIds.length }})
+          </button>
+          <button v-if="gtTranslating" class="btn btn-outline" @click="gtAborted = true">⛔ 停止</button>
+        </div>
+
+        <!-- Loading -->
+        <div v-if="gtLoading" class="empty-tip">⏳ 加载中...</div>
+
+        <!-- Item list -->
+        <div v-else class="gt-list">
+          <div v-for="item in gtFilteredItems" :key="item.id" class="gt-item" :class="gtOverallStatus(item)">
+            <label class="gt-item-check">
+              <input type="checkbox" :value="item.id" v-model="gtSelectedIds" />
+            </label>
+            <span class="gt-status-dot" :class="gtOverallStatus(item)"></span>
+            <div class="gt-item-info">
+              <span class="gt-item-name">{{ item.name }}</span>
+              <span class="gt-item-category" v-if="item.category_name">{{ item.category_name }}</span>
+            </div>
+            <div class="gt-lang-tags">
+              <span v-for="l in gtLangs" :key="l.code"
+                    class="gt-lang-tag" :class="item.languages[l.code] || 'none'"
+                    :title="l.name + ': ' + (item.languages[l.code] === 'full' ? '已翻译' : item.languages[l.code] === 'partial' ? '部分翻译' : '未翻译')">
+                {{ l.flag || l.code }}
+              </span>
+            </div>
+          </div>
+          <div v-if="!gtFilteredItems.length" class="empty-tip">暂无{{ granularTab === 'product' ? '产品' : '文章' }}数据</div>
+        </div>
+
+        <!-- Pagination (news) -->
+        <div v-if="granularTab === 'news' && gtTotalPages > 1" class="gt-pagination">
+          <button class="btn btn-outline btn-sm" :disabled="gtPage <= 1" @click="gtPage--; filterGranularItems()">← 上一页</button>
+          <span>第 {{ gtPage }} / {{ gtTotalPages }} 页</span>
+          <button class="btn btn-outline btn-sm" :disabled="gtPage >= gtTotalPages" @click="gtPage++; filterGranularItems()">下一页 →</button>
+        </div>
+
+        <!-- Progress -->
+        <div v-if="gtProgressTotal > 0" class="progress-bar-wrap">
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: gtProgressPct + '%' }" :class="{ error: gtProgressErrors > 0 }"></div>
+          </div>
+          <div class="progress-text">
+            {{ gtProgressDone }}/{{ gtProgressTotal }} 项  |  ✅ {{ gtProgressOk }}  |  ⚠️ {{ gtProgressErrors }} 错误
+            <span v-if="gtTranslating" class="spin">⏳</span>
+          </div>
+        </div>
+
+        <!-- Log -->
+        <div v-if="gtLogEntries.length" class="log-panel" ref="gtLogPanelRef">
+          <div class="log-header">
+            <span>📝 翻译日志 ({{ gtLogEntries.length }})</span>
+            <button class="btn btn-sm btn-outline" @click="gtLogEntries = []">× 清空</button>
+          </div>
+          <div class="log-body">
+            <div v-for="(log, i) in gtLogEntries" :key="i" :class="['log-entry', log.type]">
+              <span class="log-time">{{ log.time }}</span>
+              <span class="log-icon">{{ log.type === 'ok' ? '✅' : log.type === 'error' ? '❌' : log.type === 'warn' ? '⚠️' : 'ℹ️' }}</span>
+              <span class="log-msg">{{ log.msg }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Manual Search & Replace -->
     <div class="card" style="margin-top:20px">
       <div class="card-body">
@@ -728,6 +843,224 @@ const doBatchReplace = async () => {
     batchReplacing.value = false
   }
 }
+
+// ── Granular Translation State ──────────────────────────────────────────────
+const granularCollapsed = ref(false)
+const granularTab = ref('product')
+const gtCategoryId = ref('')
+const gtCategories = ref([])
+const gtLangs = ref([])
+const gtSelectedLang = ref('all')
+const gtConcurrency = ref(3)
+const gtAllItems = ref([])
+const gtFilteredItems = ref([])
+const gtSelectedIds = ref([])
+const gtLoading = ref(false)
+const gtTranslating = ref(false)
+let gtAborted = false
+const gtFailedIds = ref([])
+const gtLogEntries = ref([])
+const gtLogPanelRef = ref(null)
+const gtProgressTotal = ref(0)
+const gtProgressDone = ref(0)
+const gtProgressOk = ref(0)
+const gtProgressErrors = ref(0)
+const gtPage = ref(1)
+const gtPageSize = 20
+const gtTotalPages = ref(1)
+
+const gtAllSelected = computed(() => gtFilteredItems.value.length > 0 && gtSelectedIds.value.length === gtFilteredItems.value.length)
+const gtProgressPct = computed(() => gtProgressTotal.value ? Math.round(gtProgressDone.value / gtProgressTotal.value * 100) : 0)
+
+function gtAddLog(type, msg) {
+  const now = new Date()
+  const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
+  gtLogEntries.value.push({ type, msg, time })
+  setTimeout(() => {
+    const el = gtLogPanelRef.value?.querySelector?.('.log-body')
+    if (el) el.scrollTop = el.scrollHeight
+  }, 50)
+}
+
+function gtOverallStatus(item) {
+  const statuses = Object.values(item.languages || {})
+  if (!statuses.length) return 'none'
+  const allFull = statuses.every(s => s === 'full')
+  const hasAny = statuses.some(s => s === 'full' || s === 'partial')
+  if (allFull) return 'full'
+  if (hasAny) return 'partial'
+  return 'none'
+}
+
+function toggleGtSelectAll() {
+  if (gtAllSelected.value) {
+    gtSelectedIds.value = []
+  } else {
+    gtSelectedIds.value = gtFilteredItems.value.map(i => i.id)
+  }
+}
+
+async function switchGranularTab(tab) {
+  granularTab.value = tab
+  gtPage.value = 1
+  gtCategoryId.value = ''
+  gtSelectedIds.value = []
+  await loadGranularStatus()
+}
+
+async function loadGranularStatus() {
+  gtLoading.value = true
+  try {
+    const res = await api.getTranslationStatus(granularTab.value)
+    gtAllItems.value = res.items || []
+    gtLangs.value = res.languages || []
+    if (granularTab.value === 'product') {
+      const cats = await api.getCategories()
+      gtCategories.value = cats || []
+    }
+    filterGranularItems()
+  } catch (e) {
+    console.error('Load translation status failed:', e)
+    gtAllItems.value = []
+    gtFilteredItems.value = []
+  } finally {
+    gtLoading.value = false
+  }
+}
+
+function filterGranularItems() {
+  let items = [...gtAllItems.value]
+  if (granularTab.value === 'product' && gtCategoryId.value) {
+    items = items.filter(i => String(i.category_id) === String(gtCategoryId.value))
+  }
+  if (granularTab.value === 'news') {
+    gtTotalPages.value = Math.ceil(items.length / gtPageSize) || 1
+    if (gtPage.value > gtTotalPages.value) gtPage.value = gtTotalPages.value
+    const start = (gtPage.value - 1) * gtPageSize
+    items = items.slice(start, start + gtPageSize)
+  }
+  gtFilteredItems.value = items
+}
+
+async function startGranularTranslation() {
+  if (!gtSelectedIds.value.length) return alert('请选择要翻译的项目')
+  gtAborted = false
+  gtTranslating.value = true
+  gtFailedIds.value = []
+
+  const langs = gtSelectedLang.value === 'all'
+    ? gtLangs.value.map(l => l.code)
+    : [gtSelectedLang.value]
+  const langNames = gtSelectedLang.value === 'all'
+    ? '全部语言'
+    : (gtLangs.value.find(l => l.code === gtSelectedLang.value)?.name || gtSelectedLang.value)
+  const type = granularTab.value
+  const ids = [...gtSelectedIds.value]
+  const PACKAGE_SIZE = 5
+  const CONCURRENCY = gtConcurrency.value || 3
+
+  gtProgressTotal.value = ids.length * langs.length
+  gtProgressDone.value = 0
+  gtProgressOk.value = 0
+  gtProgressErrors.value = 0
+
+  gtAddLog('info', `开始精细化翻译 → ${type === 'product' ? '产品' : '文章'} ${ids.length} 项, 语言: ${langNames}`)
+
+  for (const langCode of langs) {
+    if (gtAborted) break
+    const langObj = gtLangs.value.find(l => l.code === langCode)
+    const langLabel = langObj ? `${langObj.flag || ''} ${langObj.name}` : langCode
+    gtAddLog('info', `── 翻译语言: ${langLabel} ──`)
+
+    for (let pkgStart = 0; pkgStart < ids.length; pkgStart += PACKAGE_SIZE) {
+      if (gtAborted) break
+      const pkgIds = ids.slice(pkgStart, pkgStart + PACKAGE_SIZE)
+      const pkgNames = pkgIds.map(id => {
+        const item = gtAllItems.value.find(i => i.id === id)
+        return item?.name || '#' + id
+      })
+      gtAddLog('info', `→ 翻译包 [${pkgNames.join(', ')}]`)
+
+      let queueIdx = 0
+      const pkgFailed = []
+
+      async function worker() {
+        while (queueIdx < pkgIds.length) {
+          if (gtAborted) break
+          const idx = queueIdx++
+          if (idx >= pkgIds.length) break
+          const itemId = pkgIds[idx]
+          const itemName = pkgNames[idx] || '#' + itemId
+
+          let retries = 0
+          let success = false
+          while (!success && retries <= 2) {
+            try {
+              const res = await api.runTranslationOne(langCode, type, itemId)
+              const ok = res.results?.length || 0
+              const errs = res.errors?.length || 0
+              gtProgressOk.value += ok
+              if (errs > 0 && ok === 0) {
+                retries++
+                if (retries > 2) {
+                  gtProgressErrors.value += errs
+                  pkgFailed.push(itemId)
+                  for (const e of (res.errors || [])) {
+                    gtAddLog('error', '   ❌「' + itemName + '」' + (e.error || '').slice(0, 120))
+                  }
+                } else {
+                  gtAddLog('warn', '   ⚠️「' + itemName + '」失败，重试 ' + retries + '/2...')
+                }
+                continue
+              }
+              if (errs > 0) {
+                gtProgressErrors.value += errs
+                gtAddLog('warn', '   ⚠️「' + itemName + '」: ' + ok + ' 成功, ' + errs + ' 错误')
+              } else if (ok > 0) {
+                gtAddLog('ok', '   ✅「' + itemName + '」翻译成功: ' + ok + ' 个字段')
+              } else {
+                gtAddLog('ok', '   ✔「' + itemName + '」无需翻译')
+              }
+              success = true
+            } catch (e) {
+              retries++
+              if (retries > 2) {
+                gtProgressErrors.value++
+                pkgFailed.push(itemId)
+                gtAddLog('error', '   ❌「' + itemName + '」翻译失败: ' + e.message)
+              } else {
+                gtAddLog('warn', '   ⚠️「' + itemName + '」失败，重试 ' + retries + '/2...')
+              }
+            }
+          }
+          gtProgressDone.value++
+        }
+      }
+
+      const workers = Array.from({ length: Math.min(CONCURRENCY, pkgIds.length) }, () => worker())
+      await Promise.all(workers)
+      if (pkgFailed.length) gtFailedIds.value.push(...pkgFailed)
+    }
+  }
+
+  gtAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  gtAddLog(gtFailedIds.value.length ? 'warn' : 'ok',
+    '🏁 翻译完成: 成功 ' + gtProgressOk.value + ' 项, 错误 ' + gtProgressErrors.value + ' 项' +
+    (gtFailedIds.value.length ? ' | ' + gtFailedIds.value.length + ' 个项目失败' : ' | 全部成功！')
+  )
+  gtAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  gtTranslating.value = false
+  await loadGranularStatus()
+}
+
+async function retryGranularFailed() {
+  if (!gtFailedIds.value.length) return
+  const retryIds = [...gtFailedIds.value]
+  gtSelectedIds.value = retryIds
+  gtFailedIds.value = []
+  gtAddLog('info', '🔄 重试 ' + retryIds.length + ' 个失败项目')
+  await startGranularTranslation()
+}
 </script>
 
 <style scoped>
@@ -863,4 +1196,37 @@ input:checked + .slider:before { transform: translateX(18px); }
 .modal-box h3 { margin: 0 0 20px; font-size: 18px; }
 .checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
 .checkbox-label input { width: 16px; height: 16px; }
+
+/* ── Granular Translation ── */
+.gt-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+.gt-tab { padding: 8px 20px; border: 2px solid #e2e8f0; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; font-weight: 600; color: #64748b; transition: all 0.2s; }
+.gt-tab:hover { border-color: #93c5fd; color: #2563eb; }
+.gt-tab.active { border-color: #2563eb; background: #eff6ff; color: #2563eb; }
+.gt-toolbar { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.gt-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.gt-select-all { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; cursor: pointer; color: #475569; }
+.gt-select-all input { width: 16px; height: 16px; }
+.gt-selected-count { font-size: 13px; color: #2563eb; font-weight: 600; background: #eff6ff; padding: 3px 10px; border-radius: 12px; }
+.gt-list { display: flex; flex-direction: column; gap: 4px; max-height: 480px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+.gt-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #f1f5f9; transition: background 0.15s; }
+.gt-item:last-child { border-bottom: none; }
+.gt-item:hover { background: #f8fafc; }
+.gt-item.full { border-left: 3px solid #22c55e; }
+.gt-item.partial { border-left: 3px solid #f59e0b; }
+.gt-item.none { border-left: 3px solid #e2e8f0; }
+.gt-item-check { flex-shrink: 0; cursor: pointer; }
+.gt-item-check input { width: 16px; height: 16px; cursor: pointer; }
+.gt-status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.gt-status-dot.full { background: #22c55e; box-shadow: 0 0 4px rgba(34,197,94,0.4); }
+.gt-status-dot.partial { background: #f59e0b; box-shadow: 0 0 4px rgba(245,158,11,0.4); }
+.gt-status-dot.none { background: #e2e8f0; }
+.gt-item-info { flex: 1; min-width: 0; }
+.gt-item-name { font-size: 14px; font-weight: 500; color: #1e293b; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gt-item-category { font-size: 11px; color: #94a3b8; background: #f1f5f9; padding: 1px 6px; border-radius: 4px; margin-top: 2px; display: inline-block; }
+.gt-lang-tags { display: flex; gap: 4px; flex-shrink: 0; flex-wrap: wrap; }
+.gt-lang-tag { font-size: 12px; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; }
+.gt-lang-tag.full { background: #dcfce7; border-color: #86efac; color: #166534; }
+.gt-lang-tag.partial { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+.gt-lang-tag.none { background: #f8fafc; color: #94a3b8; }
+.gt-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; font-size: 13px; color: #64748b; }
 </style>

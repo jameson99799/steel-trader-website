@@ -1228,8 +1228,179 @@ router.post('/batch-replace', authMiddleware, (req, res) => {
     }
 })
 
+// ─── Translation status for products/news (per-item granular status) ─────────
+
+router.get('/translation-status', authMiddleware, (req, res) => {
+    const { type } = req.query  // 'product' or 'news'
+    if (!type || !['product', 'news'].includes(type)) return res.status(400).json({ error: 'type must be product or news' })
+
+    const nonEnLangs = getAll("SELECT code, name, flag FROM languages WHERE code != 'en' AND is_active = 1")
+    if (!nonEnLangs.length) return res.json([])
+
+    // Get all items
+    let items = []
+    if (type === 'product') {
+        items = getAll(`SELECT p.id, p.name_en, p.category_id, p.created_at, c.name_en as category_name
+            FROM products p LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.status = 1 ORDER BY p.id DESC`)
+    } else {
+        items = getAll(`SELECT id, title_en as name_en, created_at FROM news WHERE status = 1 ORDER BY id DESC`)
+    }
+
+    // Count expected fields per item type
+    const PRODUCT_FIELDS = ['name', 'description', 'seo_title', 'seo_description', 'seo_keywords', 'detail_content', 'spec_combined', 'faq_combined', 'seo_combined']
+    const NEWS_FIELDS = ['title', 'summary', 'seo_title', 'seo_description', 'seo_keywords', 'content', 'faq_combined', 'seo_combined']
+
+    // Get all translation counts in one query for efficiency
+    const translationCounts = getAll(
+        `SELECT content_id, language_code, COUNT(DISTINCT content_field) as field_count
+         FROM translations WHERE content_type = ? AND content_id IS NOT NULL
+         GROUP BY content_id, language_code`,
+        [type]
+    )
+    // Build lookup: { contentId: { langCode: fieldCount } }
+    const countMap = {}
+    for (const tc of translationCounts) {
+        if (!countMap[tc.content_id]) countMap[tc.content_id] = {}
+        countMap[tc.content_id][tc.language_code] = tc.field_count
+    }
+
+    // Minimum fields to consider "translated" (at least name/title + description/summary)
+    const MIN_FIELDS = 2
+
+    const result = items.map(item => {
+        const langStatus = {}
+        const itemCounts = countMap[item.id] || {}
+        for (const lang of nonEnLangs) {
+            const count = itemCounts[lang.code] || 0
+            if (count === 0) langStatus[lang.code] = 'none'
+            else if (count >= MIN_FIELDS) langStatus[lang.code] = 'full'
+            else langStatus[lang.code] = 'partial'
+        }
+        return {
+            id: item.id,
+            name: item.name_en || `#${item.id}`,
+            category_id: item.category_id || null,
+            category_name: item.category_name || null,
+            created_at: item.created_at,
+            languages: langStatus
+        }
+    })
+
+    res.json({ items: result, languages: nonEnLangs })
+})
+
+// ─── Selective translation (chosen items + chosen languages) ─────────────────
+
+router.post('/run-selective', authMiddleware, async (req, res) => {
+    const { type, ids, languages: targetLangs, concurrency: reqConcurrency } = req.body
+    // type: 'product' | 'news'
+    // ids: [1, 2, 3] — item IDs
+    // languages: ['zh', 'es'] or ['all']
+    // concurrency: number
+    if (!type || !['product', 'news'].includes(type)) return res.status(400).json({ error: 'type must be product or news' })
+    if (!ids || !ids.length) return res.status(400).json({ error: 'No items selected' })
+    if (!targetLangs || !targetLangs.length) return res.status(400).json({ error: 'No languages selected' })
+
+    const s = getOne('SELECT * FROM translation_settings WHERE id=1')
+    if (!s?.api_key && !getOne('SELECT api_key FROM ai_channels WHERE is_default = 1')?.api_key) {
+        return res.status(400).json({ error: 'AI API key not configured' })
+    }
+
+    // Determine language list
+    let langs = []
+    if (targetLangs.includes('all')) {
+        langs = getAll("SELECT code, name FROM languages WHERE code != 'en' AND is_active = 1")
+    } else {
+        for (const code of targetLangs) {
+            const l = getOne('SELECT code, name FROM languages WHERE code = ?', [code])
+            if (l) langs.push(l)
+        }
+    }
+    if (!langs.length) return res.status(400).json({ error: 'No valid languages found' })
+
+    const enhanced = enhanceWithDefaultChannel(s)
+    const TYPE_TO_PAGE = { product: 'products', news: 'news' }
+    const pageKey = TYPE_TO_PAGE[type]
+    if (!PAGES[pageKey]) return res.status(400).json({ error: 'Invalid type' })
+
+    const manualOverrides = {}
+    for (const lang of langs) {
+        const overrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [lang.code])
+        manualOverrides[lang.code] = overrides.length > 0
+            ? '\n\nUse these approved translations as reference:\n' +
+              overrides.slice(0, 8).map(o => `"${o.original_text}" → "${o.translated_text}"`).join('\n')
+            : ''
+    }
+
+    // Collect all fields for requested items
+    const allPageItems = PAGES[pageKey]()
+    const allResults = []
+    const allErrors = []
+    let totalTranslated = 0
+
+    // Group items by ID
+    const itemGroups = []
+    for (const id of ids) {
+        const itemFields = allPageItems.filter(i => String(i.id) === String(id))
+        if (itemFields.length > 0) {
+            itemGroups.push({ id, fields: itemFields, itemName: itemFields[0]?.itemName || `#${id}` })
+        }
+    }
+
+    // Translate: for each language, process items in packages of 5
+    for (const lang of langs) {
+        const PACKAGE_SIZE = 5
+        for (let i = 0; i < itemGroups.length; i += PACKAGE_SIZE) {
+            const pkg = itemGroups.slice(i, i + PACKAGE_SIZE)
+            const pkgItems = pkg.flatMap(g => g.fields)
+            const pkgNames = pkg.map(g => g.itemName).join(', ')
+
+            let retries = 0
+            const MAX_RETRIES = 2
+            let success = false
+            while (!success && retries <= MAX_RETRIES) {
+                try {
+                    const { results, errors } = await translateBatch(enhanced, pkgItems, lang.code, lang.name, manualOverrides[lang.code])
+                    allResults.push(...results.map(r => ({ ...r, lang: lang.code })))
+                    if (errors.length > 0 && results.length === 0) {
+                        // Entire package failed
+                        retries++
+                        if (retries > MAX_RETRIES) {
+                            allErrors.push(...errors.map(e => ({ ...e, lang: lang.code })))
+                        }
+                        continue
+                    }
+                    allErrors.push(...errors.map(e => ({ ...e, lang: lang.code })))
+                    totalTranslated += results.length
+                    success = true
+                } catch (e) {
+                    retries++
+                    if (retries > MAX_RETRIES) {
+                        allErrors.push({ error: e.message, errorCode: 'ERR_API', itemName: pkgNames, lang: lang.code })
+                    }
+                }
+            }
+        }
+        // Mark language as translated
+        if (totalTranslated > 0) {
+            run('UPDATE languages SET ai_translated=1 WHERE code=?', [lang.code])
+        }
+    }
+
+    res.json({
+        success: true,
+        results: allResults,
+        errors: allErrors,
+        total: itemGroups.length * langs.length,
+        translated: totalTranslated,
+        languages: langs.length,
+        items: itemGroups.length
+    })
+})
+
 router.get('/:lang', authMiddleware, (req, res) => {
-    if (['settings', 'multilingual-status', 'content'].includes(req.params.lang)) return res.status(404).json({ error: 'not found' })
+    if (['settings', 'multilingual-status', 'content', 'translation-status'].includes(req.params.lang)) return res.status(404).json({ error: 'not found' })
     const rows = getAll('SELECT * FROM translations WHERE language_code=? ORDER BY content_type, content_field', [req.params.lang])
     res.json(rows)
 })
