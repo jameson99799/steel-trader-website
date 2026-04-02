@@ -101,6 +101,48 @@ router.delete('/channels/:id', authMiddleware, (req, res) => {
     res.json({ message: '删除成功' })
 })
 
+// ─── Test channel connectivity ────────────────────────────────────────────────
+
+router.post('/channels/:id/test', authMiddleware, async (req, res) => {
+    const channel = getOne('SELECT * FROM ai_channels WHERE id = ?', [req.params.id])
+    if (!channel) return res.status(404).json({ error: '渠道不存在' })
+
+    const apiUrl = channel.api_url.replace(/\/$/, '') + '/chat/completions'
+    const models = JSON.parse(channel.models || '[]')
+    const modelName = channel.default_model || models[0] || 'gpt-3.5-turbo'
+
+    try {
+        const result = await httpRequest(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${channel.api_key}`,
+                'Content-Type': 'application/json'
+            }
+        }, {
+            model: modelName,
+            messages: [{ role: 'user', content: 'Say "Hello" in one word.' }],
+            max_tokens: 20,
+            temperature: 0
+        }, 15000) // 15s timeout for test
+
+        if (result.status !== 200) {
+            const errMsg = result.body?.error?.message || JSON.stringify(result.body)
+            return res.status(result.status).json({ error: `API ${result.status}: ${errMsg}` })
+        }
+
+        const reply = result.body?.choices?.[0]?.message?.content || ''
+        const usage = result.body?.usage || {}
+        res.json({
+            success: true,
+            reply,
+            model: modelName,
+            tokens: usage.total_tokens || 0
+        })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
 // ─── Fetch available models for a channel ─────────────────────────────────────
 
 router.get('/channels/:id/models', authMiddleware, async (req, res) => {

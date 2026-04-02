@@ -23,19 +23,25 @@
       <div class="card-body" v-show="!channelCollapsed">
         <div v-if="channels.length === 0" class="empty-tip">暂无 AI 渠道，请点击「添加渠道」创建</div>
         <div v-else class="channel-list">
-          <div v-for="ch in channels" :key="ch.id" class="channel-card" :class="{ 'is-default': ch.is_default }">
+          <div v-for="ch in sortedChannels" :key="ch.id" class="channel-card" :class="{ 'is-default': ch.is_default }">
             <div class="ch-header">
-              <div class="ch-name">
-                <span class="ch-badge" v-if="ch.is_default">默认</span>
+              <div class="ch-name" style="cursor:pointer" @click="ch._expanded = !ch._expanded">
+                <span style="color:#94a3b8;font-size:12px;margin-right:4px">{{ ch._expanded ? '▼' : '▶' }}</span>
+                <span class="ch-badge" v-if="ch.is_default">默认渠道</span>
                 {{ ch.name }}
+                <span v-if="ch.default_model && !ch._expanded" class="model-tag" style="background:#dcfce7;color:#166534;margin-left:8px;font-size:11px">{{ ch.default_model }}</span>
               </div>
               <div class="ch-actions">
+                <button class="btn btn-outline btn-xs" @click="testChannel(ch)" :disabled="ch._testing">🔌 {{ ch._testing ? '测试中...' : '测试' }}</button>
                 <button class="btn btn-outline btn-xs" @click="openChannelDialog(ch)">✏️ 编辑</button>
                 <button class="btn btn-outline btn-xs" @click="setDefaultChannel(ch.id)" v-if="!ch.is_default">⭐ 设为默认</button>
                 <button class="btn btn-outline btn-xs btn-danger" @click="deleteChannel(ch.id)">🗑️</button>
               </div>
             </div>
-            <div class="ch-info">
+            <div v-if="ch._testResult" class="ch-test-result" :class="ch._testResult.ok ? 'test-ok' : 'test-fail'">
+              {{ ch._testResult.ok ? '✅ 连接成功' : '❌ 连接失败' }}: {{ ch._testResult.msg }}
+            </div>
+            <div class="ch-info" v-show="ch._expanded">
               <div><span class="ch-label">API:</span> {{ ch.api_url }}</div>
               <div><span class="ch-label">Key:</span> {{ ch.api_key_display }}</div>
               <div><span class="ch-label">模型:</span>
@@ -44,7 +50,7 @@
                 </span>
                 <span v-else class="ch-no-model">未选择模型</span>
               </div>
-              <div v-if="ch.default_model"><span class="ch-label">默认:</span> <span class="model-tag" style="background:#dcfce7;color:#166534">{{ ch.default_model }}</span></div>
+              <div v-if="ch.default_model"><span class="ch-label">默认模型:</span> <span class="model-tag" style="background:#dcfce7;color:#166534">{{ ch.default_model }}</span></div>
             </div>
           </div>
         </div>
@@ -484,6 +490,28 @@ const savingChannel = ref(false)
 const channelForm = reactive({
   name: '', api_url: 'https://api.openai.com/v1', api_key: '', models: [], is_default: false, default_model: ''
 })
+
+// Sorted channels: newest first, with _expanded state
+const sortedChannels = computed(() => {
+  return [...channels.value]
+    .sort((a, b) => (b.id || 0) - (a.id || 0))
+    .map(ch => ({ ...ch, _expanded: ch._expanded || false, _testing: ch._testing || false, _testResult: ch._testResult || null }))
+})
+
+async function testChannel(ch) {
+  const idx = channels.value.findIndex(c => c.id === ch.id)
+  if (idx === -1) return
+  channels.value[idx]._testing = true
+  channels.value[idx]._testResult = null
+  try {
+    const res = await api.testAIChannel(ch.id)
+    channels.value[idx]._testResult = { ok: true, msg: res.reply?.slice(0, 80) || '模型响应正常' }
+  } catch (e) {
+    channels.value[idx]._testResult = { ok: false, msg: e.message?.slice(0, 120) || '连接失败' }
+  } finally {
+    channels.value[idx]._testing = false
+  }
+}
 
 const languages = ref([])
 const models = ref([])
@@ -1079,6 +1107,7 @@ async function startGranularTranslation() {
       const item = gtAllItems.value.find(i => i.id === itemId)
       const itemName = item?.name || '#' + itemId
 
+      let itemHasGtError = false
       gtAddLog('info', '📦「' + itemName + '」开始翻译 (' + langs.length + ' 种语言)')
 
       for (const langCode of langs) {
@@ -1098,6 +1127,7 @@ async function startGranularTranslation() {
               retries++
               if (retries > 2) {
                 gtProgressErrors.value += errs
+                itemHasGtError = true
                 if (!gtFailedIds.value.includes(itemId)) gtFailedIds.value.push(itemId)
                 for (const e of (res.errors || [])) {
                   gtAddLog('error', '  ❌「' + itemName + '」[' + langLabel + '] ' + (e.error || '').slice(0, 120))
@@ -1120,6 +1150,7 @@ async function startGranularTranslation() {
             retries++
             if (retries > 2) {
               gtProgressErrors.value++
+              itemHasGtError = true
               if (!gtFailedIds.value.includes(itemId)) gtFailedIds.value.push(itemId)
               gtAddLog('error', '  ❌「' + itemName + '」[' + langLabel + '] ' + e.message)
             } else {
@@ -1130,7 +1161,13 @@ async function startGranularTranslation() {
         gtProgressDone.value++
       }
 
-      gtAddLog('ok', '📦「' + itemName + '」所有语言翻译完成 ✓')
+      if (gtAborted.value) {
+        gtAddLog('warn', '📦「' + itemName + '」翻译已停止')
+      } else if (itemHasGtError) {
+        gtAddLog('error', '📦「' + itemName + '」部分语言翻译失败 ✗')
+      } else {
+        gtAddLog('ok', '📦「' + itemName + '」全部语言翻译成功 ✓')
+      }
     }
   }
 
@@ -1274,6 +1311,7 @@ async function translateAuditMissing() {
       if (idx >= itemGroups.length) break
       const group = itemGroups[idx]
 
+      let itemHasError = false
       auditAddLog('info', '📦「' + group.name + '」开始翻译 (' + group.langs.length + ' 种语言)')
 
       for (const lang of group.langs) {
@@ -1282,6 +1320,7 @@ async function translateAuditMissing() {
         let retries = 0
         let success = false
         while (!success && retries <= 2) {
+          if (auditAborted.value) break
           try {
             const res = await api.runTranslationOne(lang.code, group.type, group.id)
             const ok = res.results?.length || 0
@@ -1291,6 +1330,7 @@ async function translateAuditMissing() {
               retries++
               if (retries > 2) {
                 auditProgressErrors.value += errs
+                itemHasError = true
                 auditAddLog('error', '  ❌「' + group.name + '」[' + langLabel + '] ' + (res.errors?.[0]?.error || '').slice(0, 120))
               } else {
                 auditAddLog('warn', '  ⚠️「' + group.name + '」[' + langLabel + '] 失败，重试 ' + retries + '/2...')
@@ -1303,6 +1343,7 @@ async function translateAuditMissing() {
             retries++
             if (retries > 2) {
               auditProgressErrors.value++
+              itemHasError = true
               auditAddLog('error', '  ❌「' + group.name + '」[' + langLabel + '] ' + e.message)
             } else {
               auditAddLog('warn', '  ⚠️「' + group.name + '」[' + langLabel + '] 失败，重试 ' + retries + '/2...')
@@ -1311,7 +1352,13 @@ async function translateAuditMissing() {
         }
         auditProgressDone.value++
       }
-      auditAddLog('ok', '📦「' + group.name + '」翻译完成 ✓')
+      if (auditAborted.value) {
+        auditAddLog('warn', '📦「' + group.name + '」翻译已停止')
+      } else if (itemHasError) {
+        auditAddLog('error', '📦「' + group.name + '」部分语言翻译失败 ✗')
+      } else {
+        auditAddLog('ok', '📦「' + group.name + '」全部语言翻译成功 ✓')
+      }
     }
   }
 
@@ -1500,6 +1547,11 @@ input:checked + .slider:before { transform: translateX(18px); }
 .gt-lang-tag.partial { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
 .gt-lang-tag.none { background: #f8fafc; color: #94a3b8; }
 .gt-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; font-size: 13px; color: #64748b; }
+
+/* ── Channel Test ── */
+.ch-test-result { padding: 6px 14px; font-size: 13px; font-weight: 500; border-radius: 6px; margin: 6px 0; }
+.ch-test-result.test-ok { background: #dcfce7; color: #166534; }
+.ch-test-result.test-fail { background: #fef2f2; color: #991b1b; }
 
 /* ── Audit ── */
 .audit-report { display: flex; flex-direction: column; gap: 6px; }
