@@ -1317,6 +1317,125 @@ router.get('/translation-status', authMiddleware, (req, res) => {
     res.json({ items: result, languages: nonEnLangs })
 })
 
+// ─── Full Translation Audit (check all products + articles across all languages) ─
+
+router.get('/audit-translations', authMiddleware, (req, res) => {
+    const nonEnLangs = getAll("SELECT code, name, flag FROM languages WHERE code != 'en' AND status = 1")
+    if (!nonEnLangs.length) return res.json({ languages: [], report: [] })
+
+    // Collect ALL translatable fields for products and news using the PAGES collector
+    const productFields = PAGES.products ? PAGES.products() : []
+    const newsFields = PAGES.news ? PAGES.news() : []
+
+    // Group fields by item (type + id)
+    function groupByItem(fields, type) {
+        const map = {}
+        for (const f of fields) {
+            const key = `${f.id}`
+            if (!map[key]) map[key] = { id: f.id, type, itemName: f.itemName || `#${f.id}`, fields: [] }
+            map[key].fields.push(f.field)
+        }
+        return Object.values(map)
+    }
+
+    const productItems = groupByItem(productFields, 'product')
+    const newsItems = groupByItem(newsFields, 'news')
+
+    // Add category info to products
+    for (const p of productItems) {
+        const prod = getOne('SELECT p.category_id, c.name_en as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?', [p.id])
+        if (prod) {
+            p.category_id = prod.category_id
+            p.category_name = prod.category_name
+        }
+    }
+
+    // Get ALL translation records grouped by content_type + content_id + language
+    const allTranslations = getAll(
+        `SELECT content_type, content_id, language_code, content_field
+         FROM translations WHERE content_type IN ('product', 'news') AND content_id IS NOT NULL`
+    )
+
+    // Build lookup: { "product_1_zh": Set(['name','description',...]) }
+    const transMap = {}
+    for (const t of allTranslations) {
+        const key = `${t.content_type}_${t.content_id}_${t.language_code}`
+        if (!transMap[key]) transMap[key] = new Set()
+        transMap[key].add(t.content_field)
+    }
+
+    // Generate report per language
+    const report = []
+    for (const lang of nonEnLangs) {
+        const langReport = {
+            code: lang.code,
+            name: lang.name,
+            flag: lang.flag,
+            products: { total: productItems.length, complete: 0, partial: 0, none: 0, missing: [] },
+            news: { total: newsItems.length, complete: 0, partial: 0, none: 0, missing: [] }
+        }
+
+        // Check products
+        for (const item of productItems) {
+            const key = `product_${item.id}_${lang.code}`
+            const translated = transMap[key] || new Set()
+            const totalFields = item.fields.length
+            const translatedCount = item.fields.filter(f => translated.has(f)).length
+            // Consider basic fields (non-faq, non-spec) for status
+            const basicFields = item.fields.filter(f => !f.startsWith('faq_') && !f.startsWith('spec_'))
+            const basicTranslated = basicFields.filter(f => translated.has(f)).length
+
+            if (translatedCount === 0) {
+                langReport.products.none++
+                langReport.products.missing.push({
+                    id: item.id, name: item.itemName,
+                    category_id: item.category_id, category_name: item.category_name,
+                    status: 'none', translated: 0, total: totalFields
+                })
+            } else if (basicTranslated >= basicFields.length && translatedCount >= Math.ceil(totalFields * 0.5)) {
+                langReport.products.complete++
+            } else {
+                langReport.products.partial++
+                langReport.products.missing.push({
+                    id: item.id, name: item.itemName,
+                    category_id: item.category_id, category_name: item.category_name,
+                    status: 'partial', translated: translatedCount, total: totalFields
+                })
+            }
+        }
+
+        // Check news
+        for (const item of newsItems) {
+            const key = `news_${item.id}_${lang.code}`
+            const translated = transMap[key] || new Set()
+            const totalFields = item.fields.length
+            const translatedCount = item.fields.filter(f => translated.has(f)).length
+            const basicFields = item.fields.filter(f => !f.startsWith('faq_'))
+            const basicTranslated = basicFields.filter(f => translated.has(f)).length
+
+            if (translatedCount === 0) {
+                langReport.news.none++
+                langReport.news.missing.push({
+                    id: item.id, name: item.itemName,
+                    status: 'none', translated: 0, total: totalFields
+                })
+            } else if (basicTranslated >= basicFields.length && translatedCount >= Math.ceil(totalFields * 0.5)) {
+                langReport.news.complete++
+            } else {
+                langReport.news.partial++
+                langReport.news.missing.push({
+                    id: item.id, name: item.itemName,
+                    status: 'partial', translated: translatedCount, total: totalFields
+                })
+            }
+        }
+
+        report.push(langReport)
+    }
+
+    res.json({ languages: nonEnLangs, report })
+})
+
 // ─── Selective translation (chosen items + chosen languages) ─────────────────
 
 router.post('/run-selective', authMiddleware, async (req, res) => {

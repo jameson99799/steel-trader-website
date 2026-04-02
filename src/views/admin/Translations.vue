@@ -321,6 +321,101 @@
       </div>
     </div>
 
+
+    <!-- ── Translation Audit ── -->
+    <div class="card" style="margin-top:20px">
+      <div class="card-header-row" style="cursor:pointer" @click="auditCollapsed = !auditCollapsed">
+        <h3>{{ auditCollapsed ? '▶' : '▼' }} 🔍 翻译完整性检查</h3>
+      </div>
+      <div class="card-body" v-show="!auditCollapsed">
+        <p class="page-desc">AI 全自动检查所有产品和文章在各语言下的翻译情况，生成完整报告。可一键翻译缺失项。</p>
+
+        <div class="gt-actions" style="margin-bottom:16px">
+          <button class="btn btn-primary" @click="runAudit" :disabled="auditRunning">
+            {{ auditRunning ? '⏳ 检查中...' : '🔍 开始检查' }}
+          </button>
+          <div class="form-group" style="width:110px;margin:0">
+            <select v-model="auditConcurrency" class="form-control">
+              <option v-for="n in 10" :key="n" :value="n">{{ n }} 并发</option>
+            </select>
+          </div>
+          <button v-if="auditMissingAll.length" class="btn btn-warning" @click="translateAuditMissing" :disabled="auditTranslating">
+            {{ auditTranslating ? '⏳ 翻译中...' : '🚀 一键翻译全部缺失 (' + auditMissingAll.length + ' 项)' }}
+          </button>
+          <button v-if="auditTranslating" class="btn btn-outline" @click="auditAborted = true">⛔ 停止</button>
+        </div>
+
+        <!-- Audit Report -->
+        <div v-if="auditReport.length" class="audit-report">
+          <div v-for="lang in auditReport" :key="lang.code" class="audit-lang-section">
+            <div class="audit-lang-header" @click="lang._expanded = !lang._expanded">
+              <span class="audit-lang-flag">{{ lang.flag }}</span>
+              <span class="audit-lang-name">{{ lang.name }}</span>
+              <span v-if="!lang.products.missing.length && !lang.news.missing.length" class="audit-badge complete">✅ 全部翻译完成</span>
+              <span v-else class="audit-badge incomplete">⚠️ {{ lang.products.missing.length + lang.news.missing.length }} 项未完成</span>
+              <span class="audit-stats">
+                产品: {{ lang.products.complete }}/{{ lang.products.total }} ✅ |
+                文章: {{ lang.news.complete }}/{{ lang.news.total }} ✅
+              </span>
+              <span class="audit-expand">{{ lang._expanded ? '▼' : '▶' }}</span>
+            </div>
+            <div v-if="lang._expanded" class="audit-lang-body">
+              <!-- Missing products -->
+              <div v-if="lang.products.missing.length" class="audit-missing-section">
+                <div class="audit-missing-title">📦 缺失产品翻译 ({{ lang.products.missing.length }})</div>
+                <div v-for="m in lang.products.missing" :key="'p'+m.id" class="audit-missing-item">
+                  <span class="gt-status-dot" :class="m.status"></span>
+                  <span class="audit-item-name">{{ m.name }}</span>
+                  <span class="audit-item-cat" v-if="m.category_name">{{ m.category_name }}</span>
+                  <span class="audit-item-progress">{{ m.translated }}/{{ m.total }} 字段</span>
+                  <button class="btn btn-sm btn-outline" @click="translateSingleAuditItem('product', m.id, lang.code)" :disabled="auditTranslating">翻译</button>
+                </div>
+              </div>
+              <!-- Missing news -->
+              <div v-if="lang.news.missing.length" class="audit-missing-section">
+                <div class="audit-missing-title">📰 缺失文章翻译 ({{ lang.news.missing.length }})</div>
+                <div v-for="m in lang.news.missing" :key="'n'+m.id" class="audit-missing-item">
+                  <span class="gt-status-dot" :class="m.status"></span>
+                  <span class="audit-item-name">{{ m.name }}</span>
+                  <span class="audit-item-progress">{{ m.translated }}/{{ m.total }} 字段</span>
+                  <button class="btn btn-sm btn-outline" @click="translateSingleAuditItem('news', m.id, lang.code)" :disabled="auditTranslating">翻译</button>
+                </div>
+              </div>
+              <div v-if="!lang.products.missing.length && !lang.news.missing.length" class="empty-tip" style="padding:12px">
+                🎉 该语言所有产品和文章均已翻译完成！
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Audit Progress -->
+        <div v-if="auditProgressTotal > 0" class="progress-bar-wrap" style="margin-top:16px">
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: auditProgressPct + '%' }"></div>
+          </div>
+          <div class="progress-text">
+            {{ auditProgressDone }}/{{ auditProgressTotal }} |  ✅ {{ auditProgressOk }}  |  ⚠️ {{ auditProgressErrors }} 错误
+            <span v-if="auditTranslating" class="spin">⏳</span>
+          </div>
+        </div>
+
+        <!-- Audit Log -->
+        <div v-if="auditLogEntries.length" class="log-panel" ref="auditLogPanelRef" style="margin-top:12px">
+          <div class="log-header">
+            <span>📝 检查/翻译日志 ({{ auditLogEntries.length }})</span>
+            <button class="btn btn-sm btn-outline" @click="auditLogEntries = []">× 清空</button>
+          </div>
+          <div class="log-body">
+            <div v-for="(log, i) in auditLogEntries" :key="i" :class="['log-entry', log.type]">
+              <span class="log-time">{{ log.time }}</span>
+              <span class="log-icon">{{ log.type === 'ok' ? '✅' : log.type === 'error' ? '❌' : log.type === 'warn' ? '⚠️' : 'ℹ️' }}</span>
+              <span class="log-msg">{{ log.msg }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Manual Search & Replace -->
     <div class="card" style="margin-top:20px">
       <div class="card-body">
@@ -1060,6 +1155,178 @@ async function retryGranularFailed() {
   gtAddLog('info', '🔄 重试 ' + retryIds.length + ' 个失败项目')
   await startGranularTranslation()
 }
+
+// ── Translation Audit ──────────────────────────────────────────────────────
+const auditCollapsed = ref(false)
+const auditReport = ref([])
+const auditRunning = ref(false)
+const auditTranslating = ref(false)
+let auditAborted = false
+const auditConcurrency = ref(3)
+const auditLogEntries = ref([])
+const auditLogPanelRef = ref(null)
+const auditProgressTotal = ref(0)
+const auditProgressDone = ref(0)
+const auditProgressOk = ref(0)
+const auditProgressErrors = ref(0)
+
+const auditMissingAll = computed(() => {
+  const items = []
+  for (const lang of auditReport.value) {
+    for (const m of (lang.products?.missing || [])) {
+      items.push({ type: 'product', id: m.id, name: m.name, lang: lang.code, langName: lang.name, langFlag: lang.flag })
+    }
+    for (const m of (lang.news?.missing || [])) {
+      items.push({ type: 'news', id: m.id, name: m.name, lang: lang.code, langName: lang.name, langFlag: lang.flag })
+    }
+  }
+  return items
+})
+const auditProgressPct = computed(() => auditProgressTotal.value ? Math.round(auditProgressDone.value / auditProgressTotal.value * 100) : 0)
+
+function auditAddLog(type, msg) {
+  const now = new Date()
+  const time = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0')
+  auditLogEntries.value.push({ type, msg, time })
+  setTimeout(() => {
+    const el = auditLogPanelRef.value?.querySelector?.('.log-body')
+    if (el) el.scrollTop = el.scrollHeight
+  }, 50)
+}
+
+async function runAudit() {
+  auditRunning.value = true
+  auditReport.value = []
+  auditAddLog('info', '🔍 开始全站翻译完整性检查...')
+  try {
+    const res = await api.auditTranslations()
+    const report = (res.report || []).map(r => ({ ...r, _expanded: (r.products?.missing?.length || 0) + (r.news?.missing?.length || 0) > 0 }))
+    auditReport.value = report
+
+    for (const lang of report) {
+      const pMissing = lang.products?.missing?.length || 0
+      const nMissing = lang.news?.missing?.length || 0
+      if (pMissing + nMissing === 0) {
+        auditAddLog('ok', (lang.flag || '') + ' ' + lang.name + ': ✅ 全部翻译完成 (产品 ' + lang.products.total + ', 文章 ' + lang.news.total + ')')
+      } else {
+        auditAddLog('warn', (lang.flag || '') + ' ' + lang.name + ': ⚠️ ' + (pMissing + nMissing) + ' 项未完成 (产品缺 ' + pMissing + ', 文章缺 ' + nMissing + ')')
+      }
+    }
+    auditAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    auditAddLog('ok', '🏁 检查完成! 共发现 ' + auditMissingAll.value.length + ' 项需要翻译')
+  } catch (e) {
+    auditAddLog('error', '❌ 检查失败: ' + e.message)
+  } finally {
+    auditRunning.value = false
+  }
+}
+
+async function translateSingleAuditItem(type, id, langCode) {
+  auditTranslating.value = true
+  auditAborted = false
+  const langObj = auditReport.value.find(r => r.code === langCode)
+  const langLabel = langObj ? (langObj.flag || '') + ' ' + langObj.name : langCode
+  auditAddLog('info', '🚀 翻译 [' + langLabel + '] ' + type + ' #' + id + '...')
+  try {
+    const res = await api.runTranslationOne(langCode, type, id)
+    const ok = res.results?.length || 0
+    const errs = res.errors?.length || 0
+    if (ok > 0) auditAddLog('ok', '  ✅ 成功翻译 ' + ok + ' 个字段')
+    if (errs > 0) auditAddLog('warn', '  ⚠️ ' + errs + ' 个错误')
+    // Refresh audit
+    await runAudit()
+  } catch (e) {
+    auditAddLog('error', '  ❌ 翻译失败: ' + e.message)
+  } finally {
+    auditTranslating.value = false
+  }
+}
+
+async function translateAuditMissing() {
+  if (!auditMissingAll.value.length) return
+  auditAborted = false
+  auditTranslating.value = true
+  const items = [...auditMissingAll.value]
+  const CONCURRENCY = auditConcurrency.value || 3
+
+  auditProgressTotal.value = items.length
+  auditProgressDone.value = 0
+  auditProgressOk.value = 0
+  auditProgressErrors.value = 0
+
+  auditAddLog('info', '🚀 开始翻译全部缺失项: ' + items.length + ' 项, 并发: ' + CONCURRENCY)
+
+  // Group by item (type+id) so each item translates all missing languages
+  const itemMap = {}
+  for (const it of items) {
+    const key = it.type + '_' + it.id
+    if (!itemMap[key]) itemMap[key] = { type: it.type, id: it.id, name: it.name, langs: [] }
+    itemMap[key].langs.push({ code: it.lang, flag: it.langFlag, name: it.langName })
+  }
+  const itemGroups = Object.values(itemMap)
+
+  let queueIdx = 0
+
+  async function worker() {
+    while (queueIdx < itemGroups.length) {
+      if (auditAborted) break
+      const idx = queueIdx++
+      if (idx >= itemGroups.length) break
+      const group = itemGroups[idx]
+
+      auditAddLog('info', '📦「' + group.name + '」开始翻译 (' + group.langs.length + ' 种语言)')
+
+      for (const lang of group.langs) {
+        if (auditAborted) break
+        const langLabel = (lang.flag || '') + ' ' + lang.name
+        let retries = 0
+        let success = false
+        while (!success && retries <= 2) {
+          try {
+            const res = await api.runTranslationOne(lang.code, group.type, group.id)
+            const ok = res.results?.length || 0
+            const errs = res.errors?.length || 0
+            auditProgressOk.value += ok
+            if (errs > 0 && ok === 0) {
+              retries++
+              if (retries > 2) {
+                auditProgressErrors.value += errs
+                auditAddLog('error', '  ❌「' + group.name + '」[' + langLabel + '] ' + (res.errors?.[0]?.error || '').slice(0, 120))
+              } else {
+                auditAddLog('warn', '  ⚠️「' + group.name + '」[' + langLabel + '] 失败，重试 ' + retries + '/2...')
+              }
+              continue
+            }
+            if (ok > 0) auditAddLog('ok', '  ✅「' + group.name + '」[' + langLabel + '] ' + ok + ' 个字段')
+            success = true
+          } catch (e) {
+            retries++
+            if (retries > 2) {
+              auditProgressErrors.value++
+              auditAddLog('error', '  ❌「' + group.name + '」[' + langLabel + '] ' + e.message)
+            } else {
+              auditAddLog('warn', '  ⚠️「' + group.name + '」[' + langLabel + '] 失败，重试 ' + retries + '/2...')
+            }
+          }
+        }
+        auditProgressDone.value++
+      }
+      auditAddLog('ok', '📦「' + group.name + '」翻译完成 ✓')
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(CONCURRENCY, itemGroups.length) }, () => worker())
+  await Promise.all(workers)
+
+  auditAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  auditAddLog('ok', '🏁 缺失翻译完成: 成功 ' + auditProgressOk.value + ', 错误 ' + auditProgressErrors.value)
+  auditTranslating.value = false
+
+  // Refresh audit report
+  await runAudit()
+  // Refresh granular status too
+  loadGranularStatus()
+}
 </script>
 
 <style scoped>
@@ -1228,4 +1495,25 @@ input:checked + .slider:before { transform: translateX(18px); }
 .gt-lang-tag.partial { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
 .gt-lang-tag.none { background: #f8fafc; color: #94a3b8; }
 .gt-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; font-size: 13px; color: #64748b; }
+
+/* ── Audit ── */
+.audit-report { display: flex; flex-direction: column; gap: 6px; }
+.audit-lang-section { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+.audit-lang-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; background: #f8fafc; transition: background 0.15s; flex-wrap: wrap; }
+.audit-lang-header:hover { background: #f1f5f9; }
+.audit-lang-flag { font-size: 18px; }
+.audit-lang-name { font-weight: 600; font-size: 14px; color: #1e293b; }
+.audit-badge { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 12px; }
+.audit-badge.complete { background: #dcfce7; color: #166534; }
+.audit-badge.incomplete { background: #fef3c7; color: #92400e; }
+.audit-stats { font-size: 12px; color: #64748b; margin-left: auto; }
+.audit-expand { color: #94a3b8; font-size: 12px; }
+.audit-lang-body { padding: 8px 16px 16px; }
+.audit-missing-section { margin-bottom: 12px; }
+.audit-missing-title { font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
+.audit-missing-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+.audit-missing-item:last-child { border-bottom: none; }
+.audit-item-name { flex: 1; color: #1e293b; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audit-item-cat { font-size: 11px; color: #94a3b8; background: #f1f5f9; padding: 1px 6px; border-radius: 4px; }
+.audit-item-progress { font-size: 11px; color: #64748b; white-space: nowrap; }
 </style>

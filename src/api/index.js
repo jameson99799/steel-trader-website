@@ -238,6 +238,7 @@ export const api = {
   getTranslationContent: (lang) => request(`/translation/content/${lang}`),
   getTranslationStatus: (type) => request(`/translation/translation-status?type=${type}`),
   runSelectiveTranslation: (type, ids, languages) => request('/translation/run-selective', { method: 'POST', body: JSON.stringify({ type, ids, languages }) }),
+  auditTranslations: () => request('/translation/audit-translations'),
 
   // AI Channels
   getAIChannels: () => request('/ai/channels'),
