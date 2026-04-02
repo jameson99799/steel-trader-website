@@ -1235,21 +1235,49 @@ router.get('/translation-status', authMiddleware, (req, res) => {
     if (!type || !['product', 'news'].includes(type)) return res.status(400).json({ error: 'type must be product or news' })
 
     const nonEnLangs = getAll("SELECT code, name, flag FROM languages WHERE code != 'en' AND status = 1")
-    if (!nonEnLangs.length) return res.json([])
+    if (!nonEnLangs.length) return res.json({ items: [], languages: [] })
 
-    // Get all items
+    // Get all items with their actual content to determine expected field count
     let items = []
     if (type === 'product') {
-        items = getAll(`SELECT p.id, p.name_en, p.category_id, p.created_at, c.name_en as category_name
+        items = getAll(`SELECT p.id, p.name_en, p.description_en, p.seo_title, p.seo_description, p.seo_keywords,
+            p.detail_content, p.faq_items, p.specs, p.category_id, p.created_at, c.name_en as category_name
             FROM products p LEFT JOIN categories c ON p.category_id = c.id
             WHERE p.status = 1 ORDER BY p.id DESC`)
     } else {
-        items = getAll(`SELECT id, title_en as name_en, created_at FROM news WHERE status = 1 ORDER BY id DESC`)
+        items = getAll(`SELECT id, title_en, summary_en, content, seo_title, seo_description, seo_keywords,
+            faq_items, created_at FROM news WHERE status = 1 ORDER BY id DESC`)
     }
 
-    // Count expected fields per item type
-    const PRODUCT_FIELDS = ['name', 'description', 'seo_title', 'seo_description', 'seo_keywords', 'detail_content', 'spec_combined', 'faq_combined', 'seo_combined']
-    const NEWS_FIELDS = ['title', 'summary', 'seo_title', 'seo_description', 'seo_keywords', 'content', 'faq_combined', 'seo_combined']
+    // Calculate expected field count per item based on actual content
+    function countExpectedFields(item, itemType) {
+        let count = 0
+        if (itemType === 'product') {
+            if (item.name_en) count++
+            if (item.description_en) count++
+            if (item.seo_title) count++
+            if (item.seo_description) count++
+            if (item.seo_keywords) count++
+            if (item.detail_content && item.detail_content.length > 10) count++
+            if (item.faq_items) {
+                try { const f = JSON.parse(item.faq_items); if (Array.isArray(f) && f.length > 0) count += f.length * 2 } catch {}
+            }
+            if (item.specs) {
+                try { const s = JSON.parse(item.specs); if (Array.isArray(s) && s.length > 0) count += s.length * 2 } catch {}
+            }
+        } else {
+            if (item.title_en) count++
+            if (item.summary_en) count++
+            if (item.seo_title) count++
+            if (item.seo_description) count++
+            if (item.seo_keywords) count++
+            if (item.content && item.content.length > 10) count++
+            if (item.faq_items) {
+                try { const f = JSON.parse(item.faq_items); if (Array.isArray(f) && f.length > 0) count += f.length * 2 } catch {}
+            }
+        }
+        return Math.max(count, 1)
+    }
 
     // Get all translation counts in one query for efficiency
     const translationCounts = getAll(
@@ -1258,32 +1286,31 @@ router.get('/translation-status', authMiddleware, (req, res) => {
          GROUP BY content_id, language_code`,
         [type]
     )
-    // Build lookup: { contentId: { langCode: fieldCount } }
     const countMap = {}
     for (const tc of translationCounts) {
         if (!countMap[tc.content_id]) countMap[tc.content_id] = {}
         countMap[tc.content_id][tc.language_code] = tc.field_count
     }
 
-    // Minimum fields to consider "translated" (at least name/title + description/summary)
-    const MIN_FIELDS = 2
-
     const result = items.map(item => {
+        const expectedFields = countExpectedFields(item, type)
         const langStatus = {}
         const itemCounts = countMap[item.id] || {}
         for (const lang of nonEnLangs) {
             const count = itemCounts[lang.code] || 0
             if (count === 0) langStatus[lang.code] = 'none'
-            else if (count >= MIN_FIELDS) langStatus[lang.code] = 'full'
+            // Consider "full" if translated at least 60% of expected fields (some combined fields merge)
+            else if (count >= Math.max(2, Math.floor(expectedFields * 0.6))) langStatus[lang.code] = 'full'
             else langStatus[lang.code] = 'partial'
         }
         return {
             id: item.id,
-            name: item.name_en || `#${item.id}`,
+            name: (type === 'product' ? item.name_en : item.title_en) || `#${item.id}`,
             category_id: item.category_id || null,
             category_name: item.category_name || null,
             created_at: item.created_at,
-            languages: langStatus
+            languages: langStatus,
+            expectedFields
         }
     })
 
