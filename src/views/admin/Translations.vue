@@ -1200,7 +1200,7 @@ async function runAudit() {
   auditAddLog('info', '🔍 开始全站翻译完整性检查...')
   try {
     const res = await api.auditTranslations()
-    const report = (res.report || []).map(r => ({ ...r, _expanded: (r.products?.missing?.length || 0) + (r.news?.missing?.length || 0) > 0 }))
+    const report = (res.report || []).map(r => ({ ...r, _expanded: false }))
     auditReport.value = report
 
     for (const lang of report) {
