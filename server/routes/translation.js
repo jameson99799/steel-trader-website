@@ -1234,8 +1234,8 @@ router.get('/translation-status', authMiddleware, (req, res) => {
     const { type } = req.query  // 'product' or 'news'
     if (!type || !['product', 'news'].includes(type)) return res.status(400).json({ error: 'type must be product or news' })
 
-    const nonEnLangs = getAll("SELECT code, name, flag FROM languages WHERE code != 'en' AND is_active = 1")
-    if (!nonEnLangs.length) return res.json({ items: [], languages: [] })
+    const nonEnLangs = getAll("SELECT code, name, flag FROM languages WHERE code != 'en' AND status = 1")
+    if (!nonEnLangs.length) return res.json([])
 
     // Get all items
     let items = []
@@ -1310,7 +1310,7 @@ router.post('/run-selective', authMiddleware, async (req, res) => {
     // Determine language list
     let langs = []
     if (targetLangs.includes('all')) {
-        langs = getAll("SELECT code, name FROM languages WHERE code != 'en' AND is_active = 1")
+        langs = getAll("SELECT code, name FROM languages WHERE code != 'en' AND status = 1")
     } else {
         for (const code of targetLangs) {
             const l = getOne('SELECT code, name FROM languages WHERE code = ?', [code])
