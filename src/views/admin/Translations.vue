@@ -439,6 +439,8 @@ onMounted(async () => {
       selectedLang.value = nonEnLangs.value[0].code
       searchLang.value = nonEnLangs.value[0].code
     }
+    // Load granular translation data
+    loadGranularStatus()
   } catch (e) {
     console.error('Failed to load settings:', e)
   }

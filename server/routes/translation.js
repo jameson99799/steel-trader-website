@@ -1235,7 +1235,7 @@ router.get('/translation-status', authMiddleware, (req, res) => {
     if (!type || !['product', 'news'].includes(type)) return res.status(400).json({ error: 'type must be product or news' })
 
     const nonEnLangs = getAll("SELECT code, name, flag FROM languages WHERE code != 'en' AND is_active = 1")
-    if (!nonEnLangs.length) return res.json([])
+    if (!nonEnLangs.length) return res.json({ items: [], languages: [] })
 
     // Get all items
     let items = []
