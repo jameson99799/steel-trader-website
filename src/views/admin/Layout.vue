@@ -34,7 +34,11 @@
       </div>
     </aside>
     <main class="admin-main">
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <keep-alive :include="['TranslationsPage']">
+          <component :is="Component" />
+        </keep-alive>
+      </router-view>
     </main>
   </div>
 </template>

@@ -23,13 +23,13 @@
       <div class="card-body" v-show="!channelCollapsed">
         <div v-if="channels.length === 0" class="empty-tip">暂无 AI 渠道，请点击「添加渠道」创建</div>
         <div v-else class="channel-list">
-          <div v-for="ch in sortedChannels" :key="ch.id" class="channel-card" :class="{ 'is-default': ch.is_default }">
+          <div v-for="ch in channels" :key="ch.id" class="channel-card" :class="{ 'is-default': ch.is_default }">
             <div class="ch-header">
-              <div class="ch-name" style="cursor:pointer" @click="ch._expanded = !ch._expanded">
-                <span style="color:#94a3b8;font-size:12px;margin-right:4px">{{ ch._expanded ? '▼' : '▶' }}</span>
+              <div class="ch-name" style="cursor:pointer" @click.stop="toggleChExpanded(ch.id)">
+                <span style="color:#94a3b8;font-size:12px;margin-right:4px">{{ chExpanded[ch.id] ? '▼' : '▶' }}</span>
                 <span class="ch-badge" v-if="ch.is_default">默认渠道</span>
                 {{ ch.name }}
-                <span v-if="ch.default_model && !ch._expanded" class="model-tag" style="background:#dcfce7;color:#166534;margin-left:8px;font-size:11px">{{ ch.default_model }}</span>
+                <span v-if="ch.default_model && !chExpanded[ch.id]" class="model-tag" style="background:#dcfce7;color:#166534;margin-left:8px;font-size:11px">{{ ch.default_model }}</span>
               </div>
               <div class="ch-actions">
                 <button class="btn btn-outline btn-xs" @click="testChannel(ch)" :disabled="ch._testing">🔌 {{ ch._testing ? '测试中...' : '测试' }}</button>
@@ -41,7 +41,7 @@
             <div v-if="ch._testResult" class="ch-test-result" :class="ch._testResult.ok ? 'test-ok' : 'test-fail'">
               {{ ch._testResult.ok ? '✅ 连接成功' : '❌ 连接失败' }}: {{ ch._testResult.msg }}
             </div>
-            <div class="ch-info" v-show="ch._expanded">
+            <div class="ch-info" v-show="chExpanded[ch.id]">
               <div><span class="ch-label">API:</span> {{ ch.api_url }}</div>
               <div><span class="ch-label">Key:</span> {{ ch.api_key_display }}</div>
               <div><span class="ch-label">模型:</span>
@@ -472,6 +472,8 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import api from '../../api'
 
+defineOptions({ name: 'TranslationsPage' })
+
 const settings = reactive({
   api_url: 'https://api.openai.com/v1',
   api_key: '',
@@ -491,25 +493,20 @@ const channelForm = reactive({
   name: '', api_url: 'https://api.openai.com/v1', api_key: '', models: [], is_default: false, default_model: ''
 })
 
-// Sorted channels: newest first, with _expanded state
-const sortedChannels = computed(() => {
-  return [...channels.value]
-    .sort((a, b) => (b.id || 0) - (a.id || 0))
-    .map(ch => ({ ...ch, _expanded: ch._expanded || false, _testing: ch._testing || false, _testResult: ch._testResult || null }))
-})
+// Channel expand state — separate reactive to avoid recomputing the list
+const chExpanded = reactive({})
+function toggleChExpanded(id) { chExpanded[id] = !chExpanded[id] }
 
 async function testChannel(ch) {
-  const idx = channels.value.findIndex(c => c.id === ch.id)
-  if (idx === -1) return
-  channels.value[idx]._testing = true
-  channels.value[idx]._testResult = null
+  ch._testing = true
+  ch._testResult = null
   try {
     const res = await api.testAIChannel(ch.id)
-    channels.value[idx]._testResult = { ok: true, msg: res.reply?.slice(0, 80) || '模型响应正常' }
+    ch._testResult = { ok: true, msg: res.reply?.slice(0, 80) || '模型响应正常' }
   } catch (e) {
-    channels.value[idx]._testResult = { ok: false, msg: e.message?.slice(0, 120) || '连接失败' }
+    ch._testResult = { ok: false, msg: e.message?.slice(0, 120) || '连接失败' }
   } finally {
-    channels.value[idx]._testing = false
+    ch._testing = false
   }
 }
 
@@ -602,8 +599,11 @@ const fetchModels = async () => {
 // Channel CRUD Methods
 async function loadChannels() {
   try {
-    const res = await fetch('/api/ai/channels', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') } })
-    if (res.ok) channels.value = await res.json()
+    const data = await api.getAIChannels()
+    // Sort newest first, add UI state
+    channels.value = (data || [])
+      .sort((a, b) => (b.id || 0) - (a.id || 0))
+      .map(ch => ({ ...ch, _testing: false, _testResult: null }))
   } catch (e) { console.error('Load channels failed:', e) }
 }
 
