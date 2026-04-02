@@ -127,7 +127,8 @@ router.post('/channels/:id/test', authMiddleware, async (req, res) => {
 
         if (result.status !== 200) {
             const errMsg = result.body?.error?.message || JSON.stringify(result.body)
-            return res.status(result.status).json({ error: `API ${result.status}: ${errMsg}` })
+            // Always use 502 for upstream AI errors — never forward 401/403 which would trigger frontend auto-logout
+            return res.status(502).json({ error: `AI API ${result.status}: ${errMsg}` })
         }
 
         const reply = result.body?.choices?.[0]?.message?.content || ''
@@ -153,7 +154,7 @@ router.get('/channels/:id/models', authMiddleware, async (req, res) => {
         const result = await httpRequest(apiUrl, {
             headers: { 'Authorization': `Bearer ${channel.api_key}` }
         })
-        if (result.status !== 200) return res.status(result.status).json({ error: JSON.stringify(result.body) })
+        if (result.status !== 200) return res.status(502).json({ error: `AI API ${result.status}: ${JSON.stringify(result.body)}` })
         const models = (result.body?.data || []).map(m => m.id).filter(Boolean).sort()
         res.json({ models })
     } catch (e) {
@@ -200,9 +201,9 @@ router.post('/chat', authMiddleware, async (req, res) => {
             result.stream.on('end', () => {
                 try {
                     const errJson = JSON.parse(errData)
-                    res.status(result.status).json({ error: errJson?.error?.message || errData })
+                    res.status(502).json({ error: errJson?.error?.message || errData })
                 } catch {
-                    res.status(result.status).json({ error: errData || `API Error ${result.status}` })
+                    res.status(502).json({ error: errData || `API Error ${result.status}` })
                 }
             })
             return
@@ -309,7 +310,7 @@ CRITICAL: ALL content MUST be 100% about "${product_name}" only. Return ONLY val
 
         if (metaResult.status !== 200) {
             const errMsg = metaResult.body?.error?.message || JSON.stringify(metaResult.body)
-            return res.status(metaResult.status).json({ error: errMsg })
+            return res.status(502).json({ error: `AI API ${metaResult.status}: ${errMsg}` })
         }
 
         const metaContent = metaResult.body?.choices?.[0]?.message?.content || ''

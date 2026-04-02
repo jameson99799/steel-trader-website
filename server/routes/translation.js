@@ -112,7 +112,7 @@ router.post('/models', authMiddleware, async (req, res) => {
         const result = await httpRequest(apiUrl, {
             headers: { 'Authorization': `Bearer ${apiKey}` }
         })
-        if (result.status !== 200) return res.status(result.status).json({ error: JSON.stringify(result.body) })
+        if (result.status !== 200) return res.status(502).json({ error: `AI API ${result.status}: ${JSON.stringify(result.body)}` })
         const models = (result.body?.data || []).map(m => m.id).filter(Boolean).sort()
         res.json({ models })
     } catch (e) {
