@@ -312,8 +312,10 @@ async function startServer() {
         html = html.replace(/<title>[^<]*<\/title>/, `<title>${esc(pageTitle)}</title>`)
         html = html.replace(/<meta\s+name="description"\s+content="[^"]*"/, `<meta name="description" content="${esc(pageDesc)}"`)
         html = html.replace(/<meta\s+name="keywords"\s+content="[^"]*"/, `<meta name="keywords" content="${esc(pageKeywords)}"`)
-        html = html.replace(/<link\s+rel="canonical"\s+href="[^"]*"/, `<link rel="canonical" href="${esc(pageCanonical)}"`)
-        html = html.replace('</head>', `${extraMeta}\n  ${extraSchemas}\n</head>`)
+        // Remove existing canonical if present, then add correct one via </head> injection
+        html = html.replace(/<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/, '')
+        const canonicalTag = `<link rel="canonical" href="${esc(pageCanonical)}">`
+        html = html.replace('</head>', `${canonicalTag}\n  ${extraMeta}\n  ${extraSchemas}\n</head>`)
 
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
