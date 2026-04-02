@@ -1327,13 +1327,34 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
     const productFields = PAGES.products ? PAGES.products() : []
     const newsFields = PAGES.news ? PAGES.news() : []
 
-    // Group fields by item (type + id)
+    // Group fields by item, EXPANDING combined fields into actual stored sub-field names
     function groupByItem(fields, type) {
         const map = {}
         for (const f of fields) {
             const key = `${f.id}`
-            if (!map[key]) map[key] = { id: f.id, type, itemName: f.itemName || `#${f.id}`, fields: [] }
-            map[key].fields.push(f.field)
+            if (!map[key]) map[key] = { id: f.id, type, itemName: f.itemName || `#${f.id}`, fields: [], basicFields: [] }
+            
+            if (f.combined && f.text) {
+                // Combined field: expand sub-fields (faq_combined → faq_q_0, faq_a_0, etc.)
+                try {
+                    const subObj = JSON.parse(f.text)
+                    for (const subField of Object.keys(subObj)) {
+                        map[key].fields.push(subField)
+                    }
+                } catch (e) {
+                    map[key].fields.push(f.field)
+                }
+            } else if (f.long_html) {
+                // Long HTML stored as 'detail_content' or 'content'
+                map[key].fields.push(f.field)
+                map[key].basicFields.push(f.field)
+            } else {
+                map[key].fields.push(f.field)
+                // Basic fields = name, title, description, summary (not faq/spec)
+                if (!f.field.startsWith('faq_') && !f.field.startsWith('spec_')) {
+                    map[key].basicFields.push(f.field)
+                }
+            }
         }
         return Object.values(map)
     }
@@ -1356,7 +1377,7 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
          FROM translations WHERE content_type IN ('product', 'news') AND content_id IS NOT NULL`
     )
 
-    // Build lookup: { "product_1_zh": Set(['name','description',...]) }
+    // Build lookup: { "product_1_zh": Set(['name','description','seo_title','faq_q_0',...]) }
     const transMap = {}
     for (const t of allTranslations) {
         const key = `${t.content_type}_${t.content_id}_${t.language_code}`
@@ -1375,28 +1396,27 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
             news: { total: newsItems.length, complete: 0, partial: 0, none: 0, missing: [] }
         }
 
-        // Check products
-        for (const item of productItems) {
-            const key = `product_${item.id}_${lang.code}`
+        function checkItem(item, section) {
+            const key = `${item.type}_${item.id}_${lang.code}`
             const translated = transMap[key] || new Set()
             const totalFields = item.fields.length
             const translatedCount = item.fields.filter(f => translated.has(f)).length
-            // Consider basic fields (non-faq, non-spec) for status
-            const basicFields = item.fields.filter(f => !f.startsWith('faq_') && !f.startsWith('spec_'))
-            const basicTranslated = basicFields.filter(f => translated.has(f)).length
+            // Check basic fields (name/title, description/summary - the essential ones)
+            const basicTotal = item.basicFields.length
+            const basicTranslated = item.basicFields.filter(f => translated.has(f)).length
 
             if (translatedCount === 0) {
-                langReport.products.none++
-                langReport.products.missing.push({
+                section.none++
+                section.missing.push({
                     id: item.id, name: item.itemName,
                     category_id: item.category_id, category_name: item.category_name,
                     status: 'none', translated: 0, total: totalFields
                 })
-            } else if (basicTranslated >= basicFields.length && translatedCount >= Math.ceil(totalFields * 0.5)) {
-                langReport.products.complete++
+            } else if (basicTranslated >= basicTotal && translatedCount >= Math.ceil(totalFields * 0.6)) {
+                section.complete++
             } else {
-                langReport.products.partial++
-                langReport.products.missing.push({
+                section.partial++
+                section.missing.push({
                     id: item.id, name: item.itemName,
                     category_id: item.category_id, category_name: item.category_name,
                     status: 'partial', translated: translatedCount, total: totalFields
@@ -1404,31 +1424,8 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
             }
         }
 
-        // Check news
-        for (const item of newsItems) {
-            const key = `news_${item.id}_${lang.code}`
-            const translated = transMap[key] || new Set()
-            const totalFields = item.fields.length
-            const translatedCount = item.fields.filter(f => translated.has(f)).length
-            const basicFields = item.fields.filter(f => !f.startsWith('faq_'))
-            const basicTranslated = basicFields.filter(f => translated.has(f)).length
-
-            if (translatedCount === 0) {
-                langReport.news.none++
-                langReport.news.missing.push({
-                    id: item.id, name: item.itemName,
-                    status: 'none', translated: 0, total: totalFields
-                })
-            } else if (basicTranslated >= basicFields.length && translatedCount >= Math.ceil(totalFields * 0.5)) {
-                langReport.news.complete++
-            } else {
-                langReport.news.partial++
-                langReport.news.missing.push({
-                    id: item.id, name: item.itemName,
-                    status: 'partial', translated: translatedCount, total: totalFields
-                })
-            }
-        }
+        for (const item of productItems) checkItem(item, langReport.products)
+        for (const item of newsItems) checkItem(item, langReport.news)
 
         report.push(langReport)
     }
