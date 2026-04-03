@@ -83,6 +83,11 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
   color: #fff;
   display: flex;
   flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 100;
 }
 
 .sidebar-header {
@@ -97,6 +102,7 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 .sidebar-nav {
   flex: 1;
   padding: 20px 0;
+  overflow-y: auto;
 }
 
 .sidebar-nav a {
@@ -117,6 +123,7 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 .sidebar-footer {
   padding: 20px;
   border-top: 1px solid #334155;
+  flex-shrink: 0;
 }
 
 .sidebar-footer a {
@@ -132,9 +139,11 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 
 .admin-main {
   flex: 1;
+  margin-left: 240px;
   background: var(--light);
   padding: 30px;
   overflow-y: auto;
+  min-height: 100vh;
 }
 
 .badge {

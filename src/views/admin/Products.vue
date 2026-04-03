@@ -200,6 +200,7 @@
                 <div class="editor-actions">
                   <button type="button" class="editor-btn" @click="insertImage" title="插入单张图片">📷 插入图片</button>
                   <button type="button" class="editor-btn carousel-btn" @click="insertCarousel" title="上传多张图片生成轮播图">🎠 插入轮播图</button>
+                  <button type="button" class="editor-btn" @click="showCopyDetailImgPicker = true" title="从另一个产品复制详情图片到相同位置" style="color:#059669;border-color:#059669;">📋 复制同模板图片</button>
                   <button type="button" class="fullscreen-btn" @click="prodFullscreen = !prodFullscreen">
                     {{ prodFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
                   </button>
@@ -478,6 +479,37 @@
         </div>
       </div>
     </div>
+
+    <!-- Copy Detail Images from Another Product -->
+    <div v-if="showCopyDetailImgPicker" class="modal-overlay" @click.self="showCopyDetailImgPicker=false" style="z-index:2300">
+      <div class="modal" style="max-width:500px;">
+        <div class="modal-header" style="background:#f0fdf4;color:#059669;">
+          <h3>📋 复制同模板产品图片</h3>
+          <button class="modal-close" @click="showCopyDetailImgPicker=false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="color:#64748b;font-size:13px;margin:0 0 12px;">选择一个已上传详情图片的产品，将其详情HTML中的图片按位置复制到当前产品。文字内容不受影响，仅替换图片。</p>
+          <div class="form-group">
+            <label>选择源产品</label>
+            <select v-model="copyImgSourceId" class="form-control" @change="previewCopyImgs">
+              <option value="">请选择...</option>
+              <option v-for="p in products.filter(x => x.id !== editingProduct?.id && x.detail_content)" :key="p.id" :value="p.id">{{ p.name_en || p.name }}</option>
+            </select>
+          </div>
+          <div v-if="copyImgPreview.length" style="margin-top:8px;">
+            <p style="font-size:13px;color:#334155;font-weight:600;">将复制 {{ copyImgPreview.length }} 张图片：</p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;max-height:200px;overflow-y:auto;">
+              <img v-for="(src, i) in copyImgPreview" :key="i" :src="src" style="width:80px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;" />
+            </div>
+          </div>
+          <p v-if="copyImgSourceId && !copyImgPreview.length" style="color:#94a3b8;text-align:center;padding:16px;">该产品详情中没有图片</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="showCopyDetailImgPicker=false">取消</button>
+          <button type="button" class="btn btn-primary" style="background:#059669;border-color:#059669;" @click="doCopyDetailImgs" :disabled="!copyImgPreview.length">复制图片</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -666,10 +698,17 @@ function doImportFromMedia() {
   mediaPickerSelected.value = []
 }
 
-// Auto-load media data when picker opens
+// Auto-load media data when picker opens — restore last group from memory
 watch(showMediaPicker, (v) => {
-  if (v) { loadMediaGroups(); loadMediaPicker(); mediaPickerSelected.value = [] }
+  if (v) {
+    loadMediaGroups()
+    mediaPickerGroup.value = localStorage.getItem('_lastMediaGroup') || ''
+    loadMediaPicker()
+    mediaPickerSelected.value = []
+  }
 })
+// Remember selected group
+watch(mediaPickerGroup, v => { if (v) localStorage.setItem('_lastMediaGroup', v) })
 
 // AI Create state
 const showAICreate = ref(false)
@@ -1030,11 +1069,13 @@ async function loadDetailMediaGroups() {
 function pickFromMediaLib() {
   showImgChooser.value = false
   detailMediaSearch.value = ''
-  detailMediaGroup.value = ''
+  detailMediaGroup.value = localStorage.getItem('_lastMediaGroup') || ''
   loadDetailMediaGroups()
   loadDetailMedia()
   showDetailMediaBrowser.value = true
 }
+// Remember selected group for detail media browser
+watch(detailMediaGroup, v => { if (v) localStorage.setItem('_lastMediaGroup', v) })
 
 function selectDetailMediaImage(item) {
   const url = item.filepath
@@ -1063,6 +1104,54 @@ function selectDetailMediaImage(item) {
       form.detail_content = (form.detail_content || '') + imgTag
     }
   }
+}
+
+// ─── Copy Detail Images from Another Product ─────────────────────────────────
+const showCopyDetailImgPicker = ref(false)
+const copyImgSourceId = ref('')
+const copyImgPreview = ref([])
+
+async function previewCopyImgs() {
+  copyImgPreview.value = []
+  if (!copyImgSourceId.value) return
+  try {
+    const p = await api.getProduct(copyImgSourceId.value)
+    if (!p.detail_content) return
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(p.detail_content, 'text/html')
+    const imgs = doc.querySelectorAll('img[src]')
+    copyImgPreview.value = Array.from(imgs).map(img => img.getAttribute('src')).filter(Boolean)
+  } catch (e) { console.error(e) }
+}
+
+function doCopyDetailImgs() {
+  if (!copyImgPreview.value.length || !form.detail_content) {
+    showCopyDetailImgPicker.value = false
+    return
+  }
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(form.detail_content, 'text/html')
+  const currentImgs = doc.querySelectorAll('img[src]')
+  const sourceImgs = copyImgPreview.value
+  let replaced = 0
+  currentImgs.forEach((img, i) => {
+    if (i < sourceImgs.length) {
+      img.setAttribute('src', sourceImgs[i])
+      replaced++
+    }
+  })
+  if (replaced === 0) {
+    alert('当前产品详情中没有图片位置可以替换')
+  } else {
+    form.detail_content = doc.body.innerHTML
+    if (editorMode.value === 'visual') {
+      nextTick(() => syncToVisual())
+    }
+    alert(`✅ 已复制 ${replaced} 张图片到对应位置`)
+  }
+  showCopyDetailImgPicker.value = false
+  copyImgSourceId.value = ''
+  copyImgPreview.value = []
 }
 
 async function onVisualPaste(e) {

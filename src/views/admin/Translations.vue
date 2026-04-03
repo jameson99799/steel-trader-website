@@ -132,17 +132,15 @@
               </select>
             </div>
             <div class="form-group" style="flex:1">
-              <label>翻译范围</label>
-              <select v-model="selectedPage" class="form-control">
-                <option value="all">全站（所有内容）</option>
-                <option value="products">产品（Products）— 名称、描述、SEO、详情HTML、FAQ、规格</option>
-                <option value="news">新闻（News）— 标题、摘要、SEO、正文HTML、FAQ</option>
-                <option value="company">公司信息（Company）</option>
-                <option value="page_texts">页面文字（Page Texts）</option>
-                <option value="categories">产品分类名称（Categories）</option>
-                <option value="hero">首页 Hero 区域（Hero）</option>
-                <option value="ui_texts_static">UI 静态文字（导航、按钮、标签等）</option>
-              </select>
+              <label>翻译范围 <small style="color:#94a3b8;font-weight:400">(可多选)</small></label>
+              <div class="scope-checks">
+                <label class="scope-check" v-for="p in allPages" :key="p">
+                  <input type="checkbox" :value="p" v-model="selectedPages" />
+                  <span>{{ pageLabels[p] || p }}</span>
+                </label>
+                <button type="button" class="btn btn-xs btn-outline" @click="selectedPages = [...allPages]" style="margin-left:8px">全选</button>
+                <button type="button" class="btn btn-xs btn-outline" @click="selectedPages = []" style="margin-left:4px">清空</button>
+              </div>
             </div>
             <div class="form-group" style="width:120px">
               <label>并发数</label>
@@ -517,7 +515,9 @@ const saving = ref(false)
 const savedMsg = ref(false)
 
 const selectedLang = ref('')
-const selectedPage = ref('all')
+const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero', 'ui_texts_static']
+const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字' }
+const selectedPages = ref([...allPages])
 const concurrency = ref(3)
 const translating = ref(false)
 const translateResult = ref(null)
@@ -726,16 +726,15 @@ function abortTranslation() {
   }, 1000)
 }
 
-const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero', 'ui_texts_static']
-const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字' }
 
 const failedItems = ref([])
 const channelCollapsed = ref(true)
 
 const startTranslate = async () => {
   if (!selectedLang.value) return alert('请选择目标语言')
+  if (!selectedPages.value.length) return alert('请至少选择一个翻译范围')
   aborted = false
-  const pages = selectedPage.value === 'all' ? [...allPages] : [selectedPage.value]
+  const pages = [...selectedPages.value]
   await runPages(pages)
 }
 
@@ -1573,4 +1572,9 @@ input:checked + .slider:before { transform: translateX(18px); }
 .audit-item-name { flex: 1; color: #1e293b; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .audit-item-cat { font-size: 11px; color: #94a3b8; background: #f1f5f9; padding: 1px 6px; border-radius: 4px; }
 .audit-item-progress { font-size: 11px; color: #64748b; white-space: nowrap; }
+
+/* Scope multi-select checkboxes */
+.scope-checks { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 8px 0; align-items: center; }
+.scope-check { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13px; color: #334155; font-weight: 500; }
+.scope-check input[type="checkbox"] { accent-color: #3b82f6; width: 15px; height: 15px; cursor: pointer; }
 </style>

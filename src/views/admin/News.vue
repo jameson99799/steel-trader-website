@@ -406,11 +406,13 @@ async function loadNewsMediaGroups() {
 function newsPickFromMediaLib() {
   showNewsImgChooser.value = false
   newsMediaSearch.value = ''
-  newsMediaGroup.value = ''
+  newsMediaGroup.value = localStorage.getItem('_lastMediaGroup') || ''
   loadNewsMediaGroups()
   loadNewsMedia()
   showNewsMediaBrowser.value = true
 }
+// Remember selected group
+watch(newsMediaGroup, v => { if (v) localStorage.setItem('_lastMediaGroup', v) })
 
 function selectNewsMediaImage(item) {
   const url = item.filepath
