@@ -460,8 +460,8 @@ onMounted(async () => {
     // Fetch related products from same category
     if (product.value?.category_id) {
       try {
-        const allProds = await api.getProducts({ category: product.value.category_id, status: 1 })
-        const prods = (allProds.products || allProds || []).filter(p => p.id !== product.value.id)
+        const allProds = await api.getProducts({ category_id: product.value.category_id, status: 1 })
+        const prods = (allProds.data || allProds || []).filter(p => p.id !== product.value.id)
         relatedProducts.value = prods.slice(0, 6)
       } catch (e) { console.warn('Failed to load related products:', e) }
     }

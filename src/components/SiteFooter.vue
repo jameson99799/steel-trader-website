@@ -160,7 +160,7 @@ onMounted(async () => {
     // Fetch latest news for footer links (SEO)
     try {
       const newsData = await api.getNews({ status: 1 })
-      latestNews.value = (newsData.news || newsData || []).slice(0, 5)
+      latestNews.value = (newsData.data || newsData || []).slice(0, 5)
     } catch (e) {}
   } catch (e) {}
 })

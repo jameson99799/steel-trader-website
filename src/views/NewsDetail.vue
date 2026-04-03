@@ -297,7 +297,7 @@ async function loadArticle(slug) {
   // Fetch related news articles (after main article loads)
   try {
     const allNewsData = await api.getNews({ status: 1 })
-    const newsList = (allNewsData.news || allNewsData || []).filter(n => n.id !== article.value?.id)
+    const newsList = (allNewsData.data || allNewsData || []).filter(n => n.id !== article.value?.id)
     relatedNews.value = newsList.slice(0, 4)
   } catch (e) { console.warn('Failed to load related news:', e) }
 }
