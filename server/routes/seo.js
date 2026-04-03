@@ -2,6 +2,11 @@ import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { upload } from '../middleware/upload.js'
+import { writeFileSync } from 'fs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const router = Router()
 
@@ -42,6 +47,15 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
                 geo_region, geo_placename, geo_lat, geo_lng,
                 hreflang_en, hreflang_zh, local_business_type, local_business_address]
         )
+    }
+    // Sync robots.txt to static file so it takes effect immediately
+    if (robots_txt) {
+        try {
+            const distPath = join(__dirname, '../../dist/robots.txt')
+            writeFileSync(distPath, robots_txt, 'utf-8')
+        } catch (e) {
+            console.warn('Failed to write dist/robots.txt:', e.message)
+        }
     }
     res.json({ message: '保存成功' })
 })
