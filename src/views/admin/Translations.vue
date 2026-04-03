@@ -355,15 +355,68 @@
             <div class="audit-lang-header" @click="lang._expanded = !lang._expanded">
               <span class="audit-lang-flag">{{ lang.flag }}</span>
               <span class="audit-lang-name">{{ lang.name }}</span>
-              <span v-if="!lang.products.missing.length && !lang.news.missing.length" class="audit-badge complete">✅ 全部翻译完成</span>
-              <span v-else class="audit-badge incomplete">⚠️ {{ lang.products.missing.length + lang.news.missing.length }} 项未完成</span>
+              <span v-if="auditLangTotalMissing(lang) === 0" class="audit-badge complete">✅ 全部翻译完成</span>
+              <span v-else class="audit-badge incomplete">⚠️ {{ auditLangTotalMissing(lang) }} 项未完成</span>
               <span class="audit-stats">
-                产品: {{ lang.products.complete }}/{{ lang.products.total }} ✅ |
-                文章: {{ lang.news.complete }}/{{ lang.news.total }} ✅
+                产品: {{ lang.products.complete }}/{{ lang.products.total }} |
+                文章: {{ lang.news.complete }}/{{ lang.news.total }} |
+                UI: {{ lang.ui_texts?.translated || 0 }}/{{ lang.ui_texts?.total || 0 }} |
+                其他: {{ (lang.company?.complete||0) + (lang.page_texts?.complete||0) + (lang.categories?.complete||0) + (lang.hero?.complete||0) }}/{{ (lang.company?.total||0) + (lang.page_texts?.total||0) + (lang.categories?.total||0) + (lang.hero?.total||0) }}
               </span>
               <span class="audit-expand">{{ lang._expanded ? '▼' : '▶' }}</span>
             </div>
             <div v-if="lang._expanded" class="audit-lang-body">
+              <!-- UI Texts missing -->
+              <div v-if="lang.ui_texts && lang.ui_texts.missing.length" class="audit-missing-section">
+                <div class="audit-missing-title">🔤 缺失 UI 静态文字 ({{ lang.ui_texts.missing.length }}/{{ lang.ui_texts.total }})</div>
+                <div class="audit-ui-keys">
+                  <span v-for="k in lang.ui_texts.missing" :key="k" class="audit-ui-key">{{ k }}</span>
+                </div>
+                <button class="btn btn-sm btn-outline" style="margin-top:8px"
+                  @click="translateSingleAuditItem('ui_text', 'static', lang.code)" :disabled="auditTranslating">
+                  🚀 翻译全部缺失 UI 文字
+                </button>
+              </div>
+              <!-- Company missing -->
+              <div v-if="lang.company?.missing?.length" class="audit-missing-section">
+                <div class="audit-missing-title">🏢 缺失公司信息翻译 ({{ lang.company.missing.length }})</div>
+                <div v-for="m in lang.company.missing" :key="'co'+m.id" class="audit-missing-item">
+                  <span class="gt-status-dot" :class="m.status"></span>
+                  <span class="audit-item-name">{{ m.name }}</span>
+                  <span class="audit-item-progress">{{ m.translated }}/{{ m.total }} 字段</span>
+                  <button class="btn btn-sm btn-outline" @click="translateSingleAuditItem('company', m.id, lang.code)" :disabled="auditTranslating">翻译</button>
+                </div>
+              </div>
+              <!-- Page texts missing -->
+              <div v-if="lang.page_texts?.missing?.length" class="audit-missing-section">
+                <div class="audit-missing-title">📝 缺失页面文字翻译 ({{ lang.page_texts.missing.length }})</div>
+                <div v-for="m in lang.page_texts.missing" :key="'pt'+m.id" class="audit-missing-item">
+                  <span class="gt-status-dot" :class="m.status"></span>
+                  <span class="audit-item-name">{{ m.name }}</span>
+                  <span class="audit-item-progress">{{ m.translated }}/{{ m.total }} 字段</span>
+                  <button class="btn btn-sm btn-outline" @click="translateSingleAuditItem('page_text', m.id, lang.code)" :disabled="auditTranslating">翻译</button>
+                </div>
+              </div>
+              <!-- Categories missing -->
+              <div v-if="lang.categories?.missing?.length" class="audit-missing-section">
+                <div class="audit-missing-title">📂 缺失分类翻译 ({{ lang.categories.missing.length }})</div>
+                <div v-for="m in lang.categories.missing" :key="'cat'+m.id" class="audit-missing-item">
+                  <span class="gt-status-dot" :class="m.status"></span>
+                  <span class="audit-item-name">{{ m.name }}</span>
+                  <span class="audit-item-progress">{{ m.translated }}/{{ m.total }} 字段</span>
+                  <button class="btn btn-sm btn-outline" @click="translateSingleAuditItem('category', m.id, lang.code)" :disabled="auditTranslating">翻译</button>
+                </div>
+              </div>
+              <!-- Hero missing -->
+              <div v-if="lang.hero?.missing?.length" class="audit-missing-section">
+                <div class="audit-missing-title">🏠 缺失 Hero 区域翻译 ({{ lang.hero.missing.length }})</div>
+                <div v-for="m in lang.hero.missing" :key="'hero'+m.id" class="audit-missing-item">
+                  <span class="gt-status-dot" :class="m.status"></span>
+                  <span class="audit-item-name">{{ m.name }}</span>
+                  <span class="audit-item-progress">{{ m.translated }}/{{ m.total }} 字段</span>
+                  <button class="btn btn-sm btn-outline" @click="translateSingleAuditItem('hero', m.id, lang.code)" :disabled="auditTranslating">翻译</button>
+                </div>
+              </div>
               <!-- Missing products -->
               <div v-if="lang.products.missing.length" class="audit-missing-section">
                 <div class="audit-missing-title">📦 缺失产品翻译 ({{ lang.products.missing.length }})</div>
@@ -372,6 +425,7 @@
                   <span class="audit-item-name">{{ m.name }}</span>
                   <span class="audit-item-cat" v-if="m.category_name">{{ m.category_name }}</span>
                   <span class="audit-item-progress">{{ m.translated }}/{{ m.total }} 字段</span>
+                  <span class="audit-missing-fields" v-if="m.missingFields?.length" :title="m.missingFields.join(', ')">缺: {{ m.missingFields.slice(0,3).join(', ') }}{{ m.missingFields.length > 3 ? '...' : '' }}</span>
                   <button class="btn btn-sm btn-outline" @click="translateSingleAuditItem('product', m.id, lang.code)" :disabled="auditTranslating">翻译</button>
                 </div>
               </div>
@@ -382,11 +436,12 @@
                   <span class="gt-status-dot" :class="m.status"></span>
                   <span class="audit-item-name">{{ m.name }}</span>
                   <span class="audit-item-progress">{{ m.translated }}/{{ m.total }} 字段</span>
+                  <span class="audit-missing-fields" v-if="m.missingFields?.length" :title="m.missingFields.join(', ')">缺: {{ m.missingFields.slice(0,3).join(', ') }}{{ m.missingFields.length > 3 ? '...' : '' }}</span>
                   <button class="btn btn-sm btn-outline" @click="translateSingleAuditItem('news', m.id, lang.code)" :disabled="auditTranslating">翻译</button>
                 </div>
               </div>
-              <div v-if="!lang.products.missing.length && !lang.news.missing.length" class="empty-tip" style="padding:12px">
-                🎉 该语言所有产品和文章均已翻译完成！
+              <div v-if="auditLangTotalMissing(lang) === 0" class="empty-tip" style="padding:12px">
+                🎉 该语言所有内容均已翻译完成！
               </div>
             </div>
           </div>
@@ -1206,6 +1261,16 @@ const auditProgressDone = ref(0)
 const auditProgressOk = ref(0)
 const auditProgressErrors = ref(0)
 
+function auditLangTotalMissing(lang) {
+  let count = (lang.products?.missing?.length || 0) + (lang.news?.missing?.length || 0)
+  count += (lang.ui_texts?.missing?.length || 0)
+  count += (lang.company?.missing?.length || 0)
+  count += (lang.page_texts?.missing?.length || 0)
+  count += (lang.categories?.missing?.length || 0)
+  count += (lang.hero?.missing?.length || 0)
+  return count
+}
+
 const auditMissingAll = computed(() => {
   const items = []
   for (const lang of auditReport.value) {
@@ -1214,6 +1279,16 @@ const auditMissingAll = computed(() => {
     }
     for (const m of (lang.news?.missing || [])) {
       items.push({ type: 'news', id: m.id, name: m.name, lang: lang.code, langName: lang.name, langFlag: lang.flag })
+    }
+    // UI texts as single item per language
+    if (lang.ui_texts?.missing?.length) {
+      items.push({ type: 'ui_text', id: 'static', name: 'UI 静态文字 (' + lang.ui_texts.missing.length + ' keys)', lang: lang.code, langName: lang.name, langFlag: lang.flag })
+    }
+    for (const section of ['company', 'page_texts', 'categories', 'hero']) {
+      for (const m of (lang[section]?.missing || [])) {
+        const typeMap = { company: 'company', page_texts: 'page_text', categories: 'category', hero: 'hero' }
+        items.push({ type: typeMap[section], id: m.id, name: m.name, lang: lang.code, langName: lang.name, langFlag: lang.flag })
+      }
     }
   }
   return items
@@ -1240,12 +1315,20 @@ async function runAudit() {
     auditReport.value = report
 
     for (const lang of report) {
+      const totalMissing = auditLangTotalMissing(lang)
+      const uiMissing = lang.ui_texts?.missing?.length || 0
       const pMissing = lang.products?.missing?.length || 0
       const nMissing = lang.news?.missing?.length || 0
-      if (pMissing + nMissing === 0) {
-        auditAddLog('ok', (lang.flag || '') + ' ' + lang.name + ': ✅ 全部翻译完成 (产品 ' + lang.products.total + ', 文章 ' + lang.news.total + ')')
+      const otherMissing = (lang.company?.missing?.length || 0) + (lang.page_texts?.missing?.length || 0) + (lang.categories?.missing?.length || 0) + (lang.hero?.missing?.length || 0)
+      if (totalMissing === 0) {
+        auditAddLog('ok', (lang.flag || '') + ' ' + lang.name + ': ✅ 全部翻译完成')
       } else {
-        auditAddLog('warn', (lang.flag || '') + ' ' + lang.name + ': ⚠️ ' + (pMissing + nMissing) + ' 项未完成 (产品缺 ' + pMissing + ', 文章缺 ' + nMissing + ')')
+        let detail = []
+        if (pMissing) detail.push('产品缺 ' + pMissing)
+        if (nMissing) detail.push('文章缺 ' + nMissing)
+        if (uiMissing) detail.push('UI文字缺 ' + uiMissing)
+        if (otherMissing) detail.push('其他缺 ' + otherMissing)
+        auditAddLog('warn', (lang.flag || '') + ' ' + lang.name + ': ⚠️ ' + totalMissing + ' 项未完成 (' + detail.join(', ') + ')')
       }
     }
     auditAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
@@ -1577,4 +1660,7 @@ input:checked + .slider:before { transform: translateX(18px); }
 .scope-checks { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 8px 0; align-items: center; }
 .scope-check { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13px; color: #334155; font-weight: 500; }
 .scope-check input[type="checkbox"] { accent-color: #3b82f6; width: 15px; height: 15px; cursor: pointer; }
+.audit-ui-keys { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 0; }
+.audit-ui-key { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-family: monospace; }
+.audit-missing-fields { font-size: 11px; color: #94a3b8; margin-left: 6px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

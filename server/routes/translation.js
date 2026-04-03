@@ -1320,25 +1320,29 @@ router.get('/translation-status', authMiddleware, (req, res) => {
     res.json({ items: result, languages: nonEnLangs })
 })
 
-// ─── Full Translation Audit (check all products + articles across all languages) ─
+// ─── Full Translation Audit (check ALL content across all languages) ─────────
 
 router.get('/audit-translations', authMiddleware, (req, res) => {
     const nonEnLangs = getAll("SELECT code, name, flag FROM languages WHERE code != 'en' AND status = 1")
     if (!nonEnLangs.length) return res.json({ languages: [], report: [] })
 
-    // Collect ALL translatable fields for products and news using the PAGES collector
+    // Collect ALL translatable fields using the PAGES collector
     const productFields = PAGES.products ? PAGES.products() : []
     const newsFields = PAGES.news ? PAGES.news() : []
+    const companyFields = PAGES.company ? PAGES.company() : []
+    const pageTextFields = PAGES.page_texts ? PAGES.page_texts() : []
+    const categoryFields = PAGES.categories ? PAGES.categories() : []
+    const heroFields = PAGES.hero ? PAGES.hero() : []
+    const uiTextFields = PAGES.ui_texts_static ? PAGES.ui_texts_static() : []
 
     // Group fields by item, EXPANDING combined fields into actual stored sub-field names
     function groupByItem(fields, type) {
         const map = {}
         for (const f of fields) {
             const key = `${f.id}`
-            if (!map[key]) map[key] = { id: f.id, type, itemName: f.itemName || `#${f.id}`, fields: [], basicFields: [] }
+            if (!map[key]) map[key] = { id: f.id, type, itemName: f.itemName || `#${f.id}`, fields: [], basicFields: [], missingFields: [] }
             
             if (f.combined && f.text) {
-                // Combined field: expand sub-fields (faq_combined → faq_q_0, faq_a_0, etc.)
                 try {
                     const subObj = JSON.parse(f.text)
                     for (const subField of Object.keys(subObj)) {
@@ -1348,12 +1352,10 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
                     map[key].fields.push(f.field)
                 }
             } else if (f.long_html) {
-                // Long HTML stored as 'detail_content' or 'content'
                 map[key].fields.push(f.field)
                 map[key].basicFields.push(f.field)
             } else {
                 map[key].fields.push(f.field)
-                // Basic fields = name, title, description, summary (not faq/spec)
                 if (!f.field.startsWith('faq_') && !f.field.startsWith('spec_')) {
                     map[key].basicFields.push(f.field)
                 }
@@ -1374,18 +1376,74 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
         }
     }
 
-    // Get ALL translation records grouped by content_type + content_id + language
+    // Get ALL translation records
     const allTranslations = getAll(
         `SELECT content_type, content_id, language_code, content_field
-         FROM translations WHERE content_type IN ('product', 'news') AND content_id IS NOT NULL`
+         FROM translations WHERE content_id IS NOT NULL`
     )
 
-    // Build lookup: { "product_1_zh": Set(['name','description','seo_title','faq_q_0',...]) }
+    // Build lookup: { "product_1_zh": Set(['name','description',...]) }
     const transMap = {}
     for (const t of allTranslations) {
         const key = `${t.content_type}_${t.content_id}_${t.language_code}`
         if (!transMap[key]) transMap[key] = new Set()
         transMap[key].add(t.content_field)
+    }
+
+    // STRICT check: only "complete" if ALL fields are translated (100%)
+    function checkItem(item, section, lang) {
+        const key = `${item.type}_${item.id}_${lang.code}`
+        const translated = transMap[key] || new Set()
+        const totalFields = item.fields.length
+        const translatedCount = item.fields.filter(f => translated.has(f)).length
+        const missingFields = item.fields.filter(f => !translated.has(f))
+
+        if (translatedCount === 0) {
+            section.none++
+            section.missing.push({
+                id: item.id, name: item.itemName,
+                category_id: item.category_id, category_name: item.category_name,
+                status: 'none', translated: 0, total: totalFields,
+                missingFields: missingFields.slice(0, 10)
+            })
+        } else if (translatedCount >= totalFields) {
+            // STRICT: 100% = complete
+            section.complete++
+        } else {
+            section.partial++
+            section.missing.push({
+                id: item.id, name: item.itemName,
+                category_id: item.category_id, category_name: item.category_name,
+                status: 'partial', translated: translatedCount, total: totalFields,
+                missingFields: missingFields.slice(0, 10)
+            })
+        }
+    }
+
+    // Check UI texts: expand into individual keys and check each
+    function checkUITexts(lang) {
+        const uiKeys = Object.keys(UI_TEXTS_EN)
+        const totalKeys = uiKeys.length
+        // UI texts are stored as type='ui_text', id='static', field=each key name
+        const translated = transMap[`ui_text_static_${lang.code}`] || new Set()
+        const missingKeys = uiKeys.filter(k => !translated.has(k))
+        const translatedCount = totalKeys - missingKeys.length
+        return {
+            total: totalKeys,
+            translated: translatedCount,
+            missing: missingKeys,
+            complete: missingKeys.length === 0
+        }
+    }
+
+    // Check simple content groups (company, page_texts, categories, hero)
+    function checkSimpleGroup(fields, type, lang) {
+        const section = { total: fields.length, complete: 0, partial: 0, none: 0, missing: [] }
+        const items = groupByItem(fields, type)
+        for (const item of items) {
+            checkItem(item, section, lang)
+        }
+        return section
     }
 
     // Generate report per language
@@ -1396,39 +1454,16 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
             name: lang.name,
             flag: lang.flag,
             products: { total: productItems.length, complete: 0, partial: 0, none: 0, missing: [] },
-            news: { total: newsItems.length, complete: 0, partial: 0, none: 0, missing: [] }
+            news: { total: newsItems.length, complete: 0, partial: 0, none: 0, missing: [] },
+            ui_texts: checkUITexts(lang),
+            company: checkSimpleGroup(companyFields, 'company', lang),
+            page_texts: checkSimpleGroup(pageTextFields, 'page_text', lang),
+            categories: checkSimpleGroup(categoryFields, 'category', lang),
+            hero: checkSimpleGroup(heroFields, 'hero', lang)
         }
 
-        function checkItem(item, section) {
-            const key = `${item.type}_${item.id}_${lang.code}`
-            const translated = transMap[key] || new Set()
-            const totalFields = item.fields.length
-            const translatedCount = item.fields.filter(f => translated.has(f)).length
-            // Check basic fields (name/title, description/summary - the essential ones)
-            const basicTotal = item.basicFields.length
-            const basicTranslated = item.basicFields.filter(f => translated.has(f)).length
-
-            if (translatedCount === 0) {
-                section.none++
-                section.missing.push({
-                    id: item.id, name: item.itemName,
-                    category_id: item.category_id, category_name: item.category_name,
-                    status: 'none', translated: 0, total: totalFields
-                })
-            } else if (basicTranslated >= basicTotal && translatedCount >= Math.ceil(totalFields * 0.6)) {
-                section.complete++
-            } else {
-                section.partial++
-                section.missing.push({
-                    id: item.id, name: item.itemName,
-                    category_id: item.category_id, category_name: item.category_name,
-                    status: 'partial', translated: translatedCount, total: totalFields
-                })
-            }
-        }
-
-        for (const item of productItems) checkItem(item, langReport.products)
-        for (const item of newsItems) checkItem(item, langReport.news)
+        for (const item of productItems) checkItem(item, langReport.products, lang)
+        for (const item of newsItems) checkItem(item, langReport.news, lang)
 
         report.push(langReport)
     }
