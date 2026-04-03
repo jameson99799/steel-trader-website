@@ -307,7 +307,7 @@ async function startServer() {
         // ── Build hreflang tags ──
         let hreflangTags = ''
         try {
-          const languages = getAll('SELECT code FROM languages WHERE is_active=1') || []
+          const languages = getAll('SELECT code FROM languages WHERE status=1') || []
           const langCodes = languages.map(l => l.code)
           if (!langCodes.includes('en')) langCodes.unshift('en')
           hreflangTags = langCodes.map(code =>

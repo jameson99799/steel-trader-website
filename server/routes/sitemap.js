@@ -19,7 +19,7 @@ router.get('/', (req, res) => {
     // Get active languages for multi-language sitemap
     let activeLangs = []
     try {
-        activeLangs = getAll(`SELECT code FROM languages WHERE is_active = 1 ORDER BY code`)
+        activeLangs = getAll(`SELECT code FROM languages WHERE status = 1 ORDER BY code`)
     } catch {
         activeLangs = [{ code: 'en' }]
     }
