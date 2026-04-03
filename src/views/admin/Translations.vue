@@ -154,7 +154,7 @@
               {{ translating ? '⏳ 翻译中...' : '🚀 开始翻译' }}
             </button>
             <button v-if="failedItems.length" class="btn btn-warning" @click="retryFailed" :disabled="translating">
-              🔄 重试失败项 ({{ failedItems.length }})
+              🔄 重新翻译全部未完成 ({{ failedItems.length }})
             </button>
             <button v-if="translating" class="btn btn-outline" @click="abortTranslation">
               ⛔ 停止
@@ -942,10 +942,10 @@ async function runItems(itemsList) {
   addLog('info', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
   addLog(newFailed.length ? 'warn' : 'ok',
     `🏁 翻译完成: 成功 ${progressOk.value} 项, 错误 ${progressErrors.value} 项` +
-    (newFailed.length ? ` | ${newFailed.length} 个项目失败` : ' | 全部成功！')
+    (newFailed.length ? ` | ${newFailed.length} 个项目需要重新翻译` : ' | 全部成功！')
   )
   if (newFailed.length) {
-    addLog('info', `💡 点击「🔄 重试失败项」可重新翻译: ${newFailed.map(i => i.itemName).slice(0, 5).join(', ')}${newFailed.length > 5 ? '...' : ''}`)
+    addLog('info', `💡 点击「🔄 重新翻译全部未完成」可重新翻译所有有错误和失败的项目: ${newFailed.map(i => i.itemName).slice(0, 5).join(', ')}${newFailed.length > 5 ? '...' : ''}`)
   }
   addLog('info', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
 
