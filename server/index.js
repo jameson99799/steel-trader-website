@@ -179,6 +179,7 @@ async function startServer() {
         let pageImage = seoSettings.og_image ? `${siteUrl}${seoSettings.og_image}` : ''
         let ogType = 'website'
         let extraSchemas = ''
+        let isNotFound = false  // Track soft 404
 
           // ── Product detail page ──
           const productMatch = subPath.match(/^\/products\/(.+)$/)
@@ -225,6 +226,11 @@ async function startServer() {
                 { '@type': 'ListItem', position: 2, name: 'Products', item: `${siteUrl}/${lang}/products` },
                 { '@type': 'ListItem', position: 3, name: product.name_en || product.name, item: pageCanonical }
               ] })
+            } else {
+              // Product not found — return 404 status to prevent soft 404
+              isNotFound = true
+              pageTitle = 'Product Not Found | ' + companyName
+              pageDesc = 'The requested product could not be found.'
             }
           }
 
@@ -260,6 +266,11 @@ async function startServer() {
                 { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
                 { '@type': 'ListItem', position: 3, name: article.title_en || article.title, item: pageCanonical }
               ] })
+            } else {
+              // News article not found — return 404 status
+              isNotFound = true
+              pageTitle = 'Article Not Found | ' + companyName
+              pageDesc = 'The requested article could not be found.'
             }
           }
 
@@ -277,6 +288,21 @@ async function startServer() {
             pageTitle = `Contact Us | ${companyName}`
             pageDesc = `Get in touch with ${companyName}. Request a quote, ask product questions, or schedule a factory visit.`
           }
+
+        // ── Global Organization schema (on every page) ──
+        const orgSchema = {
+          '@context': 'https://schema.org', '@type': 'Organization',
+          name: companyName,
+          url: siteUrl,
+          logo: `${siteUrl}/uploads/logo.png`,
+          description: (company.description_en || '').substring(0, 300),
+          address: company.address_en || company.address || '',
+          contactPoint: []
+        }
+        if (company.email) orgSchema.contactPoint.push({ '@type': 'ContactPoint', email: company.email, contactType: 'sales' })
+        if (company.phone) orgSchema.contactPoint.push({ '@type': 'ContactPoint', telephone: company.phone, contactType: 'customer service' })
+        if (company.facebook) orgSchema.sameAs = [company.facebook, company.linkedin, company.instagram, company.tiktok, company.twitter].filter(Boolean)
+        extraSchemas += jsonLd(orgSchema)
 
         // ── Build hreflang tags ──
         let hreflangTags = ''
@@ -319,7 +345,12 @@ async function startServer() {
 
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
-        res.send(html)
+        // Return 404 status for non-existent detail pages (fixes soft 404)
+        if (isNotFound) {
+          res.status(404).send(html)
+        } else {
+          res.send(html)
+        }
 
         } catch (e) {
           console.error('SEO meta injection fatal error:', e)

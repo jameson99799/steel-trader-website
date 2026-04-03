@@ -54,6 +54,35 @@
       </div>
     </div>
 
+    <!-- Related News Section (SEO internal linking) -->
+    <div class="related-news-section" v-if="relatedNews.length">
+      <div class="container">
+        <div class="section-hdr">
+          <h2>{{ t('relatedArticles') || 'Related Articles' }}</h2>
+          <p>{{ t('relatedArticlesDesc') || 'More insights you might find useful' }}</p>
+        </div>
+        <div class="related-news-grid">
+          <router-link
+            v-for="rn in relatedNews"
+            :key="rn.id"
+            :to="langPath(`/news/${rn.slug || rn.id}`)"
+            class="rn-card"
+          >
+            <div class="rn-image">
+              <img :src="rn.cover_image" :alt="localizedValue(rn, 'title')" v-if="rn.cover_image" />
+              <div class="rn-placeholder" v-else>
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4.86 8.86l-3 3.87L9 13.14 6 17h12l-3.86-5.14z"/></svg>
+              </div>
+            </div>
+            <div class="rn-info">
+              <h3>{{ localizedValue(rn, 'title') }}</h3>
+              <span class="rn-date">{{ formatDate(rn.created_at) }}</span>
+            </div>
+          </router-link>
+        </div>
+      </div>
+    </div>
+
     <!-- Product Categories Section -->
     <div class="categories-section" v-if="allCategories.length">
       <div class="container">
@@ -114,6 +143,7 @@ const allCategories = ref([])
 const pageTexts = ref(null)
 const articleIframe = ref(null)
 const company = ref(null)
+const relatedNews = ref([])
 
 // ── Template variable substitution helper ────────────────────────────────
 function resolveTemplateVars(html) {
@@ -263,6 +293,13 @@ async function loadArticle(slug) {
   } finally {
     loading.value = false
   }
+
+  // Fetch related news articles (after main article loads)
+  try {
+    const allNewsData = await api.getNews({ status: 1 })
+    const newsList = (allNewsData.news || allNewsData || []).filter(n => n.id !== article.value?.id)
+    relatedNews.value = newsList.slice(0, 4)
+  } catch (e) { console.warn('Failed to load related news:', e) }
 }
 
 onMounted(() => loadArticle(route.params.slug))
@@ -456,4 +493,61 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
   .article-body { padding: var(--spacing-md); }
   .article-footer { padding: var(--spacing-md); }
 }
+
+/* ── Related News ── */
+.related-news-section {
+  background: var(--white);
+  padding: var(--spacing-2xl) 0;
+  border-top: 1px solid var(--border);
+  margin-top: var(--spacing-xl);
+}
+
+.related-news-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.rn-card {
+  background: var(--gray-50);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  text-decoration: none;
+  transition: var(--transition);
+  border: 1px solid var(--border);
+}
+
+.rn-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary);
+}
+
+.rn-image {
+  height: 140px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #f0f4ff, #e8f0fe);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.rn-image img {
+  width: 100%; height: 100%; object-fit: cover;
+  transition: transform 0.3s;
+}
+
+.rn-card:hover .rn-image img { transform: scale(1.05); }
+
+.rn-placeholder svg { width: 40px; height: 40px; color: var(--text-muted); }
+
+.rn-info { padding: var(--spacing) var(--spacing-md); }
+
+.rn-info h3 {
+  font-size: var(--text-sm); font-weight: 700;
+  color: var(--text-primary); margin-bottom: 4px;
+  line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden;
+}
+
+.rn-date { font-size: 11px; color: var(--text-muted); }
 </style>

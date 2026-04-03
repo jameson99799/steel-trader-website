@@ -73,7 +73,19 @@
               <ul class="link-list">
                 <li><router-link :to="langPath('/about')" class="footer-link">{{ t('about') }}</router-link></li>
                 <li><router-link :to="langPath('/products')" class="footer-link">{{ t('products') }}</router-link></li>
+                <li><router-link :to="langPath('/news')" class="footer-link">{{ t('news') }}</router-link></li>
                 <li><router-link :to="langPath('/contact')" class="footer-link">{{ t('contact') }}</router-link></li>
+              </ul>
+            </div>
+
+            <div class="link-group" v-if="latestNews.length">
+              <h4 class="link-title">{{ t('latestNews') || 'Latest News' }}</h4>
+              <ul class="link-list">
+                <li v-for="n in latestNews" :key="n.id">
+                  <router-link :to="langPath(`/news/${n.slug || n.id}`)" class="footer-link">
+                    {{ (localizedValue(n, 'title') || '').substring(0, 40) }}{{ (localizedValue(n, 'title') || '').length > 40 ? '...' : '' }}
+                  </router-link>
+                </li>
               </ul>
             </div>
             
@@ -137,6 +149,7 @@ const { t, localizedValue, langPath } = useLang()
 const company = ref(null)
 const categories = ref([])
 const pageTexts = ref(null)
+const latestNews = ref([])
 
 onMounted(async () => {
   try {
@@ -144,6 +157,11 @@ onMounted(async () => {
     const tree = await api.getCategoryTree()
     categories.value = tree.slice(0, 5)
     pageTexts.value = await api.getPageTexts()
+    // Fetch latest news for footer links (SEO)
+    try {
+      const newsData = await api.getNews({ status: 1 })
+      latestNews.value = (newsData.news || newsData || []).slice(0, 5)
+    } catch (e) {}
   } catch (e) {}
 })
 </script>
@@ -253,7 +271,7 @@ onMounted(async () => {
 
 .footer-links {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--spacing-xl);
 }
 

@@ -177,6 +177,35 @@
           <div class="detail-content product-detail-html" v-html="sanitizedDetailContent"></div>
         </div>
 
+        <!-- Related Products Section (SEO internal linking) -->
+        <div class="related-products-section" v-if="relatedProducts.length">
+          <div class="container">
+            <div class="section-hdr">
+              <h2>{{ t('relatedProducts') || 'Related Products' }}</h2>
+              <p>{{ t('relatedProductsDesc') || 'You may also be interested in these products' }}</p>
+            </div>
+            <div class="related-products-grid">
+              <router-link
+                v-for="rp in relatedProducts"
+                :key="rp.id"
+                :to="langPath(`/products/${rp.slug || rp.id}`)"
+                class="related-product-card"
+              >
+                <div class="rp-image">
+                  <img :src="(rp.images || '').split(',')[0]" :alt="localizedValue(rp, 'name')" v-if="rp.images" />
+                  <div class="rp-placeholder" v-else>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+                  </div>
+                </div>
+                <div class="rp-info">
+                  <h3>{{ localizedValue(rp, 'name') }}</h3>
+                  <p v-if="localizedValue(rp, 'description')">{{ (localizedValue(rp, 'description') || '').substring(0, 80) }}...</p>
+                </div>
+              </router-link>
+            </div>
+          </div>
+        </div>
+
         <!-- Product Categories Section -->
         <div class="categories-section" v-if="allCategories.length">
           <div class="section-hdr">
@@ -279,6 +308,7 @@ const company = ref(null)
 const pageTexts = ref(null)
 const lightboxImg = ref(null)
 const allCategories = ref([])
+const relatedProducts = ref([])
 
 // Grid: 3 cols with contact panel, 2 cols without
 const layoutColumns = computed(() =>
@@ -426,6 +456,15 @@ onMounted(async () => {
     company.value = comp
     pageTexts.value = texts
     allCategories.value = cats || []
+
+    // Fetch related products from same category
+    if (product.value?.category_id) {
+      try {
+        const allProds = await api.getProducts({ category: product.value.category_id, status: 1 })
+        const prods = (allProds.products || allProds || []).filter(p => p.id !== product.value.id)
+        relatedProducts.value = prods.slice(0, 6)
+      } catch (e) { console.warn('Failed to load related products:', e) }
+    }
 
     // ── GEO: Inject Product JSON-LD structured data ──────────────────
     if (product.value) {
@@ -1563,6 +1602,84 @@ onMounted(async () => {
 .product-detail-html table td,
 .product-detail-html table th {
   vertical-align: middle;
+}
+
+/* ── Related Products ── */
+.related-products-section {
+  background: var(--white);
+  padding: var(--spacing-2xl) 0;
+  border-top: 1px solid var(--border);
+  margin-top: var(--spacing-xl);
+}
+
+.related-products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.related-product-card {
+  background: var(--gray-50);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  text-decoration: none;
+  transition: var(--transition);
+  border: 1px solid var(--border);
+}
+
+.related-product-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary);
+}
+
+.rp-image {
+  height: 160px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #f0f4ff, #e8f0fe);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rp-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+
+.related-product-card:hover .rp-image img {
+  transform: scale(1.05);
+}
+
+.rp-placeholder svg {
+  width: 48px;
+  height: 48px;
+  color: var(--text-muted);
+}
+
+.rp-info {
+  padding: var(--spacing) var(--spacing-md);
+}
+
+.rp-info h3 {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rp-info p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
 }
 </style>
 

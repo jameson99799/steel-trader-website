@@ -1,9 +1,13 @@
 User-agent: *
 Allow: /
 
+# Block admin and API
+Disallow: /admin/
+Disallow: /api/
+Disallow: /uploads/temp/
+
 # Sitemap
 Sitemap: https://www.sunseasteel.com/sitemap.xml
 
-# Block admin area
-Disallow: /admin/
-Disallow: /api/
+# Crawl-delay (optional, be polite to search engines)
+Crawl-delay: 1
