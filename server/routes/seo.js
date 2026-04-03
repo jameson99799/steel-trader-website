@@ -99,6 +99,10 @@ router.get('/audit', authMiddleware, (req, res) => {
     check('Google工具', 'Robots.txt 包含 Sitemap', hasSitemapInRobots,
         '⚠️ robots.txt中未声明sitemap地址，建议添加: Sitemap: https://www.sunseasteel.com/sitemap.xml')
 
+    const blocksApi = robotsTxt.toLowerCase().includes('disallow: /api/')
+    check('Google工具', 'Robots.txt 允许 API 访问', !blocksApi,
+        '🔴 致命！robots.txt 禁止了 /api/ 路径，Google 无法渲染 SPA 页面！请立即删除 Disallow: /api/', 3)
+
     // ── 3. 公司信息 ──────────────────────────────────────────
     const company = getOne('SELECT * FROM company WHERE id = 1') || {}
 

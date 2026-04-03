@@ -58,8 +58,88 @@ async function updateHreflang() {
   }
 }
 
-onMounted(updateHreflang)
-watch(() => route.path, updateHreflang)
+// Inject canonical URL tag
+function updateCanonical() {
+  let el = document.querySelector('link[rel="canonical"]')
+  if (!el) {
+    el = document.createElement('link')
+    el.rel = 'canonical'
+    document.head.appendChild(el)
+  }
+  el.href = window.location.origin + route.path
+}
+
+// Inject Organization + WebSite structured data (JSON-LD)
+async function injectStructuredData() {
+  // Remove old structured data
+  document.querySelectorAll('script[data-seo-jsonld]').forEach(el => el.remove())
+
+  try {
+    const [company, seo] = await Promise.all([
+      api.getCompany().catch(() => null),
+      api.getSeoSettings().catch(() => null)
+    ])
+
+    const origin = window.location.origin
+    const name = company?.name_en || company?.name || 'Shandong Sunsea Steel Co., Ltd'
+    const description = seo?.site_description || company?.description_en || ''
+    const logo = company?.logo ? origin + company.logo : ''
+
+    // Organization schema
+    const orgSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      name,
+      url: origin,
+      description,
+      ...(logo && { logo }),
+      ...(company?.email && { email: company.email }),
+      ...(company?.phone && { telephone: company.phone }),
+      ...(company?.address && {
+        address: {
+          '@type': 'PostalAddress',
+          streetAddress: company.address
+        }
+      }),
+      sameAs: [
+        company?.facebook, company?.linkedin, company?.twitter, company?.youtube
+      ].filter(Boolean)
+    }
+
+    const orgScript = document.createElement('script')
+    orgScript.type = 'application/ld+json'
+    orgScript.setAttribute('data-seo-jsonld', 'org')
+    orgScript.textContent = JSON.stringify(orgSchema)
+    document.head.appendChild(orgScript)
+
+    // WebSite schema (enables sitelinks search box)
+    const siteSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: seo?.site_title || name,
+      url: origin,
+      description
+    }
+
+    const siteScript = document.createElement('script')
+    siteScript.type = 'application/ld+json'
+    siteScript.setAttribute('data-seo-jsonld', 'site')
+    siteScript.textContent = JSON.stringify(siteSchema)
+    document.head.appendChild(siteScript)
+  } catch (e) {
+    console.warn('Failed to inject structured data:', e)
+  }
+}
+
+onMounted(() => {
+  updateHreflang()
+  updateCanonical()
+  injectStructuredData()
+})
+watch(() => route.path, () => {
+  updateHreflang()
+  updateCanonical()
+})
 watch(lang, updateHreflang)
 </script>
 
