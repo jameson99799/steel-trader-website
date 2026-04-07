@@ -20,7 +20,7 @@ import languagesRoutes from './routes/languages.js'
 import translationRoutes from './routes/translation.js'
 import sslRoutes from './routes/ssl.js'
 import emailRoutes from './routes/email.js'
-import indexingRoutes from './routes/indexing.js'
+import indexingRoutes, { startIndexingScheduler } from './routes/indexing.js'
 import aiRoutes from './routes/ai.js'
 import mailerRoutes from './routes/mailer.js'
 import externalApiRoutes from './routes/external-api.js'
@@ -41,6 +41,11 @@ async function startServer() {
     // 初始化数据库
     await initDb()
     console.log('✓ Database initialized')
+
+    // Start Google Indexing background scheduler (survives pm2 restarts)
+    if (NODE_ENV === 'production') {
+      startIndexingScheduler()
+    }
 
     // Auto sea pool timer: check every 6 hours
     function autoSeaPoolCheck() {

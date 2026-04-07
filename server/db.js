@@ -109,6 +109,33 @@ async function initDb() {
   try { db.exec("ALTER TABLE products ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }
   try { db.exec("ALTER TABLE news ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }
 
+  // ── Google Indexing Queue ──────────────────────────────────────────────────
+  // Tracks every URL submission: status, response, quota usage
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS indexing_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      url TEXT NOT NULL UNIQUE,
+      status TEXT DEFAULT 'pending',
+      http_code INTEGER,
+      api_response TEXT,
+      error_message TEXT,
+      submitted_at DATETIME,
+      next_retry_at DATETIME,
+      retry_count INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  // Track daily quota usage (one row per calendar date)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS indexing_daily_quota (
+      date TEXT PRIMARY KEY,
+      submitted_count INTEGER DEFAULT 0,
+      quota_limit INTEGER DEFAULT 200,
+      auto_paused INTEGER DEFAULT 0
+    )
+  `)
+
   // AI Channels table for AI product generation
   db.exec(`
     CREATE TABLE IF NOT EXISTS ai_channels (
