@@ -78,6 +78,29 @@
           </router-link>
           
           <nav class="main-nav" :class="{ active: menuOpen }">
+            <!-- Tablet-only globe: left of Home, hidden on desktop and mobile -->
+            <div class="tablet-nav-lang" v-if="multilingualEnabled && activeLanguages.length > 1" ref="tabletLangRef">
+              <button class="tablet-globe-btn" @click="tabletLangOpen = !tabletLangOpen" aria-label="Switch language">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 2a14.5 14.5 0 0 1 0 20M12 2a14.5 14.5 0 0 0 0 20M2 12h20"/>
+                </svg>
+                <svg class="tablet-lang-chevron" :class="{ open: tabletLangOpen }" viewBox="0 0 20 20" fill="currentColor" width="12" height="12">
+                  <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                </svg>
+              </button>
+              <div class="tablet-lang-dropdown" v-show="tabletLangOpen">
+                <button v-for="l in activeLanguages" :key="l.code"
+                  class="lang-drop-item"
+                  :class="{ active: lang === l.code }"
+                  @click="selectLang(l.code); tabletLangOpen = false">
+                  <span class="lang-flag">{{ l.flag }}</span>
+                  <span>{{ l.name }}</span>
+                  <span v-if="lang === l.code" class="lang-check">✓</span>
+                </button>
+              </div>
+            </div>
+
             <router-link :to="langPath('/')" @click="menuOpen = false" class="nav-link">
               {{ t('home') }}
             </router-link>
@@ -150,6 +173,8 @@ const langDropOpen = ref(false)
 const langSwitcherRef = ref(null)
 const mobileLangOpen = ref(false)
 const mobileLangRef = ref(null)
+const tabletLangOpen = ref(false)
+const tabletLangRef = ref(null)
 
 const selectLang = (code) => {
   if (typeof setLang === 'function') setLang(code)
@@ -163,6 +188,9 @@ const handleClickOutside = (e) => {
   }
   if (mobileLangRef.value && !mobileLangRef.value.contains(e.target)) {
     mobileLangOpen.value = false
+  }
+  if (tabletLangRef.value && !tabletLangRef.value.contains(e.target)) {
+    tabletLangOpen.value = false
   }
 }
 
@@ -511,34 +539,40 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-/* 移动端样式 */
-@media (max-width: 1024px) {
-  /* Tablet + mobile: hide top black contact bar */
-  .header-top {
-    display: none;
-  }
-  
-  .logo-title {
-    font-size: var(--text-xl);
-  }
-  
-  .main-nav {
-    gap: var(--spacing);
-  }
-  
-  .nav-link {
-    font-size: var(--text-sm);
+/* ── Tablet (769px – 1024px) ────────────────────────────────────────────── */
+@media (min-width: 769px) and (max-width: 1024px) {
+  /* Hide top black bar */
+  .header-top { display: none; }
+
+  /* Compact logo – same size as mobile */
+  .logo-image { width: 40px; height: 40px; flex-shrink: 0; }
+
+  /* Switch to compact brand text (SUNSEA STEEL / GI GL PPGI…) */
+  .logo-text { display: none; }
+  .logo-text-mobile {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
 
-  /* Tablet: hide 'Get in Touch' button, show globe lang switcher instead */
-  .header-cta .btn-primary {
-    display: none;
-  }
-  
-  /* Show globe button on tablet (768-1024px) */
-  .mobile-lang-globe {
-    display: block;
-  }
+  /* Shrink nav gaps + font */
+  .main-nav { gap: 4px; }
+  .nav-link { font-size: 13px; padding: 10px 6px; }
+
+  /* Hide 'Get in Touch' button – globe in nav handles lang */
+  .header-cta .btn-primary { display: none; }
+
+  /* Hide the header-cta globe (nav globe handles it on tablet) */
+  .mobile-lang-globe { display: none; }
+
+  /* Show tablet nav globe */
+  .tablet-nav-lang { display: block; }
+}
+
+/* ── Shared: all breakpoints ≤ 1024px ────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .header-top { display: none; }
+  .logo-title { font-size: var(--text-xl); }
 }
 
 @media (max-width: 768px) {
@@ -664,10 +698,46 @@ onUnmounted(() => {
 .mobile-lang-item .lang-flag { font-size: 18px; }
 .mobile-lang-item .lang-check { margin-left: auto; color: #22c55e; font-weight: 700; }
 
-/* Show globe button on mobile (≤768px) - tablet already handled above */
+/* ── Tablet nav globe (left of Home) — hidden by default ── */
+.tablet-nav-lang {
+  display: none;
+  position: relative;
+  margin-right: 4px;
+}
+.tablet-globe-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: all 0.2s;
+}
+.tablet-globe-btn:hover { border-color: var(--primary); color: var(--primary); }
+.tablet-lang-chevron { transition: transform 0.2s; flex-shrink: 0; }
+.tablet-lang-chevron.open { transform: rotate(180deg); }
+.tablet-lang-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 160px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+  overflow: hidden;
+  z-index: 300;
+  border: 1px solid #e2e8f0;
+}
+
+/* ── Mobile (≤ 768px) ───────────────────────────────────────────────────── */
 @media (max-width: 768px) {
+  /* Show the header-cta globe on mobile (hamburger menu hides the nav globe) */
   .mobile-lang-globe { display: block; }
-  /* On mobile the header-top is already hidden by the 1024px rule above */
+  /* Nav globe hidden on mobile since nav is a dropdown / hamburger */
+  .tablet-nav-lang { display: none !important; }
 }
 
 @media (max-width: 640px) {
