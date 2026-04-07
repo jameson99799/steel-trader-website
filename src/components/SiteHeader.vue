@@ -513,20 +513,9 @@ onUnmounted(() => {
 
 /* 移动端样式 */
 @media (max-width: 1024px) {
-  /* Tablet: hide contact info text but KEEP language switcher in top bar */
+  /* Tablet + mobile: hide top black contact bar */
   .header-top {
-    display: block;
-    padding: 6px 0;
-  }
-  .header-top-content {
-    justify-content: flex-end;
-  }
-  .contact-info {
-    display: none; /* hide email/phone on tablet to save space */
-  }
-  .header-actions {
-    display: flex;
-    align-items: center;
+    display: none;
   }
   
   .logo-title {
@@ -539,6 +528,16 @@ onUnmounted(() => {
   
   .nav-link {
     font-size: var(--text-sm);
+  }
+
+  /* Tablet: hide 'Get in Touch' button, show globe lang switcher instead */
+  .header-cta .btn-primary {
+    display: none;
+  }
+  
+  /* Show globe button on tablet (768-1024px) */
+  .mobile-lang-globe {
+    display: block;
   }
 }
 
@@ -665,11 +664,10 @@ onUnmounted(() => {
 .mobile-lang-item .lang-flag { font-size: 18px; }
 .mobile-lang-item .lang-check { margin-left: auto; color: #22c55e; font-weight: 700; }
 
-/* Show globe button on both tablet and mobile (when top bar lang switcher is hidden) */
+/* Show globe button on mobile (≤768px) - tablet already handled above */
 @media (max-width: 768px) {
   .mobile-lang-globe { display: block; }
-  /* At 768px- the header-top is fully hidden, so globe in main bar is the only option */
-  .header-top { display: none !important; }
+  /* On mobile the header-top is already hidden by the 1024px rule above */
 }
 
 @media (max-width: 640px) {
