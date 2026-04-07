@@ -78,7 +78,7 @@
           </router-link>
           
           <nav class="main-nav" :class="{ active: menuOpen }">
-            <!-- Tablet-only globe: left of Home, hidden on desktop and mobile -->
+            <!-- Tablet-only globe: left of Home -->
             <div class="tablet-nav-lang" v-if="multilingualEnabled && activeLanguages.length > 1" ref="tabletLangRef">
               <button class="tablet-globe-btn" @click="tabletLangOpen = !tabletLangOpen" aria-label="Switch language">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
@@ -545,12 +545,12 @@ onUnmounted(() => {
   .header-top { display: none; }
 
   /* Compact logo – same size as mobile */
-  .logo-image { width: 40px; height: 40px; flex-shrink: 0; }
+  .logo-image { width: 40px !important; height: 40px !important; flex-shrink: 0; }
 
-  /* Switch to compact brand text (SUNSEA STEEL / GI GL PPGI…) */
-  .logo-text { display: none; }
+  /* Switch to compact brand text */
+  .logo-text { display: none !important; }
   .logo-text-mobile {
-    display: flex;
+    display: flex !important;
     flex-direction: column;
     justify-content: center;
   }
@@ -559,14 +559,14 @@ onUnmounted(() => {
   .main-nav { gap: 4px; }
   .nav-link { font-size: 13px; padding: 10px 6px; }
 
-  /* Hide 'Get in Touch' button – globe in nav handles lang */
-  .header-cta .btn-primary { display: none; }
+  /* Hide 'Get in Touch' button */
+  .header-cta .btn-primary { display: none !important; }
 
-  /* Hide the header-cta globe (nav globe handles it on tablet) */
-  .mobile-lang-globe { display: none; }
+  /* Hide the header-cta globe – nav globe handles it */
+  .mobile-lang-globe { display: none !important; }
 
-  /* Show tablet nav globe */
-  .tablet-nav-lang { display: block; }
+  /* Show tablet nav globe — override the default display:none */
+  .tablet-nav-lang { display: flex !important; align-items: center; }
 }
 
 /* ── Shared: all breakpoints ≤ 1024px ────────────────────────────────────── */
