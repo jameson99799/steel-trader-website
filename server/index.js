@@ -78,6 +78,22 @@ async function startServer() {
     // Allow large raw body for ZIP imports
     app.use('/api/crm/customers/import/zip', express.raw({ type: 'application/octet-stream', limit: '200mb' }))
 
+    // ── HTTPS + www 强制重定向 (301) ─────────────────────────────────
+    // Fixes "page redirects" in Google Search Console for http:// and non-www URLs
+    if (NODE_ENV === 'production') {
+      app.use((req, res, next) => {
+        const host = req.headers.host || ''
+        const proto = req.headers['x-forwarded-proto'] || req.protocol
+        const isHttps = proto === 'https'
+        const isWww = host.startsWith('www.')
+        if (!isHttps || !isWww) {
+          const wwwHost = isWww ? host : `www.${host}`
+          return res.redirect(301, `https://${wwwHost}${req.originalUrl}`)
+        }
+        next()
+      })
+    }
+
     // 安全头部
     app.use((req, res, next) => {
       res.setHeader('X-Content-Type-Options', 'nosniff')
@@ -147,6 +163,27 @@ async function startServer() {
       const distIndexPath = join(__dirname, '..', 'dist', 'index.html')
       let indexHtmlTemplate = ''
       try { indexHtmlTemplate = readFileSync(distIndexPath, 'utf8') } catch (e) { console.error('Failed to read dist/index.html:', e) }
+
+      // ── Server-side 301 redirects for bare paths (no language prefix) ───────
+      // This replaces client-side redirects in Vue Router, making them proper 301s
+      // that Google treats as permanent redirects, not "redirect" pages
+      const VALID_LANGS = new Set(['en','zh','es','fr','ru','ar','pt','tr','hi','th'])
+      const SITE_PAGES = ['products', 'news', 'about', 'contact']
+      app.use((req, res, next) => {
+        const p = req.path
+        // Skip non-SPA paths
+        if (p.startsWith('/api/') || p.startsWith('/uploads/') || p.startsWith('/admin') ||
+            p.startsWith('/crm') || p === '/sitemap.xml' || p === '/health' ||
+            p.startsWith('/assets/')) return next()
+        // /  → /en/
+        if (p === '/') return res.redirect(301, '/en/')
+        // /products, /products/slug, /news/slug, /about, /contact → /en/...
+        const m = p.match(/^\/([^/]+)(\/.*)?$/)
+        if (m && !VALID_LANGS.has(m[1]) && SITE_PAGES.some(pg => m[1] === pg || m[1].startsWith(pg + '/'))) {
+          return res.redirect(301, `/en${p}`)
+        }
+        next()
+      })
 
       // Helper: escape HTML entities in injected content
       const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

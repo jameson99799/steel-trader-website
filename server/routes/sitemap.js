@@ -25,6 +25,9 @@ router.get('/', (req, res) => {
     }
     if (!activeLangs.length) activeLangs = [{ code: 'en' }]
 
+    // Force canonical base URL to always be https://www (no redirects)
+    const BASE_URL = 'https://www.sunseasteel.com'
+
     const staticPages = [
         { loc: '/', priority: '1.0', changefreq: 'daily' },
         { loc: '/products', priority: '0.9', changefreq: 'daily' },
@@ -43,9 +46,9 @@ router.get('/', (req, res) => {
     function hreflangLinks(path) {
         return activeLangs.map(l => {
             const langPath = `/${l.code}${path === '/' ? '' : path}`
-            return `    <xhtml:link rel="alternate" hreflang="${escapeXml(l.code)}" href="${escapeXml(baseUrl + langPath)}" />`
+            return `    <xhtml:link rel="alternate" hreflang="${escapeXml(l.code)}" href="${escapeXml(BASE_URL + langPath)}" />`
         }).concat([
-            `    <xhtml:link rel="alternate" hreflang="x-default" href="${escapeXml(baseUrl + '/en' + (path === '/' ? '' : path))}" />`
+            `    <xhtml:link rel="alternate" hreflang="x-default" href="${escapeXml(BASE_URL + '/en' + (path === '/' ? '' : path))}" />`
         ]).join('\n')
     }
 
@@ -56,7 +59,7 @@ router.get('/', (req, res) => {
         for (const l of activeLangs) {
             const langPath = `/${l.code}${p.loc === '/' ? '' : p.loc}`
             urls.push(`  <url>
-    <loc>${escapeXml(baseUrl + langPath)}</loc>
+    <loc>${escapeXml(BASE_URL + langPath)}</loc>
     <lastmod>${now}</lastmod>
     <changefreq>${p.changefreq}</changefreq>
     <priority>${p.priority}</priority>
@@ -71,7 +74,7 @@ ${hreflangLinks(p.loc)}
         const catPath = `/products?category=${catSlug}`
         for (const l of activeLangs) {
             urls.push(`  <url>
-    <loc>${escapeXml(baseUrl + '/' + l.code + catPath)}</loc>
+    <loc>${escapeXml(BASE_URL + '/' + l.code + catPath)}</loc>
     <lastmod>${now}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
@@ -87,7 +90,7 @@ ${hreflangLinks(catPath)}
         const lastmod = p.created_at ? p.created_at.split(' ')[0] : now
         for (const l of activeLangs) {
             urls.push(`  <url>
-    <loc>${escapeXml(baseUrl + '/' + l.code + prodPath)}</loc>
+    <loc>${escapeXml(BASE_URL + '/' + l.code + prodPath)}</loc>
     <lastmod>${lastmod}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
@@ -103,7 +106,7 @@ ${hreflangLinks(prodPath)}
         const lastmod = n.updated_at ? n.updated_at.split(' ')[0] : now
         for (const l of activeLangs) {
             urls.push(`  <url>
-    <loc>${escapeXml(baseUrl + '/' + l.code + newsPath)}</loc>
+    <loc>${escapeXml(BASE_URL + '/' + l.code + newsPath)}</loc>
     <lastmod>${lastmod}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
