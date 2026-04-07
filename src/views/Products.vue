@@ -11,7 +11,9 @@
             <span class="breadcrumb-current">{{ currentCategoryName || t('allProducts') }}</span>
           </div>
           <h1 class="page-title">{{ currentCategoryName || t('allProducts') }}</h1>
-          <p class="page-subtitle" v-if="!loading">{{ products.length }} {{ t('available') }}</p>
+          <p class="page-subtitle" v-if="!loading">
+            {{ selectedCategory ? products.length : totalProductCount }} {{ t('available') }}
+          </p>
           <p class="page-subtitle" v-else>&nbsp;</p>
         </div>
       </div>

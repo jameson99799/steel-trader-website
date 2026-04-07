@@ -513,8 +513,20 @@ onUnmounted(() => {
 
 /* 移动端样式 */
 @media (max-width: 1024px) {
+  /* Tablet: hide contact info text but KEEP language switcher in top bar */
   .header-top {
-    display: none;
+    display: block;
+    padding: 6px 0;
+  }
+  .header-top-content {
+    justify-content: flex-end;
+  }
+  .contact-info {
+    display: none; /* hide email/phone on tablet to save space */
+  }
+  .header-actions {
+    display: flex;
+    align-items: center;
   }
   
   .logo-title {
@@ -653,8 +665,11 @@ onUnmounted(() => {
 .mobile-lang-item .lang-flag { font-size: 18px; }
 .mobile-lang-item .lang-check { margin-left: auto; color: #22c55e; font-weight: 700; }
 
+/* Show globe button on both tablet and mobile (when top bar lang switcher is hidden) */
 @media (max-width: 768px) {
   .mobile-lang-globe { display: block; }
+  /* At 768px- the header-top is fully hidden, so globe in main bar is the only option */
+  .header-top { display: none !important; }
 }
 
 @media (max-width: 640px) {

@@ -206,7 +206,7 @@
     </div>
 
     <!-- Google Maps Embed Section -->
-    <div class="map-section">
+    <div class="map-section" v-if="company?.map_embed_url || company?.address">
       <div class="container">
         <div class="map-header">
           <svg viewBox="0 0 24 24" fill="currentColor" class="map-pin-icon">
@@ -214,22 +214,59 @@
           </svg>
           <h3>{{ t('ourLocation') }}</h3>
         </div>
+
+        <!-- Map: click-to-load (avoids blocking page render) -->
         <div class="map-embed-wrap" v-if="company?.map_embed_url">
+          <!-- Preview overlay before loading -->
+          <div v-if="!mapLoaded" class="map-preview" @click="mapLoaded = true">
+            <div class="map-preview-inner">
+              <svg viewBox="0 0 24 24" fill="currentColor" class="map-big-pin">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+              </svg>
+              <p class="map-address-preview">{{ localizedValue(company, 'address') }}</p>
+              <button class="map-load-btn">
+                <svg viewBox="0 0 20 20" fill="currentColor" style="width:16px;height:16px">
+                  <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
+                </svg>
+                {{ t('showMap') || 'Show Map' }}
+              </button>
+            </div>
+          </div>
+          <!-- Actual iframe only loads after click -->
           <iframe
+            v-if="mapLoaded"
             :src="company.map_embed_url"
             width="100%"
-            height="420"
-            style="border:0;"
-            allowfullscreen=""
+            height="450"
+            style="border:0;display:block;width:100%;"
+            allowfullscreen
             loading="lazy"
             referrerpolicy="no-referrer-when-downgrade"
           ></iframe>
         </div>
-        <div class="map-placeholder" v-else>
+
+        <!-- Address + Open Google Maps button -->
+        <div class="map-footer" v-if="localizedValue(company, 'address')">
+          <svg viewBox="0 0 20 20" fill="currentColor" class="map-footer-icon">
+            <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
+          </svg>
+          <span class="map-address">{{ localizedValue(company, 'address') }}</span>
+          <a :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(localizedValue(company, 'address'))" 
+             target="_blank" rel="noopener" class="map-open-btn">
+            <svg viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px">
+              <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z"/>
+              <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z"/>
+            </svg>
+            Open in Google Maps
+          </a>
+        </div>
+
+        <!-- Placeholder when no map URL configured -->
+        <div class="map-placeholder" v-if="!company?.map_embed_url">
           <svg viewBox="0 0 24 24" fill="currentColor" style="width:48px;height:48px;color:#cbd5e1;margin-bottom:12px;">
             <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
           </svg>
-          <p>To show a Google Map here, go to <strong>Admin → Company Info → Google Maps Embed URL</strong> and paste your Google Maps embed link.</p>
+          <p>To show a Google Map, go to <strong>Admin → Company Info → Google Maps Embed URL</strong>.</p>
         </div>
       </div>
     </div>
@@ -257,6 +294,7 @@ const { t, localizedValue, langPath } = useLang()
 const company = ref(null)
 const pageTexts = ref(null)
 const loading = ref(false)
+const mapLoaded = ref(false)
 
 const form = reactive({
   name: '',
@@ -757,15 +795,107 @@ textarea.form-control {
 .map-embed-wrap {
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.10);
   line-height: 0;
+  min-height: 450px;
+  background: #e2e8f0;
+  position: relative;
 }
+
+/* Click-to-load preview overlay */
+.map-preview {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #e0e7ef 0%, #c7d2e0 100%);
+  cursor: pointer;
+  border-radius: 12px;
+  min-height: 450px;
+}
+.map-preview-inner {
+  text-align: center;
+  padding: 32px;
+}
+.map-big-pin {
+  width: 56px;
+  height: 56px;
+  color: #ef4444;
+  margin: 0 auto 16px;
+  display: block;
+  filter: drop-shadow(0 4px 8px rgba(239,68,68,0.3));
+}
+.map-address-preview {
+  font-size: 15px;
+  color: #374151;
+  font-weight: 500;
+  margin-bottom: 20px;
+  max-width: 360px;
+  line-height: 1.6;
+}
+.map-load-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  background: #1d4ed8;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+  box-shadow: 0 2px 8px rgba(29,78,216,0.25);
+}
+.map-load-btn:hover { background: #1e40af; transform: translateY(-1px); }
 
 .map-embed-wrap iframe {
   display: block;
   width: 100%;
-  height: 420px;
+  height: 450px;
 }
+
+/* Address bar below map */
+.map-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  flex-wrap: wrap;
+}
+.map-footer-icon {
+  width: 18px;
+  height: 18px;
+  color: #ef4444;
+  flex-shrink: 0;
+}
+.map-address {
+  flex: 1;
+  font-size: 14px;
+  color: #374151;
+  font-weight: 500;
+}
+.map-open-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #1d4ed8;
+  color: white;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+.map-open-btn:hover { background: #1e40af; }
 
 /* Placeholder shown when Google Maps URL is not configured */
 .map-placeholder {
