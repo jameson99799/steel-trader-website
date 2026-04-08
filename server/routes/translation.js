@@ -789,6 +789,14 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
     const results = []
     const errors = []
 
+    // ── Keep-alive heartbeat: prevent Cloudflare 524 timeout ──
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders()
+    const keepAlive = setInterval(() => {
+        try { res.write(' ') } catch (e) { clearInterval(keepAlive) }
+    }, 25000)
+
     // ── Translate ALL short text fields in mega-batches ──
     const BATCH = 50
     for (let i = 0; i < allShortItems.length; i += BATCH) {
@@ -884,7 +892,8 @@ DO NOT TRANSLATE: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T, model n
     if (results.length > 0) {
         run('UPDATE languages SET ai_translated=1 WHERE code=?', [targetLang])
     }
-    res.json({ success: true, results, errors, total: allShortItems.length + allLongItems.length, translated: results.length })
+    clearInterval(keepAlive)
+    res.end(JSON.stringify({ success: true, results, errors, total: allShortItems.length + allLongItems.length, translated: results.length }))
 })
 
 // ─── Translate ONE item (type + id) to avoid timeout ─────────────────────────
@@ -913,6 +922,16 @@ router.post('/run-one', authMiddleware, async (req, res) => {
         ? '\n\nUse these approved translations as reference:\n' +
         manualOverrides.slice(0, 8).map(o => `"${o.original_text}" → "${o.translated_text}"`).join('\n')
         : ''
+
+    // ── Keep-alive heartbeat: prevent Cloudflare 524 timeout ──
+    // Cloudflare cuts the connection if no data is received for 100s.
+    // Sending a space every 25s resets the timer. JSON.parse ignores leading whitespace.
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('X-Accel-Buffering', 'no')  // disable Nginx response buffering
+    res.flushHeaders()
+    const keepAlive = setInterval(() => {
+        try { res.write(' ') } catch (e) { clearInterval(keepAlive) }
+    }, 25000)
 
     try {
         const enhanced = enhanceWithDefaultChannel(s)
@@ -1022,9 +1041,11 @@ DO NOT TRANSLATE: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T, model n
         if (results.length > 0) {
             run('UPDATE languages SET ai_translated=1 WHERE code=?', [targetLang])
         }
-        res.json({ success: true, results, errors, total: items.length, translated: results.length })
+        clearInterval(keepAlive)
+        res.end(JSON.stringify({ success: true, results, errors, total: items.length, translated: results.length }))
     } catch (e) {
-        res.status(500).json({ error: e.message, errorCode: 'ERR_API' })
+        clearInterval(keepAlive)
+        res.end(JSON.stringify({ error: e.message, errorCode: 'ERR_API' }))
     }
 })
 
