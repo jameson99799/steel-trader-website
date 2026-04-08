@@ -979,60 +979,75 @@ Glossary(zh): Galvalume/GL=镀铝锌 ALUZINC=镀铝锌 PPGI=彩涂镀锌 PPGL=�
             }
         }
 
-        // ── LONG HTML: exact same sequential block approach as run-bulk ──
+        // ── LONG HTML: single-call approach (keep-alive prevents timeout) ──
+        // With keep-alive heartbeat, Cloudflare won't 524. Send entire HTML in ONE call.
         for (const item of longItems) {
             try {
-                const { root, blocks } = extractBlockSegments(item.text)
-                if (!root || blocks.length === 0) continue
+                const contextName = item.itemName || 'steel product'
+                const htmlPrompt = `You are translating HTML content for a steel products company website from English to ${langRow.name}.
+Rules:
+- Translate ALL visible text content completely and naturally
+- Preserve ALL HTML tags, attributes, class names, styles, URLs exactly as-is
+- Keep product codes, model numbers, units (mm, kg, MPa, etc.) unchanged
+- Return ONLY the translated HTML, no explanation or wrapper
+GLOSSARY (for Chinese): Galvalume/GL=镀铝锌, ALUZINC=镀铝锌, PPGI=彩涂镀锌, PPGL=彩涂镀铝锌, GI=镀锌, CRC=冷轧卷
+DO NOT TRANSLATE: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T, model numbers.
+Context: This is a page about "${contextName}".${overrideNote}`
 
-                const BLOCK_BATCH = 15
-                const contextName = item.itemName ? `\nContext: This content is about "${item.itemName}".` : ''
+                let translatedHtml = null
 
-                for (let i = 0; i < blocks.length; i += BLOCK_BATCH) {
-                    const batch = blocks.slice(i, i + BLOCK_BATCH)
-                    const numberedText = batch.map((b, idx) => `${idx + 1}. ${b.innerHTML}`).join('\n')
-                    let prevContext = ''
-                    if (i > 0) {
-                        const recent = blocks.slice(Math.max(0, i - 3), i)
-                        prevContext = '\nPrevious translated content for context:\n' + recent.map(b => b.innerHTML).join('\n')
-                    }
-                    const blockPrompt = `You are translating HTML content for a steel products company website from English to ${langRow.name}.
-Translate each numbered HTML block. Preserve ALL HTML tags, attributes, CSS, and structure exactly. Only translate visible text content.
-Return ONLY a JSON object like {"1":"<translated html>","2":"<translated html>"}.
-GLOSSARY: Galvalume/GL=镀铝锌, ALUZINC=镀铝锌, PPGI=彩涂镀锌, PPGL=彩涂镀铝锌, GI=镀锌, CRC=冷轧卷 (for Chinese).
-DO NOT TRANSLATE: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T, model numbers.${contextName}${prevContext}${overrideNote}`
-                    let blockSuccess = false
-                    for (let retry = 0; retry <= 2 && !blockSuccess; retry++) {
-                        try {
-                            const aiContent = await callAI(enhanced, [
-                                { role: 'system', content: blockPrompt },
-                                { role: 'user', content: numberedText }
-                            ], 8000)
-                            const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
-                            if (jsonMatch) {
-                                const translations = JSON.parse(jsonMatch[0])
-                                for (let j = 0; j < batch.length; j++) {
-                                    const translated = translations[String(j + 1)]
-                                    if (translated) batch[j].set_innerHTML(translated)
+                // For very large HTML (>50000 chars), split into 2 halves
+                if (item.text.length > 50000) {
+                    console.log('[run-one] Very large HTML (' + item.text.length + ' chars), splitting into 2 parts')
+                    const midPoint = Math.floor(item.text.length / 2)
+                    // Find a safe split point near the middle (after a closing tag)
+                    const splitIdx = item.text.indexOf('>', midPoint) + 1 || midPoint
+                    const parts = [item.text.slice(0, splitIdx), item.text.slice(splitIdx)]
+                    const translatedParts = []
+                    for (let p = 0; p < parts.length; p++) {
+                        for (let retry = 0; retry <= 1; retry++) {
+                            try {
+                                const translated = await callAI(enhanced, [
+                                    { role: 'system', content: htmlPrompt + '\nThis is part ' + (p + 1) + ' of 2.' },
+                                    { role: 'user', content: parts[p] }
+                                ], 16000)
+                                if (translated && translated.length > 10) {
+                                    translatedParts.push(translated)
+                                    break
                                 }
-                                blockSuccess = true
-                            } else {
-                                console.log('[run-one] Block batch returned no JSON, retry', retry, '| response:', aiContent.slice(0, 200))
-                                if (retry >= 2) {
-                                    errors.push({ error: 'AI未返回JSON (batch ' + Math.floor(i / BLOCK_BATCH + 1) + ')', errorCode: 'ERR_BLOCK_NO_JSON', itemName: item.itemName })
-                                }
-                            }
-                        } catch (e) {
-                            console.log('[run-one] Block batch error, retry', retry, ':', e.message)
-                            if (retry >= 2) {
-                                errors.push({ error: e.message + ' (batch ' + Math.floor(i / BLOCK_BATCH + 1) + ')', errorCode: 'ERR_BLOCK', itemName: item.itemName })
+                            } catch (e) {
+                                if (retry >= 1) errors.push({ error: e.message + ' (part ' + (p + 1) + ')', errorCode: 'ERR_HTML', itemName: item.itemName })
                             }
                         }
                     }
+                    if (translatedParts.length === 2) {
+                        translatedHtml = translatedParts.join('')
+                    }
+                } else {
+                    // Normal HTML: ONE call for the entire content
+                    for (let retry = 0; retry <= 2; retry++) {
+                        try {
+                            const translated = await callAI(enhanced, [
+                                { role: 'system', content: htmlPrompt },
+                                { role: 'user', content: item.text }
+                            ], 16000)
+                            if (translated && translated.length > 10) {
+                                translatedHtml = translated
+                                break
+                            }
+                        } catch (e) {
+                            console.log('[run-one] HTML translation error, retry', retry, ':', e.message)
+                            if (retry >= 2) errors.push({ error: e.message + ' (retried 2x)', errorCode: 'ERR_HTML', itemName: item.itemName })
+                        }
+                    }
                 }
-                const translatedHtml = root.toString()
-                upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translatedHtml)
-                results.push({ type: item.type, field: item.field, itemName: item.itemName, original: '[HTML]', translated: '[HTML translated]' })
+
+                if (translatedHtml) {
+                    upsertTranslation(targetLang, item.type, item.id, item.field, '[HTML]', translatedHtml)
+                    results.push({ type: item.type, field: item.field, itemName: item.itemName, original: '[HTML ' + item.text.length + ' chars]', translated: '[Translated ' + translatedHtml.length + ' chars]' })
+                } else {
+                    errors.push({ error: 'HTML translation returned empty', errorCode: 'ERR_HTML_EMPTY', itemName: item.itemName })
+                }
             } catch (e) {
                 errors.push({ error: e.message, errorCode: 'ERR_HTML', itemName: item.itemName })
             }
