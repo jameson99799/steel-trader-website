@@ -915,7 +915,98 @@ router.post('/run-one', authMiddleware, async (req, res) => {
         : ''
 
     try {
-        const { results, errors } = await translateBatch(enhanceWithDefaultChannel(s), items, targetLang, langRow.name, overrideNote, 2)  // aiConcurrency=2: fast enough for typical articles (~40s), avoids rate limits when multiple lang requests are concurrent
+        const enhanced = enhanceWithDefaultChannel(s)
+        const results = []
+        const errors = []
+        const shortItems = items.filter(i => !i.long_html)
+        const longItems = items.filter(i => i.long_html)
+
+        // ── SHORT TEXT: same approach as run-bulk — one callAI for all short fields ──
+        if (shortItems.length > 0) {
+            const numberedText = shortItems.map((item, idx) => `${idx + 1}. ${item.text}`).join('\n')
+            const systemPrompt = `Translate numbered lines to ${langRow.name}. Steel company context. Return JSON {"1":"...","2":"..."}.
+Keep unchanged: codes, HTML, ASTM/JIS/EN/GB/T, "SHANDONG SUNSEA STEEL CO., LTD".
+Glossary(zh): Galvalume/GL=镀铝锌 ALUZINC=镀铝锌 PPGI=彩涂镀锌 PPGL=彩涂镀铝锌 GI=镀锌 CRC=冷轧卷.${overrideNote}`
+
+            let success = false
+            for (let attempt = 0; attempt <= 2 && !success; attempt++) {
+                try {
+                    const content = await callAI(enhanced, [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: numberedText }
+                    ], 8000)
+                    const jsonMatch = content.match(/\{[\s\S]*\}/)
+                    if (!jsonMatch) {
+                        errors.push({ error: 'JSON parse error', errorCode: 'ERR_PARSE', itemName: shortItems[0]?.itemName })
+                        break
+                    }
+                    const translations = JSON.parse(jsonMatch[0])
+                    for (let j = 0; j < shortItems.length; j++) {
+                        const item = shortItems[j]
+                        const translated = translations[String(j + 1)]
+                        if (!translated) {
+                            errors.push({ item: item.text.slice(0, 60), error: 'No translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
+                            continue
+                        }
+                        upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
+                        results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field, itemName: item.itemName })
+                    }
+                    success = true
+                } catch (e) {
+                    if (attempt >= 2) {
+                        errors.push({ error: e.message + ' (retried 2x)', errorCode: 'ERR_API', itemName: shortItems[0]?.itemName })
+                    }
+                }
+            }
+        }
+
+        // ── LONG HTML: exact same sequential block approach as run-bulk ──
+        for (const item of longItems) {
+            try {
+                const { root, blocks } = extractBlockSegments(item.text)
+                if (!root || blocks.length === 0) continue
+
+                const BLOCK_BATCH = 15
+                const contextName = item.itemName ? `\nContext: This content is about "${item.itemName}".` : ''
+
+                for (let i = 0; i < blocks.length; i += BLOCK_BATCH) {
+                    const batch = blocks.slice(i, i + BLOCK_BATCH)
+                    const numberedText = batch.map((b, idx) => `${idx + 1}. ${b.innerHTML}`).join('\n')
+                    let prevContext = ''
+                    if (i > 0) {
+                        const recent = blocks.slice(Math.max(0, i - 3), i)
+                        prevContext = '\nPrevious translated content for context:\n' + recent.map(b => b.innerHTML).join('\n')
+                    }
+                    const blockPrompt = `You are translating HTML content for a steel products company website from English to ${langRow.name}.
+Translate each numbered HTML block. Preserve ALL HTML tags, attributes, CSS, and structure exactly. Only translate visible text content.
+Return ONLY a JSON object like {"1":"<translated html>","2":"<translated html>"}.
+GLOSSARY: Galvalume/GL=镀铝锌, ALUZINC=镀铝锌, PPGI=彩涂镀锌, PPGL=彩涂镀铝锌, GI=镀锌, CRC=冷轧卷 (for Chinese).
+DO NOT TRANSLATE: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T, model numbers.${contextName}${prevContext}${overrideNote}`
+                    try {
+                        const aiContent = await callAI(enhanced, [
+                            { role: 'system', content: blockPrompt },
+                            { role: 'user', content: numberedText }
+                        ], 8000)
+                        const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
+                        if (jsonMatch) {
+                            const translations = JSON.parse(jsonMatch[0])
+                            for (let j = 0; j < batch.length; j++) {
+                                const translated = translations[String(j + 1)]
+                                if (translated) batch[j].set_innerHTML(translated)
+                            }
+                        }
+                    } catch (e) {
+                        errors.push({ error: e.message, errorCode: 'ERR_BLOCK', itemName: item.itemName })
+                    }
+                }
+                const translatedHtml = root.toString()
+                upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translatedHtml)
+                results.push({ type: item.type, field: item.field, itemName: item.itemName, original: '[HTML]', translated: '[HTML translated]' })
+            } catch (e) {
+                errors.push({ error: e.message, errorCode: 'ERR_HTML', itemName: item.itemName })
+            }
+        }
+
         if (results.length > 0) {
             run('UPDATE languages SET ai_translated=1 WHERE code=?', [targetLang])
         }
