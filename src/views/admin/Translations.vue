@@ -1184,7 +1184,14 @@ async function startGranularTranslation() {
         }
         if (errs > 0) {
           gtProgressErrors.value += errs
-          gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] ' + ok + ' 成功, ' + errs + ' 错误')
+          // Show what specifically failed
+          for (const e of (res.errors || []))
+            gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] ' + (e.errorCode || '') + ' ' + (e.error || '').slice(0, 150))
+          if (ok > 0) {
+            gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] 部分成功: ' + ok + ' 成功, ' + errs + ' 错误（可重试修复）')
+          }
+          hasError = true
+          if (!gtFailedIds.value.includes(itemId)) gtFailedIds.value.push(itemId)
         } else if (ok > 0) {
           gtAddLog('ok', '  ✅「' + itemName + '」[' + langLabel + '] ' + ok + ' 个字段')
         } else {

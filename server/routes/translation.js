@@ -982,21 +982,33 @@ Translate each numbered HTML block. Preserve ALL HTML tags, attributes, CSS, and
 Return ONLY a JSON object like {"1":"<translated html>","2":"<translated html>"}.
 GLOSSARY: Galvalume/GL=镀铝锌, ALUZINC=镀铝锌, PPGI=彩涂镀锌, PPGL=彩涂镀铝锌, GI=镀锌, CRC=冷轧卷 (for Chinese).
 DO NOT TRANSLATE: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T, model numbers.${contextName}${prevContext}${overrideNote}`
-                    try {
-                        const aiContent = await callAI(enhanced, [
-                            { role: 'system', content: blockPrompt },
-                            { role: 'user', content: numberedText }
-                        ], 8000)
-                        const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
-                        if (jsonMatch) {
-                            const translations = JSON.parse(jsonMatch[0])
-                            for (let j = 0; j < batch.length; j++) {
-                                const translated = translations[String(j + 1)]
-                                if (translated) batch[j].set_innerHTML(translated)
+                    let blockSuccess = false
+                    for (let retry = 0; retry <= 2 && !blockSuccess; retry++) {
+                        try {
+                            const aiContent = await callAI(enhanced, [
+                                { role: 'system', content: blockPrompt },
+                                { role: 'user', content: numberedText }
+                            ], 8000)
+                            const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
+                            if (jsonMatch) {
+                                const translations = JSON.parse(jsonMatch[0])
+                                for (let j = 0; j < batch.length; j++) {
+                                    const translated = translations[String(j + 1)]
+                                    if (translated) batch[j].set_innerHTML(translated)
+                                }
+                                blockSuccess = true
+                            } else {
+                                console.log('[run-one] Block batch returned no JSON, retry', retry, '| response:', aiContent.slice(0, 200))
+                                if (retry >= 2) {
+                                    errors.push({ error: 'AI未返回JSON (batch ' + Math.floor(i / BLOCK_BATCH + 1) + ')', errorCode: 'ERR_BLOCK_NO_JSON', itemName: item.itemName })
+                                }
+                            }
+                        } catch (e) {
+                            console.log('[run-one] Block batch error, retry', retry, ':', e.message)
+                            if (retry >= 2) {
+                                errors.push({ error: e.message + ' (batch ' + Math.floor(i / BLOCK_BATCH + 1) + ')', errorCode: 'ERR_BLOCK', itemName: item.itemName })
                             }
                         }
-                    } catch (e) {
-                        errors.push({ error: e.message, errorCode: 'ERR_BLOCK', itemName: item.itemName })
                     }
                 }
                 const translatedHtml = root.toString()
