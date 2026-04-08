@@ -924,175 +924,16 @@ router.post('/run-one', authMiddleware, async (req, res) => {
         : ''
 
     // ── Keep-alive heartbeat: prevent Cloudflare 524 timeout ──
-    // Cloudflare cuts the connection if no data is received for 100s.
-    // Sending a space every 25s resets the timer. JSON.parse ignores leading whitespace.
     res.setHeader('Content-Type', 'application/json')
-    res.setHeader('X-Accel-Buffering', 'no')  // disable Nginx response buffering
+    res.setHeader('X-Accel-Buffering', 'no')
     res.flushHeaders()
     const keepAlive = setInterval(() => {
         try { res.write(' ') } catch (e) { clearInterval(keepAlive) }
     }, 25000)
 
     try {
-        const enhanced = enhanceWithDefaultChannel(s)
-        const results = []
-        const errors = []
-        const shortItems = items.filter(i => !i.long_html)
-        const longItems = items.filter(i => i.long_html)
-
-        // ── SHORT TEXT: same JSON approach as translateBatch ──
-        if (shortItems.length > 0) {
-            // Build merged JSON — combined fields expanded into sub-fields (same as translateBatch)
-            const fieldsObj = {}
-            for (const item of shortItems) {
-                if (item.combined) {
-                    try {
-                        const subObj = JSON.parse(item.text)
-                        Object.assign(fieldsObj, subObj)
-                    } catch (e) {
-                        fieldsObj[item.field] = item.text
-                    }
-                } else {
-                    fieldsObj[item.field] = item.text
-                }
-            }
-            console.log('[run-one] Sending', Object.keys(fieldsObj).length, 'fields in ONE call for', shortItems[0]?.itemName)
-
-            const systemPrompt = `Translate the following JSON values from English to ${langRow.name}. This is content for a steel products company website.
-Return ONLY a JSON object with the SAME keys and translated values.
-Rules:
-- Translate ALL text content completely and naturally
-- Keep HTML tags, product codes, model numbers, units (mm, kg, MPa) unchanged
-- Keep URLs, email addresses unchanged
-GLOSSARY (for Chinese): Galvalume/GL=镀铝锌, ALUZINC=镀铝锌, PPGI=彩涂镀锌, PPGL=彩涂镀铝锌, GI=镀锌, CRC=冷轧卷
-DO NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", "GI GL PPGI PPGL CRC Steel Coil", ASTM, JIS, EN, GB/T${overrideNote}`
-
-            for (let attempt = 0; attempt <= 2; attempt++) {
-                try {
-                    const aiContent = await callAI(enhanced, [
-                        { role: 'system', content: systemPrompt },
-                        { role: 'user', content: JSON.stringify(fieldsObj, null, 0) }
-                    ], 16000)
-
-                    const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
-                    if (!jsonMatch) {
-                        if (attempt >= 2) errors.push({ error: 'No JSON in AI response', errorCode: 'ERR_NO_JSON', itemName: shortItems[0]?.itemName })
-                        continue
-                    }
-
-                    let translations
-                    try { translations = JSON.parse(jsonMatch[0]) } catch (e) {
-                        if (attempt >= 2) errors.push({ error: 'JSON parse error', errorCode: 'ERR_PARSE', itemName: shortItems[0]?.itemName })
-                        continue
-                    }
-
-                    // Match translations back — handle combined fields (same as translateBatch)
-                    console.log('[run-one] Got', Object.keys(translations).length, 'translated fields back')
-                    for (const item of shortItems) {
-                        if (item.combined) {
-                            try {
-                                const subObj = JSON.parse(item.text)
-                                for (const subField of Object.keys(subObj)) {
-                                    const translated = translations[subField]
-                                    if (translated && typeof translated === 'string') {
-                                        upsertTranslation(targetLang, item.type, item.id, subField, subObj[subField], translated)
-                                        results.push({ original: subObj[subField].slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: subField, itemName: item.itemName })
-                                    }
-                                }
-                            } catch (e) {
-                                errors.push({ item: item.field, error: 'Combined field parse error', errorCode: 'ERR_PARSE', itemName: item.itemName })
-                            }
-                        } else {
-                            const translated = translations[item.field]
-                            if (translated && typeof translated === 'string') {
-                                upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
-                                results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field, itemName: item.itemName })
-                            } else {
-                                errors.push({ item: item.field, error: 'Missing translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
-                            }
-                        }
-                    }
-                    break // success
-                } catch (e) {
-                    if (attempt >= 2) errors.push({ error: e.message + ' (retried 2x)', errorCode: 'ERR_API', itemName: shortItems[0]?.itemName })
-                }
-            }
-        }
-
-        // ── LONG HTML: single-call approach (keep-alive prevents timeout) ──
-        // With keep-alive heartbeat, Cloudflare won't 524. Send entire HTML in ONE call.
-        for (const item of longItems) {
-            try {
-                const contextName = item.itemName || 'steel product'
-                const htmlPrompt = `You are translating HTML content for a steel products company website from English to ${langRow.name}.
-Rules:
-- Translate ALL visible text content completely and naturally
-- Preserve ALL HTML tags, attributes, class names, styles, URLs exactly as-is
-- Keep product codes, model numbers, units (mm, kg, MPa, etc.) unchanged
-- Return ONLY the translated HTML, no explanation or wrapper
-GLOSSARY (for Chinese): Galvalume/GL=镀铝锌, ALUZINC=镀铝锌, PPGI=彩涂镀锌, PPGL=彩涂镀铝锌, GI=镀锌, CRC=冷轧卷
-DO NOT TRANSLATE: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T, model numbers.
-Context: This is a page about "${contextName}".${overrideNote}`
-
-                let translatedHtml = null
-
-                // For very large HTML (>50000 chars), split into 2 halves
-                if (item.text.length > 50000) {
-                    console.log('[run-one] Very large HTML (' + item.text.length + ' chars), splitting into 2 parts')
-                    const midPoint = Math.floor(item.text.length / 2)
-                    // Find a safe split point near the middle (after a closing tag)
-                    const splitIdx = item.text.indexOf('>', midPoint) + 1 || midPoint
-                    const parts = [item.text.slice(0, splitIdx), item.text.slice(splitIdx)]
-                    const translatedParts = []
-                    for (let p = 0; p < parts.length; p++) {
-                        for (let retry = 0; retry <= 1; retry++) {
-                            try {
-                                const translated = await callAI(enhanced, [
-                                    { role: 'system', content: htmlPrompt + '\nThis is part ' + (p + 1) + ' of 2.' },
-                                    { role: 'user', content: parts[p] }
-                                ], 16000)
-                                if (translated && translated.length > 10) {
-                                    translatedParts.push(translated)
-                                    break
-                                }
-                            } catch (e) {
-                                if (retry >= 1) errors.push({ error: e.message + ' (part ' + (p + 1) + ')', errorCode: 'ERR_HTML', itemName: item.itemName })
-                            }
-                        }
-                    }
-                    if (translatedParts.length === 2) {
-                        translatedHtml = translatedParts.join('')
-                    }
-                } else {
-                    // Normal HTML: ONE call for the entire content
-                    for (let retry = 0; retry <= 2; retry++) {
-                        try {
-                            const translated = await callAI(enhanced, [
-                                { role: 'system', content: htmlPrompt },
-                                { role: 'user', content: item.text }
-                            ], 16000)
-                            if (translated && translated.length > 10) {
-                                translatedHtml = translated
-                                break
-                            }
-                        } catch (e) {
-                            console.log('[run-one] HTML translation error, retry', retry, ':', e.message)
-                            if (retry >= 2) errors.push({ error: e.message + ' (retried 2x)', errorCode: 'ERR_HTML', itemName: item.itemName })
-                        }
-                    }
-                }
-
-                if (translatedHtml) {
-                    upsertTranslation(targetLang, item.type, item.id, item.field, '[HTML]', translatedHtml)
-                    results.push({ type: item.type, field: item.field, itemName: item.itemName, original: '[HTML ' + item.text.length + ' chars]', translated: '[Translated ' + translatedHtml.length + ' chars]' })
-                } else {
-                    errors.push({ error: 'HTML translation returned empty', errorCode: 'ERR_HTML_EMPTY', itemName: item.itemName })
-                }
-            } catch (e) {
-                errors.push({ error: e.message, errorCode: 'ERR_HTML', itemName: item.itemName })
-            }
-        }
-
+        // Directly use translateBatch — the EXACT same function as full-site translation
+        const { results, errors } = await translateBatch(enhanceWithDefaultChannel(s), items, targetLang, langRow.name, overrideNote)
         if (results.length > 0) {
             run('UPDATE languages SET ai_translated=1 WHERE code=?', [targetLang])
         }
@@ -1103,6 +944,7 @@ Context: This is a page about "${contextName}".${overrideNote}`
         res.end(JSON.stringify({ error: e.message, errorCode: 'ERR_API' }))
     }
 })
+
 
 // ─── Run full translation (per page or all) ──────────────────────────────────
 
