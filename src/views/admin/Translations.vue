@@ -1124,6 +1124,10 @@ function filterGranularItems() {
 async function startGranularTranslation() {
   if (!gtSelectedIds.value.length) return alert('请选择要翻译的项目')
   const ids = [...gtSelectedIds.value]
+  // Cancel any previous session's pending HTTP requests immediately
+  if (window._gtAbortController) window._gtAbortController.abort()
+  window._gtAbortController = new AbortController()
+  const signal = window._gtAbortController.signal
   gtAborted = false
   gtTranslating.value = true
   gtFailedIds.value = []
@@ -1161,7 +1165,7 @@ async function startGranularTranslation() {
     while (!success && retries <= 1) {  // max 1 retry (not 2)
       if (gtAborted) break
       try {
-        const res = await api.runTranslationOne(langCode, type, itemId)
+        const res = await api.runTranslationOne(langCode, type, itemId, signal)
         const ok = res.results?.length || 0
         const errs = res.errors?.length || 0
         gtProgressOk.value += ok
@@ -1255,8 +1259,13 @@ async function startGranularTranslation() {
 
 function stopGranularTranslation() {
   gtAborted = true
-  gtTranslating.value = false   // immediately reset button state
-  gtAddLog('warn', '⛔ 用户已停止，当前进行中的 API 请求完成后将停止')
+  // Cancel ALL in-flight fetch requests immediately → frees browser connections
+  if (window._gtAbortController) {
+    window._gtAbortController.abort()
+    window._gtAbortController = null
+  }
+  gtTranslating.value = false
+  gtAddLog('warn', '⛔ 已停止翻译，所有进行中的请求已取消')
 }
 
 async function retryGranularFailed() {

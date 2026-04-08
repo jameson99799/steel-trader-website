@@ -915,7 +915,7 @@ router.post('/run-one', authMiddleware, async (req, res) => {
         : ''
 
     try {
-        const { results, errors } = await translateBatch(enhanceWithDefaultChannel(s), items, targetLang, langRow.name, overrideNote, 1)  // aiConcurrency=1: single-item endpoint, frontend handles concurrency
+        const { results, errors } = await translateBatch(enhanceWithDefaultChannel(s), items, targetLang, langRow.name, overrideNote, 2)  // aiConcurrency=2: fast enough for typical articles (~40s), avoids rate limits when multiple lang requests are concurrent
         if (results.length > 0) {
             run('UPDATE languages SET ai_translated=1 WHERE code=?', [targetLang])
         }
