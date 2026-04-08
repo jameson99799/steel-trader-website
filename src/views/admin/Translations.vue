@@ -1174,6 +1174,7 @@ async function startGranularTranslation() {
         let retries = 0
         let success = false
         while (!success && retries <= 2) {
+          if (gtAborted) break   // exit retry loop immediately on abort
           try {
             const res = await api.runTranslationOne(langCode, type, itemId)
             const ok = res.results?.length || 0
@@ -1217,7 +1218,7 @@ async function startGranularTranslation() {
         gtProgressDone.value++
       }
 
-      if (gtAborted.value) {
+      if (gtAborted) {
         gtAddLog('warn', '📦「' + itemName + '」翻译已停止')
       } else if (itemHasGtError) {
         gtAddLog('error', '📦「' + itemName + '」部分语言翻译失败 ✗')
@@ -1242,7 +1243,8 @@ async function startGranularTranslation() {
 
 function stopGranularTranslation() {
   gtAborted = true
-  gtAddLog('warn', '⛔ 用户已停止翻译，等待当前任务完成...')
+  gtTranslating.value = false   // immediately reset button state
+  gtAddLog('warn', '⛔ 用户已停止，当前进行中的 API 请求完成后将停止')
 }
 
 async function retryGranularFailed() {
@@ -1409,7 +1411,7 @@ async function translateAuditMissing() {
         let retries = 0
         let success = false
         while (!success && retries <= 2) {
-          if (auditAborted) break
+          if (auditAborted) break   // exit retry immediately on abort
           try {
             const res = await api.runTranslationOne(lang.code, group.type, group.id)
             const ok = res.results?.length || 0
@@ -1471,7 +1473,8 @@ async function translateAuditMissing() {
 
 function stopAuditTranslation() {
   auditAborted = true
-  auditAddLog('warn', '⛔ 用户已停止翻译，等待当前任务完成...')
+  auditTranslating.value = false   // immediately reset button state
+  auditAddLog('warn', '⛔ 用户已停止，当前进行中的 API 请求完成后将停止')
 }
 </script>
 
