@@ -262,7 +262,7 @@
           <button v-if="gtFailedIds.length" class="btn btn-warning" @click="retryGranularFailed" :disabled="gtTranslating">
             🔄 重试失败 ({{ gtFailedIds.length }})
           </button>
-          <button v-if="gtTranslating" class="btn btn-outline" @click="gtAborted.value = true">⛔ 停止</button>
+          <button v-if="gtTranslating" class="btn btn-outline" @click="stopGranularTranslation()">⛔ 停止</button>
         </div>
 
         <!-- Loading -->
@@ -346,7 +346,7 @@
           <button v-if="auditMissingAll.length" class="btn btn-warning" @click="translateAuditMissing" :disabled="auditTranslating">
             {{ auditTranslating ? '⏳ 翻译中...' : '🚀 一键翻译全部缺失 (' + auditMissingAll.length + ' 项)' }}
           </button>
-          <button v-if="auditTranslating" class="btn btn-outline" @click="auditAborted.value = true">⛔ 停止</button>
+          <button v-if="auditTranslating" class="btn btn-outline" @click="stopAuditTranslation()">⛔ 停止</button>
         </div>
 
         <!-- Audit Report -->
@@ -1036,7 +1036,7 @@ const gtFilteredItems = ref([])
 const gtSelectedIds = ref([])
 const gtLoading = ref(false)
 const gtTranslating = ref(false)
-const gtAborted = ref(false)
+let gtAborted = false   // plain boolean — Vue ref auto-unwrap in templates breaks assignment
 const gtFailedIds = ref([])
 const gtLogEntries = ref([])
 const gtLogPanelRef = ref(null)
@@ -1123,7 +1123,9 @@ function filterGranularItems() {
 
 async function startGranularTranslation() {
   if (!gtSelectedIds.value.length) return alert('请选择要翻译的项目')
-  gtAborted.value = false
+  // Snapshot selected IDs immediately to prevent any reactive changes during translation
+  const ids = [...gtSelectedIds.value]
+  gtAborted = false
   gtTranslating.value = true
   gtFailedIds.value = []
 
@@ -1134,7 +1136,7 @@ async function startGranularTranslation() {
     ? '全部语言'
     : (gtLangs.value.find(l => l.code === gtSelectedLang.value)?.name || gtSelectedLang.value)
   const type = granularTab.value
-  const ids = [...gtSelectedIds.value]
+  // Use the ids snapshot (captured before translation started)
   const CONCURRENCY = gtConcurrency.value || 3
 
   // Total = items * languages
@@ -1154,7 +1156,7 @@ async function startGranularTranslation() {
 
   async function worker() {
     while (queueIdx < ids.length) {
-      if (gtAborted.value) break
+      if (gtAborted) break
       const idx = queueIdx++
       if (idx >= ids.length) break
       const itemId = ids[idx]
@@ -1165,7 +1167,7 @@ async function startGranularTranslation() {
       gtAddLog('info', '📦「' + itemName + '」开始翻译 (' + langs.length + ' 种语言)')
 
       for (const langCode of langs) {
-        if (gtAborted.value) break
+        if (gtAborted) break
         const langObj = gtLangs.value.find(l => l.code === langCode)
         const langLabel = langObj ? (langObj.flag || '') + ' ' + langObj.name : langCode
 
@@ -1238,6 +1240,11 @@ async function startGranularTranslation() {
   await loadGranularStatus()
 }
 
+function stopGranularTranslation() {
+  gtAborted = true
+  gtAddLog('warn', '⛔ 用户已停止翻译，等待当前任务完成...')
+}
+
 async function retryGranularFailed() {
   if (!gtFailedIds.value.length) return
   const retryIds = [...gtFailedIds.value]
@@ -1252,7 +1259,7 @@ const auditCollapsed = ref(false)
 const auditReport = ref([])
 const auditRunning = ref(false)
 const auditTranslating = ref(false)
-const auditAborted = ref(false)
+let auditAborted = false   // plain boolean — same fix as gtAborted
 const auditConcurrency = ref(3)
 const auditLogEntries = ref([])
 const auditLogPanelRef = ref(null)
@@ -1342,7 +1349,7 @@ async function runAudit() {
 
 async function translateSingleAuditItem(type, id, langCode) {
   auditTranslating.value = true
-  auditAborted.value = false
+  auditAborted = false
   const langObj = auditReport.value.find(r => r.code === langCode)
   const langLabel = langObj ? (langObj.flag || '') + ' ' + langObj.name : langCode
   auditAddLog('info', '🚀 翻译 [' + langLabel + '] ' + type + ' #' + id + '...')
@@ -1363,7 +1370,7 @@ async function translateSingleAuditItem(type, id, langCode) {
 
 async function translateAuditMissing() {
   if (!auditMissingAll.value.length) return
-  auditAborted.value = false
+  auditAborted = false
   auditTranslating.value = true
   const items = [...auditMissingAll.value]
   const CONCURRENCY = auditConcurrency.value || 3
@@ -1388,7 +1395,7 @@ async function translateAuditMissing() {
 
   async function worker() {
     while (queueIdx < itemGroups.length) {
-      if (auditAborted.value) break
+      if (auditAborted) break
       const idx = queueIdx++
       if (idx >= itemGroups.length) break
       const group = itemGroups[idx]
@@ -1397,12 +1404,12 @@ async function translateAuditMissing() {
       auditAddLog('info', '📦「' + group.name + '」开始翻译 (' + group.langs.length + ' 种语言)')
 
       for (const lang of group.langs) {
-        if (auditAborted.value) break
+        if (auditAborted) break
         const langLabel = (lang.flag || '') + ' ' + lang.name
         let retries = 0
         let success = false
         while (!success && retries <= 2) {
-          if (auditAborted.value) break
+          if (auditAborted) break
           try {
             const res = await api.runTranslationOne(lang.code, group.type, group.id)
             const ok = res.results?.length || 0
@@ -1434,7 +1441,7 @@ async function translateAuditMissing() {
         }
         auditProgressDone.value++
       }
-      if (auditAborted.value) {
+      if (auditAborted) {
         auditAddLog('warn', '📦「' + group.name + '」翻译已停止')
       } else if (itemHasError) {
         auditAddLog('error', '📦「' + group.name + '」部分语言翻译失败 ✗')
@@ -1448,7 +1455,7 @@ async function translateAuditMissing() {
   await Promise.all(workers)
 
   auditAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-  if (auditAborted.value) {
+  if (auditAborted) {
     auditAddLog('warn', '⛔ 翻译已手动停止 | 已完成 ' + auditProgressDone.value + '/' + auditProgressTotal.value + ' | 成功 ' + auditProgressOk.value + ' | 错误 ' + auditProgressErrors.value)
     auditAddLog('info', '💡 可再次点击"一键翻译全部缺失"继续翻译剩余项目')
   } else {
@@ -1460,6 +1467,11 @@ async function translateAuditMissing() {
   await runAudit()
   // Refresh granular status too
   loadGranularStatus()
+}
+
+function stopAuditTranslation() {
+  auditAborted = true
+  auditAddLog('warn', '⛔ 用户已停止翻译，等待当前任务完成...')
 }
 </script>
 
