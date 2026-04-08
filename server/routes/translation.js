@@ -940,41 +940,81 @@ router.post('/run-one', authMiddleware, async (req, res) => {
         const shortItems = items.filter(i => !i.long_html)
         const longItems = items.filter(i => i.long_html)
 
-        // ── SHORT TEXT: same approach as run-bulk — one callAI for all short fields ──
+        // ── SHORT TEXT: same JSON approach as translateBatch ──
         if (shortItems.length > 0) {
-            const numberedText = shortItems.map((item, idx) => `${idx + 1}. ${item.text}`).join('\n')
-            const systemPrompt = `Translate numbered lines to ${langRow.name}. Steel company context. Return JSON {"1":"...","2":"..."}.
-Keep unchanged: codes, HTML, ASTM/JIS/EN/GB/T, "SHANDONG SUNSEA STEEL CO., LTD".
-Glossary(zh): Galvalume/GL=镀铝锌 ALUZINC=镀铝锌 PPGI=彩涂镀锌 PPGL=彩涂镀铝锌 GI=镀锌 CRC=冷轧卷.${overrideNote}`
+            // Build merged JSON — combined fields expanded into sub-fields (same as translateBatch)
+            const fieldsObj = {}
+            for (const item of shortItems) {
+                if (item.combined) {
+                    try {
+                        const subObj = JSON.parse(item.text)
+                        Object.assign(fieldsObj, subObj)
+                    } catch (e) {
+                        fieldsObj[item.field] = item.text
+                    }
+                } else {
+                    fieldsObj[item.field] = item.text
+                }
+            }
+            console.log('[run-one] Sending', Object.keys(fieldsObj).length, 'fields in ONE call for', shortItems[0]?.itemName)
 
-            let success = false
-            for (let attempt = 0; attempt <= 2 && !success; attempt++) {
+            const systemPrompt = `Translate the following JSON values from English to ${langRow.name}. This is content for a steel products company website.
+Return ONLY a JSON object with the SAME keys and translated values.
+Rules:
+- Translate ALL text content completely and naturally
+- Keep HTML tags, product codes, model numbers, units (mm, kg, MPa) unchanged
+- Keep URLs, email addresses unchanged
+GLOSSARY (for Chinese): Galvalume/GL=镀铝锌, ALUZINC=镀铝锌, PPGI=彩涂镀锌, PPGL=彩涂镀铝锌, GI=镀锌, CRC=冷轧卷
+DO NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", "GI GL PPGI PPGL CRC Steel Coil", ASTM, JIS, EN, GB/T${overrideNote}`
+
+            for (let attempt = 0; attempt <= 2; attempt++) {
                 try {
-                    const content = await callAI(enhanced, [
+                    const aiContent = await callAI(enhanced, [
                         { role: 'system', content: systemPrompt },
-                        { role: 'user', content: numberedText }
-                    ], 8000)
-                    const jsonMatch = content.match(/\{[\s\S]*\}/)
+                        { role: 'user', content: JSON.stringify(fieldsObj, null, 0) }
+                    ], 16000)
+
+                    const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
                     if (!jsonMatch) {
-                        errors.push({ error: 'JSON parse error', errorCode: 'ERR_PARSE', itemName: shortItems[0]?.itemName })
-                        break
+                        if (attempt >= 2) errors.push({ error: 'No JSON in AI response', errorCode: 'ERR_NO_JSON', itemName: shortItems[0]?.itemName })
+                        continue
                     }
-                    const translations = JSON.parse(jsonMatch[0])
-                    for (let j = 0; j < shortItems.length; j++) {
-                        const item = shortItems[j]
-                        const translated = translations[String(j + 1)]
-                        if (!translated) {
-                            errors.push({ item: item.text.slice(0, 60), error: 'No translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
-                            continue
+
+                    let translations
+                    try { translations = JSON.parse(jsonMatch[0]) } catch (e) {
+                        if (attempt >= 2) errors.push({ error: 'JSON parse error', errorCode: 'ERR_PARSE', itemName: shortItems[0]?.itemName })
+                        continue
+                    }
+
+                    // Match translations back — handle combined fields (same as translateBatch)
+                    console.log('[run-one] Got', Object.keys(translations).length, 'translated fields back')
+                    for (const item of shortItems) {
+                        if (item.combined) {
+                            try {
+                                const subObj = JSON.parse(item.text)
+                                for (const subField of Object.keys(subObj)) {
+                                    const translated = translations[subField]
+                                    if (translated && typeof translated === 'string') {
+                                        upsertTranslation(targetLang, item.type, item.id, subField, subObj[subField], translated)
+                                        results.push({ original: subObj[subField].slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: subField, itemName: item.itemName })
+                                    }
+                                }
+                            } catch (e) {
+                                errors.push({ item: item.field, error: 'Combined field parse error', errorCode: 'ERR_PARSE', itemName: item.itemName })
+                            }
+                        } else {
+                            const translated = translations[item.field]
+                            if (translated && typeof translated === 'string') {
+                                upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
+                                results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field, itemName: item.itemName })
+                            } else {
+                                errors.push({ item: item.field, error: 'Missing translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
+                            }
                         }
-                        upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
-                        results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field, itemName: item.itemName })
                     }
-                    success = true
+                    break // success
                 } catch (e) {
-                    if (attempt >= 2) {
-                        errors.push({ error: e.message + ' (retried 2x)', errorCode: 'ERR_API', itemName: shortItems[0]?.itemName })
-                    }
+                    if (attempt >= 2) errors.push({ error: e.message + ' (retried 2x)', errorCode: 'ERR_API', itemName: shortItems[0]?.itemName })
                 }
             }
         }
