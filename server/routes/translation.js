@@ -485,7 +485,7 @@ const PAGES = {
 // Long HTML is sent as complete text, not split into tiny blocks.
 // This maximizes token efficiency and translation coherence.
 
-async function translateBatch(settings, items, targetLang, langName, overrideNote) {
+async function translateBatch(settings, items, targetLang, langName, overrideNote, aiConcurrency = 3) {
     const results = []
     const errors = []
     const shortItems = items.filter(i => !i.long_html)
@@ -587,7 +587,7 @@ DO NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", "GI GL PPGI PPGL CRC Steel C
 
     // ── LONG HTML: Send as COMPLETE text in ONE call (no block splitting) ──
     // For long HTML, send the entire content at once for coherent translation
-    const AI_CONCURRENCY = 5
+    const AI_CONCURRENCY = aiConcurrency  // controlled per call-site to avoid rate limit when multiple langs are concurrent
     const runConcurrently = async (tasks, limit) => {
         const executing = new Set()
         for (const task of tasks) {
@@ -604,13 +604,15 @@ DO NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", "GI GL PPGI PPGL CRC Steel C
             const contentLength = item.text.length
             const contextName = item.itemName || 'steel product'
 
-            if (contentLength > 15000) {
-                // Very large HTML: use block splitting for reliability
+            if (contentLength > 4000) {
+                // HTML > 4000 chars: use block splitting (each block is fast and avoids timeout)
                 const { root, blocks } = extractBlockSegments(item.text)
-                if (!root || blocks.length === 0) return
-
-                // But use larger batches and concurrent processing
-                const BLOCK_BATCH = 20
+                if (!root || blocks.length === 0) {
+                    // No blocks found, skip (don't try single call which may timeout)
+                    console.log('[translateBatch] No blocks extracted from HTML, skipping:', item.itemName)
+                    return
+                }
+                const BLOCK_BATCH = 8  // small batches = faster per AI call = no timeout
                 const blockTasks = []
                 for (let i = 0; i < blocks.length; i += BLOCK_BATCH) {
                     const batch = blocks.slice(i, i + BLOCK_BATCH)
@@ -666,7 +668,7 @@ Do NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T${overrid
                         const translated = await callAI(settings, [
                             { role: 'system', content: htmlPrompt },
                             { role: 'user', content: item.text }
-                        ], 16000)
+                        ], 8000)  // 8000 max tokens keeps each call under 60s
 
                         if (translated && translated.length > 10) {
                             upsertTranslation(targetLang, item.type, item.id, item.field, '[HTML]', translated)
@@ -913,7 +915,7 @@ router.post('/run-one', authMiddleware, async (req, res) => {
         : ''
 
     try {
-        const { results, errors } = await translateBatch(enhanceWithDefaultChannel(s), items, targetLang, langRow.name, overrideNote)
+        const { results, errors } = await translateBatch(enhanceWithDefaultChannel(s), items, targetLang, langRow.name, overrideNote, 1)  // aiConcurrency=1: single-item endpoint, frontend handles concurrency
         if (results.length > 0) {
             run('UPDATE languages SET ai_translated=1 WHERE code=?', [targetLang])
         }

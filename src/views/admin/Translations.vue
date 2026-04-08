@@ -1149,7 +1149,7 @@ async function startGranularTranslation() {
     ', 语言并发: ' + Math.min(CONCURRENCY, langs.length))
   gtAddLog('info', '📋 策略：每个项目的所有语言并发翻译，项目之间顺序执行')
 
-  // ── 翻译单个项目的单种语言（含重试）──
+  // ── 翻译单个项目的单种语言（含重试，超时不重试）──
   async function translateOneLang(itemId, langCode, itemName) {
     if (gtAborted) return false
     const langObj = gtLangs.value.find(l => l.code === langCode)
@@ -1158,7 +1158,7 @@ async function startGranularTranslation() {
     let retries = 0
     let success = false
     let hasError = false
-    while (!success && retries <= 2) {
+    while (!success && retries <= 1) {  // max 1 retry (not 2)
       if (gtAborted) break
       try {
         const res = await api.runTranslationOne(langCode, type, itemId)
@@ -1167,14 +1167,14 @@ async function startGranularTranslation() {
         gtProgressOk.value += ok
         if (errs > 0 && ok === 0) {
           retries++
-          if (retries > 2) {
+          if (retries > 1) {
             gtProgressErrors.value += errs
             hasError = true
             if (!gtFailedIds.value.includes(itemId)) gtFailedIds.value.push(itemId)
             for (const e of (res.errors || []))
               gtAddLog('error', '  ❌「' + itemName + '」[' + langLabel + '] ' + (e.error || '').slice(0, 120))
           } else {
-            gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] 失败，重试 ' + retries + '/2...')
+            gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] 失败，重试 1/1...')
           }
           continue
         }
@@ -1188,14 +1188,24 @@ async function startGranularTranslation() {
         }
         success = true
       } catch (e) {
+        // 524 = Cloudflare timeout, 504 = gateway timeout — don't retry, it will just timeout again
+        const isTimeout = e.message.includes('524') || e.message.includes('504') ||
+          e.message.includes('timeout') || e.message.includes('超时')
+        if (isTimeout) {
+          gtProgressErrors.value++
+          hasError = true
+          if (!gtFailedIds.value.includes(itemId)) gtFailedIds.value.push(itemId)
+          gtAddLog('error', '  ⏱️「' + itemName + '」[' + langLabel + '] 请求超时 — 文章内容过长，建议降低并发数或联系服务器管理员增加超时配置')
+          break  // exit retry loop immediately, no point retrying a timeout
+        }
         retries++
-        if (retries > 2) {
+        if (retries > 1) {
           gtProgressErrors.value++
           hasError = true
           if (!gtFailedIds.value.includes(itemId)) gtFailedIds.value.push(itemId)
           gtAddLog('error', '  ❌「' + itemName + '」[' + langLabel + '] ' + e.message)
         } else {
-          gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] 失败，重试 ' + retries + '/2...')
+          gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] 失败，重试 1/1...')
         }
       }
     }

@@ -82,7 +82,7 @@ const request = async (url, options = {}) => {
       data = JSON.parse(text)
     } catch {
       // Server returned non-JSON (HTML error page from nginx, etc.)
-      throw new Error(`服务器错误 (${response.status}): ${response.status === 504 ? '翻译超时，内容可能过长。请稍后重试或减少翻译范围' : response.status === 502 ? '后端服务暂时不可用，请稍后重试' : '服务器返回了非JSON响应，请检查后端服务是否正常运行'}`)
+      throw new Error(`服务器错误 (${response.status}): ${response.status === 524 ? '翻译超时 (524)：内容过长，AI处理超过了服务器限制，已自动跳过' : response.status === 504 ? '翻译超时，内容可能过长。请稍后重试或减少翻译范围' : response.status === 502 ? '后端服务暂时不可用，请稍后重试' : '服务器返回了非JSON响应，请检查后端服务是否正常运行'}`)
     }
   }
 
