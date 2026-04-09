@@ -361,7 +361,7 @@ async function startServer() {
         }
 
         // ── Build OG meta tags ──
-        const safeDesc = (pageDesc || '').substring(0, 200)
+        const safeDesc = (pageDesc || '').substring(0, 160)
         const extraMeta = `
   <meta property="og:type" content="${esc(ogType)}" />
   <meta property="og:title" content="${esc(pageTitle)}" />

@@ -45,8 +45,9 @@ router.get('/', (req, res) => {
     // Build hreflang links for a path
     function hreflangLinks(path) {
         return activeLangs.map(l => {
-            const langPath = `/${l.code}${path === '/' ? '' : path}`
-            return `    <xhtml:link rel="alternate" hreflang="${escapeXml(l.code)}" href="${escapeXml(BASE_URL + langPath)}" />`
+            const code = (l.code || '').trim()
+            const langPath = `/${code}${path === '/' ? '' : path}`
+            return `    <xhtml:link rel="alternate" hreflang="${escapeXml(code)}" href="${escapeXml(BASE_URL + langPath)}" />`
         }).concat([
             `    <xhtml:link rel="alternate" hreflang="x-default" href="${escapeXml(BASE_URL + '/en' + (path === '/' ? '' : path))}" />`
         ]).join('\n')
