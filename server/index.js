@@ -361,7 +361,27 @@ async function startServer() {
                     .replace(/\{\{whatsapp\}\}/g, company.whatsapp || '')
                     .replace(/\{\{company_name\}\}/g, companyName)
                 : ''
-              ssrContent = `<article id="ssr-article"><h1>${aTitle}</h1><p>${aSummary}</p>${articleBody}</article>`
+
+              // ── FAQPage schema for news articles (GEO: used by Google SGE, ChatGPT, Perplexity) ──
+              let newsFaqHtml = ''
+              if (article.faq_items) {
+                try {
+                  const faqList = JSON.parse(article.faq_items)
+                  if (Array.isArray(faqList) && faqList.length > 0) {
+                    extraSchemas += jsonLd({
+                      '@context': 'https://schema.org', '@type': 'FAQPage',
+                      mainEntity: faqList.map(f => ({
+                        '@type': 'Question', name: f.question,
+                        acceptedAnswer: { '@type': 'Answer', text: f.answer }
+                      }))
+                    })
+                    newsFaqHtml = '<h2>Frequently Asked Questions</h2>' +
+                      faqList.map(f => `<h3>${esc(f.question)}</h3><p>${esc(f.answer)}</p>`).join('')
+                  }
+                } catch (e) {}
+              }
+
+              ssrContent = `<article id="ssr-article"><h1>${aTitle}</h1><p>${aSummary}</p>${articleBody}${newsFaqHtml}</article>`
             } else {
               // News article not found — return 404 status
               isNotFound = true
@@ -369,6 +389,7 @@ async function startServer() {
               pageDesc = 'The requested article could not be found.'
             }
           }
+
 
           // ── News category page (e.g. /news/category/product-introduction) ──
           const catPageMatch = subPath.match(/^\/news\/category\/([^/]+)$/)

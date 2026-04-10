@@ -15,6 +15,34 @@ function slugify(text, id) {
     return id ? `${base}-${id}` : base
 }
 
+// ─── Auto SEO helper ─────────────────────────────────────────────────────────
+function autoSeoProduct(name_en, description_en, categoryName) {
+    const title = `${(name_en || '').substring(0, 40)} - ${categoryName || 'Steel Coil'} | SunSea Steel`
+    const desc = `Factory direct ${name_en || 'steel coil'}. ${(description_en || '').substring(0, 90).replace(/<[^>]*>/g, '')}. Get a quote from SunSea Steel.`
+    const keywords = [
+        name_en, categoryName,
+        `${name_en} manufacturer`, `${name_en} supplier`,
+        'steel coil manufacturer China', 'GI GL PPGI PPGL CRC steel'
+    ].filter(Boolean).join(', ')
+    return {
+        seo_title: title.substring(0, 60),
+        seo_description: desc.substring(0, 160),
+        seo_keywords: keywords.substring(0, 200)
+    }
+}
+
+function autoSeoNews(title_en, summary_en) {
+    const title = `${(title_en || '').substring(0, 50)} | SunSea Steel`
+    const desc = (summary_en || '').replace(/<[^>]*>/g, '').substring(0, 155)
+    const words = (title_en || '').toLowerCase().split(/\s+/).filter(w => w.length > 4).slice(0, 6)
+    const keywords = [...words, 'steel coil', 'SunSea Steel'].join(', ')
+    return {
+        seo_title: title.substring(0, 60),
+        seo_description: desc || `${title_en} - Expert insights from SunSea Steel.`,
+        seo_keywords: keywords.substring(0, 200)
+    }
+}
+
 // ─── API Key middleware ──────────────────────────────────────────────────────
 function apiKeyMiddleware(req, res, next) {
     const key = req.headers['x-api-key']
@@ -25,6 +53,61 @@ function apiKeyMiddleware(req, res, next) {
     }
     next()
 }
+
+// ─── GET /api/external/media/groups ─────────────────────────────────────────
+// Returns all media groups for AI to pick the correct image source.
+// Call this first, then use group slug in GET /api/external/media?group_slug=xxx
+router.get('/media/groups', apiKeyMiddleware, (req, res) => {
+    const groups = getAll(`
+        SELECT mg.id, mg.name, mg.slug, mg.sort_order,
+               (SELECT COUNT(*) FROM media m WHERE m.group_id = mg.id AND m.status = 1) as image_count
+        FROM media_groups mg ORDER BY mg.sort_order, mg.name`)
+    res.json({
+        groups,
+        // Matching hints for AI: map product/content type to group slug
+        matching_hints: {
+            description: 'Use these hints to pick the correct group_slug when calling GET /api/external/media',
+            rules: [
+                { keywords: ['GI', 'galvanized', 'hot-dip zinc', 'zinc coated', 'HDG'], group_slug: 'gi' },
+                { keywords: ['GL', 'galvalume', 'aluzinc', 'aluminum-zinc', 'AZ'], group_slug: 'gl' },
+                { keywords: ['PPGI', 'PPGL', 'prepainted', 'color coated', 'painted galvanized', 'painted galvalume', 'color steel'], group_slug: 'ppgi' },
+                { keywords: ['CRC', 'cold rolled', 'cold-rolled', 'cold-drawn'], group_slug: 'crc' },
+                { keywords: ['roofing', 'roof', 'corrugated', 'IBR', 'tile'], group_slug: 'roofing' },
+                { keywords: ['bulk', '散货', 'break bulk', 'bulk vessel'], group_slug: '散货' },
+                { keywords: ['container', '集装箱', 'FCL', '20GP', '40HQ'], group_slug: '集装箱' }
+            ],
+            fallback: 'If no rule matches, call GET /api/external/media/groups first and pick the closest group by name.',
+            tip: 'If a new group is added in the backend, it will appear here automatically — just re-call this endpoint.'
+        }
+    })
+})
+
+// ─── GET /api/external/media — search images ─────────────────────────────────
+// Query: group_slug, group_id, search (filename/alt), limit (default 10), page
+router.get('/media', apiKeyMiddleware, (req, res) => {
+    const { group_slug, group_id, search, limit = 10, page = 1 } = req.query
+    let where = 'WHERE m.status = 1'
+    const params = []
+
+    // Resolve group by slug if provided
+    let resolvedGroupId = group_id || null
+    if (group_slug && !group_id) {
+        const grp = getOne('SELECT id FROM media_groups WHERE slug = ? OR LOWER(name) = LOWER(?)', [group_slug, group_slug])
+        if (grp) resolvedGroupId = grp.id
+    }
+    if (resolvedGroupId) { where += ' AND m.group_id = ?'; params.push(resolvedGroupId) }
+    if (search) { where += ' AND (m.original_filename LIKE ? OR m.alt LIKE ?)'; params.push(`%${search}%`, `%${search}%`) }
+
+    const total = getOne(`SELECT COUNT(*) as c FROM media m ${where}`, params)?.c || 0
+    const offset = (parseInt(page) - 1) * parseInt(limit)
+    const items = getAll(
+        `SELECT m.id, m.filepath, m.original_filename, m.alt, m.width, m.height, mg.name as group_name, mg.slug as group_slug
+         FROM media m LEFT JOIN media_groups mg ON mg.id = m.group_id
+         ${where} ORDER BY m.created_at DESC LIMIT ? OFFSET ?`,
+        [...params, parseInt(limit), offset]
+    )
+    res.json({ items, total, page: parseInt(page), limit: parseInt(limit) })
+})
 
 // ─── GET /api/external/key — admin: get/regenerate key ───────────────────────
 // (Protected by normal auth, used in Settings page)
@@ -136,6 +219,14 @@ router.post('/products', apiKeyMiddleware, (req, res) => {
 
     if (!name && !name_en) return res.status(400).json({ error: 'name or name_en is required' })
 
+    // Auto-generate SEO fields if not provided
+    const cat = category_id ? getOne('SELECT name_en, name FROM categories WHERE id = ?', [category_id]) : null
+    const catName = cat?.name_en || cat?.name || 'Steel Coil'
+    const autoSeo = autoSeoProduct(name_en || name, description_en || description, catName)
+    const finalSeoTitle = seo_title || autoSeo.seo_title
+    const finalSeoDesc = seo_description || autoSeo.seo_description
+    const finalSeoKw = seo_keywords || autoSeo.seo_keywords
+
     const result = run(`
         INSERT INTO products (name, name_en, category_id, description, description_en, specs, images, detail_content, is_featured, sort_order, status, seo_title, seo_description, seo_keywords, faq_items)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -144,7 +235,7 @@ router.post('/products', apiKeyMiddleware, (req, res) => {
         description || null, description_en || null, specs || null,
         images || '', detail_content || null,
         parseInt(is_featured || 0), parseInt(sort_order || 0), parseInt(status ?? 1),
-        seo_title || null, seo_description || null, seo_keywords || null,
+        finalSeoTitle, finalSeoDesc, finalSeoKw,
         faq_items || '[]'
     ])
 
@@ -156,6 +247,9 @@ router.post('/products', apiKeyMiddleware, (req, res) => {
         success: true,
         id: newId,
         slug: base,
+        seo_title: finalSeoTitle,
+        seo_description: finalSeoDesc,
+        seo_auto_generated: !seo_title,
         message: 'Product created successfully'
     })
 })
@@ -164,20 +258,41 @@ router.post('/products', apiKeyMiddleware, (req, res) => {
 router.post('/news', apiKeyMiddleware, (req, res) => {
     const {
         title, title_en, summary, summary_en, content, cover_image,
-        seo_title, seo_description, seo_keywords, status, render_mode
+        seo_title, seo_description, seo_keywords, status, render_mode,
+        faq_items, category_name, category_id
     } = req.body
 
     if (!title && !title_en) return res.status(400).json({ error: 'title or title_en is required' })
 
+    // Resolve category: prefer category_name lookup, fallback to category_id
+    let resolvedCatId = category_id || null
+    if (category_name && !resolvedCatId) {
+        const cat = getOne('SELECT id FROM news_categories WHERE LOWER(name_en) = LOWER(?) OR LOWER(name) = LOWER(?)', [category_name, category_name])
+        if (cat) resolvedCatId = cat.id
+        else {
+            // Auto-create new category
+            const slug = category_name.toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '')
+            const r = run('INSERT INTO news_categories (name_en, name, slug, sort_order) VALUES (?,?,?,?)', [category_name, category_name, slug, 99])
+            resolvedCatId = r.lastInsertRowid
+        }
+    }
+
+    // Auto-generate SEO fields if not provided
+    const autoSeo = autoSeoNews(title_en || title, summary_en || summary)
+    const finalSeoTitle = seo_title || autoSeo.seo_title
+    const finalSeoDesc = seo_description || autoSeo.seo_description
+    const finalSeoKw = seo_keywords || autoSeo.seo_keywords
+
     const result = run(`
-        INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status, sort_order, render_mode)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, faq_items, category_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [
         title || title_en, title_en || null, 'temp',
         summary || null, summary_en || null, content || null,
         cover_image || null,
-        seo_title || null, seo_description || null, seo_keywords || null,
-        parseInt(status ?? 1), 0, render_mode || 'direct'
+        finalSeoTitle, finalSeoDesc, finalSeoKw,
+        parseInt(status ?? 1), 0, render_mode || 'direct',
+        faq_items || '[]', resolvedCatId
     ])
 
     const newId = result.lastInsertRowid
@@ -188,6 +303,10 @@ router.post('/news', apiKeyMiddleware, (req, res) => {
         success: true,
         id: newId,
         slug: cleanSlug,
+        category_id: resolvedCatId,
+        seo_title: finalSeoTitle,
+        seo_description: finalSeoDesc,
+        seo_auto_generated: !seo_title,
         message: 'News article created successfully'
     })
 })
@@ -236,11 +355,12 @@ router.delete('/products/:id', apiKeyMiddleware, (req, res) => {
 // ─── PUT /api/external/news/:id — update news ──────────────────────────────
 router.put('/news/:id', apiKeyMiddleware, (req, res) => {
     const { id } = req.params
-    const existing = getOne('SELECT id FROM news WHERE id = ?', [id])
+    const existing = getOne('SELECT * FROM news WHERE id = ?', [id])
     if (!existing) return res.status(404).json({ error: 'News not found' })
     const {
         title, title_en, summary, summary_en, content, cover_image,
-        seo_title, seo_description, seo_keywords, status, render_mode
+        seo_title, seo_description, seo_keywords, status, render_mode,
+        faq_items, category_name, category_id
     } = req.body
 
     const sets = []
@@ -256,6 +376,21 @@ router.put('/news/:id', apiKeyMiddleware, (req, res) => {
     if (seo_keywords !== undefined) { sets.push('seo_keywords=?'); vals.push(seo_keywords) }
     if (status !== undefined) { sets.push('status=?'); vals.push(parseInt(status)) }
     if (render_mode !== undefined) { sets.push('render_mode=?'); vals.push(render_mode) }
+    if (faq_items !== undefined) { sets.push('faq_items=?'); vals.push(faq_items) }
+    // category_name resolution
+    if (category_name !== undefined) {
+        let resolvedCatId = category_id || null
+        const cat = getOne('SELECT id FROM news_categories WHERE LOWER(name_en) = LOWER(?) OR LOWER(name) = LOWER(?)', [category_name, category_name])
+        if (cat) resolvedCatId = cat.id
+        else {
+            const slug = category_name.toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '')
+            const r = run('INSERT INTO news_categories (name_en, name, slug, sort_order) VALUES (?,?,?,?)', [category_name, category_name, slug, 99])
+            resolvedCatId = r.lastInsertRowid
+        }
+        sets.push('category_id=?'); vals.push(resolvedCatId)
+    } else if (category_id !== undefined) {
+        sets.push('category_id=?'); vals.push(category_id)
+    }
 
     if (!sets.length) return res.status(400).json({ error: 'No fields to update' })
     vals.push(id)
@@ -306,23 +441,57 @@ router.delete('/templates/:id', apiKeyMiddleware, (req, res) => {
 })
 
 router.get('/docs', (req, res) => {
-    // Dynamically load categories from DB
+    // Dynamically load data from DB
     const cats = getAll('SELECT id, name, name_en, slug FROM categories ORDER BY sort_order')
     const catList = cats.map(c => ({ id: c.id, name: c.name_en || c.name, slug: c.slug }))
+    const mediaGroups = getAll(`SELECT mg.id, mg.name, mg.slug,
+        (SELECT COUNT(*) FROM media m WHERE m.group_id = mg.id AND m.status = 1) as image_count
+        FROM media_groups mg ORDER BY mg.sort_order, mg.name`)
+    const newsCats = getAll('SELECT id, name, name_en, slug FROM news_categories ORDER BY sort_order')
 
     res.json({
         info: 'SunSea Steel External API — Content Creation Guide for AI Systems',
-        version: '2.0',
+        version: '3.0',
         base_url: req.protocol + '://' + req.get('host') + '/api/external',
         auth: {
             method: 'Header: X-API-Key',
-            description: '所有写入接口需要在 HTTP Header 中携带 X-API-Key'
+            description: 'All write endpoints require X-API-Key in HTTP header. GET /media/groups and GET /media also require API key.'
         },
 
-        // ═══ Categories ═══
-        categories: {
+        // ═══ Product Categories ═══
+        product_categories: {
             description: 'Product category_id mapping. Use these IDs when creating products.',
             list: catList
+        },
+
+        // ═══ News Categories ═══
+        news_categories: {
+            description: 'News article grouping. Pass category_name (string) or category_id when creating/updating news articles.',
+            list: newsCats.map(c => ({ id: c.id, name_en: c.name_en, name: c.name, slug: c.slug })),
+            usage: 'Pass "category_name": "Product Introduction" to auto-assign. New categories are created automatically.'
+        },
+
+        // ═══ Media Library ═══
+        media_library: {
+            description: 'Read-only access to the media library. Use to get real image URLs for products and articles.',
+            groups: mediaGroups,
+            matching_hints: {
+                description: 'Map content type to group_slug when calling GET /api/external/media',
+                rules: [
+                    { keywords: ['GI', 'galvanized', 'hot-dip zinc', 'zinc coated', 'Z40', 'Z275'], group_slug: 'gi', example_product: 'Galvanized Steel Coil' },
+                    { keywords: ['GL', 'galvalume', 'aluzinc', 'aluminum-zinc', 'AZ150', 'AZ50'], group_slug: 'gl', example_product: 'Galvalume Steel Coil' },
+                    { keywords: ['PPGI', 'PPGL', 'prepainted', 'color coated', 'RAL', 'painted steel'], group_slug: 'ppgi', example_product: 'PPGI / PPGL Color Coated Coil' },
+                    { keywords: ['CRC', 'cold rolled', 'cold-rolled', 'SPCC', 'DC01'], group_slug: 'crc', example_product: 'Cold Rolled Steel Coil' },
+                    { keywords: ['roofing', 'roof sheet', 'corrugated', 'IBR', 'tile sheet'], group_slug: 'roofing', example_product: 'Steel Roofing Sheet' }
+                ],
+                tip: 'If a new group is added by admin, call GET /api/external/media/groups to get the latest list automatically.'
+            },
+            workflow: [
+                '1. GET /api/external/media/groups → get all groups + matching hints',
+                '2. Match product/content to the correct group_slug',
+                '3. GET /api/external/media?group_slug=gi&limit=5 → get image URLs',
+                '4. Use filepath values directly in: images field (comma-separated), detail_content <img> src, cover_image'
+            ]
         },
 
         // ═══ Template Variables ═══
@@ -496,28 +665,57 @@ router.get('/docs', (req, res) => {
             news: {
                 list: {
                     method: 'GET', path: '/api/external/news',
-                    query_params: { search: '搜索文章标题(中/英)', status: '0=草稿 1=发布', page: '页码(默认1)', limit: '每页数量(默认50)' }
+                    query_params: { search: 'Search title (EN/CN)', status: '0=draft 1=published', page: 'page num (default 1)', limit: 'per page (default 50)' }
                 },
                 get_by_id: { method: 'GET', path: '/api/external/news/:id' },
                 create: {
                     method: 'POST',
                     path: '/api/external/news',
+                    note: 'seo_title/description/keywords are AUTO-GENERATED if not provided. Always provide faq_items for GEO optimization.',
                     body: {
-                        title: '(required) 文章标题中文',
-                        title_en: '(recommended) 文章标题英文',
-                        summary: '(string) 中文摘要',
-                        summary_en: '(string) 英文摘要',
-                        content: '(HTML string) 文章内容HTML',
-                        cover_image: '(string) 封面图URL',
-                        seo_title: '(string) SEO标题',
-                        seo_description: '(string) SEO描述',
-                        seo_keywords: '(string) SEO关键词',
-                        status: '(0/1) 0=草稿 1=发布',
-                        render_mode: '(string) direct(默认) 或 iframe'
-                    }
+                        title: '(required) Article title (Chinese)',
+                        title_en: '(recommended) Article title (English)',
+                        summary: '(string) Chinese summary',
+                        summary_en: '(string) English summary (used for auto SEO description)',
+                        content: '(HTML string) Article body HTML',
+                        cover_image: '(string) Cover image URL — get from GET /api/external/media?group_slug=gi',
+                        category_name: '(string) News group name — e.g. "Product Introduction" or "Cases". Auto-creates if not found.',
+                        category_id: '(integer) News category ID — alternative to category_name',
+                        seo_title: '(string, optional) SEO title ≤60 chars. AUTO-GENERATED from title_en if omitted.',
+                        seo_description: '(string, optional) SEO description ≤160 chars. AUTO-GENERATED from summary_en if omitted.',
+                        seo_keywords: '(string, optional) SEO keywords comma-separated. AUTO-GENERATED if omitted.',
+                        faq_items: '(JSON string, REQUIRED for GEO) FAQ array — renders as FAQPage schema. Format: [{"question":"...","answer":"..."}]. Provide 5-7 Q&A pairs.',
+                        status: '(0/1) 0=draft 1=published',
+                        render_mode: '(string) direct (default, best SEO) or iframe (for content with <style> tags)'
+                    },
+                    faq_requirement: 'ALWAYS include faq_items — it generates FAQPage JSON-LD schema that Google SGE, ChatGPT, and Perplexity use to directly cite your content.'
                 },
-                update: { method: 'PUT', path: '/api/external/news/:id', note: '只传需要更新的字段' },
+                update: { method: 'PUT', path: '/api/external/news/:id', note: 'Pass only fields to update. faq_items and category_name supported.' },
                 delete: { method: 'DELETE', path: '/api/external/news/:id' }
+            },
+            media: {
+                get_groups: {
+                    method: 'GET', path: '/api/external/media/groups',
+                    description: 'Get all media groups with image counts. Returns matching_hints to map product types to group slugs. Call FIRST before fetching images.',
+                    headers: { 'X-API-Key': 'Required' }
+                },
+                search: {
+                    method: 'GET', path: '/api/external/media',
+                    description: 'Get images from a specific group or search by filename/alt text.',
+                    query_params: {
+                        group_slug: '(string) Group slug — e.g. gi, gl, ppgi, crc, roofing',
+                        group_id: '(integer) Group ID — alternative to group_slug',
+                        search: '(string) Search by original_filename or alt text',
+                        limit: '(integer) Max results (default 10)',
+                        page: '(integer) Page number (default 1)'
+                    },
+                    response_fields: 'items[].filepath — use this URL directly in images, cover_image, or <img> src',
+                    example_workflow: [
+                        'GET /api/external/media/groups → find gi group slug',
+                        'GET /api/external/media?group_slug=gi&limit=5 → get GI coil images',
+                        'Use items[0].filepath in images field: "/uploads/gi-coil-main.webp"'
+                    ]
+                }
             },
             templates: {
                 list: {
