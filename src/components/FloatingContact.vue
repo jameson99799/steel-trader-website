@@ -70,8 +70,8 @@
           <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
         </svg>
         <div class="row-text">
-          <span class="row-label">Email</span>
-          <span class="row-num">{{ company.email }}</span>
+          <span class="row-label">EMAIL</span>
+          <span class="row-email">{{ company.email }}</span>
         </div>
       </a>
     </div>
@@ -247,6 +247,19 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 175px;
+}
+
+/* Email — full address shown, wraps if needed */
+.email-row {
+  align-items: flex-start;
+}
+.row-email {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.4;
+  word-break: break-all;
+  white-space: normal;
 }
 
 /* Toast */

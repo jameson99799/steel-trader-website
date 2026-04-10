@@ -29,6 +29,7 @@ const routes = [
   },
   // Legacy paths without lang prefix → redirect to /en/path
   { path: '/products/:slug?', redirect: to => `/en/products${to.params.slug ? '/' + to.params.slug : ''}` },
+  { path: '/news/category/:catSlug', redirect: to => `/en/news/category/${to.params.catSlug}` },
   { path: '/news/:slug?', redirect: to => `/en/news${to.params.slug ? '/' + to.params.slug : ''}` },
   { path: '/about', redirect: '/en/about' },
   { path: '/contact', redirect: '/en/contact' },
