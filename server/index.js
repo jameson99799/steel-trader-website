@@ -15,6 +15,7 @@ import uploadRoutes from './routes/upload.js'
 import pageTextsRoutes from './routes/pagetexts.js'
 import newsRoutes from './routes/news.js'
 import newsCategoriesRoutes from './routes/news-categories.js'
+import newsEnhanceRoutes from './routes/news-enhance.js'
 import seoRoutes from './routes/seo.js'
 import sitemapRoutes from './routes/sitemap.js'
 import languagesRoutes from './routes/languages.js'
@@ -142,6 +143,7 @@ async function startServer() {
     app.use('/api/media', mediaRoutes)
     app.use('/api/pagetexts', pageTextsRoutes)
     app.use('/api/news', newsRoutes)
+    app.use('/api/news', newsEnhanceRoutes)
     app.use('/api/news-categories', newsCategoriesRoutes)
     app.use('/api/seo', seoRoutes)
     // Sitemap (accessible as /sitemap.xml)

@@ -64,20 +64,74 @@ router.get('/media/groups', apiKeyMiddleware, (req, res) => {
         FROM media_groups mg ORDER BY mg.sort_order, mg.name`)
     res.json({
         groups,
-        // Matching hints for AI: map product/content type to group slug
+        // ── Smart matching guide for AI ──────────────────────────────────────
+        // Step 1: Call this endpoint to get the live group list
+        // Step 2: Use the rules below to pick group_slug for each image slot
+        // Step 3: GET /api/external/media?group_slug=xxx to fetch actual image URLs
         matching_hints: {
-            description: 'Use these hints to pick the correct group_slug when calling GET /api/external/media',
-            rules: [
-                { keywords: ['GI', 'galvanized', 'hot-dip zinc', 'zinc coated', 'HDG'], group_slug: 'gi' },
-                { keywords: ['GL', 'galvalume', 'aluzinc', 'aluminum-zinc', 'AZ'], group_slug: 'gl' },
-                { keywords: ['PPGI', 'PPGL', 'prepainted', 'color coated', 'painted galvanized', 'painted galvalume', 'color steel'], group_slug: 'ppgi' },
-                { keywords: ['CRC', 'cold rolled', 'cold-rolled', 'cold-drawn'], group_slug: 'crc' },
-                { keywords: ['roofing', 'roof', 'corrugated', 'IBR', 'tile'], group_slug: 'roofing' },
-                { keywords: ['bulk', '散货', 'break bulk', 'bulk vessel'], group_slug: '散货' },
-                { keywords: ['container', '集装箱', 'FCL', '20GP', '40HQ'], group_slug: '集装箱' }
+            description: 'Context-aware rules for matching content sections to image groups. Use these when building product detail pages and articles.',
+            by_product_type: [
+                { match_when: 'Product is GI / Galvanized Steel / Hot-dip zinc / HDG / Z40/Z60/Z100/Z275 coating', group_slug: 'gi', note: 'Main product images, hero banner, overview section' },
+                { match_when: 'Product is GL / Galvalume / Aluzinc / AZ50/AZ150 / ALUZINC coating', group_slug: 'gl', note: 'Main product images, hero banner, overview section' },
+                { match_when: 'Product is PPGI / PPGL / Prepainted / Color coated / RAL colors / painted galvanized', group_slug: 'ppgi', note: 'Main product images, color chart section' },
+                { match_when: 'Product is CRC / Cold Rolled / SPCC / DC01 / cold-drawn', group_slug: 'crc', note: 'Main product images' },
+                { match_when: 'Product is Roofing sheet / Corrugated sheet / IBR / Tile / Roof panel', group_slug: 'roofing', note: 'Main product images + application section' }
             ],
-            fallback: 'If no rule matches, call GET /api/external/media/groups first and pick the closest group by name.',
-            tip: 'If a new group is added in the backend, it will appear here automatically — just re-call this endpoint.'
+            by_content_section: [
+                {
+                    section: 'Product Applications / End-use scenarios for GI/GL products',
+                    group_slug: '镀锌产品应用',
+                    fallback_slug: 'gi',
+                    use_in: 'Applications section, use-case cards, construction/industry images'
+                },
+                {
+                    section: 'Product Applications / End-use scenarios for PPGI/Color coated products',
+                    group_slug: '彩涂产品应用',
+                    fallback_slug: 'ppgi',
+                    use_in: 'Applications section showing roofing, wall panels, appliances in color'
+                },
+                {
+                    section: 'Packaging & Shipping — how product is packed (inner/outer wrap, steel strip)',
+                    group_slug: '包装',
+                    use_in: 'Packaging section, what-you-receive section'
+                },
+                {
+                    section: 'Factory / Production facility / Manufacturing process / Workshop',
+                    group_slug: '工厂',
+                    use_in: 'Factory section, production capability, manufacturing images'
+                },
+                {
+                    section: 'Quality inspection / Testing / Certifications / Lab',
+                    group_slug: '质检',
+                    fallback_slug: '工厂',
+                    use_in: 'Quality control section, inspection process images'
+                },
+                {
+                    section: 'Container shipping / FCL / 20GP / 40HQ / Container loading',
+                    group_slug: '集装箱',
+                    use_in: 'Shipping section, logistics, delivery method'
+                },
+                {
+                    section: 'Bulk vessel / Bulk carrier / Break bulk / Ocean freight without container',
+                    group_slug: '散货',
+                    use_in: 'Shipping section for bulk orders'
+                }
+            ],
+            product_detail_image_slots: {
+                description: 'Recommended image placement for a complete product detail page',
+                slots: [
+                    { slot: 'images field (product card)', group: 'match product type (gi/gl/ppgi/crc/roofing)', count: '2-3 images' },
+                    { slot: 'Hero banner background', group: 'match product type', count: '1 image' },
+                    { slot: 'Product overview (left or right image)', group: 'match product type', count: '1 image' },
+                    { slot: 'Applications section images', group: '镀锌产品应用 or 彩涂产品应用', count: '2-4 images' },
+                    { slot: 'Factory / Production section', group: '工厂', count: '1-2 images' },
+                    { slot: 'Quality Control section', group: '质检', count: '1-2 images' },
+                    { slot: 'Packaging & Shipping section', group: '包装', count: '1-2 images' },
+                    { slot: 'Shipping method section', group: '集装箱 or 散货', count: '1 image' }
+                ]
+            },
+            fallback_rule: 'If a group_slug returns 0 images, fall back to the closest product type group (gi/gl/ppgi/crc/roofing). Never leave <img> with a placeholder when real images are available.',
+            new_group_tip: 'When admin adds new groups in the backend, they appear here automatically. Re-call GET /api/external/media/groups to refresh.'
         }
     })
 })
