@@ -464,24 +464,20 @@ const UI_TEXTS_EN = {
 
 function collectUITexts() {
     const entries = Object.entries(UI_TEXTS_EN)
-    const CHUNK_SIZE = 15  // small batches = higher AI success rate (read-frog style)
+    const CHUNK_SIZE = 15  // read-frog style: small batches = higher AI success rate
     const items = []
     for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
         const chunk = Object.fromEntries(entries.slice(i, i + CHUNK_SIZE))
         const chunkIdx = Math.floor(i / CHUNK_SIZE)
         items.push({
-            type: 'ui_text',
-            id: 'static',          // MUST stay 'static' — checkUITexts() and /ui-texts/:lang both need this
-            field: `ui_chunk_${chunkIdx}`,  // unique field name per chunk to avoid collisions
+            type: 'ui_text', id: 'static', field: `ui_chunk_${chunkIdx}`,
             text: JSON.stringify(chunk),
-            combined: true,
-            subFields: Object.keys(chunk),
+            combined: true, subFields: Object.keys(chunk),
             itemName: `UI Text (batch ${chunkIdx + 1}/${Math.ceil(entries.length / CHUNK_SIZE)})`
         })
     }
     return items
 }
-
 
 const PAGES = {
         ui_texts_static: () => collectUITexts(),
