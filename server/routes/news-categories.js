@@ -7,16 +7,16 @@ const router = Router()
 // GET all categories (public)
 router.get('/', (req, res) => {
   const cats = getAll('SELECT * FROM news_categories ORDER BY sort_order, id')
-  // Load all translations for news_category type once
+  // Load all translations for news_category type once (correct column names from db.js schema)
   const allTranslations = getAll(
-    `SELECT entity_id, lang, field, translated_text FROM translations
-     WHERE entity_type = 'news_category' AND field = 'name'`
+    `SELECT content_id, language_code, content_field, translated_text FROM translations
+     WHERE content_type = 'news_category' AND content_field = 'name'`
   )
   // Build a quick lookup: { [catId]: { zh: '...', th: '...' } }
   const transMap = {}
   for (const tr of allTranslations) {
-    if (!transMap[tr.entity_id]) transMap[tr.entity_id] = {}
-    transMap[tr.entity_id][tr.lang] = tr.translated_text
+    if (!transMap[tr.content_id]) transMap[tr.content_id] = {}
+    transMap[tr.content_id][tr.language_code] = tr.translated_text
   }
 
   const withCount = cats.map(c => {
