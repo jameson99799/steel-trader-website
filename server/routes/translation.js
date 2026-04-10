@@ -339,6 +339,7 @@ function collectCategories() {
 // Collect news category names (e.g. "Product Introduction", "Cases")
 // IMPORTANT: use unique field keys (name_NC_{id}) because translateBatch
 // merges all items into one JSON object — duplicate 'name' keys would overwrite each other
+// translateBatch maps name_NC_* → 'name' at save time (via realField logic)
 function collectNewsCategories() {
     const cats = getAll('SELECT id, name_en FROM news_categories WHERE name_en IS NOT NULL AND name_en != \'\'  ORDER BY sort_order, id')
     return cats.flatMap(c =>
@@ -1450,6 +1451,7 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
     const companyFields = PAGES.company ? PAGES.company() : []
     const pageTextFields = PAGES.page_texts ? PAGES.page_texts() : []
     const categoryFields = PAGES.categories ? PAGES.categories() : []
+    const newsCategoryFields = PAGES.news_categories ? PAGES.news_categories() : []
     const heroFields = PAGES.hero ? PAGES.hero() : []
     const uiTextFields = PAGES.ui_texts_static ? PAGES.ui_texts_static() : []
 
@@ -1473,9 +1475,12 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
                 map[key].fields.push(f.field)
                 map[key].basicFields.push(f.field)
             } else {
-                map[key].fields.push(f.field)
+                // Map name_NC_{id} → 'name' to match what's stored in DB
+                // (translateBatch uses name_NC_ to avoid key collision, but stores as 'name')
+                const storedField = f.field.startsWith('name_NC_') ? 'name' : f.field
+                map[key].fields.push(storedField)
                 if (!f.field.startsWith('faq_') && !f.field.startsWith('spec_')) {
-                    map[key].basicFields.push(f.field)
+                    map[key].basicFields.push(storedField)
                 }
             }
         }
@@ -1577,6 +1582,7 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
             company: checkSimpleGroup(companyFields, 'company', lang),
             page_texts: checkSimpleGroup(pageTextFields, 'page_text', lang),
             categories: checkSimpleGroup(categoryFields, 'category', lang),
+            news_categories: checkSimpleGroup(newsCategoryFields, 'news_category', lang),
             hero: checkSimpleGroup(heroFields, 'hero', lang)
         }
 

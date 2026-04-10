@@ -361,7 +361,7 @@
                 产品: {{ lang.products.complete }}/{{ lang.products.total }} |
                 文章: {{ lang.news.complete }}/{{ lang.news.total }} |
                 UI: {{ lang.ui_texts?.translated || 0 }}/{{ lang.ui_texts?.total || 0 }} |
-                其他: {{ (lang.company?.complete||0) + (lang.page_texts?.complete||0) + (lang.categories?.complete||0) + (lang.hero?.complete||0) }}/{{ (lang.company?.total||0) + (lang.page_texts?.total||0) + (lang.categories?.total||0) + (lang.hero?.total||0) }}
+                其他: {{ (lang.company?.complete||0) + (lang.page_texts?.complete||0) + (lang.categories?.complete||0) + (lang.news_categories?.complete||0) + (lang.hero?.complete||0) }}/{{ (lang.company?.total||0) + (lang.page_texts?.total||0) + (lang.categories?.total||0) + (lang.news_categories?.total||0) + (lang.hero?.total||0) }}
               </span>
               <span class="audit-expand">{{ lang._expanded ? '▼' : '▶' }}</span>
             </div>
@@ -405,6 +405,16 @@
                   <span class="audit-item-name">{{ m.name }}</span>
                   <span class="audit-item-progress">{{ m.translated }}/{{ m.total }} 字段</span>
                   <button class="btn btn-sm btn-outline" @click="translateSingleAuditItem('category', m.id, lang.code)" :disabled="auditTranslating">翻译</button>
+                </div>
+              </div>
+              <!-- News Categories missing (产品介绍、案例) -->
+              <div v-if="lang.news_categories?.missing?.length" class="audit-missing-section">
+                <div class="audit-missing-title">📰 缺失新闻分组翻译 ({{ lang.news_categories.missing.length }})</div>
+                <div v-for="m in lang.news_categories.missing" :key="'nc'+m.id" class="audit-missing-item">
+                  <span class="gt-status-dot" :class="m.status"></span>
+                  <span class="audit-item-name">{{ m.name }}</span>
+                  <span class="audit-item-progress">{{ m.translated }}/{{ m.total }} 字段</span>
+                  <button class="btn btn-sm btn-outline" @click="translateSingleAuditItem('news_category', m.id, lang.code)" :disabled="auditTranslating">翻译</button>
                 </div>
               </div>
               <!-- Hero missing -->
@@ -1370,6 +1380,7 @@ function auditLangTotalMissing(lang) {
   count += (lang.company?.missing?.length || 0)
   count += (lang.page_texts?.missing?.length || 0)
   count += (lang.categories?.missing?.length || 0)
+  count += (lang.news_categories?.missing?.length || 0)
   count += (lang.hero?.missing?.length || 0)
   return count
 }
@@ -1387,9 +1398,9 @@ const auditMissingAll = computed(() => {
     if (lang.ui_texts?.missing?.length) {
       items.push({ type: 'ui_text', id: 'static', name: 'UI 静态文字 (' + lang.ui_texts.missing.length + ' keys)', lang: lang.code, langName: lang.name, langFlag: lang.flag })
     }
-    for (const section of ['company', 'page_texts', 'categories', 'hero']) {
+    for (const section of ['company', 'page_texts', 'categories', 'news_categories', 'hero']) {
       for (const m of (lang[section]?.missing || [])) {
-        const typeMap = { company: 'company', page_texts: 'page_text', categories: 'category', hero: 'hero' }
+        const typeMap = { company: 'company', page_texts: 'page_text', categories: 'category', news_categories: 'news_category', hero: 'hero' }
         items.push({ type: typeMap[section], id: m.id, name: m.name, lang: lang.code, langName: lang.name, langFlag: lang.flag })
       }
     }
