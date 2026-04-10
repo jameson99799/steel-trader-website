@@ -97,8 +97,11 @@ pm2 stop led-trade 2>/dev/null || pm2 stop steel-trader 2>/dev/null || true
 pm2 delete led-trade 2>/dev/null || pm2 delete steel-trader 2>/dev/null || true
 ok "旧进程已清除"
 
-info "启动新进程..."
-NODE_ENV=production pm2 start server/index.js --name led-trade
+info "创建日志目录..."
+mkdir -p logs
+
+info "启动新进程（使用 ecosystem.config.cjs，NODE_ENV=production 已固定）..."
+pm2 start ecosystem.config.cjs
 pm2 save
 ok "PM2 已启动（NODE_ENV=production）"
 
