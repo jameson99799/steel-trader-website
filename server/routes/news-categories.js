@@ -7,10 +7,28 @@ const router = Router()
 // GET all categories (public)
 router.get('/', (req, res) => {
   const cats = getAll('SELECT * FROM news_categories ORDER BY sort_order, id')
-  // Attach article count to each category
+  // Load all translations for news_category type once
+  const allTranslations = getAll(
+    `SELECT entity_id, lang, field, translated_text FROM translations
+     WHERE entity_type = 'news_category' AND field = 'name'`
+  )
+  // Build a quick lookup: { [catId]: { zh: '...', th: '...' } }
+  const transMap = {}
+  for (const tr of allTranslations) {
+    if (!transMap[tr.entity_id]) transMap[tr.entity_id] = {}
+    transMap[tr.entity_id][tr.lang] = tr.translated_text
+  }
+
   const withCount = cats.map(c => {
     const r = getOne('SELECT COUNT(*) as count FROM news WHERE category_id = ?', [c.id])
-    return { ...c, count: r?.count || 0 }
+    // Attach translated names as name_{lang} fields so localizedValue() works
+    const langFields = {}
+    if (transMap[c.id]) {
+      for (const [lang, text] of Object.entries(transMap[c.id])) {
+        langFields[`name_${lang}`] = text
+      }
+    }
+    return { ...c, ...langFields, count: r?.count || 0 }
   })
   res.json(withCount)
 })

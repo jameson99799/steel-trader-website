@@ -458,7 +458,8 @@ const UI_TEXTS_EN = {
     "benefitQuality": "Quality guarantee",
     "articleNotFound": "Article not found",
     "inquiryForProduct": "I would like to inquire about",
-    "browseArticlesIn": "Browse articles in:"
+    "browseArticlesIn": "Browse articles in:",
+    "latestNews": "Latest News"
 };
 
 function collectUITexts() {

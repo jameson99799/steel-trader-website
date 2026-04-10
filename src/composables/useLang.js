@@ -54,7 +54,8 @@ const builtInTranslations = {
     benefit24h: '24小时内响应', benefitPricing: '价格有竞争力', benefitQuality: '品质保证',
     articleNotFound: '文章未找到',
     inquiryForProduct: '我想咨询以下产品',
-    browseArticlesIn: '浏览分类：'
+    browseArticlesIn: '浏览分类：',
+    latestNews: '最新文章'
   },
   en: {
     home: 'Home', products: 'Products', about: 'About Us', contact: 'Contact',
@@ -109,7 +110,8 @@ const builtInTranslations = {
     benefit24h: '24-hour response', benefitPricing: 'Competitive pricing', benefitQuality: 'Quality guarantee',
     articleNotFound: 'Article not found',
     inquiryForProduct: 'I would like to inquire about',
-    browseArticlesIn: 'Browse articles in:'
+    browseArticlesIn: 'Browse articles in:',
+    latestNews: 'Latest News'
   }
 }
 
