@@ -19,9 +19,11 @@ router.get('/', (req, res) => {
 router.post('/', authMiddleware, (req, res) => {
   const { name, name_en, sort_order = 0 } = req.body
   if (!name) return res.status(400).json({ error: '分组名称不能为空' })
+  // Generate slug from English name
+  const slug = (name_en || name).toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_]+/g, '-').replace(/^-+|-+$/g, '')
   const result = run(
-    'INSERT INTO news_categories (name, name_en, sort_order) VALUES (?,?,?)',
-    [name, name_en || '', parseInt(sort_order)]
+    'INSERT INTO news_categories (name, name_en, slug, sort_order) VALUES (?,?,?,?)',
+    [name, name_en || '', slug, parseInt(sort_order)]
   )
   res.json({ id: result.lastInsertRowid, message: '创建成功' })
 })
@@ -31,9 +33,12 @@ router.put('/:id', authMiddleware, (req, res) => {
   const { name, name_en, sort_order } = req.body
   const existing = getOne('SELECT * FROM news_categories WHERE id = ?', [req.params.id])
   if (!existing) return res.status(404).json({ error: '分组不存在' })
+  const newNameEn = name_en ?? existing.name_en
+  const newName = name || existing.name
+  const slug = (newNameEn || newName).toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_]+/g, '-').replace(/^-+|-+$/g, '')
   run(
-    'UPDATE news_categories SET name=?, name_en=?, sort_order=? WHERE id=?',
-    [name || existing.name, name_en ?? existing.name_en, sort_order ?? existing.sort_order, req.params.id]
+    'UPDATE news_categories SET name=?, name_en=?, slug=?, sort_order=? WHERE id=?',
+    [newName, newNameEn, slug, sort_order ?? existing.sort_order, req.params.id]
   )
   res.json({ message: '更新成功' })
 })

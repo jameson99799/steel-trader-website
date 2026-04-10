@@ -53,7 +53,8 @@ const builtInTranslations = {
     placeholderMessage: '请描述您的钢材需求：产品类型、数量、规格、用途、时间等',
     benefit24h: '24小时内响应', benefitPricing: '价格有竞争力', benefitQuality: '品质保证',
     articleNotFound: '文章未找到',
-    inquiryForProduct: '我想咨询以下产品'
+    inquiryForProduct: '我想咨询以下产品',
+    browseArticlesIn: '浏览分类：'
   },
   en: {
     home: 'Home', products: 'Products', about: 'About Us', contact: 'Contact',
@@ -107,7 +108,8 @@ const builtInTranslations = {
     placeholderMessage: 'Please describe your steel requirements: product type, quantity, specifications, application, timeline, etc.',
     benefit24h: '24-hour response', benefitPricing: 'Competitive pricing', benefitQuality: 'Quality guarantee',
     articleNotFound: 'Article not found',
-    inquiryForProduct: 'I would like to inquire about'
+    inquiryForProduct: 'I would like to inquire about',
+    browseArticlesIn: 'Browse articles in:'
   }
 }
 

@@ -300,8 +300,8 @@ async function startServer() {
             }
           }
 
-          // ── News detail page ──
-          const newsMatch = subPath.match(/^\/news\/(.+)$/)
+          // ── News detail page (skip /news/category/ URLs) ──
+          const newsMatch = subPath.match(/^\/news\/(?!category\/)(.+)$/)
           if (newsMatch) {
             const slug = newsMatch[1]
             let article = getOne('SELECT * FROM news WHERE slug=?', [slug])
@@ -347,6 +347,42 @@ async function startServer() {
             }
           }
 
+          // ── News category page (e.g. /news/category/product-introduction) ──
+          const catPageMatch = subPath.match(/^\/news\/category\/([^/]+)$/)
+          if (catPageMatch) {
+            const catSlug = catPageMatch[1]
+            const cat = getOne('SELECT * FROM news_categories WHERE slug = ?', [catSlug])
+            if (cat) {
+              const catName = cat.name_en || cat.name
+              const catNameLocal = cat.name || cat.name_en
+              pageTitle = `${catName} - Steel Industry Articles | ${companyName}`
+              pageDesc = `Browse all ${catName} articles from ${companyName}. Expert knowledge on galvanized steel, PPGI, GL, CRC coils and international steel market.`
+              // BreadcrumbList schema
+              extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+                { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
+                { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
+                { '@type': 'ListItem', position: 3, name: catName, item: pageCanonical }
+              ] })
+              // ItemList schema: list of articles in this category
+              const catArticles = getAll('SELECT id, title_en, title, slug, summary_en, summary FROM news WHERE category_id = ? AND status = 1 ORDER BY sort_order, id DESC LIMIT 20', [cat.id])
+              if (catArticles.length) {
+                extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'ItemList',
+                  name: catName,
+                  itemListElement: catArticles.map((a, i) => ({
+                    '@type': 'ListItem', position: i + 1,
+                    url: `${siteUrl}/${lang}/news/${a.slug || a.id}`,
+                    name: a.title_en || a.title
+                  }))
+                })
+                // SSR content for category listing (GEO readable)
+                const articleLinks = catArticles.map(a =>
+                  `<li><a href="${siteUrl}/${lang}/news/${a.slug || a.id}">${esc(a.title_en || a.title)}</a><p>${esc(a.summary_en || a.summary || '')}</p></li>`
+                ).join('')
+                ssrContent = `<section id="ssr-category"><h1>${esc(catName)}</h1><ul>${articleLinks}</ul></section>`
+              }
+            }
+          }
+
           // ── Static pages ──
           if (subPath === '/products' || subPath === '/products/') {
             pageTitle = `Steel Products - GI, GL, PPGI, PPGL, CRC Coils & Sheets | ${companyName}`
@@ -360,6 +396,20 @@ async function startServer() {
           } else if (subPath === '/contact' || subPath === '/contact/') {
             pageTitle = `Contact Us | ${companyName}`
             pageDesc = `Get in touch with ${companyName}. Request a quote, ask product questions, or schedule a factory visit.`
+          }
+
+          // ── Homepage BreadcrumbList schema ──
+          if (!subPath || subPath === '/') {
+            extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` }
+            ] })
+            // WebSite schema for homepage (helps with sitelinks in SERP)
+            extraSchemas += jsonLd({
+              '@context': 'https://schema.org', '@type': 'WebSite',
+              name: companyName,
+              url: `${siteUrl}/${lang}`,
+              potentialAction: { '@type': 'SearchAction', target: `${siteUrl}/${lang}/products?search={search_term_string}`, 'query-input': 'required name=search_term_string' }
+            })
           }
 
         // ── Global Organization schema (on every page) ──
@@ -377,7 +427,9 @@ async function startServer() {
         }
         if (company.email) orgSchema.contactPoint.push({ '@type': 'ContactPoint', email: company.email, contactType: 'sales' })
         if (company.phone) orgSchema.contactPoint.push({ '@type': 'ContactPoint', telephone: company.phone, contactType: 'customer service' })
-        if (company.facebook) orgSchema.sameAs = [company.facebook, company.linkedin, company.instagram, company.tiktok, company.twitter].filter(Boolean)
+        if (company.facebook || company.linkedin || company.instagram) {
+          orgSchema.sameAs = [company.facebook, company.linkedin, company.instagram, company.tiktok, company.twitter].filter(Boolean)
+        }
         extraSchemas += jsonLd(orgSchema)
 
         // ── Build hreflang tags ──

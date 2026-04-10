@@ -100,7 +100,23 @@ ${hreflangLinks(prodPath)}
         }
     }
 
-    // News — one entry per language
+    const newsCategories = getAll(`SELECT slug, name_en FROM news_categories ORDER BY sort_order, id`)
+
+    // News categories — one entry per language
+    for (const nc of newsCategories) {
+        const ncPath = `/news/category/${nc.slug}`
+        for (const l of activeLangs) {
+            urls.push(`  <url>
+    <loc>${escapeXml(BASE_URL + '/' + l.code + ncPath)}</loc>
+    <lastmod>${now}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+${hreflangLinks(ncPath)}
+  </url>`)
+        }
+    }
+
+    // News articles — one entry per language
     for (const n of news) {
         const slug = n.slug || n.id
         const newsPath = `/news/${slug}`

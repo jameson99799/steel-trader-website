@@ -6,6 +6,7 @@ const publicRoutes = [
   { path: 'products', name: 'Products', component: () => import('../views/Products.vue') },
   { path: 'products/:slug', name: 'ProductDetail', component: () => import('../views/ProductDetail.vue') },
   { path: 'news', name: 'News', component: () => import('../views/News.vue') },
+  { path: 'news/category/:catSlug', name: 'NewsCategory', component: () => import('../views/News.vue') },
   { path: 'news/:slug', name: 'NewsDetail', component: () => import('../views/NewsDetail.vue') },
   { path: 'about', name: 'About', component: () => import('../views/About.vue') },
   { path: 'contact', name: 'Contact', component: () => import('../views/Contact.vue') }

@@ -17,10 +17,27 @@ function slugify(text, id) {
     return id ? `${base}-${id}` : base
 }
 
+// Resolve category: accepts category_id (number) or category_name (string)
+// If category_name provided, look up by name or name_en (case-insensitive)
+// If no match and create=true, auto-creates the category
+function resolveCategoryId(category_id, category_name) {
+    if (category_id) return parseInt(category_id)
+    if (!category_name) return null
+    const cat = getOne(
+        'SELECT id FROM news_categories WHERE LOWER(name_en)=LOWER(?) OR LOWER(name)=LOWER(?)',
+        [category_name, category_name]
+    )
+    if (cat) return cat.id
+    // Auto-create the category if it doesn't exist
+    const slug = category_name.toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_]+/g, '-').replace(/^-+|-+$/g, '')
+    const result = run('INSERT INTO news_categories (name, name_en, slug, sort_order) VALUES (?,?,?,?)', [category_name, category_name, slug, 99])
+    return result.lastInsertRowid
+}
+
 // GET all news (public)
 router.get('/', (req, res) => {
-    const { status = '1', page = 1, limit = 12, category_id } = req.query
-    let sql = 'SELECT n.*, nc.name as category_name, nc.name_en as category_name_en FROM news n LEFT JOIN news_categories nc ON n.category_id = nc.id WHERE 1=1'
+    const { status = '1', page = 1, limit = 12, category_id, category_slug } = req.query
+    let sql = 'SELECT n.*, nc.name as category_name, nc.name_en as category_name_en, nc.slug as category_slug FROM news n LEFT JOIN news_categories nc ON n.category_id = nc.id WHERE 1=1'
     const params = []
 
     if (status !== 'all') {
@@ -30,9 +47,13 @@ router.get('/', (req, res) => {
     if (category_id) {
         sql += ' AND n.category_id = ?'
         params.push(parseInt(category_id))
+    } else if (category_slug) {
+        // Filter by slug (used by frontend category pages)
+        sql += ' AND nc.slug = ?'
+        params.push(category_slug)
     }
 
-    const countSql = sql.replace('SELECT n.*, nc.name as category_name, nc.name_en as category_name_en', 'SELECT COUNT(*) as total')
+    const countSql = sql.replace('SELECT n.*, nc.name as category_name, nc.name_en as category_name_en, nc.slug as category_slug', 'SELECT COUNT(*) as total')
     const total = getOne(countSql, params)?.total || 0
 
     sql += ' ORDER BY n.sort_order, n.id DESC LIMIT ? OFFSET ?'
@@ -72,22 +93,23 @@ router.get('/:slug', (req, res) => {
 
 // POST create news (admin only)
 router.post('/', authMiddleware, upload.single('cover_image'), (req, res) => {
-    const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status = 1, sort_order = 0, render_mode = 'direct', category_id } = req.body
+    const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status = 1, sort_order = 0, render_mode = 'direct', category_id, category_name } = req.body
     if (!title) return res.status(400).json({ error: '标题不能为空' })
 
+    const resolvedCatId = resolveCategoryId(category_id, category_name)
     const slug = slugify(title_en || title)
     const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || null)
 
     const result = run(
         `INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, category_id)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [title, title_en || null, 'temp', summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status), parseInt(sort_order), render_mode, category_id ? parseInt(category_id) : null]
+        [title, title_en || null, 'temp', summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status), parseInt(sort_order), render_mode, resolvedCatId]
     )
     // Generate clean SEO slug: title_en (preferred) or title + article ID
     const newId = result.lastInsertRowid
     const cleanSlug = slugify(title_en || title, newId)
     run('UPDATE news SET slug = ? WHERE id = ?', [cleanSlug, newId])
-    res.json({ id: newId, message: '创建成功' })
+    res.json({ id: newId, slug: cleanSlug, category_id: resolvedCatId, message: '创建成功' })
 })
 
 // PUT update news (admin only)
@@ -96,7 +118,8 @@ router.put('/:id', authMiddleware, upload.single('cover_image'), (req, res) => {
     const existing = getOne('SELECT * FROM news WHERE id = ?', [id])
     if (!existing) return res.status(404).json({ error: '文章不存在' })
 
-    const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, category_id } = req.body
+    const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, category_id, category_name } = req.body
+    const resolvedCatId = resolveCategoryId(category_id, category_name) ?? existing.category_id
     const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || existing.cover_image)
     // Regenerate clean SEO slug on update
     const updatedSlug = slugify(title_en || title, id)
@@ -104,9 +127,9 @@ router.put('/:id', authMiddleware, upload.single('cover_image'), (req, res) => {
     run(
         `UPDATE news SET title=?, title_en=?, slug=?, summary=?, summary_en=?, content=?, cover_image=?, seo_title=?, seo_description=?, seo_keywords=?, status=?, sort_order=?, render_mode=?, category_id=?, updated_at=CURRENT_TIMESTAMP
      WHERE id=?`,
-        [title, title_en || null, updatedSlug, summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status || 1), parseInt(sort_order || 0), render_mode || 'direct', category_id ? parseInt(category_id) : existing.category_id, id]
+        [title, title_en || null, updatedSlug, summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status || 1), parseInt(sort_order || 0), render_mode || 'direct', resolvedCatId, id]
     )
-    res.json({ message: '更新成功', slug: updatedSlug })
+    res.json({ message: '更新成功', slug: updatedSlug, category_id: resolvedCatId })
 })
 
 // DELETE news (admin only)

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="news-page">
     <div class="page-header">
       <div class="container">
@@ -6,23 +6,23 @@
           <nav class="breadcrumb">
             <router-link :to="langPath('/')" class="breadcrumb-link">{{ t('home') }}</router-link>
             <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
-            <span class="breadcrumb-current">{{ t('news') }}</span>
+            <router-link :to="langPath('/news')" class="breadcrumb-link">{{ t('news') }}</router-link>
+            <template v-if="activeCategory">
+              <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+              <span class="breadcrumb-current">{{ localizedValue(activeCategory, 'name') }}</span>
+            </template>
           </nav>
-          <h1 class="page-title">{{ t('newsUpdates') }}</h1>
-          <p class="page-subtitle">{{ t('newsSubtitle') }}</p>
+          <h1 class="page-title">{{ activeCategory ? localizedValue(activeCategory, 'name') : t('newsUpdates') }}</h1>
+          <p class="page-subtitle">{{ activeCategory ? t('browseArticlesIn') + ' ' + localizedValue(activeCategory, 'name') : t('newsSubtitle') }}</p>
 
-          <!-- Category filter tabs -->
-          <div class="cat-filter" v-if="categories.length">
-            <button
-              :class="['cat-btn', !activeCatId ? 'active' : '']"
-              @click="setCategory(null)"
-            >{{ t('all') || 'All' }}</button>
-            <button
+          <!-- Category buttons -->
+          <div class="cat-buttons" v-if="categories.length">
+            <router-link
               v-for="c in categories"
               :key="c.id"
-              :class="['cat-btn', activeCatId === c.id ? 'active' : '']"
-              @click="setCategory(c.id)"
-            >{{ localizedValue(c, 'name') }}</button>
+              :to="langPath(`/news/category/${c.slug}`)"
+              :class="['cat-btn', activeCatSlug === c.slug ? 'active' : '']"
+            >{{ localizedValue(c, 'name') }}</router-link>
           </div>
         </div>
       </div>
@@ -68,13 +68,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const { t, localizedValue, langPath } = useLang()
 const router = useRouter()
+const route = useRoute()
 
 const news = ref([])
 const loading = ref(true)
@@ -82,7 +83,12 @@ const total = ref(0)
 const page = ref(1)
 const limit = 12
 const categories = ref([])
-const activeCatId = ref(null)
+
+// Derive active category from URL param
+const activeCatSlug = computed(() => route.params.catSlug || null)
+const activeCategory = computed(() =>
+  activeCatSlug.value ? categories.value.find(c => c.slug === activeCatSlug.value) : null
+)
 
 function formatDate(d) {
   if (!d) return ''
@@ -103,7 +109,7 @@ async function loadNews() {
   loading.value = true
   try {
     const params = { page: page.value, limit }
-    if (activeCatId.value) params.category_id = activeCatId.value
+    if (activeCatSlug.value) params.category_slug = activeCatSlug.value
     const res = await api.getNews(params)
     news.value = res.data
     total.value = res.total
@@ -114,17 +120,17 @@ async function loadNews() {
   }
 }
 
-function setCategory(id) {
-  activeCatId.value = id
-  page.value = 1
-  loadNews()
-}
-
 function changePage(p) {
   page.value = p
   loadNews()
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
+
+// Reload when route changes (e.g., clicking between categories)
+watch(() => route.params.catSlug, () => {
+  page.value = 1
+  loadNews()
+})
 
 onMounted(() => {
   loadCategories()
@@ -138,7 +144,7 @@ onMounted(() => {
 .page-header {
   background: var(--white);
   border-bottom: 1px solid var(--border);
-  padding: var(--spacing-xl) 0 0;
+  padding: var(--spacing-xl) 0 var(--spacing-lg);
 }
 
 .header-content { text-align: center; }
@@ -148,7 +154,7 @@ onMounted(() => {
   gap: var(--spacing-sm); margin-bottom: var(--spacing); font-size: var(--text-sm);
 }
 
-.breadcrumb-link { color: var(--text-secondary); transition: var(--transition); }
+.breadcrumb-link { color: var(--text-secondary); transition: var(--transition); text-decoration: none; }
 .breadcrumb-link:hover { color: var(--primary); }
 .breadcrumb-separator { width: 16px; height: 16px; color: var(--text-muted); }
 .breadcrumb-current { color: var(--text-primary); font-weight: 600; }
@@ -158,36 +164,45 @@ onMounted(() => {
   color: var(--text-primary); margin-bottom: var(--spacing-sm);
 }
 
-.page-subtitle { color: var(--text-secondary); font-size: var(--text-lg); margin-bottom: var(--spacing-xl); }
+.page-subtitle { color: var(--text-secondary); font-size: var(--text-lg); margin-bottom: var(--spacing-lg); }
 
-/* Category filter tabs */
-.cat-filter {
+/* Category filter buttons — blue filled style */
+.cat-buttons {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0;
-  border-top: 1px solid var(--border);
-  margin-top: var(--spacing-lg);
+  gap: 12px;
+  margin-top: var(--spacing);
 }
 
 .cat-btn {
-  padding: 14px 32px;
-  border: none;
-  background: transparent;
-  font-size: var(--text-base);
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 28px;
+  border-radius: 6px;
+  font-size: 15px;
   font-weight: 600;
-  color: var(--text-secondary);
+  text-decoration: none;
+  transition: all 0.25s;
+  border: 2px solid var(--primary, #1a56db);
+  color: var(--primary, #1a56db);
+  background: var(--white, #fff);
   cursor: pointer;
-  transition: all 0.2s;
-  border-bottom: 3px solid transparent;
-  margin-bottom: -1px;
   letter-spacing: 0.01em;
 }
 
-.cat-btn:hover { color: var(--primary); }
+.cat-btn:hover {
+  background: var(--primary, #1a56db);
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(26, 86, 219, 0.3);
+}
+
 .cat-btn.active {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
+  background: var(--primary, #1a56db);
+  color: #fff;
+  border-color: var(--primary, #1a56db);
+  box-shadow: 0 4px 14px rgba(26, 86, 219, 0.35);
 }
 
 .page-content { padding: var(--spacing-2xl) 0; }
@@ -213,10 +228,7 @@ onMounted(() => {
   box-shadow: var(--shadow-xl);
 }
 
-.card-image {
-  height: 200px;
-  overflow: hidden;
-}
+.card-image { height: 200px; overflow: hidden; }
 
 .card-image img {
   width: 100%; height: 100%;
@@ -294,6 +306,6 @@ onMounted(() => {
 @media (max-width: 640px) {
   .news-grid { grid-template-columns: 1fr; }
   .page-title { font-size: var(--text-4xl); }
-  .cat-btn { padding: 12px 20px; font-size: var(--text-sm); }
+  .cat-btn { padding: 8px 18px; font-size: 13px; }
 }
 </style>
