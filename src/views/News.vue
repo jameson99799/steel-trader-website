@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="news-page">
     <div class="page-header">
       <div class="container">
@@ -10,6 +10,20 @@
           </nav>
           <h1 class="page-title">{{ t('newsUpdates') }}</h1>
           <p class="page-subtitle">{{ t('newsSubtitle') }}</p>
+
+          <!-- Category filter tabs -->
+          <div class="cat-filter" v-if="categories.length">
+            <button
+              :class="['cat-btn', !activeCatId ? 'active' : '']"
+              @click="setCategory(null)"
+            >{{ t('all') || 'All' }}</button>
+            <button
+              v-for="c in categories"
+              :key="c.id"
+              :class="['cat-btn', activeCatId === c.id ? 'active' : '']"
+              @click="setCategory(c.id)"
+            >{{ localizedValue(c, 'name') }}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -67,6 +81,8 @@ const loading = ref(true)
 const total = ref(0)
 const page = ref(1)
 const limit = 12
+const categories = ref([])
+const activeCatId = ref(null)
 
 function formatDate(d) {
   if (!d) return ''
@@ -77,10 +93,18 @@ function goToArticle(item) {
   router.push(langPath(`/news/${item.slug || item.id}`))
 }
 
+async function loadCategories() {
+  try {
+    categories.value = await api.getNewsCategories()
+  } catch (e) { console.error(e) }
+}
+
 async function loadNews() {
   loading.value = true
   try {
-    const res = await api.getNews({ page: page.value, limit })
+    const params = { page: page.value, limit }
+    if (activeCatId.value) params.category_id = activeCatId.value
+    const res = await api.getNews(params)
     news.value = res.data
     total.value = res.total
   } catch (e) {
@@ -90,13 +114,22 @@ async function loadNews() {
   }
 }
 
+function setCategory(id) {
+  activeCatId.value = id
+  page.value = 1
+  loadNews()
+}
+
 function changePage(p) {
   page.value = p
   loadNews()
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-onMounted(loadNews)
+onMounted(() => {
+  loadCategories()
+  loadNews()
+})
 </script>
 
 <style scoped>
@@ -105,7 +138,7 @@ onMounted(loadNews)
 .page-header {
   background: var(--white);
   border-bottom: 1px solid var(--border);
-  padding: var(--spacing-xl) 0;
+  padding: var(--spacing-xl) 0 0;
 }
 
 .header-content { text-align: center; }
@@ -125,7 +158,37 @@ onMounted(loadNews)
   color: var(--text-primary); margin-bottom: var(--spacing-sm);
 }
 
-.page-subtitle { color: var(--text-secondary); font-size: var(--text-lg); }
+.page-subtitle { color: var(--text-secondary); font-size: var(--text-lg); margin-bottom: var(--spacing-xl); }
+
+/* Category filter tabs */
+.cat-filter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  border-top: 1px solid var(--border);
+  margin-top: var(--spacing-lg);
+}
+
+.cat-btn {
+  padding: 14px 32px;
+  border: none;
+  background: transparent;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  letter-spacing: 0.01em;
+}
+
+.cat-btn:hover { color: var(--primary); }
+.cat-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
 
 .page-content { padding: var(--spacing-2xl) 0; }
 
@@ -231,5 +294,6 @@ onMounted(loadNews)
 @media (max-width: 640px) {
   .news-grid { grid-template-columns: 1fr; }
   .page-title { font-size: var(--text-4xl); }
+  .cat-btn { padding: 12px 20px; font-size: var(--text-sm); }
 }
 </style>
