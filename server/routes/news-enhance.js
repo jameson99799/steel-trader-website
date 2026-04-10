@@ -71,6 +71,28 @@ function stripHtml(html) {
     return (html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 3000)
 }
 
+// ─── GET /api/news/test-ai — debug: test AI channel with a simple prompt ──────
+router.get('/test-ai', authMiddleware, async (req, res) => {
+    const s = getAISettings()
+    if (!s.api_key) return res.json({ error: 'No API key configured' })
+    try {
+        const raw = await callAI(s, [
+            { role: 'system', content: 'Return only a JSON array. No markdown.' },
+            { role: 'user', content: 'Generate 2 example FAQ pairs about steel coils as a JSON array: [{"question":"...","answer":"..."}]' }
+        ], 500)
+        res.json({
+            api_url: s.api_url,
+            model: s.model_name,
+            raw_response: raw,
+            response_length: raw.length,
+            has_json_array: /\[[\s\S]*\]/.test(raw),
+            has_code_block: raw.includes('```')
+        })
+    } catch (e) {
+        res.json({ error: e.message, api_url: s.api_url, model: s.model_name })
+    }
+})
+
 // ─── GET /api/news/batch-status ──────────────────────────────────────────────
 // Returns stats: how many articles have/lack faq_items and SEO fields
 router.get('/batch-status', authMiddleware, (req, res) => {
@@ -168,20 +190,35 @@ REQUIREMENTS:
 - Questions should be what steel buyers/importers actually ask about this topic
 - Answers should be 2-4 sentences, factual and specific
 - Cover: product specs, pricing/MOQ, delivery/shipping, quality/certifications, customization
-- Return ONLY valid JSON array: [{"question":"...","answer":"..."},...]
-- No markdown, no explanation, just the JSON array`
+- Return ONLY a valid JSON array (no markdown code blocks, no explanation):
+[{"question":"...","answer":"..."},{"question":"...","answer":"..."}]`
 
                     const aiResponse = await callAI(s, [
-                        { role: 'system', content: 'You generate FAQ JSON for steel company articles. Return only valid JSON array.' },
+                        { role: 'system', content: 'You generate FAQ JSON arrays for steel company articles. Output ONLY the raw JSON array starting with [ and ending with ]. No markdown. No explanations.' },
                         { role: 'user', content: prompt }
                     ], 2000)
 
-                    const jsonMatch = aiResponse.match(/\[[\s\S]*\]/)
-                    if (jsonMatch) {
-                        const faqs = JSON.parse(jsonMatch[0])
-                        if (Array.isArray(faqs) && faqs.length >= 3) {
-                            updatedFaq = JSON.stringify(faqs)
+                    // Extract JSON array — handle markdown code blocks and plain JSON
+                    const arrayMatch =
+                        aiResponse.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/) ||
+                        aiResponse.match(/(\[[\s\S]*\])/)
+                    const rawJsonStr = arrayMatch ? (arrayMatch[1] || arrayMatch[0]) : null
+
+                    if (rawJsonStr) {
+                        try {
+                            const faqs = JSON.parse(rawJsonStr)
+                            if (Array.isArray(faqs) && faqs.length >= 3) {
+                                updatedFaq = JSON.stringify(faqs)
+                            } else {
+                                errors.push({ id: article.id, title: articleTitle, error: `FAQ parse OK but only ${faqs.length} items (need ≥3)` })
+                            }
+                        } catch (parseErr) {
+                            errors.push({ id: article.id, title: articleTitle, error: `FAQ JSON parse failed: ${parseErr.message} | Raw: ${rawJsonStr.substring(0, 100)}` })
                         }
+                    } else {
+                        // Record what AI actually returned for debugging
+                        const preview = aiResponse ? aiResponse.substring(0, 150) : '(empty response)'
+                        errors.push({ id: article.id, title: articleTitle, error: `FAQ: no JSON array found in AI response. Preview: ${preview}` })
                     }
                 }
             } catch (e) {
