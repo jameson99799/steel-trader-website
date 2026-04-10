@@ -142,8 +142,8 @@ async function startServer() {
     app.use('/api/upload', uploadRoutes)
     app.use('/api/media', mediaRoutes)
     app.use('/api/pagetexts', pageTextsRoutes)
+    app.use('/api/news', newsEnhanceRoutes)  // MUST be before newsRoutes to avoid /:slug catchall
     app.use('/api/news', newsRoutes)
-    app.use('/api/news', newsEnhanceRoutes)
     app.use('/api/news-categories', newsCategoriesRoutes)
     app.use('/api/seo', seoRoutes)
     // Sitemap (accessible as /sitemap.xml)

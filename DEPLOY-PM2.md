@@ -18,8 +18,8 @@ curl -fsSL https://raw.githubusercontent.com/jameson99799/steel-trader-website/m
 ## 完成后
 
 - 网站：http://43.159.129.164 或 http://www.sunseasteel.com
-- 后台：http://43.159.129.164/admin/login
-- 账号：admin / admin123 **请立即修改密码**
+- 后台：http://43.159.129.164/admin/login 或 https://www.sunseasteel.com/admin
+- 账号：admin / x9981509
 
 ---
 
