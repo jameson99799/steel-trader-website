@@ -337,10 +337,12 @@ function collectCategories() {
 }
 
 // Collect news category names (e.g. "Product Introduction", "Cases")
+// IMPORTANT: use unique field keys (name_NC_{id}) because translateBatch
+// merges all items into one JSON object — duplicate 'name' keys would overwrite each other
 function collectNewsCategories() {
     const cats = getAll('SELECT id, name_en FROM news_categories WHERE name_en IS NOT NULL AND name_en != \'\'  ORDER BY sort_order, id')
     return cats.flatMap(c =>
-        c.name_en ? [{ type: 'news_category', id: c.id, field: 'name', text: c.name_en, itemName: `News Group: ${c.name_en}` }] : []
+        c.name_en ? [{ type: 'news_category', id: c.id, field: `name_NC_${c.id}`, text: c.name_en, itemName: `News Group: ${c.name_en}` }] : []
     )
 }
 
@@ -539,6 +541,16 @@ DO NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", "GI GL PPGI PPGL CRC Steel C
 
                 const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
                 if (!jsonMatch) {
+                    // Fallback: for very small batches (1-2 items), AI sometimes returns plain text
+                    // Try to use it directly if all items have unique non-overlapping fields
+                    const plainText = aiContent.trim().replace(/^["']|["']$/g, '')
+                    if (shortItems.length === 1 && plainText && plainText.length < 300 && !plainText.includes('{')) {
+                        const item = shortItems[0]
+                        const realField = item.field.startsWith('name_NC_') ? 'name' : item.field
+                        upsertTranslation(targetLang, item.type, item.id, realField, item.text, plainText)
+                        results.push({ original: item.text.slice(0, 80), translated: plainText.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
+                        break // success
+                    }
                     if (attempt >= MAX_RETRIES) {
                         errors.push({ error: 'No JSON in AI response (retried ' + MAX_RETRIES + 'x)', errorCode: 'ERR_NO_JSON', itemName: shortItems[0]?.itemName })
                     }
@@ -556,6 +568,8 @@ DO NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", "GI GL PPGI PPGL CRC Steel C
                 // Match translations back to items — handle combined fields
                 console.log('[translateBatch] Got', Object.keys(translations).length, 'translated fields back')
                 for (const item of shortItems) {
+                    // Resolve the actual DB field name (strip the _NC_{id} suffix used to make keys unique)
+                    const realField = item.field.startsWith('name_NC_') ? 'name' : item.field
                     if (item.combined) {
                         // Combined field: match each sub-field
                         try {
@@ -579,8 +593,8 @@ DO NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", "GI GL PPGI PPGL CRC Steel C
                     } else {
                         const translated = translations[item.field]
                         if (translated && typeof translated === 'string') {
-                            upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
-                            results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field, itemName: item.itemName })
+                            upsertTranslation(targetLang, item.type, item.id, realField, item.text, translated)
+                            results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
                         } else {
                             errors.push({ item: item.field, error: 'Missing translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
                         }
@@ -701,6 +715,9 @@ Do NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T${overrid
     return { results, errors }
 }
 
+// Cache for PRAGMA table_info results per language to avoid repeated DB schema queries
+const _newsCatColCache = new Set()
+
 function upsertTranslation(lang, type, id, field, original, translated) {
     // Clean garbled characters from translations
     if (translated && typeof translated === 'string') {
@@ -710,16 +727,21 @@ function upsertTranslation(lang, type, id, field, original, translated) {
     // so localizedValue(cat, 'name') can find name_es / name_fr etc.
     if (type === 'news_category' && field === 'name' && id && lang) {
         const col = `name_${lang}`
+        const cacheKey = col
         try {
-            // Check if column exists first (SQLite doesn't auto-add columns)
-            const tableInfo = getAll(`PRAGMA table_info(news_categories)`)
-            const hasCol = tableInfo.some(c => c.name === col)
-            if (!hasCol) {
-                run(`ALTER TABLE news_categories ADD COLUMN ${col} TEXT`)
+            if (!_newsCatColCache.has(cacheKey)) {
+                // Only check PRAGMA if we haven't confirmed column exists yet
+                const tableInfo = getAll(`PRAGMA table_info(news_categories)`)
+                const hasCol = tableInfo.some(c => c.name === col)
+                if (!hasCol) {
+                    run(`ALTER TABLE news_categories ADD COLUMN ${col} TEXT`)
+                }
+                _newsCatColCache.add(cacheKey) // cache: column confirmed to exist
             }
             run(`UPDATE news_categories SET ${col} = ? WHERE id = ?`, [translated, id])
         } catch (e) {
             // Ignore ALTER TABLE errors (column may already exist)
+            _newsCatColCache.add(cacheKey) // still cache to avoid repeated attempts
         }
     }
     try {
@@ -844,18 +866,32 @@ Glossary(zh): Galvalume/GL=镀铝锌 ALUZINC=镀铝锌 PPGI=彩涂镀锌 PPGL=�
                 // Parse JSON from response
                 const jsonMatch = content.match(/\{[\s\S]*\}/)
                 if (!jsonMatch) {
-                    errors.push({ error: 'JSON parse error', errorCode: 'ERR_PARSE', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
-                    break
+                    // Fallback: single item returned as plain text
+                    const plainText = content.trim().replace(/^["']|["']$/g, '')
+                    if (batch.length === 1 && plainText && plainText.length < 300 && !plainText.includes('{')) {
+                        const item = batch[0]
+                        const realField = item.field.startsWith('name_NC_') ? 'name' : item.field
+                        upsertTranslation(targetLang, item.type, item.id, realField, item.text, plainText)
+                        results.push({ original: item.text.slice(0, 80), translated: plainText.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
+                        success = true
+                        break
+                    }
+                    attempt++
+                    if (attempt > MAX_RETRIES) {
+                        errors.push({ error: 'No JSON in AI response (retried ' + MAX_RETRIES + 'x)', errorCode: 'ERR_NO_JSON', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
+                    }
+                    continue
                 }
                 const translations = JSON.parse(jsonMatch[0])
                 for (let j = 0; j < batch.length; j++) {
                     const item = batch[j]
+                    const realField = item.field.startsWith('name_NC_') ? 'name' : item.field
                     const translated = translations[String(j + 1)]
                     if (!translated) {
                         errors.push({ item: item.text.slice(0, 60), error: 'No translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
                         continue
                     }
-                    upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translated)
+                    upsertTranslation(targetLang, item.type, item.id, realField, item.text, translated)
                     results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: item.field, itemName: item.itemName })
                 }
                 success = true
