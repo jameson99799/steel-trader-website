@@ -273,6 +273,19 @@ async function startServer() {
                 { '@type': 'ListItem', position: 3, name: product.name_en || product.name, item: pageCanonical }
               ] })
 
+              // ── Product Schema (helps Google Shopping + AI entity recognition) ──
+              const productImages = (product.images || '').split(',').filter(Boolean).map(img => img.startsWith('http') ? img : `${siteUrl}${img}`)
+              extraSchemas += jsonLd({
+                '@context': 'https://schema.org', '@type': 'Product',
+                name: product.name_en || product.name,
+                description: (product.description_en || product.description || '').substring(0, 500),
+                brand: { '@type': 'Brand', name: companyName },
+                manufacturer: { '@type': 'Organization', name: companyName, url: siteUrl },
+                ...(productImages.length && { image: productImages }),
+                offers: { '@type': 'Offer', availability: 'https://schema.org/InStock', seller: { '@type': 'Organization', name: companyName }, url: pageCanonical },
+                url: pageCanonical
+              })
+
               // ── SSR content for product detail (SEO/GEO crawlers) ──
               const pName = esc(product.name_en || product.name || '')
               const pDesc = esc(product.description_en || product.description || '')
@@ -287,7 +300,7 @@ async function startServer() {
               if (product.faq_items) {
                 try {
                   const fl = JSON.parse(product.faq_items)
-                  if (fl.length) faqHtml = fl.map(f => `<h3>${esc(f.question)}</h3><p>${esc(f.answer)}</p>`).join('')
+                  if (fl.length) faqHtml = '<h2>Frequently Asked Questions</h2>' + fl.map(f => `<h3>${esc(f.question)}</h3><p>${esc(f.answer)}</p>`).join('')
                 } catch (e) {}
               }
               const detailHtml = product.detail_content ? product.detail_content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') : ''
@@ -337,7 +350,17 @@ async function startServer() {
               // ── SSR content for article detail (SEO/GEO crawlers) ──
               const aTitle = esc(article.title_en || article.title || '')
               const aSummary = esc(article.summary_en || article.summary || '')
-              const articleBody = article.content ? article.content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') : ''
+              // Replace template placeholders with real company data
+              const whatsappLink = company.whatsapp ? `https://wa.me/${company.whatsapp.replace(/[^0-9]/g, '')}` : '#'
+              let articleBody = article.content
+                ? article.content
+                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                    .replace(/\{\{email\}\}/g, company.email || '')
+                    .replace(/\{\{phone\}\}/g, company.phone || company.whatsapp || '')
+                    .replace(/\{\{whatsapp_link\}\}/g, whatsappLink)
+                    .replace(/\{\{whatsapp\}\}/g, company.whatsapp || '')
+                    .replace(/\{\{company_name\}\}/g, companyName)
+                : ''
               ssrContent = `<article id="ssr-article"><h1>${aTitle}</h1><p>${aSummary}</p>${articleBody}</article>`
             } else {
               // News article not found — return 404 status
@@ -383,33 +406,89 @@ async function startServer() {
             }
           }
 
-          // ── Static pages ──
+          // ── Static pages with SSR content injection ──
           if (subPath === '/products' || subPath === '/products/') {
             pageTitle = `Steel Products - GI, GL, PPGI, PPGL, CRC Coils & Sheets | ${companyName}`
             pageDesc = `Manufacturer & Exporter of Galvanized Steel (GI), Galvalume (GL), PPGI, PPGL & CRC Coils. ASTM A653/JIS G3302/EN 10346 compliant. Factory direct pricing from Shandong, China.`
+            // SSR product list for GEO crawlers
+            const productList = getAll('SELECT id, slug, name_en, name, description_en, description FROM products WHERE status=1 ORDER BY sort_order, id DESC LIMIT 20')
+            if (productList.length) {
+              const prodItems = productList.map(p => `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a><p>${esc((p.description_en || p.description || '').substring(0, 150))}</p></li>`).join('')
+              ssrContent = `<section id="ssr-products"><h1>Steel Products</h1><ul>${prodItems}</ul></section>`
+            }
+            // ItemList Schema for product listing
+            const allProducts = getAll('SELECT id, slug, name_en, name FROM products WHERE status=1 ORDER BY sort_order, id DESC LIMIT 30')
+            if (allProducts.length) {
+              extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'ItemList',
+                name: 'Steel Products', url: pageCanonical,
+                itemListElement: allProducts.map((p, i) => ({ '@type': 'ListItem', position: i+1, name: p.name_en || p.name, url: `${siteUrl}/${lang}/products/${p.slug || p.id}` }))
+              })
+            }
+            extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: 'Products', item: pageCanonical }
+            ] })
           } else if (subPath === '/news' || subPath === '/news/') {
             pageTitle = `Steel Industry News & Technical Guides | ${companyName}`
             pageDesc = `Latest galvanized steel news, PPGI/PPGL technical guides, coil specifications, and market analysis from ${companyName}. Expert insights for steel buyers.`
+            // SSR recent article list for GEO crawlers
+            const recentArticles = getAll('SELECT id, slug, title_en, title, summary_en, summary FROM news WHERE status=1 ORDER BY sort_order, id DESC LIMIT 12')
+            if (recentArticles.length) {
+              const artItems = recentArticles.map(a => `<li><a href="${siteUrl}/${lang}/news/${a.slug || a.id}">${esc(a.title_en || a.title)}</a><p>${esc(a.summary_en || a.summary || '')}</p></li>`).join('')
+              ssrContent = `<section id="ssr-news-list"><h1>Steel Industry News</h1><ul>${artItems}</ul></section>`
+            }
+            extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: 'News', item: pageCanonical }
+            ] })
           } else if (subPath === '/about' || subPath === '/about/') {
             pageTitle = `About Us | ${companyName}`
             pageDesc = company.description_en || `Learn about ${companyName} — a professional steel coil manufacturer and exporter based in Shandong, China.`
+            extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: 'About Us', item: pageCanonical }
+            ] })
+            extraSchemas += jsonLd({
+              '@context': 'https://schema.org', '@type': 'LocalBusiness',
+              name: companyName, url: siteUrl,
+              address: { '@type': 'PostalAddress', addressCountry: 'CN', addressRegion: 'Shandong', addressLocality: 'Liaocheng' },
+              ...(company.email && { email: company.email }),
+              ...(company.phone && { telephone: company.phone }),
+              description: (company.description_en || '').substring(0, 300)
+            })
           } else if (subPath === '/contact' || subPath === '/contact/') {
             pageTitle = `Contact Us | ${companyName}`
             pageDesc = `Get in touch with ${companyName}. Request a quote, ask product questions, or schedule a factory visit.`
+            extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: 'Contact', item: pageCanonical }
+            ] })
+            extraSchemas += jsonLd({
+              '@context': 'https://schema.org', '@type': 'ContactPage',
+              name: `Contact ${companyName}`,
+              url: pageCanonical,
+              mainEntity: { '@type': 'Organization', name: companyName,
+                ...(company.email && { email: company.email }),
+                ...(company.phone && { telephone: company.phone })
+              }
+            })
           }
 
-          // ── Homepage BreadcrumbList schema ──
+          // ── Homepage BreadcrumbList + WebSite schema + SSR content ──
           if (!subPath || subPath === '/') {
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` }
             ] })
-            // WebSite schema for homepage (helps with sitelinks in SERP)
             extraSchemas += jsonLd({
               '@context': 'https://schema.org', '@type': 'WebSite',
-              name: companyName,
-              url: `${siteUrl}/${lang}`,
+              name: companyName, url: `${siteUrl}/${lang}`,
               potentialAction: { '@type': 'SearchAction', target: `${siteUrl}/${lang}/products?search={search_term_string}`, 'query-input': 'required name=search_term_string' }
             })
+            // SSR home content: company intro + top products
+            const homeProducts = getAll('SELECT id, slug, name_en, name FROM products WHERE status=1 ORDER BY sort_order, id LIMIT 8')
+            const companyDesc = esc(company.description_en || company.description || '')
+            const homeProductList = homeProducts.map(p => `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a></li>`).join('')
+            ssrContent = `<section id="ssr-home"><h1>${esc(companyName)}</h1><p>${companyDesc}</p><h2>Main Products</h2><ul>${homeProductList}</ul></section>`
           }
 
         // ── Global Organization schema (on every page) ──
