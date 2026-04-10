@@ -98,9 +98,9 @@ pm2 delete led-trade 2>/dev/null || pm2 delete steel-trader 2>/dev/null || true
 ok "旧进程已清除"
 
 info "启动新进程..."
-pm2 start server/index.js --name led-trade
+NODE_ENV=production pm2 start server/index.js --name led-trade
 pm2 save
-ok "PM2 已启动"
+ok "PM2 已启动（NODE_ENV=production）"
 
 echo ""
 pm2 status
