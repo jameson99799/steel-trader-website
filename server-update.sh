@@ -91,15 +91,14 @@ info "npm run build..."
 npm run build 2>&1 | tail -1
 ok "前端构建完成"
 
-# ── 9. 启动 PM2 ──────────────────────────────────────────────
-info "启动 PM2..."
-if pm2 describe led-trade > /dev/null 2>&1; then
-  pm2 restart led-trade
-elif pm2 describe steel-trader > /dev/null 2>&1; then
-  pm2 restart steel-trader
-else
-  pm2 start server/index.js --name led-trade
-fi
+# ── 9. 停止 → 启动 PM2（严格顺序：先停，再启动）──────────────
+info "停止旧进程..."
+pm2 stop led-trade 2>/dev/null || pm2 stop steel-trader 2>/dev/null || true
+pm2 delete led-trade 2>/dev/null || pm2 delete steel-trader 2>/dev/null || true
+ok "旧进程已清除"
+
+info "启动新进程..."
+pm2 start server/index.js --name led-trade
 pm2 save
 ok "PM2 已启动"
 
