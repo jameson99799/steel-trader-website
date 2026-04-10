@@ -462,14 +462,19 @@ const UI_TEXTS_EN = {
 };
 
 function collectUITexts() {
+    const entries = Object.entries(UI_TEXTS_EN)
+    const CHUNK_SIZE = 15  // read-frog style: small batches = higher AI success rate
     const items = []
-    // All UI static texts as one combined field for efficient single-call translation
-    items.push({
-        type: 'ui_text', id: 'static', field: 'ui_combined',
-        text: JSON.stringify(UI_TEXTS_EN),
-        combined: true, subFields: Object.keys(UI_TEXTS_EN),
-        itemName: 'UI Static Text'
-    })
+    for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
+        const chunk = Object.fromEntries(entries.slice(i, i + CHUNK_SIZE))
+        const chunkIdx = Math.floor(i / CHUNK_SIZE)
+        items.push({
+            type: 'ui_text', id: `static_${chunkIdx}`, field: `ui_chunk_${chunkIdx}`,
+            text: JSON.stringify(chunk),
+            combined: true, subFields: Object.keys(chunk),
+            itemName: `UI Text (batch ${chunkIdx + 1}/${Math.ceil(entries.length / CHUNK_SIZE)})`
+        })
+    }
     return items
 }
 
@@ -503,13 +508,12 @@ async function translateBatch(settings, items, targetLang, langName, overrideNot
     const shortItems = items.filter(i => !i.long_html)
     const longItems = items.filter(i => i.long_html)
 
-    // ── SHORT TEXT: Send ALL fields in ONE API call as {field: text} ──
+    // ── SHORT TEXT: Send ALL fields in ONE API call ──
     if (shortItems.length > 0) {
         // Build a merged JSON object — combined fields get expanded into sub-fields
         const fieldsObj = {}
         for (const item of shortItems) {
             if (item.combined) {
-                // Expand combined fields (FAQ, specs, SEO) into individual sub-fields
                 try {
                     const subObj = JSON.parse(item.text)
                     Object.assign(fieldsObj, subObj)
@@ -520,15 +524,26 @@ async function translateBatch(settings, items, targetLang, langName, overrideNot
                 fieldsObj[item.field] = item.text
             }
         }
-        console.log('[translateBatch] Sending', Object.keys(fieldsObj).length, 'fields in ONE call for', shortItems[0]?.itemName, '| JSON size:', JSON.stringify(fieldsObj).length, 'chars')
+        const fieldKeys = Object.keys(fieldsObj)
+        const fieldVals = Object.values(fieldsObj)
+        console.log('[translateBatch] Sending', fieldKeys.length, 'fields | JSON size:', JSON.stringify(fieldsObj).length, 'chars')
 
-        const systemPrompt = `Translate the following JSON values from English to ${langName}. This is content for a steel products company website.
-Return ONLY a JSON object with the SAME keys and translated values.
+        // read-frog style: use NUMBERED lines instead of JSON to avoid ERR_NO_JSON
+        // Format: "1. text1\n2. text2\n..." → AI returns "1. trans1\n2. trans2\n..."
+        // Much more reliable than JSON for 3rd-party AI proxies
+        const numberedInput = fieldVals.map((v, i) => `${i + 1}. ${v}`).join('\n')
+
+        const systemPrompt = `Translate the following numbered items from English to ${langName}. This is content for a steel products company website.
+Return ONLY numbered lines in the SAME order:
+1. [translation of item 1]
+2. [translation of item 2]
+...
 Rules:
-- Translate ALL text content completely and naturally
-- Keep HTML tags, product codes, model numbers, units (mm, kg, MPa) unchanged
+- Translate ALL text completely and naturally
+- Keep HTML tags, product codes, units (mm, kg, MPa) unchanged
 - Keep URLs, email addresses unchanged
-GLOSSARY (for Chinese): Galvalume/GL=镀铝锌, ALUZINC=镀铝锌, PPGI=彩涂镀锌, PPGL=彩涂镀铝锌, GI=镀锌, CRC=冷轧卷
+- DO NOT skip any numbered item
+GLOSSARY (Chinese): Galvalume/GL=镀铝锌, ALUZINC=镀铝锌, PPGI=彩涂镀锌, PPGL=彩涂镀铝锌, GI=镀锌, CRC=冷轧卷
 DO NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", "GI GL PPGI PPGL CRC Steel Coil", ASTM, JIS, EN, GB/T${overrideNote}`
 
         const MAX_RETRIES = 2
@@ -536,71 +551,88 @@ DO NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", "GI GL PPGI PPGL CRC Steel C
             try {
                 const aiContent = await callAI(settings, [
                     { role: 'system', content: systemPrompt },
-                    { role: 'user', content: JSON.stringify(fieldsObj, null, 0) }
-                ], 16000)  // Large token limit for complete product
+                    { role: 'user', content: numberedInput }
+                ], 16000)
 
-                const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
-                if (!jsonMatch) {
-                    // Fallback: for very small batches (1-2 items), AI sometimes returns plain text
-                    // Try to use it directly if all items have unique non-overlapping fields
-                    const plainText = aiContent.trim().replace(/^["']|["']$/g, '')
-                    if (shortItems.length === 1 && plainText && plainText.length < 300 && !plainText.includes('{')) {
-                        const item = shortItems[0]
-                        const realField = item.field.startsWith('name_NC_') ? 'name' : item.field
-                        upsertTranslation(targetLang, item.type, item.id, realField, item.text, plainText)
-                        results.push({ original: item.text.slice(0, 80), translated: plainText.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
-                        break // success
-                    }
-                    if (attempt >= MAX_RETRIES) {
-                        errors.push({ error: 'No JSON in AI response (retried ' + MAX_RETRIES + 'x)', errorCode: 'ERR_NO_JSON', itemName: shortItems[0]?.itemName })
-                    }
-                    continue
+                // Parse numbered response: "1. text\n2. text\n..."
+                const lines = aiContent.split('\n').map(l => l.trim()).filter(Boolean)
+                const translatedArr = []
+                for (const line of lines) {
+                    const m = line.match(/^\d+\.\s+(.+)$/)
+                    if (m) translatedArr.push(m[1].trim())
                 }
 
-                let translations
-                try { translations = JSON.parse(jsonMatch[0]) } catch (e) {
-                    if (attempt >= MAX_RETRIES) {
-                        errors.push({ error: 'JSON parse error: ' + aiContent.slice(0, 200), errorCode: 'ERR_PARSE', itemName: shortItems[0]?.itemName })
-                    }
-                    continue
-                }
-
-                // Match translations back to items — handle combined fields
-                console.log('[translateBatch] Got', Object.keys(translations).length, 'translated fields back')
-                for (const item of shortItems) {
-                    // Resolve the actual DB field name (strip the _NC_{id} suffix used to make keys unique)
-                    const realField = item.field.startsWith('name_NC_') ? 'name' : item.field
-                    if (item.combined) {
-                        // Combined field: match each sub-field
+                if (translatedArr.length < Math.floor(fieldVals.length * 0.5)) {
+                    // Fallback: try JSON format if numbered parsing got too few results
+                    const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
+                    if (jsonMatch) {
                         try {
-                            const subObj = JSON.parse(item.text)
-                            let allFound = true
-                            for (const subField of Object.keys(subObj)) {
-                                const translated = translations[subField]
-                                if (translated && typeof translated === 'string') {
-                                    upsertTranslation(targetLang, item.type, item.id, subField, subObj[subField], translated)
-                                    results.push({ original: subObj[subField].slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: subField, itemName: item.itemName })
+                            const jsonTranslations = JSON.parse(jsonMatch[0])
+                            // Map JSON response back to items
+                            let anySuccess = false
+                            for (const item of shortItems) {
+                                const realField = item.field.startsWith('name_NC_') ? 'name' : item.field
+                                if (item.combined) {
+                                    try {
+                                        const subObj = JSON.parse(item.text)
+                                        for (const [subField, origVal] of Object.entries(subObj)) {
+                                            const trans = jsonTranslations[subField]
+                                            if (trans && typeof trans === 'string') {
+                                                upsertTranslation(targetLang, item.type, item.id, subField, origVal, trans)
+                                                results.push({ original: origVal.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: subField, itemName: item.itemName })
+                                                anySuccess = true
+                                            }
+                                        }
+                                    } catch {}
                                 } else {
-                                    allFound = false
+                                    const trans = jsonTranslations[item.field] || jsonTranslations[realField]
+                                    if (trans && typeof trans === 'string') {
+                                        upsertTranslation(targetLang, item.type, item.id, realField, item.text, trans)
+                                        results.push({ original: item.text.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
+                                        anySuccess = true
+                                    }
                                 }
                             }
-                            if (!allFound) {
-                                errors.push({ item: item.field, error: 'Some sub-fields missing', errorCode: 'ERR_PARTIAL', itemName: item.itemName })
+                            if (anySuccess) break
+                        } catch {}
+                    }
+                    if (attempt >= MAX_RETRIES) {
+                        errors.push({ error: `Numbered parsing got ${translatedArr.length}/${fieldVals.length} items (retried ${MAX_RETRIES}x)`, errorCode: 'ERR_PARTIAL', itemName: shortItems[0]?.itemName })
+                    }
+                    continue
+                }
+
+                // Map numbered translations back to items
+                let transIdx = 0
+                for (const item of shortItems) {
+                    const realField = item.field.startsWith('name_NC_') ? 'name' : item.field
+                    if (item.combined) {
+                        try {
+                            const subObj = JSON.parse(item.text)
+                            for (const [subField, origVal] of Object.entries(subObj)) {
+                                const trans = translatedArr[transIdx++]
+                                if (trans) {
+                                    upsertTranslation(targetLang, item.type, item.id, subField, origVal, trans)
+                                    results.push({ original: origVal.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: subField, itemName: item.itemName })
+                                } else {
+                                    errors.push({ item: subField, error: 'Missing numbered translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
+                                }
                             }
                         } catch (e) {
                             errors.push({ item: item.field, error: 'Combined field parse error', errorCode: 'ERR_PARSE', itemName: item.itemName })
                         }
                     } else {
-                        const translated = translations[item.field]
-                        if (translated && typeof translated === 'string') {
-                            upsertTranslation(targetLang, item.type, item.id, realField, item.text, translated)
-                            results.push({ original: item.text.slice(0, 80), translated: translated.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
+                        const trans = translatedArr[transIdx++]
+                        if (trans) {
+                            upsertTranslation(targetLang, item.type, item.id, realField, item.text, trans)
+                            results.push({ original: item.text.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
                         } else {
-                            errors.push({ item: item.field, error: 'Missing translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
+                            errors.push({ item: item.field, error: 'Missing numbered translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
                         }
                     }
                 }
-                break  // Success, exit retry loop
+                console.log('[translateBatch] Numbered format: mapped', translatedArr.length, 'translations to', shortItems.length, 'items')
+                break  // Success
             } catch (e) {
                 if (attempt >= MAX_RETRIES) {
                     errors.push({ error: e.message + ' (retried ' + MAX_RETRIES + 'x)', errorCode: 'ERR_API', itemName: shortItems[0]?.itemName })

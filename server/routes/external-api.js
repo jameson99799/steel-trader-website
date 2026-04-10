@@ -2,6 +2,53 @@ import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import crypto from 'crypto'
 
+// ─── Product type detection from article context ─────────────────────────────
+const PRODUCT_TYPE_MAP = [
+    {
+        type: 'GI', label: 'GI (Galvanized Steel / 镀锌钢板)',
+        keywords: ['galvanized', 'gi coil', 'hot-dip zinc', 'zinc coated', 'z40', 'z60', 'z100', 'z275', 'hdg', '镀锌'],
+        must_cover: ['zinc coating weight (Z40-Z275 g/m²)', 'hot-dip galvanizing process', 'corrosion resistance', 'MOQ/pricing', 'compliance standards (ASTM A653 / JIS G3302 / EN 10346)', 'delivery time', 'customization options'],
+        must_not_mention: ['galvalume', 'GL', 'PPGI', 'PPGL', 'aluminum-zinc alloy', 'color coating', 'RAL color', 'AZ50', 'AZ150'],
+        sample_questions: ['What is the zinc coating weight for GI steel coils?', 'What standards does your galvanized steel comply with?', 'What is the MOQ for GI coils?', 'What is the service life of hot-dip galvanized steel?', 'Can you customize the GI coil width and thickness?']
+    },
+    {
+        type: 'GL', label: 'GL (Galvalume / Aluzinc / 镀铝锌)',
+        keywords: ['galvalume', 'aluzinc', 'aluminum-zinc', 'az50', 'az150', 'gl coil', 'aluminized zinc', '镀铝锌'],
+        must_cover: ['aluminum-zinc alloy composition (55% Al, 43.4% Zn, 1.6% Si)', 'superior heat resistance vs GI', 'corrosion resistance life', 'MOQ/pricing', 'standards (ASTM A792 / JIS G3321 / EN 10346)', 'roofing/industrial applications'],
+        must_not_mention: ['hot-dip zinc only', 'pure zinc coating', 'GI', 'PPGI', 'PPGL', 'RAL color'],
+        sample_questions: ['What is the difference between GL (Galvalume) and GI (Galvanized) steel?', 'What coating composition does Galvalume steel have?', 'Is GL steel suitable for roofing applications?', 'What standards does your GL coil comply with?', 'What is the heat resistance of Galvalume steel?']
+    },
+    {
+        type: 'PPGI', label: 'PPGI / PPGL (Pre-painted Color Coated / 彩涂钢板)',
+        keywords: ['ppgi', 'ppgl', 'prepainted', 'color coated', 'colour coated', 'ral', 'painted steel', 'colored steel', '彩涂', '彩钢'],
+        must_cover: ['available RAL colors and custom color matching', 'coating layers (primer + topcoat)', 'thickness range', 'applications (roofing, wall panels, appliances)', 'MOQ per color', 'standards (ASTM A755 / JIS G3312)', 'weather resistance'],
+        must_not_mention: ['bare GI without paint', 'bare GL without paint', 'uncoated zinc'],
+        sample_questions: ['What RAL colors are available for PPGI steel coils?', 'What coating thickness options are available for PPGI?', 'Is PPGI steel suitable for roofing applications?', 'What is the MOQ for each color?', 'Can you provide custom colors for PPGI coils?']
+    },
+    {
+        type: 'CRC', label: 'CRC (Cold Rolled Steel / 冷轧钢板)',
+        keywords: ['cold rolled', 'cold-rolled', 'crc', 'spcc', 'dc01', 'dc03', 'st12', 'cold drawn', '冷轧'],
+        must_cover: ['precision thickness tolerance', 'surface finish options (BA / 2B / matt)', 'tensile strength', 'applications (auto body, appliances, precision stamping)', 'MOQ/pricing', 'standards (ASTM A1008 / JIS G3141 / EN 10130)'],
+        must_not_mention: ['hot-dip zinc coating', 'color coating', 'galvanized', 'PPGI'],
+        sample_questions: ['What thickness tolerance can you achieve for CRC?', 'What surface finish options are available for cold rolled steel?', 'What industries use cold rolled steel coils?', 'What is the tensile strength of your CR steel?', 'What standards does your CRC comply with?']
+    },
+    {
+        type: 'ROOFING', label: 'Roofing Sheet (屋顶板)',
+        keywords: ['roofing', 'roof sheet', 'corrugated', 'ibr', 'tile sheet', 'roof panel', '屋顶板', '瓦楞板', '彩钢瓦'],
+        must_cover: ['available profiles (corrugated / IBR / tile)', 'panel thickness and coverage width', 'suitable base material (GI or GL)', 'installation method', 'weather and UV resistance', 'MOQ/container quantities'],
+        must_not_mention: ['flat coil only use cases', 'cold forming applications'],
+        sample_questions: ['What corrugated roofing sheet profiles do you offer?', 'Are your roofing sheets pre-painted or bare metal?', 'What thickness is recommended for industrial roofing?', 'How many roofing sheets fit in one container?', 'What is the warranty on your roofing sheets?']
+    }
+]
+
+function detectProductType(title, content) {
+    const text = ((title || '') + ' ' + (content || '')).toLowerCase().substring(0, 1000)
+    for (const pt of PRODUCT_TYPE_MAP) {
+        if (pt.keywords.some(kw => text.includes(kw.toLowerCase()))) return pt
+    }
+    return null
+}
+
 const router = Router()
 
 // ─── Slugify helper ──────────────────────────────────────────────────────────
@@ -231,11 +278,158 @@ router.get('/news', apiKeyMiddleware, (req, res) => {
     res.json({ news, total, page: parseInt(page), limit: parseInt(limit) })
 })
 
-// ─── GET /api/external/news/:id — get single news article ───────────────────
+// ─── GET /api/external/news/faq-status — bulk FAQ status with product hints ──
+// Returns all articles sorted by: missing FAQ first, then by ID desc
+// Each article includes a faq_writing_guide to help AI write product-specific FAQs
+router.get('/news/faq-status', apiKeyMiddleware, (req, res) => {
+    const articles = getAll(`
+        SELECT id, title, title_en, slug, summary_en, content, cover_image, seo_title, faq_items, status, created_at
+        FROM news ORDER BY id DESC`)
+
+    const result = articles.map(a => {
+        let faqCount = 0
+        try { faqCount = JSON.parse(a.faq_items || '[]').length } catch {}
+
+        // Strip HTML for product type detection
+        const plainContent = (a.content || '').replace(/<[^>]*>/g, ' ').substring(0, 800)
+        const productType = detectProductType(a.title_en || a.title, plainContent)
+
+        const hint = productType
+            ? `This article is about ${productType.label}. FAQ MUST cover ${productType.type}-specific topics. Do NOT mention: ${productType.must_not_mention.join(', ')}.`
+            : 'General steel industry article. FAQ should cover topics actually mentioned in the article content.'
+
+        return {
+            id: a.id,
+            title: a.title_en || a.title,
+            slug: a.slug,
+            status: a.status,
+            faq_count: faqCount,
+            needs_faq: faqCount < 5,
+            product_type: productType?.type || 'GENERAL',
+            hint,
+            cover_image: a.cover_image || null
+        }
+    })
+
+    const needsFaq = result.filter(a => a.needs_faq)
+    const hasFaq = result.filter(a => !a.needs_faq)
+
+    res.json({
+        total: result.length,
+        needs_faq_count: needsFaq.length,
+        has_faq_count: hasFaq.length,
+        // Articles needing FAQ come first for easy processing
+        articles: [...needsFaq, ...hasFaq],
+        workflow: [
+            '1. Pick article from this list where needs_faq=true',
+            '2. GET /api/external/news/:id → get full content + faq_writing_guide',
+            '3. Write 5-7 FAQ pairs based on article content and faq_writing_guide',
+            '4. PUT /api/external/news/:id/faq → submit {"faq_items":[{"question":"...","answer":"..."},...]}',
+            '5. Repeat for next article'
+        ]
+    })
+})
+
+// ─── GET /api/external/news/:id — get single news article with FAQ writing guide
 router.get('/news/:id', apiKeyMiddleware, (req, res) => {
     const n = getOne('SELECT * FROM news WHERE id = ?', [req.params.id])
     if (!n) return res.status(404).json({ error: 'News not found' })
-    res.json(n)
+
+    let faqCount = 0
+    let currentFaq = []
+    try { currentFaq = JSON.parse(n.faq_items || '[]'); faqCount = currentFaq.length } catch {}
+
+    // Detect product type from article
+    const plainContent = (n.content || '').replace(/<[^>]*>/g, ' ').substring(0, 800)
+    const productType = detectProductType(n.title_en || n.title, plainContent)
+
+    // Build content excerpt (first 600 chars of plain text) to help AI understand article
+    const contentExcerpt = plainContent.replace(/\s+/g, ' ').trim().substring(0, 600)
+
+    res.json({
+        ...n,
+        faq_count: faqCount,
+        current_faq: currentFaq,
+        content_excerpt: contentExcerpt,
+        // ── FAQ Writing Guide ── The most important part for product-specific FAQ
+        faq_writing_guide: productType ? {
+            product_type: productType.type,
+            product_label: productType.label,
+            CRITICAL_RULE: `All FAQ questions and answers MUST be about ${productType.label}. Do NOT write FAQ about other product types.`,
+            must_cover_topics: productType.must_cover,
+            must_not_mention: productType.must_not_mention,
+            sample_questions: productType.sample_questions,
+            format: 'Return as JSON array: [{"question":"...","answer":"..."},{"question":"...","answer":"..."}]',
+            min_count: 5,
+            max_count: 7,
+            answer_length: '2-4 sentences per answer. Include specific numbers, standards, or technical details.'
+        } : {
+            product_type: 'GENERAL',
+            CRITICAL_RULE: 'Write FAQ based ONLY on topics covered in this specific article. Do not invent unrelated content.',
+            format: 'Return as JSON array: [{"question":"...","answer":"..."}]',
+            min_count: 5,
+            max_count: 7,
+            answer_length: '2-4 sentences per answer.'
+        }
+    })
+})
+
+// ─── PUT /api/external/news/:id/faq — dedicated FAQ update endpoint ──────────
+// Validates FAQ format + warns on cross-product contamination
+router.put('/news/:id/faq', apiKeyMiddleware, (req, res) => {
+    const { id } = req.params
+    const article = getOne('SELECT id, title, title_en, content, faq_items FROM news WHERE id = ?', [id])
+    if (!article) return res.status(404).json({ error: 'Article not found' })
+
+    const { faq_items } = req.body
+    if (!faq_items) return res.status(400).json({ error: 'faq_items is required' })
+
+    // Parse and validate
+    let faqs
+    try {
+        faqs = Array.isArray(faq_items) ? faq_items : JSON.parse(faq_items)
+    } catch (e) {
+        return res.status(400).json({ error: 'faq_items must be a valid JSON array', hint: '[{"question":"Q1","answer":"A1"},{"question":"Q2","answer":"A2"}]' })
+    }
+
+    if (!Array.isArray(faqs)) return res.status(400).json({ error: 'faq_items must be an array' })
+    if (faqs.length < 3) return res.status(400).json({ error: `Need at least 3 FAQ pairs, got ${faqs.length}. Minimum 5 recommended.` })
+
+    // Validate each item
+    for (let i = 0; i < faqs.length; i++) {
+        if (!faqs[i].question || !faqs[i].answer) {
+            return res.status(400).json({ error: `FAQ item ${i + 1} missing question or answer field` })
+        }
+    }
+
+    // Cross-product contamination check (warn only, don't block)
+    const warnings = []
+    const plainContent = (article.content || '').replace(/<[^>]*>/g, ' ').substring(0, 800)
+    const articleProductType = detectProductType(article.title_en || article.title, plainContent)
+    if (articleProductType) {
+        const faqText = faqs.map(f => f.question + ' ' + f.answer).join(' ').toLowerCase()
+        for (const forbiddenTerm of articleProductType.must_not_mention) {
+            if (faqText.includes(forbiddenTerm.toLowerCase())) {
+                warnings.push(`FAQ mentions "${forbiddenTerm}" which is NOT a ${articleProductType.type} product topic. This may confuse search engines.`)
+            }
+        }
+    }
+
+    // Save to DB
+    const faqJson = JSON.stringify(faqs)
+    run(`UPDATE news SET faq_items=?, updated_at=datetime('now') WHERE id=?`, [faqJson, id])
+
+    res.json({
+        success: true,
+        article_id: parseInt(id),
+        article_title: article.title_en || article.title,
+        faq_count: faqs.length,
+        product_type: articleProductType?.type || 'GENERAL',
+        warnings: warnings.length ? warnings : undefined,
+        message: warnings.length
+            ? `FAQ saved with ${warnings.length} product-type warning(s). Please review.`
+            : `FAQ updated successfully with ${faqs.length} Q&A pairs. FAQPage schema will be active on next page load.`
+    })
 })
 
 // ─── GET /api/external/templates — list/search email templates ──────────────
@@ -721,7 +915,32 @@ router.get('/docs', (req, res) => {
                     method: 'GET', path: '/api/external/news',
                     query_params: { search: 'Search title (EN/CN)', status: '0=draft 1=published', page: 'page num (default 1)', limit: 'per page (default 50)' }
                 },
-                get_by_id: { method: 'GET', path: '/api/external/news/:id' },
+                faq_status: {
+                    method: 'GET', path: '/api/external/news/faq-status',
+                    description: 'Get ALL articles sorted by missing FAQ first. Each article includes product_type and hint for AI-friendly FAQ writing.',
+                    response_fields: {
+                        articles: 'Array of all articles with faq_count, needs_faq, product_type, hint fields',
+                        needs_faq_count: 'Number of articles with <5 FAQ items'
+                    }
+                },
+                get_by_id: {
+                    method: 'GET', path: '/api/external/news/:id',
+                    description: 'Returns full article + current_faq + content_excerpt + faq_writing_guide (product-specific topics to cover)'
+                },
+                update_faq: {
+                    method: 'PUT', path: '/api/external/news/:id/faq',
+                    description: 'Dedicated FAQ update endpoint. Validates format, validates product-type match, saves to DB.',
+                    body: {
+                        faq_items: '(required) Array or JSON string: [{"question":"...","answer":"..."}, ...]. Min 3 pairs, recommend 5-7.'
+                    },
+                    CRITICAL_FAQ_RULE: 'FAQ content MUST match the article product type. GI article → GI FAQs only. GL article → GL FAQs only. Cross-product FAQ contamination is flagged as warnings in the response.',
+                    workflow: [
+                        '1. GET /api/external/news/faq-status → find articles needing FAQ (needs_faq=true)',
+                        '2. GET /api/external/news/:id → read content_excerpt + faq_writing_guide',
+                        '3. Write 5-7 FAQ based on article content and faq_writing_guide.must_cover_topics',
+                        '4. PUT /api/external/news/:id/faq with {"faq_items":[...]}'
+                    ]
+                },
                 create: {
                     method: 'POST',
                     path: '/api/external/news',
@@ -738,11 +957,11 @@ router.get('/docs', (req, res) => {
                         seo_title: '(string, optional) SEO title ≤60 chars. AUTO-GENERATED from title_en if omitted.',
                         seo_description: '(string, optional) SEO description ≤160 chars. AUTO-GENERATED from summary_en if omitted.',
                         seo_keywords: '(string, optional) SEO keywords comma-separated. AUTO-GENERATED if omitted.',
-                        faq_items: '(JSON string, REQUIRED for GEO) FAQ array — renders as FAQPage schema. Format: [{"question":"...","answer":"..."}]. Provide 5-7 Q&A pairs.',
+                        faq_items: '(JSON string) FAQ array. Format: [{"question":"...","answer":"..."}]. MUST match article product type.',
                         status: '(0/1) 0=draft 1=published',
                         render_mode: '(string) direct (default, best SEO) or iframe (for content with <style> tags)'
                     },
-                    faq_requirement: 'ALWAYS include faq_items — it generates FAQPage JSON-LD schema that Google SGE, ChatGPT, and Perplexity use to directly cite your content.'
+                    faq_requirement: 'Always include faq_items — it generates FAQPage JSON-LD schema for Google SGE, ChatGPT, Perplexity. FAQ must match article product type (GI article = GI FAQs, not GL/PPGI).'
                 },
                 update: { method: 'PUT', path: '/api/external/news/:id', note: 'Pass only fields to update. faq_items and category_name supported.' },
                 delete: { method: 'DELETE', path: '/api/external/news/:id' }
