@@ -336,6 +336,14 @@ function collectCategories() {
     )
 }
 
+// Collect news category names (e.g. "Product Introduction", "Cases")
+function collectNewsCategories() {
+    const cats = getAll('SELECT id, name_en FROM news_categories WHERE name_en IS NOT NULL AND name_en != \'\'  ORDER BY sort_order, id')
+    return cats.flatMap(c =>
+        c.name_en ? [{ type: 'news_category', id: c.id, field: 'name', text: c.name_en, itemName: `News Group: ${c.name_en}` }] : []
+    )
+}
+
 function collectHero() {
     const h = getOne('SELECT * FROM hero_content WHERE id=1')
     if (!h) return []
@@ -447,7 +455,8 @@ const UI_TEXTS_EN = {
     "benefitPricing": "Competitive pricing",
     "benefitQuality": "Quality guarantee",
     "articleNotFound": "Article not found",
-    "inquiryForProduct": "I would like to inquire about"
+    "inquiryForProduct": "I would like to inquire about",
+    "browseArticlesIn": "Browse articles in:"
 };
 
 function collectUITexts() {
@@ -469,6 +478,7 @@ const PAGES = {
     company: collectCompany,
     page_texts: collectPageTexts,
     categories: collectCategories,
+    news_categories: collectNewsCategories,
     hero: collectHero
 }
 
@@ -696,6 +706,22 @@ function upsertTranslation(lang, type, id, field, original, translated) {
     if (translated && typeof translated === 'string') {
         translated = translated.replace(/\uFFFD/g, '').trim()
     }
+    // For news_category names: also write directly to news_categories table
+    // so localizedValue(cat, 'name') can find name_es / name_fr etc.
+    if (type === 'news_category' && field === 'name' && id && lang) {
+        const col = `name_${lang}`
+        try {
+            // Check if column exists first (SQLite doesn't auto-add columns)
+            const tableInfo = getAll(`PRAGMA table_info(news_categories)`)
+            const hasCol = tableInfo.some(c => c.name === col)
+            if (!hasCol) {
+                run(`ALTER TABLE news_categories ADD COLUMN ${col} TEXT`)
+            }
+            run(`UPDATE news_categories SET ${col} = ? WHERE id = ?`, [translated, id])
+        } catch (e) {
+            // Ignore ALTER TABLE errors (column may already exist)
+        }
+    }
     try {
         run(
             `INSERT INTO translations (language_code, content_type, content_id, content_field, original_text, translated_text, is_manual)
@@ -760,7 +786,7 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'AI API key not configured' })
     }
 
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', hero: 'hero', ui_text: 'ui_texts_static' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static' }
     const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
     const overrideNote = manualOverrides.length > 0
         ? '\n\nUse these approved translations as reference:\n' +
@@ -909,7 +935,7 @@ router.post('/run-one', authMiddleware, async (req, res) => {
     if (!s?.api_key && !getOne('SELECT api_key FROM ai_channels WHERE is_default = 1')?.api_key) return res.status(400).json({ error: 'AI API key not configured. Please add an AI channel in AI Translation settings.' })
 
     // Map singular type names to PAGES keys (product -> products, category -> categories, etc.)
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', hero: 'hero', ui_text: 'ui_texts_static' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static' }
     const pageKey = TYPE_TO_PAGE[content_type] || content_type
     if (!PAGES[pageKey]) return res.status(400).json({ error: `Unknown content type: ${content_type}` })
     const allItems = PAGES[pageKey]()
