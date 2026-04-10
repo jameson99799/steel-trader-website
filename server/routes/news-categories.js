@@ -7,12 +7,11 @@ const router = Router()
 // GET all categories (public)
 router.get('/', (req, res) => {
   const cats = getAll('SELECT * FROM news_categories ORDER BY sort_order, id')
-  // Load all translations for news_category type once (correct column names from db.js schema)
+  // Load all translations for news_category type (for th, ar, es, etc.)
   const allTranslations = getAll(
     `SELECT content_id, language_code, content_field, translated_text FROM translations
      WHERE content_type = 'news_category' AND content_field = 'name'`
   )
-  // Build a quick lookup: { [catId]: { zh: '...', th: '...' } }
   const transMap = {}
   for (const tr of allTranslations) {
     if (!transMap[tr.content_id]) transMap[tr.content_id] = {}
@@ -23,6 +22,11 @@ router.get('/', (req, res) => {
     const r = getOne('SELECT COUNT(*) as count FROM news WHERE category_id = ?', [c.id])
     // Attach translated names as name_{lang} fields so localizedValue() works
     const langFields = {}
+    // CRITICAL: The `name` column stores Chinese text, but localizedValue() looks for
+    // `name_zh` first, then falls back to `name_en` (English), so Chinese never shows.
+    // Fix: always map name -> name_zh so Chinese users see the correct language.
+    if (c.name) langFields.name_zh = c.name
+    // Add translations from DB (th, ar, es, etc.)
     if (transMap[c.id]) {
       for (const [lang, text] of Object.entries(transMap[c.id])) {
         langFields[`name_${lang}`] = text
