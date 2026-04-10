@@ -700,7 +700,6 @@ async function initDb() {
     )
   `)
 
-  // Migrations: add new page_texts columns if not exist
   const ptCols = ['contact_tagline', 'contact_tagline_en', 'about_overlay_text', 'about_overlay_text_en', 'about_tagline', 'about_tagline_en', 'about_cta_subtitle', 'about_cta_subtitle_en', 'about_iso', 'about_iso_en', 'about_global', 'about_global_en', 'about_innovation', 'about_innovation_en', 'inquiry_subtitle', 'inquiry_subtitle_en']
   for (const col of ptCols) {
     try { db.exec(`ALTER TABLE page_texts ADD COLUMN ${col} TEXT`) } catch (e) { }
@@ -728,6 +727,34 @@ async function initDb() {
 
   // Migration: add render_mode column to news (default 'direct' = v-html, 'iframe' = full isolation)
   try { db.exec("ALTER TABLE news ADD COLUMN render_mode TEXT DEFAULT 'direct'") } catch (e) { }
+
+  // ── News Categories (article grouping) ──────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS news_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      name_en TEXT DEFAULT '',
+      slug TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  // Migration: add category_id to news table
+  try { db.exec('ALTER TABLE news ADD COLUMN category_id INTEGER DEFAULT NULL') } catch (e) { }
+  // Seed default news categories if empty
+  try {
+    const ncCount = db.prepare('SELECT COUNT(*) as c FROM news_categories').get().c
+    if (ncCount === 0) {
+      db.prepare('INSERT INTO news_categories (name, name_en, slug, sort_order) VALUES (?,?,?,?)').run('产品介绍', 'Product Introduction', 'product-introduction', 1)
+      db.prepare('INSERT INTO news_categories (name, name_en, slug, sort_order) VALUES (?,?,?,?)').run('案例展示', 'Cases', 'cases', 2)
+      // Move all existing articles to "产品介绍" category
+      const firstCat = db.prepare('SELECT id FROM news_categories WHERE sort_order = 1 LIMIT 1').get()
+      if (firstCat) {
+        db.prepare('UPDATE news SET category_id = ? WHERE category_id IS NULL').run(firstCat.id)
+      }
+    }
+  } catch (e) { }
+
   // Migration: regenerate news slugs that contain timestamp suffixes (13-digit numbers) with clean title+ID slugs
   try {
     const allNews = db.prepare('SELECT id, title, title_en, slug FROM news').all()

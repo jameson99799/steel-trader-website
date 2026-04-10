@@ -2,23 +2,48 @@
   <div class="admin-page">
     <div class="page-header">
       <h2>📰 新闻管理</h2>
-      <button class="btn btn-primary" @click="openCreate">+ 新建文章</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline" @click="showCatModal = true" style="color:#7c3aed;border-color:#c4b5fd;">📂 分组管理</button>
+        <button class="btn btn-primary" @click="openCreate">+ 新建文章</button>
+      </div>
+    </div>
+
+    <!-- Category tabs -->
+    <div class="cat-tabs">
+      <span :class="['cat-tab', !filterCatId ? 'active' : '']" @click="filterCatId = null; loadNews()">全部 ({{ totalCount }})</span>
+      <span v-for="c in categories" :key="c.id" :class="['cat-tab', filterCatId === c.id ? 'active' : '']" @click="filterCatId = c.id; loadNews()">
+        {{ c.name }} ({{ c.count || 0 }})
+      </span>
+    </div>
+
+    <!-- Batch action bar -->
+    <div v-if="selectedIds.length" class="batch-bar">
+      <span>已选 <b>{{ selectedIds.length }}</b> 篇文章</span>
+      <select v-model="batchMoveTo" class="form-control" style="max-width:180px;padding:6px 10px;font-size:13px;">
+        <option value="">移动到分组...</option>
+        <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+      </select>
+      <button class="btn btn-sm btn-primary" :disabled="!batchMoveTo" @click="batchMove">确定移动</button>
+      <button class="btn btn-sm btn-outline" @click="selectedIds = []">取消选择</button>
     </div>
 
     <div class="news-list">
       <table class="data-table" v-if="newsList.length">
         <thead>
           <tr>
-            <th>封面</th><th>标题</th><th>状态</th><th>排序</th><th>创建时间</th><th>操作</th>
+            <th style="width:36px;"><input type="checkbox" :checked="allChecked" @change="toggleAll" /></th>
+            <th>封面</th><th>标题</th><th>分组</th><th>状态</th><th>排序</th><th>创建时间</th><th>操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="item in newsList" :key="item.id">
+            <td><input type="checkbox" :value="item.id" v-model="selectedIds" /></td>
             <td><img v-if="item.cover_image" :src="item.cover_image" class="thumb" /></td>
             <td>
               <div class="title-wrap">{{ item.title }}</div>
               <div class="title-en">{{ item.title_en }}</div>
             </td>
+            <td><span class="cat-badge" v-if="item.category_name">{{ item.category_name }}</span></td>
             <td><span :class="['status-badge', item.status ? 'active' : 'inactive']">{{ item.status ? '已发布' : '草稿' }}</span></td>
             <td>{{ item.sort_order }}</td>
             <td>{{ item.created_at?.substring(0,10) }}</td>
@@ -33,7 +58,7 @@
       <div v-else class="empty">暂无文章，点击"新建文章"开始创建</div>
     </div>
 
-    <!-- Modal -->
+    <!-- Article Create/Edit Modal -->
     <div class="modal-overlay" v-if="showModal" @click.self="showModal = false">
       <div class="modal-wrap">
         <div class="modal-header">
@@ -49,6 +74,13 @@
 
           <!-- Basic Tab -->
           <div v-show="activeTab === 'basic'" class="tab-content">
+            <div class="form-group">
+              <label>文章分组</label>
+              <select v-model="form.category_id" class="form-control">
+                <option :value="null">未分组</option>
+                <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+              </select>
+            </div>
             <div class="form-group">
               <label>标题（中文）<span class="req">*</span></label>
               <input v-model="form.title" class="form-control" placeholder="文章标题" />
@@ -163,6 +195,49 @@
       </div>
     </div>
 
+    <!-- Category Management Modal -->
+    <div class="modal-overlay" v-if="showCatModal" @click.self="showCatModal = false" style="z-index:10050">
+      <div class="modal-wrap" style="max-width:520px;">
+        <div class="modal-header" style="background:#f5f3ff;color:#7c3aed;">
+          <h3>📂 文章分组管理</h3>
+          <button class="modal-close" @click="showCatModal = false">✕</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex;gap:8px;margin-bottom:16px;">
+            <input v-model="newCatName" class="form-control" placeholder="分组名称（中文）" style="flex:1" />
+            <input v-model="newCatNameEn" class="form-control" placeholder="English name" style="flex:1" />
+            <button class="btn btn-primary btn-sm" @click="addCategory" :disabled="!newCatName.trim()">添加</button>
+          </div>
+          <div v-if="categories.length" class="cat-list">
+            <div v-for="c in categories" :key="c.id" class="cat-item">
+              <div v-if="editingCatId !== c.id" class="cat-info">
+                <span class="cat-name">{{ c.name }} <small style="color:#94a3b8;">{{ c.name_en }}</small></span>
+                <span class="cat-count">{{ c.count || 0 }} 篇</span>
+              </div>
+              <div v-else class="cat-edit-row">
+                <input v-model="editCatName" class="form-control" style="flex:1;padding:6px 10px;" />
+                <input v-model="editCatNameEn" class="form-control" style="flex:1;padding:6px 10px;" placeholder="English" />
+              </div>
+              <div class="cat-actions">
+                <template v-if="editingCatId !== c.id">
+                  <button class="btn btn-sm btn-outline" @click="startEditCat(c)">编辑</button>
+                  <button class="btn btn-sm btn-danger" @click="deleteCat(c)">删除</button>
+                </template>
+                <template v-else>
+                  <button class="btn btn-sm btn-primary" @click="saveEditCat(c.id)">保存</button>
+                  <button class="btn btn-sm btn-outline" @click="editingCatId = null">取消</button>
+                </template>
+              </div>
+            </div>
+          </div>
+          <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无分组，请添加</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" @click="showCatModal = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Image Source Chooser (for news content visual editor) -->
     <div v-if="showNewsImgChooser" class="modal-overlay" @click.self="showNewsImgChooser=false" style="z-index:10100">
       <div class="modal-wrap" style="max-width:360px;">
@@ -219,7 +294,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import api from '../../api'
 
 const newsList = ref([])
@@ -229,6 +304,60 @@ const saving = ref(false)
 const activeTab = ref('basic')
 const isFullscreen = ref(false)
 const translatingId = ref(null)
+
+// ─── Category state ──────────────────────────────────────────────────────────
+const categories = ref([])
+const filterCatId = ref(null)
+const totalCount = ref(0)
+const selectedIds = ref([])
+const batchMoveTo = ref('')
+const showCatModal = ref(false)
+const newCatName = ref('')
+const newCatNameEn = ref('')
+const editingCatId = ref(null)
+const editCatName = ref('')
+const editCatNameEn = ref('')
+
+const allChecked = computed(() => newsList.value.length > 0 && selectedIds.value.length === newsList.value.length)
+function toggleAll(e) {
+  selectedIds.value = e.target.checked ? newsList.value.map(n => n.id) : []
+}
+
+async function loadCategories() {
+  try { categories.value = await api.getNewsCategories() } catch (e) { console.error(e) }
+}
+async function addCategory() {
+  if (!newCatName.value.trim()) return
+  await api.createNewsCategory({ name: newCatName.value.trim(), name_en: newCatNameEn.value.trim() })
+  newCatName.value = ''
+  newCatNameEn.value = ''
+  await loadCategories()
+}
+function startEditCat(c) {
+  editingCatId.value = c.id
+  editCatName.value = c.name
+  editCatNameEn.value = c.name_en || ''
+}
+async function saveEditCat(id) {
+  await api.updateNewsCategory(id, { name: editCatName.value, name_en: editCatNameEn.value })
+  editingCatId.value = null
+  await loadCategories()
+}
+async function deleteCat(c) {
+  if (!confirm(`确认删除分组「${c.name}」吗？其中的文章会移至其他分组。`)) return
+  await api.deleteNewsCategory(c.id)
+  if (filterCatId.value === c.id) filterCatId.value = null
+  await loadCategories()
+  await loadNews()
+}
+async function batchMove() {
+  if (!batchMoveTo.value || !selectedIds.value.length) return
+  await api.moveArticles(selectedIds.value, parseInt(batchMoveTo.value))
+  selectedIds.value = []
+  batchMoveTo.value = ''
+  await loadCategories()
+  await loadNews()
+}
 
 async function translateNews(item) {
   if (!confirm(`翻译文章「${item.title_en || item.title}」到所有已配置的语言？`)) return
@@ -265,13 +394,24 @@ const form = ref({
   status: 1, sort_order: 0,
   seo_title: '', seo_description: '', seo_keywords: '',
   content: '',
-  render_mode: 'direct'
+  render_mode: 'direct',
+  category_id: null
 })
 
 async function loadNews() {
   try {
-    const res = await api.getNews({ status: 'all', limit: 100 })
+    const params = { status: 'all', limit: 200 }
+    if (filterCatId.value) params.category_id = filterCatId.value
+    const res = await api.getNews(params)
     newsList.value = res.data
+    selectedIds.value = []
+    // Get total unfiltered count for "全部" tab
+    if (!filterCatId.value) {
+      totalCount.value = res.total
+    } else {
+      const allRes = await api.getNews({ status: 'all', limit: 1 })
+      totalCount.value = allRes.total
+    }
   } catch(e) { console.error(e) }
 }
 
@@ -488,7 +628,7 @@ async function handleNewsImgUpload(e) {
 // ─── Modal open/close ─────────────────────────────────────────────────────────
 async function openCreate() {
   editId.value = null
-  form.value = { title: '', title_en: '', summary: '', summary_en: '', cover_image: null, cover_preview: null, status: 1, sort_order: 0, seo_title: '', seo_description: '', seo_keywords: '', content: '', render_mode: 'direct' }
+  form.value = { title: '', title_en: '', summary: '', summary_en: '', cover_image: null, cover_preview: null, status: 1, sort_order: 0, seo_title: '', seo_description: '', seo_keywords: '', content: '', render_mode: 'direct', category_id: filterCatId.value || null }
   activeTab.value = 'basic'
   newsEditorMode.value = 'visual'
   newsReplacingImg = null
@@ -505,7 +645,8 @@ async function openEdit(item) {
     status: item.status ?? 1, sort_order: item.sort_order || 0,
     seo_title: item.seo_title || '', seo_description: item.seo_description || '',
     seo_keywords: item.seo_keywords || '', content: item.content || '',
-    render_mode: item.render_mode || 'direct'
+    render_mode: item.render_mode || 'direct',
+    category_id: item.category_id || null
   }
   activeTab.value = 'basic'
   newsEditorMode.value = 'visual'
@@ -541,6 +682,7 @@ async function save() {
     if (form.value.cover_image) fd.append('cover_image', form.value.cover_image)
     else if (form.value.cover_url) fd.append('cover_url', form.value.cover_url)
     fd.append('render_mode', form.value.render_mode || 'direct')
+    if (form.value.category_id) fd.append('category_id', form.value.category_id)
 
     if (editId.value) {
       await api.updateNews(editId.value, fd)
@@ -548,6 +690,7 @@ async function save() {
       await api.createNews(fd)
     }
     showModal.value = false
+    await loadCategories()
     await loadNews()
   } catch(e) { alert(e.message) }
   saving.value = false
@@ -559,13 +702,52 @@ async function deleteItem(id) {
   await loadNews()
 }
 
-onMounted(loadNews)
+onMounted(() => {
+  loadCategories()
+  loadNews()
+})
 </script>
 
 <style scoped>
 .admin-page { padding: 0; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .page-header h2 { font-size: 22px; font-weight: 700; }
+
+/* Category tabs */
+.cat-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid var(--border); flex-wrap: wrap; }
+.cat-tab {
+  padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px;
+  transition: all 0.2s; white-space: nowrap;
+}
+.cat-tab:hover { color: var(--text-primary); }
+.cat-tab.active { color: #7c3aed; border-bottom-color: #7c3aed; }
+
+/* Batch action bar */
+.batch-bar {
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  background: #f5f3ff; border: 1px solid #c4b5fd; border-radius: 8px; margin-bottom: 12px;
+  font-size: 13px; color: #5b21b6;
+}
+
+/* Category badge in table */
+.cat-badge {
+  padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600;
+  background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd;
+}
+
+/* Category management modal */
+.cat-list { display: flex; flex-direction: column; gap: 8px; }
+.cat-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; background: #fafafa; border-radius: 8px; border: 1px solid #e5e7eb;
+}
+.cat-info { display: flex; align-items: center; gap: 10px; flex: 1; }
+.cat-name { font-weight: 600; font-size: 14px; }
+.cat-count { font-size: 12px; color: #94a3b8; }
+.cat-actions { display: flex; gap: 6px; }
+.cat-edit-row { display: flex; gap: 8px; flex: 1; }
+
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th, .data-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; }
 .data-table th { background: var(--gray-50); font-weight: 600; }

@@ -19,19 +19,23 @@ function slugify(text, id) {
 
 // GET all news (public)
 router.get('/', (req, res) => {
-    const { status = '1', page = 1, limit = 12 } = req.query
-    let sql = 'SELECT * FROM news WHERE 1=1'
+    const { status = '1', page = 1, limit = 12, category_id } = req.query
+    let sql = 'SELECT n.*, nc.name as category_name, nc.name_en as category_name_en FROM news n LEFT JOIN news_categories nc ON n.category_id = nc.id WHERE 1=1'
     const params = []
 
     if (status !== 'all') {
-        sql += ' AND status = ?'
+        sql += ' AND n.status = ?'
         params.push(parseInt(status))
     }
+    if (category_id) {
+        sql += ' AND n.category_id = ?'
+        params.push(parseInt(category_id))
+    }
 
-    const countSql = sql.replace('SELECT *', 'SELECT COUNT(*) as total')
+    const countSql = sql.replace('SELECT n.*, nc.name as category_name, nc.name_en as category_name_en', 'SELECT COUNT(*) as total')
     const total = getOne(countSql, params)?.total || 0
 
-    sql += ' ORDER BY sort_order, id DESC LIMIT ? OFFSET ?'
+    sql += ' ORDER BY n.sort_order, n.id DESC LIMIT ? OFFSET ?'
     params.push(parseInt(limit), (parseInt(page) - 1) * parseInt(limit))
 
     const news = getAll(sql, params)
@@ -68,16 +72,16 @@ router.get('/:slug', (req, res) => {
 
 // POST create news (admin only)
 router.post('/', authMiddleware, upload.single('cover_image'), (req, res) => {
-    const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status = 1, sort_order = 0, render_mode = 'direct' } = req.body
+    const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status = 1, sort_order = 0, render_mode = 'direct', category_id } = req.body
     if (!title) return res.status(400).json({ error: '标题不能为空' })
 
     const slug = slugify(title_en || title)
     const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || null)
 
     const result = run(
-        `INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status, sort_order, render_mode)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [title, title_en || null, 'temp', summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status), parseInt(sort_order), render_mode]
+        `INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, category_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [title, title_en || null, 'temp', summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status), parseInt(sort_order), render_mode, category_id ? parseInt(category_id) : null]
     )
     // Generate clean SEO slug: title_en (preferred) or title + article ID
     const newId = result.lastInsertRowid
@@ -92,15 +96,15 @@ router.put('/:id', authMiddleware, upload.single('cover_image'), (req, res) => {
     const existing = getOne('SELECT * FROM news WHERE id = ?', [id])
     if (!existing) return res.status(404).json({ error: '文章不存在' })
 
-    const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status, sort_order, render_mode } = req.body
+    const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, category_id } = req.body
     const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || existing.cover_image)
     // Regenerate clean SEO slug on update
     const updatedSlug = slugify(title_en || title, id)
 
     run(
-        `UPDATE news SET title=?, title_en=?, slug=?, summary=?, summary_en=?, content=?, cover_image=?, seo_title=?, seo_description=?, seo_keywords=?, status=?, sort_order=?, render_mode=?, updated_at=CURRENT_TIMESTAMP
+        `UPDATE news SET title=?, title_en=?, slug=?, summary=?, summary_en=?, content=?, cover_image=?, seo_title=?, seo_description=?, seo_keywords=?, status=?, sort_order=?, render_mode=?, category_id=?, updated_at=CURRENT_TIMESTAMP
      WHERE id=?`,
-        [title, title_en || null, updatedSlug, summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status || 1), parseInt(sort_order || 0), render_mode || 'direct', id]
+        [title, title_en || null, updatedSlug, summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status || 1), parseInt(sort_order || 0), render_mode || 'direct', category_id ? parseInt(category_id) : existing.category_id, id]
     )
     res.json({ message: '更新成功', slug: updatedSlug })
 })

@@ -14,6 +14,7 @@ import inquiriesRoutes from './routes/inquiries.js'
 import uploadRoutes from './routes/upload.js'
 import pageTextsRoutes from './routes/pagetexts.js'
 import newsRoutes from './routes/news.js'
+import newsCategoriesRoutes from './routes/news-categories.js'
 import seoRoutes from './routes/seo.js'
 import sitemapRoutes from './routes/sitemap.js'
 import languagesRoutes from './routes/languages.js'
@@ -141,6 +142,7 @@ async function startServer() {
     app.use('/api/media', mediaRoutes)
     app.use('/api/pagetexts', pageTextsRoutes)
     app.use('/api/news', newsRoutes)
+    app.use('/api/news-categories', newsCategoriesRoutes)
     app.use('/api/seo', seoRoutes)
     // Sitemap (accessible as /sitemap.xml)
     app.use('/sitemap.xml', sitemapRoutes)
@@ -222,6 +224,7 @@ async function startServer() {
         let ogType = 'website'
         let extraSchemas = ''
         let isNotFound = false  // Track soft 404
+        let ssrContent = ''    // Server-rendered content for SEO/GEO crawlers
 
           // ── Product detail page ──
           const productMatch = subPath.match(/^\/products\/(.+)$/)
@@ -233,7 +236,8 @@ async function startServer() {
               if (idMatch) product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.id=?', [idMatch[1]])
             }
             if (product) {
-              pageTitle = product.seo_title || product.name_en || product.name || pageTitle
+              const baseProductTitle = product.seo_title || product.name_en || product.name || pageTitle
+              pageTitle = baseProductTitle.includes(companyName) ? baseProductTitle : `${baseProductTitle} | ${companyName}`
               pageDesc = product.seo_description || product.description_en || product.description || pageDesc
               pageKeywords = product.seo_keywords || pageKeywords
               ogType = 'product'
@@ -268,6 +272,26 @@ async function startServer() {
                 { '@type': 'ListItem', position: 2, name: 'Products', item: `${siteUrl}/${lang}/products` },
                 { '@type': 'ListItem', position: 3, name: product.name_en || product.name, item: pageCanonical }
               ] })
+
+              // ── SSR content for product detail (SEO/GEO crawlers) ──
+              const pName = esc(product.name_en || product.name || '')
+              const pDesc = esc(product.description_en || product.description || '')
+              let specsHtml = ''
+              if (product.specs) {
+                try {
+                  const sl = JSON.parse(product.specs)
+                  if (sl.length) specsHtml = '<table>' + sl.map(s => `<tr><td>${esc(s.name)}</td><td>${esc(s.value)}</td></tr>`).join('') + '</table>'
+                } catch (e) {}
+              }
+              let faqHtml = ''
+              if (product.faq_items) {
+                try {
+                  const fl = JSON.parse(product.faq_items)
+                  if (fl.length) faqHtml = fl.map(f => `<h3>${esc(f.question)}</h3><p>${esc(f.answer)}</p>`).join('')
+                } catch (e) {}
+              }
+              const detailHtml = product.detail_content ? product.detail_content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') : ''
+              ssrContent = `<article id="ssr-product"><h1>${pName}</h1><p>${pDesc}</p>${specsHtml}${detailHtml}${faqHtml}</article>`
             } else {
               // Product not found — return 404 status to prevent soft 404
               isNotFound = true
@@ -286,7 +310,8 @@ async function startServer() {
               if (idMatch) article = getOne('SELECT * FROM news WHERE id=?', [idMatch[1]])
             }
             if (article) {
-              pageTitle = article.seo_title || article.title_en || article.title || pageTitle
+              const baseArticleTitle = article.seo_title || article.title_en || article.title || pageTitle
+              pageTitle = baseArticleTitle.includes(companyName) ? baseArticleTitle : `${baseArticleTitle} | ${companyName}`
               pageDesc = article.seo_description || article.summary_en || article.summary || pageDesc
               pageKeywords = article.seo_keywords || pageKeywords
               ogType = 'article'
@@ -308,6 +333,12 @@ async function startServer() {
                 { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
                 { '@type': 'ListItem', position: 3, name: article.title_en || article.title, item: pageCanonical }
               ] })
+
+              // ── SSR content for article detail (SEO/GEO crawlers) ──
+              const aTitle = esc(article.title_en || article.title || '')
+              const aSummary = esc(article.summary_en || article.summary || '')
+              const articleBody = article.content ? article.content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') : ''
+              ssrContent = `<article id="ssr-article"><h1>${aTitle}</h1><p>${aSummary}</p>${articleBody}</article>`
             } else {
               // News article not found — return 404 status
               isNotFound = true
@@ -318,11 +349,11 @@ async function startServer() {
 
           // ── Static pages ──
           if (subPath === '/products' || subPath === '/products/') {
-            pageTitle = `Products | ${companyName}`
-            pageDesc = `Browse our full range of steel products: Galvanized Steel Coil (GI), Galvalume (GL), PPGI, PPGL, CRC, and Corrugated Roofing Sheets. Factory direct pricing.`
+            pageTitle = `Steel Products - GI, GL, PPGI, PPGL, CRC Coils & Sheets | ${companyName}`
+            pageDesc = `Manufacturer & Exporter of Galvanized Steel (GI), Galvalume (GL), PPGI, PPGL & CRC Coils. ASTM A653/JIS G3302/EN 10346 compliant. Factory direct pricing from Shandong, China.`
           } else if (subPath === '/news' || subPath === '/news/') {
-            pageTitle = `News & Industry Insights | ${companyName}`
-            pageDesc = `Latest steel industry news, technical guides, and market analysis from ${companyName}.`
+            pageTitle = `Steel Industry News & Technical Guides | ${companyName}`
+            pageDesc = `Latest galvanized steel news, PPGI/PPGL technical guides, coil specifications, and market analysis from ${companyName}. Expert insights for steel buyers.`
           } else if (subPath === '/about' || subPath === '/about/') {
             pageTitle = `About Us | ${companyName}`
             pageDesc = company.description_en || `Learn about ${companyName} — a professional steel coil manufacturer and exporter based in Shandong, China.`
@@ -339,6 +370,9 @@ async function startServer() {
           logo: `${siteUrl}/uploads/logo.png`,
           description: (company.description_en || '').substring(0, 300),
           address: company.address_en || company.address || '',
+          foundingDate: '2010',
+          areaServed: 'Worldwide',
+          numberOfEmployees: { '@type': 'QuantitativeValue', minValue: 100, maxValue: 500 },
           contactPoint: []
         }
         if (company.email) orgSchema.contactPoint.push({ '@type': 'ContactPoint', email: company.email, contactType: 'sales' })
@@ -384,6 +418,12 @@ async function startServer() {
         html = html.replace(/<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/, '')
         const canonicalTag = `<link rel="canonical" href="${esc(pageCanonical)}">`
         html = html.replace('</head>', `${canonicalTag}\n  ${extraMeta}\n  ${extraSchemas}\n</head>`)
+
+        // ── Inject SSR content for SEO/GEO crawlers ──
+        // Insert real content inside <body> so non-JS crawlers can read it
+        if (ssrContent) {
+          html = html.replace('<div id="app">', `<div id="ssr-content" style="display:none">${ssrContent}</div>\n<div id="app">`)
+        }
 
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')

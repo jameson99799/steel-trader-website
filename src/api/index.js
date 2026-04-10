@@ -185,6 +185,13 @@ export const api = {
   updateNews: (id, data) => request(`/news/${id}`, { method: 'PUT', body: data }),
   deleteNews: (id) => request(`/news/${id}`, { method: 'DELETE' }),
 
+  // News Categories
+  getNewsCategories: () => request('/news-categories'),
+  createNewsCategory: (data) => request('/news-categories', { method: 'POST', body: JSON.stringify(data) }),
+  updateNewsCategory: (id, data) => request(`/news-categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteNewsCategory: (id, moveToId) => request(`/news-categories/${id}${moveToId ? `?move_to=${moveToId}` : ''}`, { method: 'DELETE' }),
+  moveArticles: (article_ids, category_id) => request('/news-categories/move', { method: 'POST', body: JSON.stringify({ article_ids, category_id }) }),
+
   // SEO
   getSeoSettings: () => request('/seo'),
   updateSeoSettings: (data) => request('/seo', { method: 'PUT', body: data }),
