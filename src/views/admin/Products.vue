@@ -482,7 +482,7 @@
 
     <!-- Copy Detail Images from Another Product -->
     <div v-if="showCopyDetailImgPicker" class="modal-overlay" @click.self="showCopyDetailImgPicker=false" style="z-index:2300">
-      <div class="modal" style="max-width:550px;">
+      <div class="modal" style="max-width:500px;">
         <div class="modal-header" style="background:#f0fdf4;color:#059669;">
           <h3>📋 复制同模板产品图片</h3>
           <button class="modal-close" @click="showCopyDetailImgPicker=false">&times;</button>
@@ -490,17 +490,10 @@
         <div class="modal-body">
           <p style="color:#64748b;font-size:13px;margin:0 0 12px;">选择一个已上传详情图片的产品，将其详情HTML中的图片按位置复制到当前产品。文字内容不受影响，仅替换图片。</p>
           <div class="form-group">
-            <label>选择分组</label>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-              <button v-for="g in copyImgGroupOptions" :key="g.id" :class="['btn','btn-sm', copyImgGroupFilter===String(g.id)?'btn-primary':'btn-outline']" @click="copyImgGroupFilter=String(g.id)">{{ g.name }}</button>
-              <button :class="['btn','btn-sm', copyImgGroupFilter==='all'?'btn-primary':'btn-outline']" @click="copyImgGroupFilter='all'">📋 全部分组</button>
-            </div>
-          </div>
-          <div class="form-group">
             <label>选择源产品</label>
             <select v-model="copyImgSourceId" class="form-control" @change="previewCopyImgs">
               <option value="">请选择...</option>
-              <option v-for="p in copyImgProductList" :key="p.id" :value="p.id">{{ p.name_en || p.name }}</option>
+              <option v-for="p in products.filter(x => x.id !== editingProduct?.id && x.detail_content)" :key="p.id" :value="p.id">{{ p.name_en || p.name }}</option>
             </select>
           </div>
           <div v-if="copyImgPreview.length" style="margin-top:8px;">
@@ -1117,41 +1110,6 @@ function selectDetailMediaImage(item) {
 const showCopyDetailImgPicker = ref(false)
 const copyImgSourceId = ref('')
 const copyImgPreview = ref([])
-const copyImgGroupFilter = ref('')
-
-// Category group options (top-level only, same as import picker)
-const copyImgGroupOptions = computed(() => {
-  return flatCategories.value.filter(c => !c.prefix)
-})
-
-// Filter products by selected category group (includes sub-categories)
-const copyImgProductList = computed(() => {
-  let list = products.value.filter(x => x.id !== editingProduct.value?.id && x.detail_content)
-  if (copyImgGroupFilter.value === 'all' || !copyImgGroupFilter.value) return list
-  const gid = parseInt(copyImgGroupFilter.value)
-  const ids = [gid]
-  flatCategories.value.forEach(c => { if (c.prefix && c.parent_id === gid) ids.push(c.id) })
-  return list.filter(p => ids.includes(p.category_id))
-})
-
-// Default to current product's category group when picker opens
-watch(showCopyDetailImgPicker, (v) => {
-  if (v) {
-    copyImgSourceId.value = ''
-    copyImgPreview.value = []
-    if (editingProduct.value?.category_id) {
-      const cat = flatCategories.value.find(c => c.id === editingProduct.value.category_id)
-      if (cat) {
-        const parent = cat.prefix ? flatCategories.value.find(c => c.id === cat.parent_id) : cat
-        copyImgGroupFilter.value = String((parent || cat).id)
-      } else {
-        copyImgGroupFilter.value = 'all'
-      }
-    } else {
-      copyImgGroupFilter.value = 'all'
-    }
-  }
-})
 
 async function previewCopyImgs() {
   copyImgPreview.value = []
@@ -1171,21 +1129,42 @@ function doCopyDetailImgs() {
     showCopyDetailImgPicker.value = false
     return
   }
+  // Use DOMParser only to discover existing img src positions in the current content
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(form.detail_content, 'text/html')
+  const currentImgs = doc.querySelectorAll('img[src]')
   const sourceImgs = copyImgPreview.value
-  // Use regex to replace img src values IN-PLACE on the raw HTML string.
-  // This preserves the <style> block and all formatting — DOMParser strips
-  // <style> into <head> so doc.body.innerHTML loses all CSS rules.
+
+  if (currentImgs.length === 0) {
+    alert('当前产品详情中没有图片位置可以替换')
+    showCopyDetailImgPicker.value = false
+    return
+  }
+
+  // Collect (oldSrc -> newSrc) mappings for replacement
+  // We replace img src values directly on the raw HTML string to preserve
+  // the entire document structure including <style> tags, inline styles, etc.
+  // DOMParser would strip <style> tags from the body (moves them to <head>),
+  // which is the root cause of the layout-breaking bug.
   let html = form.detail_content
   let replaced = 0
-  let sourceIdx = 0
-  html = html.replace(/<img\b([^>]*?)src\s*=\s*["']([^"']*)["']/gi, (match, before, oldSrc) => {
-    if (sourceIdx < sourceImgs.length) {
-      const newSrc = sourceImgs[sourceIdx++]
+
+  // Use regex to find <img ...> tags one by one and replace their src
+  // We track which source image index we're on
+  let imgIndex = 0
+  html = html.replace(/<img\b([^>]*?)src\s*=\s*(["'])([^"']*?)\2([^>]*?)\/?>/gi, (match, before, quote, oldSrc, after) => {
+    if (imgIndex < sourceImgs.length) {
+      const newSrc = sourceImgs[imgIndex]
+      imgIndex++
       replaced++
-      return `<img${before}src="${newSrc}"`
+      // Preserve the original closing style (self-closing or not)
+      const selfClose = match.trimEnd().endsWith('/>') ? ' />' : '>'
+      return `<img${before}src=${quote}${newSrc}${quote}${after}${selfClose}`
     }
-    return match // no more source images, keep original
+    imgIndex++
+    return match
   })
+
   if (replaced === 0) {
     alert('当前产品详情中没有图片位置可以替换')
   } else {
