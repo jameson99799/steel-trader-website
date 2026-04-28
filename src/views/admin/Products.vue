@@ -1129,21 +1129,25 @@ function doCopyDetailImgs() {
     showCopyDetailImgPicker.value = false
     return
   }
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(form.detail_content, 'text/html')
-  const currentImgs = doc.querySelectorAll('img[src]')
   const sourceImgs = copyImgPreview.value
+  // Use regex to replace img src values IN-PLACE on the raw HTML string.
+  // This preserves the <style> block and all formatting — DOMParser strips
+  // <style> into <head> so doc.body.innerHTML loses all CSS rules.
+  let html = form.detail_content
   let replaced = 0
-  currentImgs.forEach((img, i) => {
-    if (i < sourceImgs.length) {
-      img.setAttribute('src', sourceImgs[i])
+  let sourceIdx = 0
+  html = html.replace(/<img\b([^>]*?)src\s*=\s*["']([^"']*)["']/gi, (match, before, oldSrc) => {
+    if (sourceIdx < sourceImgs.length) {
+      const newSrc = sourceImgs[sourceIdx++]
       replaced++
+      return `<img${before}src="${newSrc}"`
     }
+    return match // no more source images, keep original
   })
   if (replaced === 0) {
     alert('当前产品详情中没有图片位置可以替换')
   } else {
-    form.detail_content = doc.body.innerHTML
+    form.detail_content = html
     if (editorMode.value === 'visual') {
       nextTick(() => syncToVisual())
     }
