@@ -482,7 +482,7 @@
 
     <!-- Copy Detail Images from Another Product -->
     <div v-if="showCopyDetailImgPicker" class="modal-overlay" @click.self="showCopyDetailImgPicker=false" style="z-index:2300">
-      <div class="modal" style="max-width:500px;">
+      <div class="modal" style="max-width:650px;">
         <div class="modal-header" style="background:#f0fdf4;color:#059669;">
           <h3>📋 复制同模板产品图片</h3>
           <button class="modal-close" @click="showCopyDetailImgPicker=false">&times;</button>
@@ -490,10 +490,17 @@
         <div class="modal-body">
           <p style="color:#64748b;font-size:13px;margin:0 0 12px;">选择一个已上传详情图片的产品，将其详情HTML中的图片按位置复制到当前产品。文字内容不受影响，仅替换图片。</p>
           <div class="form-group">
+            <label>选择分组</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+              <button v-for="g in importGroupOptions" :key="g.id" :class="['btn','btn-sm', copyImgGroupFilter===String(g.id)?'btn-primary':'btn-outline']" @click="copyImgGroupFilter=String(g.id);copyImgSourceId='';copyImgPreview=[]">{{ g.name }}</button>
+              <button :class="['btn','btn-sm', copyImgGroupFilter==='all'?'btn-primary':'btn-outline']" @click="copyImgGroupFilter='all';copyImgSourceId='';copyImgPreview=[]">📋 全部分组</button>
+            </div>
+          </div>
+          <div class="form-group">
             <label>选择源产品</label>
             <select v-model="copyImgSourceId" class="form-control" @change="previewCopyImgs">
               <option value="">请选择...</option>
-              <option v-for="p in products.filter(x => x.id !== editingProduct?.id && x.detail_content)" :key="p.id" :value="p.id">{{ p.name_en || p.name }}</option>
+              <option v-for="p in copyImgProductList" :key="p.id" :value="p.id">{{ p.name_en || p.name }}</option>
             </select>
           </div>
           <div v-if="copyImgPreview.length" style="margin-top:8px;">
@@ -1110,6 +1117,39 @@ function selectDetailMediaImage(item) {
 const showCopyDetailImgPicker = ref(false)
 const copyImgSourceId = ref('')
 const copyImgPreview = ref([])
+const copyImgGroupFilter = ref('')
+
+// Filter product list by selected group (only products with detail_content, excluding current)
+const copyImgProductList = computed(() => {
+  let list = products.value.filter(x => x.id !== editingProduct.value?.id && x.detail_content)
+  if (copyImgGroupFilter.value === 'all') return list
+  const gid = copyImgGroupFilter.value
+  if (!gid) return list
+  // Include products in this category and its children
+  const ids = [parseInt(gid)]
+  flatCategories.value.forEach(c => { if (c.prefix && ids.includes(c.parent_id)) ids.push(c.id) })
+  return list.filter(p => ids.includes(p.category_id))
+})
+
+// Auto-set group filter when picker opens
+watch(showCopyDetailImgPicker, (v) => {
+  if (v) {
+    // Default to current product's top-level category
+    if (editingProduct.value?.category_id) {
+      const cat = flatCategories.value.find(c => c.id === editingProduct.value.category_id)
+      if (cat) {
+        const parent = cat.prefix ? flatCategories.value.find(c => c.id === cat.parent_id) : cat
+        copyImgGroupFilter.value = String((parent || cat).id)
+      } else {
+        copyImgGroupFilter.value = 'all'
+      }
+    } else {
+      copyImgGroupFilter.value = 'all'
+    }
+    copyImgSourceId.value = ''
+    copyImgPreview.value = []
+  }
+})
 
 async function previewCopyImgs() {
   copyImgPreview.value = []
