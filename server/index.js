@@ -185,9 +185,8 @@ async function startServer() {
         const p = req.path
         // Skip non-SPA paths
         if (p.startsWith('/api/') || p.startsWith('/uploads/') || p.startsWith('/admin') ||
-            p.startsWith('/crm') || p === '/sitemap.xml' ||
-            p === '/sitemap-static.xml' || p === '/sitemap-products.xml' || p === '/sitemap-news.xml' ||
-            p === '/health' || p.startsWith('/assets/')) return next()
+            p.startsWith('/crm') || p === '/sitemap.xml' || p === '/health' ||
+            p.startsWith('/assets/')) return next()
         // /  → /en/
         if (p === '/') return res.redirect(301, '/en/')
         // /products, /products/slug, /news/slug, /about, /contact → /en/...
@@ -249,8 +248,7 @@ async function startServer() {
               ogType = 'product'
               const images = (product.images || '').split(',').filter(Boolean)
               if (images.length) pageImage = images[0].startsWith('http') ? images[0] : `${siteUrl}${images[0]}`
-
-              // ── Single unified Product Schema ──
+              // ── Product Schema (merged: Google Shopping + AI entity recognition) ──
               const productImages = (product.images || '').split(',').filter(Boolean).map(img => img.startsWith('http') ? img : `${siteUrl}${img}`)
               const productSchema = {
                 '@context': 'https://schema.org', '@type': 'Product',
@@ -281,7 +279,6 @@ async function startServer() {
                 { '@type': 'ListItem', position: 2, name: 'Products', item: `${siteUrl}/${lang}/products` },
                 { '@type': 'ListItem', position: 3, name: product.name_en || product.name, item: pageCanonical }
               ] })
-
               // ── SSR content for product detail (SEO/GEO crawlers) ──
               const pName = esc(product.name_en || product.name || '')
               const pDesc = esc(product.description_en || product.description || '')
@@ -543,13 +540,9 @@ async function startServer() {
           hreflangTags = `<link rel="alternate" hreflang="en" href="${siteUrl}/en${subPath}" />\n  <link rel="alternate" hreflang="x-default" href="${siteUrl}/en${subPath}" />`
         }
 
-        // ── og:image fallback: use company logo when no page-specific image ──
-        if (!pageImage) {
-          const logoPath = company.logo || '/uploads/logo.png'
-          pageImage = logoPath.startsWith('http') ? logoPath : `${siteUrl}${logoPath}`
-        }
-
         // ── Build OG meta tags ──
+        // Use company logo as default og:image when no page-specific image is available
+        const ogImage = pageImage || `${siteUrl}/uploads/logo.png`
         const safeDesc = (pageDesc || '').substring(0, 160)
         const extraMeta = `
   <meta property="og:type" content="${esc(ogType)}" />
@@ -557,11 +550,13 @@ async function startServer() {
   <meta property="og:description" content="${esc(safeDesc)}" />
   <meta property="og:url" content="${esc(pageCanonical)}" />
   <meta property="og:site_name" content="${esc(companyName)}" />
-  ${pageImage ? `<meta property="og:image" content="${esc(pageImage)}" />` : ''}
+  <meta property="og:image" content="${esc(ogImage)}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${esc(pageTitle)}" />
   <meta name="twitter:description" content="${esc(safeDesc)}" />
-  ${pageImage ? `<meta name="twitter:image" content="${esc(pageImage)}" />` : ''}
+  <meta name="twitter:image" content="${esc(ogImage)}" />
   ${hreflangTags}`
 
         // ── Replace meta tags in HTML ──
