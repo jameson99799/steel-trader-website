@@ -1709,5 +1709,103 @@ router.get('/:lang', authMiddleware, (req, res) => {
     const rows = getAll('SELECT * FROM translations WHERE language_code=? ORDER BY content_type, content_field', [req.params.lang])
     res.json(rows)
 })
+// ─── Sync images from English detail_content to all translations ─────────────
+router.post('/sync-images', authMiddleware, (req, res) => {
+    try {
+        // Get all products with detail_content
+        const products = getAll('SELECT id, name_en, detail_content FROM products WHERE detail_content IS NOT NULL AND detail_content != \'\'')
+        // Get all translated detail_content entries
+        const translations = getAll(
+            `SELECT id, language_code, content_id, translated_text FROM translations 
+             WHERE content_type='product' AND content_field='detail_content' AND translated_text IS NOT NULL AND translated_text != ''`
+        )
+
+        let synced = 0
+        let skipped = 0
+
+        for (const trans of translations) {
+            const product = products.find(p => p.id === trans.content_id)
+            if (!product || !product.detail_content) { skipped++; continue }
+
+            // Extract image src values from base (English) content
+            const baseImgs = []
+            product.detail_content.replace(/<img\b[^>]*?src\s*=\s*(["'])([^"']*?)\1[^>]*?\/?>/gi, (m, q, src) => {
+                baseImgs.push(src)
+            })
+            if (!baseImgs.length) { skipped++; continue }
+
+            // Replace image src values in translated content positionally
+            let idx = 0
+            const updatedHtml = trans.translated_text.replace(
+                /<img\b([^>]*?)src\s*=\s*(["'])([^"']*?)\2([^>]*?)\/?>/gi,
+                (match, before, quote, oldSrc, after) => {
+                    if (idx < baseImgs.length) {
+                        const newSrc = baseImgs[idx]
+                        idx++
+                        if (newSrc === oldSrc) return match // no change needed
+                        const selfClose = match.trimEnd().endsWith('/>') ? ' />' : '>'
+                        return `<img${before}src=${quote}${newSrc}${quote}${after}${selfClose}`
+                    }
+                    idx++
+                    return match
+                }
+            )
+
+            if (updatedHtml !== trans.translated_text) {
+                run('UPDATE translations SET translated_text=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', [updatedHtml, trans.id])
+                synced++
+            } else {
+                skipped++
+            }
+        }
+
+        // Also sync news article content images
+        const articles = getAll('SELECT id, content FROM news WHERE content IS NOT NULL AND content != \'\'')
+        const newsTranslations = getAll(
+            `SELECT id, language_code, content_id, translated_text FROM translations 
+             WHERE content_type='news' AND content_field='content' AND translated_text IS NOT NULL AND translated_text != ''`
+        )
+        let newsSynced = 0
+        for (const trans of newsTranslations) {
+            const article = articles.find(a => a.id === trans.content_id)
+            if (!article || !article.content) continue
+            const baseImgs = []
+            article.content.replace(/<img\b[^>]*?src\s*=\s*(["'])([^"']*?)\1[^>]*?\/?>/gi, (m, q, src) => {
+                baseImgs.push(src)
+            })
+            if (!baseImgs.length) continue
+            let idx = 0
+            const updatedHtml = trans.translated_text.replace(
+                /<img\b([^>]*?)src\s*=\s*(["'])([^"']*?)\2([^>]*?)\/?>/gi,
+                (match, before, quote, oldSrc, after) => {
+                    if (idx < baseImgs.length) {
+                        const newSrc = baseImgs[idx]
+                        idx++
+                        if (newSrc === oldSrc) return match
+                        const selfClose = match.trimEnd().endsWith('/>') ? ' />' : '>'
+                        return `<img${before}src=${quote}${newSrc}${quote}${after}${selfClose}`
+                    }
+                    idx++
+                    return match
+                }
+            )
+            if (updatedHtml !== trans.translated_text) {
+                run('UPDATE translations SET translated_text=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', [updatedHtml, trans.id])
+                newsSynced++
+            }
+        }
+
+        res.json({
+            message: `同步完成`,
+            productsSynced: synced,
+            productsSkipped: skipped,
+            newsSynced,
+            totalTranslations: translations.length + newsTranslations.length
+        })
+    } catch (e) {
+        console.error('Sync images error:', e)
+        res.status(500).json({ error: e.message })
+    }
+})
 
 export default router

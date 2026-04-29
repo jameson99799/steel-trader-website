@@ -2,7 +2,10 @@
   <div class="products-page">
     <div class="page-header">
       <h1>商品管理</h1>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-sm btn-outline" style="color:#059669;border-color:#059669;" @click="syncImages" :disabled="syncingImages">
+          {{ syncingImages ? '⏳ 同步中...' : '🔄 同步图片到所有语言' }}
+        </button>
         <button class="btn btn-primary" style="background:#7c3aed;border-color:#7c3aed;" @click="showAICreate = true">🤖 AI 创建商品</button>
         <button class="btn btn-primary" @click="openModal()">添加商品</button>
       </div>
@@ -531,6 +534,7 @@ const categories = ref([])
 const showModal = ref(false)
 const editingProduct = ref(null)
 const loading = ref(false)
+const syncingImages = ref(false)
 const imageFiles = ref([])
 const existingImages = ref([])
 const specs = ref([])
@@ -588,6 +592,27 @@ function previewProduct(product) {
   const slug = product.slug || product.id
   const previewLang = localStorage.getItem('lang') || 'en'
   window.open(`/${previewLang}/products/${slug}`, '_blank')
+}
+
+async function syncImages() {
+  if (syncingImages.value) return
+  syncingImages.value = true
+  try {
+    const res = await fetch((import.meta.env.VITE_API_BASE || '') + '/api/translation/sync-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+    })
+    const data = await res.json()
+    if (res.ok) {
+      alert(`✅ 同步完成！\n产品详情：${data.productsSynced} 个已更新\n新闻文章：${data.newsSynced} 个已更新`)
+    } else {
+      alert('❌ 同步失败: ' + (data.error || '未知错误'))
+    }
+  } catch (e) {
+    alert('❌ 同步失败: ' + e.message)
+  } finally {
+    syncingImages.value = false
+  }
 }
 
 // ─── Import from other product ────────────────────────────────────────────
