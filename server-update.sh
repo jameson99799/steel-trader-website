@@ -56,7 +56,6 @@ fi
 
 # ── 4. 拉取最新代码（git reset --hard 不影响 /tmp 备份）────
 info "从 GitHub 拉取最新代码..."
-git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
 git fetch origin
 git reset --hard origin/master
 ok "代码: $(git log --oneline -1)"

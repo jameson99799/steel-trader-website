@@ -1727,22 +1727,24 @@ router.post('/sync-images', authMiddleware, (req, res) => {
             const product = products.find(p => p.id === trans.content_id)
             if (!product || !product.detail_content) { skipped++; continue }
 
-            // Extract image src values from base (English) content
+            // Extract image src values and full tags from base (English) content
             const baseImgs = []
-            product.detail_content.replace(/<img\b[^>]*?src\s*=\s*(["'])([^"']*?)\1[^>]*?\/?>/gi, (m, q, src) => {
+            const baseImgTags = []
+            product.detail_content.replace(/<img\b[^>]*?src\s*=\s*(["'])([^"']*?)\1[^>]*?\/?>/gi, (fullMatch, q, src) => {
                 baseImgs.push(src)
+                baseImgTags.push(fullMatch)
             })
             if (!baseImgs.length) { skipped++; continue }
 
             // Replace image src values in translated content positionally
             let idx = 0
-            const updatedHtml = trans.translated_text.replace(
+            let updatedHtml = trans.translated_text.replace(
                 /<img\b([^>]*?)src\s*=\s*(["'])([^"']*?)\2([^>]*?)\/?>/gi,
                 (match, before, quote, oldSrc, after) => {
                     if (idx < baseImgs.length) {
                         const newSrc = baseImgs[idx]
                         idx++
-                        if (newSrc === oldSrc) return match // no change needed
+                        if (newSrc === oldSrc) return match
                         const selfClose = match.trimEnd().endsWith('/>') ? ' />' : '>'
                         return `<img${before}src=${quote}${newSrc}${quote}${after}${selfClose}`
                     }
@@ -1750,6 +1752,21 @@ router.post('/sync-images', authMiddleware, (req, res) => {
                     return match
                 }
             )
+
+            // If base has MORE images than translated, append the missing ones
+            if (idx < baseImgs.length) {
+                const missingTags = baseImgTags.slice(idx).join('\n')
+                if (updatedHtml.includes('</body>')) {
+                    updatedHtml = updatedHtml.replace('</body>', missingTags + '\n</body>')
+                } else {
+                    const lastDivIdx = updatedHtml.lastIndexOf('</div>')
+                    if (lastDivIdx > updatedHtml.length * 0.8) {
+                        updatedHtml = updatedHtml.slice(0, lastDivIdx) + missingTags + '\n' + updatedHtml.slice(lastDivIdx)
+                    } else {
+                        updatedHtml += '\n' + missingTags
+                    }
+                }
+            }
 
             if (updatedHtml !== trans.translated_text) {
                 run('UPDATE translations SET translated_text=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', [updatedHtml, trans.id])
@@ -1770,12 +1787,14 @@ router.post('/sync-images', authMiddleware, (req, res) => {
             const article = articles.find(a => a.id === trans.content_id)
             if (!article || !article.content) continue
             const baseImgs = []
-            article.content.replace(/<img\b[^>]*?src\s*=\s*(["'])([^"']*?)\1[^>]*?\/?>/gi, (m, q, src) => {
+            const baseImgTags = []
+            article.content.replace(/<img\b[^>]*?src\s*=\s*(["'])([^"']*?)\1[^>]*?\/?>/gi, (fullMatch, q, src) => {
                 baseImgs.push(src)
+                baseImgTags.push(fullMatch)
             })
             if (!baseImgs.length) continue
             let idx = 0
-            const updatedHtml = trans.translated_text.replace(
+            let updatedHtml = trans.translated_text.replace(
                 /<img\b([^>]*?)src\s*=\s*(["'])([^"']*?)\2([^>]*?)\/?>/gi,
                 (match, before, quote, oldSrc, after) => {
                     if (idx < baseImgs.length) {
@@ -1789,6 +1808,15 @@ router.post('/sync-images', authMiddleware, (req, res) => {
                     return match
                 }
             )
+            // Append missing images
+            if (idx < baseImgs.length) {
+                const missingTags = baseImgTags.slice(idx).join('\n')
+                if (updatedHtml.includes('</body>')) {
+                    updatedHtml = updatedHtml.replace('</body>', missingTags + '\n</body>')
+                } else {
+                    updatedHtml += '\n' + missingTags
+                }
+            }
             if (updatedHtml !== trans.translated_text) {
                 run('UPDATE translations SET translated_text=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', [updatedHtml, trans.id])
                 newsSynced++

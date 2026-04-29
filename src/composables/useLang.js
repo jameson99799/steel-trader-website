@@ -207,21 +207,29 @@ export function useLang() {
   }
 
   /**
-   * Replace image src values in translatedHtml with those from baseHtml,
-   * matched by position. This keeps translated text but uses the latest
-   * images from the base (English) content.
+   * Replace image src values in translatedHtml with those from baseHtml.
+   * Handles cases where the translated HTML has fewer images than the base
+   * (AI may drop some during translation). Uses positional matching first,
+   * then appends any extra base images at the end.
    */
   const syncImagesFromBase = (baseHtml, translatedHtml) => {
     if (!baseHtml || !translatedHtml) return translatedHtml || baseHtml || ''
-    // Extract all img src values from base HTML
+    // Extract all <img> tags from base HTML (full tag for appending)
     const baseImgs = []
-    baseHtml.replace(/<img\b[^>]*?src\s*=\s*(["'])([^"']*?)\1[^>]*?\/?>/gi, (m, q, src) => {
+    const baseImgTags = []
+    baseHtml.replace(/<img\b[^>]*?src\s*=\s*(["'])([^"']*?)\1[^>]*?\/?>/gi, (fullMatch, q, src) => {
       baseImgs.push(src)
+      baseImgTags.push(fullMatch)
     })
     if (!baseImgs.length) return translatedHtml
-    // Replace img src values in translated HTML positionally
+    
+    // Count images in translated HTML
+    let translatedImgCount = 0
+    translatedHtml.replace(/<img\b[^>]*?src\s*=\s*(["'])[^"']*?\1[^>]*?\/?>/gi, () => { translatedImgCount++ })
+    
+    // Replace existing img src values positionally
     let idx = 0
-    return translatedHtml.replace(/<img\b([^>]*?)src\s*=\s*(["'])([^"']*?)\2([^>]*?)\/?>/gi, (match, before, quote, oldSrc, after) => {
+    let result = translatedHtml.replace(/<img\b([^>]*?)src\s*=\s*(["'])([^"']*?)\2([^>]*?)\/?>/gi, (match, before, quote, oldSrc, after) => {
       if (idx < baseImgs.length) {
         const newSrc = baseImgs[idx]
         idx++
@@ -231,6 +239,25 @@ export function useLang() {
       idx++
       return match
     })
+    
+    // If base has MORE images than translated, append the missing ones
+    if (idx < baseImgs.length) {
+      const missingTags = baseImgTags.slice(idx).join('\n')
+      // Try to insert before closing </body> or </div> at the end, or just append
+      if (result.includes('</body>')) {
+        result = result.replace('</body>', missingTags + '\n</body>')
+      } else {
+        // Find the last substantial closing tag and insert before it
+        const lastDivIdx = result.lastIndexOf('</div>')
+        if (lastDivIdx > result.length * 0.8) {
+          result = result.slice(0, lastDivIdx) + missingTags + '\n' + result.slice(lastDivIdx)
+        } else {
+          result += '\n' + missingTags
+        }
+      }
+    }
+    
+    return result
   }
 
   // Get language-prefixed path for router-links
