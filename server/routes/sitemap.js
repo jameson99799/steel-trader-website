@@ -13,133 +13,152 @@ function escapeXml(str) {
         .replace(/'/g, '&apos;')
 }
 
-router.get('/', (req, res) => {
-    const baseUrl = (process.env.SITE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '')
+const BASE_URL = 'https://www.sunseasteel.com'
 
-    // Get active languages for multi-language sitemap
-    let activeLangs = []
+function getActiveLangs() {
     try {
-        activeLangs = getAll(`SELECT code FROM languages WHERE status = 1 ORDER BY code`)
+        const langs = getAll(`SELECT code FROM languages WHERE status = 1 ORDER BY code`)
+        return langs.length ? langs : [{ code: 'en' }]
     } catch {
-        activeLangs = [{ code: 'en' }]
+        return [{ code: 'en' }]
     }
-    if (!activeLangs.length) activeLangs = [{ code: 'en' }]
+}
 
-    // Force canonical base URL to always be https://www (no redirects)
-    const BASE_URL = 'https://www.sunseasteel.com'
+function hreflangLinks(activeLangs, path) {
+    const normalPath = path === '/' ? '' : path
+    return activeLangs.map(l => {
+        const code = (l.code || '').trim()
+        return `    <xhtml:link rel="alternate" hreflang="${escapeXml(code)}" href="${escapeXml(BASE_URL + '/' + code + normalPath)}" />`
+    }).concat([
+        `    <xhtml:link rel="alternate" hreflang="x-default" href="${escapeXml(BASE_URL + '/en' + normalPath)}" />`
+    ]).join('\n')
+}
 
-    const staticPages = [
-        { loc: '/', priority: '1.0', changefreq: 'daily' },
-        { loc: '/products', priority: '0.9', changefreq: 'daily' },
-        { loc: '/news', priority: '0.8', changefreq: 'daily' },
-        { loc: '/about', priority: '0.7', changefreq: 'monthly' },
-        { loc: '/contact', priority: '0.7', changefreq: 'monthly' },
-    ]
-
-    const products = getAll(`SELECT id, slug, name_en, created_at FROM products WHERE status = 1 ORDER BY id DESC`)
-    const news = getAll(`SELECT slug, id, title_en, updated_at FROM news WHERE status = 1 ORDER BY id DESC`)
-    const categories = getAll(`SELECT id, slug, name_en FROM categories ORDER BY sort_order, id`)
-
-    const now = new Date().toISOString().split('T')[0]
-
-    // Build hreflang links for a path
-    function hreflangLinks(path) {
-        return activeLangs.map(l => {
-            const code = (l.code || '').trim()
-            const langPath = `/${code}${path === '/' ? '' : path}`
-            return `    <xhtml:link rel="alternate" hreflang="${escapeXml(code)}" href="${escapeXml(BASE_URL + langPath)}" />`
-        }).concat([
-            `    <xhtml:link rel="alternate" hreflang="x-default" href="${escapeXml(BASE_URL + '/en' + (path === '/' ? '' : path))}" />`
-        ]).join('\n')
-    }
-
-    const urls = []
-
-    // Static pages — one entry per language
-    for (const p of staticPages) {
-        for (const l of activeLangs) {
-            const langPath = `/${l.code}${p.loc === '/' ? '' : p.loc}`
-            urls.push(`  <url>
-    <loc>${escapeXml(BASE_URL + langPath)}</loc>
-    <lastmod>${now}</lastmod>
-    <changefreq>${p.changefreq}</changefreq>
-    <priority>${p.priority}</priority>
-${hreflangLinks(p.loc)}
-  </url>`)
-        }
-    }
-
-    // Category pages — one entry per language
-    for (const c of categories) {
-        const catSlug = c.slug || c.id
-        const catPath = `/products?category=${catSlug}`
-        for (const l of activeLangs) {
-            urls.push(`  <url>
-    <loc>${escapeXml(BASE_URL + '/' + l.code + catPath)}</loc>
-    <lastmod>${now}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-${hreflangLinks(catPath)}
-  </url>`)
-        }
-    }
-
-    // Products — one entry per language
-    for (const p of products) {
-        const prodSlug = p.slug || p.id
-        const prodPath = `/products/${prodSlug}`
-        const lastmod = p.created_at ? p.created_at.split(' ')[0] : now
-        for (const l of activeLangs) {
-            urls.push(`  <url>
-    <loc>${escapeXml(BASE_URL + '/' + l.code + prodPath)}</loc>
+function urlEntry(loc, { lastmod, changefreq, priority, hreflang = '' }) {
+    return `  <url>
+    <loc>${escapeXml(loc)}</loc>
     <lastmod>${lastmod}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-${hreflangLinks(prodPath)}
-  </url>`)
-        }
-    }
+    <changefreq>${changefreq}</changefreq>
+    <priority>${priority}</priority>
+${hreflang}
+  </url>`
+}
 
-    const newsCategories = getAll(`SELECT slug, name_en FROM news_categories ORDER BY sort_order, id`)
-
-    // News categories — one entry per language
-    for (const nc of newsCategories) {
-        const ncPath = `/news/category/${nc.slug}`
-        for (const l of activeLangs) {
-            urls.push(`  <url>
-    <loc>${escapeXml(BASE_URL + '/' + l.code + ncPath)}</loc>
-    <lastmod>${now}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-${hreflangLinks(ncPath)}
-  </url>`)
-        }
-    }
-
-    // News articles — one entry per language
-    for (const n of news) {
-        const slug = n.slug || n.id
-        const newsPath = `/news/${slug}`
-        const lastmod = n.updated_at ? n.updated_at.split(' ')[0] : now
-        for (const l of activeLangs) {
-            urls.push(`  <url>
-    <loc>${escapeXml(BASE_URL + '/' + l.code + newsPath)}</loc>
-    <lastmod>${lastmod}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-${hreflangLinks(newsPath)}
-  </url>`)
-        }
-    }
-
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+function wrapUrlset(urls) {
+    return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:xhtml="http://www.w3.org/1999/xhtml">
 ${urls.join('\n')}
 </urlset>`
+}
 
+// ── Sitemap Index (/sitemap.xml) ──────────────────────────────────────────────
+router.get('/', (req, res) => {
+    const now = new Date().toISOString().split('T')[0]
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>${BASE_URL}/sitemap-static.xml</loc>
+    <lastmod>${now}</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>${BASE_URL}/sitemap-products.xml</loc>
+    <lastmod>${now}</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>${BASE_URL}/sitemap-news.xml</loc>
+    <lastmod>${now}</lastmod>
+  </sitemap>
+</sitemapindex>`
     res.setHeader('Content-Type', 'application/xml; charset=utf-8')
     res.send(xml)
+})
+
+// ── Static pages sitemap (/sitemap-static.xml) ───────────────────────────────
+router.get('/static', (req, res) => {
+    const activeLangs = getActiveLangs()
+    const now = new Date().toISOString().split('T')[0]
+    const staticPages = [
+        { loc: '/',        priority: '1.0', changefreq: 'daily' },
+        { loc: '/products', priority: '0.9', changefreq: 'daily' },
+        { loc: '/news',     priority: '0.8', changefreq: 'daily' },
+        { loc: '/about',    priority: '0.7', changefreq: 'monthly' },
+        { loc: '/contact',  priority: '0.7', changefreq: 'monthly' },
+    ]
+
+    // Category pages — clean path URLs (not query params)
+    const categories = getAll(`SELECT id, slug, name_en FROM categories ORDER BY sort_order, id`)
+
+    const urls = []
+    for (const p of staticPages) {
+        for (const l of activeLangs) {
+            const normalPath = p.loc === '/' ? '' : p.loc
+            const loc = `${BASE_URL}/${l.code}${normalPath}`
+            urls.push(urlEntry(loc, { lastmod: now, changefreq: p.changefreq, priority: p.priority, hreflang: hreflangLinks(activeLangs, p.loc) }))
+        }
+    }
+
+    for (const c of categories) {
+        const catSlug = c.slug || `category-${c.id}`
+        const catPath = `/products/category/${catSlug}`
+        for (const l of activeLangs) {
+            const loc = `${BASE_URL}/${l.code}${catPath}`
+            urls.push(urlEntry(loc, { lastmod: now, changefreq: 'weekly', priority: '0.7', hreflang: hreflangLinks(activeLangs, catPath) }))
+        }
+    }
+
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+    res.send(wrapUrlset(urls))
+})
+
+// ── Products sitemap (/sitemap-products.xml) ──────────────────────────────────
+router.get('/products', (req, res) => {
+    const activeLangs = getActiveLangs()
+    const now = new Date().toISOString().split('T')[0]
+    const products = getAll(`SELECT id, slug, name_en, updated_at, created_at FROM products WHERE status = 1 ORDER BY id DESC`)
+
+    const urls = []
+    for (const p of products) {
+        const prodSlug = p.slug || p.id
+        const prodPath = `/products/${prodSlug}`
+        const lastmod = (p.updated_at || p.created_at || '').split(' ')[0] || now
+        for (const l of activeLangs) {
+            const loc = `${BASE_URL}/${l.code}${prodPath}`
+            urls.push(urlEntry(loc, { lastmod, changefreq: 'weekly', priority: '0.8', hreflang: hreflangLinks(activeLangs, prodPath) }))
+        }
+    }
+
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+    res.send(wrapUrlset(urls))
+})
+
+// ── News sitemap (/sitemap-news.xml) ─────────────────────────────────────────
+router.get('/news', (req, res) => {
+    const activeLangs = getActiveLangs()
+    const now = new Date().toISOString().split('T')[0]
+    const newsArticles = getAll(`SELECT slug, id, title_en, updated_at FROM news WHERE status = 1 ORDER BY id DESC`)
+    const newsCategories = getAll(`SELECT slug, name_en FROM news_categories ORDER BY sort_order, id`)
+
+    const urls = []
+    for (const nc of newsCategories) {
+        const ncPath = `/news/category/${nc.slug}`
+        for (const l of activeLangs) {
+            const loc = `${BASE_URL}/${l.code}${ncPath}`
+            urls.push(urlEntry(loc, { lastmod: now, changefreq: 'weekly', priority: '0.7', hreflang: hreflangLinks(activeLangs, ncPath) }))
+        }
+    }
+    for (const n of newsArticles) {
+        const slug = n.slug || n.id
+        const newsPath = `/news/${slug}`
+        const lastmod = (n.updated_at || '').split(' ')[0] || now
+        for (const l of activeLangs) {
+            const loc = `${BASE_URL}/${l.code}${newsPath}`
+            urls.push(urlEntry(loc, { lastmod, changefreq: 'monthly', priority: '0.6', hreflang: hreflangLinks(activeLangs, newsPath) }))
+        }
+    }
+
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+    res.send(wrapUrlset(urls))
 })
 
 export default router

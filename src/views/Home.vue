@@ -10,7 +10,7 @@
           <div class="hero-text">
             <span class="hero-badge">{{ localizedValue(hero, 'tag') }}</span>
             <h1 class="hero-title">{{ localizedValue(hero, 'title') }}</h1>
-            <p class="hero-subtitle">{{ localizedValue(hero, 'subtitle') }}</p>
+            <h2 class="hero-subtitle">{{ localizedValue(hero, 'subtitle') }}</h2>
             
             <div class="hero-stats">
               <div class="stat-item">

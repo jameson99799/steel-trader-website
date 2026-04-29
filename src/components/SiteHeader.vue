@@ -67,7 +67,7 @@
               <img :src="company.logo" :alt="localizedValue(company, 'name')" />
             </div>
             <div class="logo-text">
-              <h1 class="logo-title">{{ localizedValue(company, 'name') }}</h1>
+              <span class="logo-title">{{ localizedValue(company, 'name') }}</span>
               <p class="logo-subtitle">{{ localizedValue(pageTexts, 'logo_subtitle') }}</p>
             </div>
             <!-- Mobile-only hardcoded compact brand -->

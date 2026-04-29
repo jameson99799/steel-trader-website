@@ -146,8 +146,11 @@ async function startServer() {
     app.use('/api/news', newsRoutes)
     app.use('/api/news-categories', newsCategoriesRoutes)
     app.use('/api/seo', seoRoutes)
-    // Sitemap (accessible as /sitemap.xml)
+    // Sitemap index + sub-sitemaps
     app.use('/sitemap.xml', sitemapRoutes)
+    app.use('/sitemap-static.xml', (req, res, next) => { req.url = '/static'; sitemapRoutes(req, res, next) })
+    app.use('/sitemap-products.xml', (req, res, next) => { req.url = '/products'; sitemapRoutes(req, res, next) })
+    app.use('/sitemap-news.xml', (req, res, next) => { req.url = '/news'; sitemapRoutes(req, res, next) })
     app.use('/api/languages', languagesRoutes)
     app.use('/api/translation', translationRoutes)
     app.use('/api', sslRoutes)
@@ -182,8 +185,9 @@ async function startServer() {
         const p = req.path
         // Skip non-SPA paths
         if (p.startsWith('/api/') || p.startsWith('/uploads/') || p.startsWith('/admin') ||
-            p.startsWith('/crm') || p === '/sitemap.xml' || p === '/health' ||
-            p.startsWith('/assets/')) return next()
+            p.startsWith('/crm') || p === '/sitemap.xml' ||
+            p === '/sitemap-static.xml' || p === '/sitemap-products.xml' || p === '/sitemap-news.xml' ||
+            p === '/health' || p.startsWith('/assets/')) return next()
         // /  → /en/
         if (p === '/') return res.redirect(301, '/en/')
         // /products, /products/slug, /news/slug, /about, /contact → /en/...
@@ -246,15 +250,18 @@ async function startServer() {
               const images = (product.images || '').split(',').filter(Boolean)
               if (images.length) pageImage = images[0].startsWith('http') ? images[0] : `${siteUrl}${images[0]}`
 
+              // ── Single unified Product Schema ──
+              const productImages = (product.images || '').split(',').filter(Boolean).map(img => img.startsWith('http') ? img : `${siteUrl}${img}`)
               const productSchema = {
                 '@context': 'https://schema.org', '@type': 'Product',
                 name: product.name_en || product.name,
-                description: (product.seo_description || product.description_en || '').substring(0, 500),
+                description: (product.seo_description || product.description_en || product.description || '').substring(0, 500),
                 url: pageCanonical,
                 brand: { '@type': 'Brand', name: companyName },
-                manufacturer: { '@type': 'Organization', name: companyName }
+                manufacturer: { '@type': 'Organization', name: companyName, url: siteUrl },
+                offers: { '@type': 'Offer', availability: 'https://schema.org/InStock', seller: { '@type': 'Organization', name: companyName }, url: pageCanonical }
               }
-              if (images.length) productSchema.image = images.map(i => i.startsWith('http') ? i : `${siteUrl}${i}`)
+              if (productImages.length) productSchema.image = productImages
               if (product.category_name_en) productSchema.category = product.category_name_en
               if (product.specs) {
                 try {
@@ -274,19 +281,6 @@ async function startServer() {
                 { '@type': 'ListItem', position: 2, name: 'Products', item: `${siteUrl}/${lang}/products` },
                 { '@type': 'ListItem', position: 3, name: product.name_en || product.name, item: pageCanonical }
               ] })
-
-              // ── Product Schema (helps Google Shopping + AI entity recognition) ──
-              const productImages = (product.images || '').split(',').filter(Boolean).map(img => img.startsWith('http') ? img : `${siteUrl}${img}`)
-              extraSchemas += jsonLd({
-                '@context': 'https://schema.org', '@type': 'Product',
-                name: product.name_en || product.name,
-                description: (product.description_en || product.description || '').substring(0, 500),
-                brand: { '@type': 'Brand', name: companyName },
-                manufacturer: { '@type': 'Organization', name: companyName, url: siteUrl },
-                ...(productImages.length && { image: productImages }),
-                offers: { '@type': 'Offer', availability: 'https://schema.org/InStock', seller: { '@type': 'Organization', name: companyName }, url: pageCanonical },
-                url: pageCanonical
-              })
 
               // ── SSR content for product detail (SEO/GEO crawlers) ──
               const pName = esc(product.name_en || product.name || '')
@@ -547,6 +541,12 @@ async function startServer() {
           hreflangTags += `\n  <link rel="alternate" hreflang="x-default" href="${siteUrl}/en${subPath}" />`
         } catch (e) {
           hreflangTags = `<link rel="alternate" hreflang="en" href="${siteUrl}/en${subPath}" />\n  <link rel="alternate" hreflang="x-default" href="${siteUrl}/en${subPath}" />`
+        }
+
+        // ── og:image fallback: use company logo when no page-specific image ──
+        if (!pageImage) {
+          const logoPath = company.logo || '/uploads/logo.png'
+          pageImage = logoPath.startsWith('http') ? logoPath : `${siteUrl}${logoPath}`
         }
 
         // ── Build OG meta tags ──
