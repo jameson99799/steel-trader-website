@@ -305,7 +305,7 @@ async function startServer() {
                   if (fl.length) faqHtml = '<h2>Frequently Asked Questions</h2>' + fl.map(f => `<h3>${esc(f.question)}</h3><p>${esc(f.answer)}</p>`).join('')
                 } catch (e) {}
               }
-              const detailHtml = product.detail_content ? product.detail_content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') : ''
+              const detailHtml = product.detail_content ? product.detail_content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') : ''
               ssrContent = `<article id="ssr-product"><h1>${pName}</h1><p>${pDesc}</p>${specsHtml}${detailHtml}${faqHtml}</article>`
             } else {
               // Product not found — return 404 status to prevent soft 404
@@ -357,6 +357,7 @@ async function startServer() {
               let articleBody = article.content
                 ? article.content
                     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
                     .replace(/\{\{email\}\}/g, company.email || '')
                     .replace(/\{\{phone\}\}/g, company.phone || company.whatsapp || '')
                     .replace(/\{\{whatsapp_link\}\}/g, whatsappLink)

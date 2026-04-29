@@ -586,7 +586,8 @@ const pagedProducts = computed(() => {
 function onFilterChange() { currentPage.value = 1 }
 function previewProduct(product) {
   const slug = product.slug || product.id
-  window.open(`/en/products/${slug}`, '_blank')
+  const previewLang = localStorage.getItem('lang') || 'en'
+  window.open(`/${previewLang}/products/${slug}`, '_blank')
 }
 
 // ─── Import from other product ────────────────────────────────────────────
