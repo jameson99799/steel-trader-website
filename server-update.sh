@@ -88,7 +88,11 @@ ok "依赖就绪"
 
 # ── 8. 重新构建前端 ──────────────────────────────────────────
 info "清除旧构建文件..."
-rm -rf dist
+# dist/ 可能由 root/Docker 构建，需先修复权限再删除
+if [ -d "dist" ]; then
+  sudo chown -R "$(whoami):$(whoami)" dist/ 2>/dev/null || true
+  rm -rf dist
+fi
 info "npm run build..."
 npm run build 2>&1 | tail -3
 # Verify the new build is present
