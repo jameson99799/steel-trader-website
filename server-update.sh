@@ -87,9 +87,16 @@ npm install --production=false 2>&1 | tail -1
 ok "依赖就绪"
 
 # ── 8. 重新构建前端 ──────────────────────────────────────────
+info "清除旧构建文件..."
+rm -rf dist
 info "npm run build..."
-npm run build 2>&1 | tail -1
-ok "前端构建完成"
+npm run build 2>&1 | tail -3
+# Verify the new build is present
+if [ ! -f "dist/index.html" ]; then
+  fail "构建失败：dist/index.html 不存在！"
+fi
+NEW_HASH=$(grep -oP 'index-[A-Za-z0-9_-]+\.js' dist/index.html | head -1)
+ok "前端构建完成 (${NEW_HASH})"
 
 # ── 9. 停止 → 启动 PM2（严格顺序：先停，再启动）──────────────
 info "停止旧进程..."
