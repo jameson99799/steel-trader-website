@@ -194,11 +194,43 @@ export function useLang() {
 
   const localizedHtml = (obj, field) => {
     if (!obj) return ''
+    const baseHtml = obj[field] || ''
     if (lang.value !== 'en') {
       const translatedField = `${field}_${lang.value}`
-      if (obj[translatedField]) return obj[translatedField]
+      if (obj[translatedField]) {
+        // Sync images from base (English) content into translated content.
+        // Images are language-independent; only text needs translation.
+        return syncImagesFromBase(baseHtml, obj[translatedField])
+      }
     }
-    return obj[field] || ''
+    return baseHtml
+  }
+
+  /**
+   * Replace image src values in translatedHtml with those from baseHtml,
+   * matched by position. This keeps translated text but uses the latest
+   * images from the base (English) content.
+   */
+  const syncImagesFromBase = (baseHtml, translatedHtml) => {
+    if (!baseHtml || !translatedHtml) return translatedHtml || baseHtml || ''
+    // Extract all img src values from base HTML
+    const baseImgs = []
+    baseHtml.replace(/<img\b[^>]*?src\s*=\s*(["'])([^"']*?)\1[^>]*?\/?>/gi, (m, q, src) => {
+      baseImgs.push(src)
+    })
+    if (!baseImgs.length) return translatedHtml
+    // Replace img src values in translated HTML positionally
+    let idx = 0
+    return translatedHtml.replace(/<img\b([^>]*?)src\s*=\s*(["'])([^"']*?)\2([^>]*?)\/?>/gi, (match, before, quote, oldSrc, after) => {
+      if (idx < baseImgs.length) {
+        const newSrc = baseImgs[idx]
+        idx++
+        const selfClose = match.trimEnd().endsWith('/>') ? ' />' : '>'
+        return `<img${before}src=${quote}${newSrc}${quote}${after}${selfClose}`
+      }
+      idx++
+      return match
+    })
   }
 
   // Get language-prefixed path for router-links
