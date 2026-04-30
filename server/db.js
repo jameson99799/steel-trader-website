@@ -942,6 +942,122 @@ async function initDb() {
     }
   }
 
+  // ── RAL Color Chart ────────────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ral_colors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      hex TEXT NOT NULL,
+      name_zh TEXT NOT NULL,
+      name_en TEXT NOT NULL
+    )
+  `)
+  // Seed RAL colors (idempotent via INSERT OR IGNORE)
+  const ralColors = [
+    ['1000','#CCC58F','米绿色','Green Beige'],['1001','#D2B773','米色','Beige'],
+    ['1002','#D8BE7C','沙黄色','Sand Yellow'],['1003','#E6AE18','信号黄','Signal Yellow'],
+    ['1004','#E49B09','金黄色','Golden Yellow'],['1005','#CE8B00','蜜黄色','Honey Yellow'],
+    ['1006','#D7A420','玉米黄','Maize Yellow'],['1007','#D8A40C','灰黄色','Daffodil Yellow'],
+    ['1011','#BB8A3A','米褐色','Brown Beige'],['1012','#D6C44A','柠檬黄','Lemon Yellow'],
+    ['1013','#E7E1CB','近于白色的浅','Oyster White'],['1014','#DEBF7E','象牙色','Ivory'],
+    ['1015','#E4CEAB','亮象牙色','Light Ivory'],['1016','#D9D83D','硫磺色','Sulfur Yellow'],
+    ['1017','#F4AC37','深黄色','Saffron Yellow'],['1018','#F6CE34','绿黄色','Zinc Yellow'],
+    ['1019','#B5956C','米灰色','Grey Beige'],['1020','#A59246','橄榄黄','Olive Yellow'],
+    ['1021','#F2AC00','油菜黄','Rape Yellow'],['1023','#F5C400','交通黄','Traffic Yellow'],
+    ['1024','#C59A3A','赭黄色','Ochre Yellow'],['1027','#B3850D','咖喱色','Curry'],
+    ['1028','#FF9B00','浅橙黄','Melon Yellow'],['1032','#E5A800','金雀花黄','Broom Yellow'],
+    ['1033','#FF9900','大丽花黄','Dahlia Yellow'],['1034','#F2AC63','粉黄色','Pastel Yellow'],
+    ['2000','#E97000','黄橙色','Yellow Orange'],['2001','#C64A3C','橘红','Red Orange'],
+    ['2002','#C04433','朱红','Vermillion'],['2003','#F47524','淡橙','Pastel Orange'],
+    ['2004','#F24E00','纯橙','Pure Orange'],['2008','#F37135','浅红橙','Bright Red Orange'],
+    ['2009','#E85F00','交通橙','Traffic Orange'],['2010','#D46000','信号橙','Signal Orange'],
+    ['2011','#EB6E10','深橙色','Deep Orange'],['2012','#D9613E','鲑鱼橙','Salmon Orange'],
+    ['3000','#AB2B2B','火焰红','Flame Red'],['3001','#9B2828','信号红','Signal Red'],
+    ['3002','#952D2D','胭脂红','Carmine Red'],['3003','#7B2033','宝石红','Ruby Red'],
+    ['3004','#6E2034','紫红色','Purple Red'],['3005','#57192C','葡萄酒红','Wine Red'],
+    ['3007','#3E1A1A','黑红','Black Red'],['3009','#6B2525','氧化红','Oxide Red'],
+    ['3011','#7E2828','棕红色','Brown Red'],['3012','#CB8D76','米红色','Beige Red'],
+    ['3013','#972826','番茄红','Tomato Red'],['3014','#CB7575','古粉红色','Antique Pink'],
+    ['3015','#D8A5A5','淡粉红色','Light Pink'],['3016','#AD4A39','珊瑚红色','Coral Red'],
+    ['3017','#CA5C69','玫瑰色','Rose'],['3018','#C33A4D','草莓红','Strawberry Red'],
+    ['3020','#C01B1B','交通红','Traffic Red'],['3022','#C66558','鲑鱼粉红色','Salmon Pink'],
+    ['3027','#B2234F','悬钩子红色','Raspberry Red'],['3031','#A3282E','戈亚红色','Orient Red'],
+    ['4001','#886088','丁香红','Red Lilac'],['4002','#8A3044','紫红色','Red Violet'],
+    ['4003','#C16082','石南紫','Heather Violet'],['4004','#6C2345','酒红紫','Claret Violet'],
+    ['4005','#7A6896','丁香蓝','Blue Lilac'],['4006','#8A2472','交通紫','Traffic Purple'],
+    ['4007','#412040','紫红蓝色','Purple Violet'],['4008','#7A3B7A','信号紫罗兰','Signal Violet'],
+    ['4009','#9B8898','崧蓝紫色','Pastel Violet'],['5000','#2D4D7A','紫蓝色','Violet Blue'],
+    ['5001','#1A5270','蓝绿色','Green Blue'],['5002','#1A3365','群青蓝','Ultramarine Blue'],
+    ['5003','#1C3A5E','蓝宝石蓝','Sapphire Blue'],['5004','#151E28','蓝黑色','Black Blue'],
+    ['5005','#1A4789','信号蓝','Signal Blue'],['5007','#3A6496','亮蓝色','Brilliant Blue'],
+    ['5008','#324456','灰蓝色','Grey Blue'],['5009','#2A5E8C','天青蓝','Azure Blue'],
+    ['5010','#1A3D7A','龙胆蓝色','Gentian Blue'],['5011','#1C2E40','钢蓝色','Steel Blue'],
+    ['5012','#3D7AB5','淡蓝色','Light Blue'],['5013','#1B2D60','钴蓝色','Cobalt Blue'],
+    ['5014','#637391','鸽蓝色','Pigeon Blue'],['5015','#2574A9','天蓝色','Sky Blue'],
+    ['5017','#0E4FA0','交通蓝','Traffic Blue'],['5018','#2A898A','绿松石蓝','Turquoise Blue'],
+    ['5019','#1A5C8A','卡布里蓝色','Capri Blue'],['5020','#1A3B50','海蓝色','Ocean Blue'],
+    ['5021','#1A7C7A','不来梅蓝色','Water Blue'],['5022','#1A2050','夜蓝色','Night Blue'],
+    ['5023','#4A6896','冷蓝色','Distant Blue'],['5024','#5A9AB5','崧蓝蓝色','Pastel Blue'],
+    ['6000','#358069','铜锈绿色','Patina Green'],['6001','#286843','翡翠绿色','Emerald Green'],
+    ['6002','#336A27','叶绿色','Leaf Green'],['6003','#5A5A2A','橄榄绿','Olive Green'],
+    ['6004','#1A5948','蓝绿色','Blue Green'],['6005','#1A4D26','苔藓绿','Moss Green'],
+    ['6006','#3C3C25','橄榄灰绿','Grey Olive'],['6007','#273823','瓶绿','Bottle Green'],
+    ['6008','#3A3323','褐绿','Brown Green'],['6009','#243A28','冷杉绿','Fir Green'],
+    ['6010','#3B7443','草绿色','Grass Green'],['6011','#7A8E59','淡橄榄绿','Reseda Green'],
+    ['6012','#303D33','墨绿色','Black Green'],['6013','#8B8564','芦苇绿','Reed Green'],
+    ['6014','#4E4B35','橄榄黄','Yellow Olive'],['6015','#3F3E2B','黑齐墩果色','Black Olive'],
+    ['6016','#1A7A60','绿松石绿色','Turquoise Green'],['6017','#4E8A3F','五月绿','May Green'],
+    ['6018','#64A23D','黄绿色','Yellow Green'],['6019','#BCE4C0','崧蓝绿色','Pastel Green'],
+    ['6020','#2E4320','铭绿色','Chrome Green'],['6021','#8DAF75','浅绿色','Pale Green'],
+    ['6022','#3E3A28','橄榄土褐色','Olive Drab'],['6024','#1A9645','交通绿','Traffic Green'],
+    ['6025','#537840','蕨绿色','Fern Green'],['6026','#1A6B56','蛋白石绿色','Opal Green'],
+    ['6027','#79C6B5','浅绿色','Light Green'],['6028','#2B5546','松绿色','Pine Green'],
+    ['6029','#1A8042','薄荷绿','Mint Green'],['6032','#1A9B50','信号绿','Signal Green'],
+    ['6033','#4A9E99','薄荷绿蓝色','Mint Turquoise'],['6034','#90C8BF','崧蓝绿松石','Pastel Turquoise'],
+    ['7000','#7F8C96','松鼠灰','Squirrel Grey'],['7001','#8C9BB0','银灰色','Silver Grey'],
+    ['7002','#8A8668','橄榄灰绿色','Olive Grey'],['7003','#7A7E6A','苔藓灰','Moss Grey'],
+    ['7004','#969696','信号灰','Signal Grey'],['7005','#6D7066','鼠灰色','Mouse Grey'],
+    ['7006','#766E60','米灰色','Beige Grey'],['7008','#7A6E49','土黄灰色','Khaki Grey'],
+    ['7009','#5D6360','绿灰色','Green Grey'],['7010','#525C57','油布灰','Tarpaulin Grey'],
+    ['7011','#4E5660','铁灰色','Iron Grey'],['7012','#4D5A5E','玄武石灰','Basalt Grey'],
+    ['7013','#5A5248','褐灰色','Brown Grey'],['7015','#4F5660','浅橄榄灰','Slate Grey'],
+    ['7016','#383D42','煤灰','Anthracite Grey'],['7021','#2A2E33','黑灰','Black Grey'],
+    ['7022','#484843','暗灰','Umbra Grey'],['7023','#7B7D78','混凝土灰','Concrete Grey'],
+    ['7024','#474B4E','石墨灰','Graphite Grey'],['7026','#3A4248','花岗灰','Granite Grey'],
+    ['7030','#919082','石灰色','Stone Grey'],['7031','#5A6872','蓝灰色','Blue Grey'],
+    ['7032','#B5B0A0','卵石灰','Pebble Grey'],['7033','#7E8A80','水泥灰','Cement Grey'],
+    ['7034','#8F8A6F','黄灰色','Yellow Grey'],['7035','#CBCBCB','浅灰色','Light Grey'],
+    ['7036','#938E8C','铂灰色','Platinum Grey'],['7037','#7B7B7B','土灰色','Dusty Grey'],
+    ['7038','#B2B2A2','玛瑙灰','Agate Grey'],['7039','#6A6863','石英灰','Quartz Grey'],
+    ['7040','#9AA0A8','窗灰色','Window Grey'],['7042','#8F9696','交通灰A','Traffic Grey A'],
+    ['7043','#4E5452','交通灰B','Traffic Grey B'],['7044','#B4AFA6','深铭灰色','Silk Grey'],
+    ['7045','#909095','电视灰1','Telegrey 1'],['7046','#828590','电视灰2','Telegrey 2'],
+    ['7047','#CACACE','电视灰4','Telegrey 4'],['8000','#8A7040','绿褐色','Green Brown'],
+    ['8001','#9A6A30','赭石棕色','Ochre Brown'],['8002','#7A4A3A','信号棕','Signal Brown'],
+    ['8003','#8A5030','陶土棕色','Clay Brown'],['8004','#8A4830','铜棕色','Copper Brown'],
+    ['8007','#7A4A28','鹿棕色','Fawn Brown'],['8008','#7A5530','橄榄棕色','Olive Brown'],
+    ['8011','#5A3A1A','深棕','Nut Brown'],['8012','#6E3028','红棕色','Red Brown'],
+    ['8014','#3E2A1A','乌贼棕','Sepia Brown'],['8015','#5A2E22','栗棕色','Chestnut Brown'],
+    ['8016','#4A2018','桃花心木棕','Mahogany Brown'],['8017','#3E2018','巧克力棕','Chocolate Brown'],
+    ['8019','#3E3028','灰棕色','Grey Brown'],['8022','#1A1018','黑棕色','Black Brown'],
+    ['8023','#A05530','橘棕色','Orange Brown'],['8024','#8A6040','米棕色','Beige Brown'],
+    ['8025','#7A5A40','浅棕色','Pale Brown'],['8028','#5A4030','土棕色','Terra Brown'],
+    ['9001','#F4F1DC','米白色','Cream'],['9002','#E7EBDA','灰白色','Grey White'],
+    ['9003','#F4F4F4','信号白','Signal White'],['9004','#2A2A2A','信号黑','Signal Black'],
+    ['9005','#0A0A0A','碳黑色','Jet Black'],['9006','#A5A5A5','白铝色','White Aluminium'],
+    ['9007','#8A8A8A','灰铝色','Grey Aluminium'],['9010','#FFFFFF','纯白色','Pure White'],
+    ['9011','#1A1A1A','石墨黑','Graphite Black'],['9016','#F6F6F6','交通白','Traffic White'],
+    ['9017','#1E1E1E','交通黑','Traffic Black'],['9018','#D8DDD3','纸莎草白','Papyrus White'],
+    ['9022','#9A9A9A','珍珠浅灰','Pearl Light Grey'],['9023','#797979','珍珠暗灰','Pearl Dark Grey']
+  ]
+  const insertColor = db.prepare(`INSERT OR IGNORE INTO ral_colors (code, hex, name_zh, name_en) VALUES (?,?,?,?)`)
+  const insertAllColors = db.transaction(() => {
+    for (const [code, hex, name_zh, name_en] of ralColors) {
+      insertColor.run(code, hex, name_zh, name_en)
+    }
+  })
+  insertAllColors()
+
   return db
 }
 

@@ -502,6 +502,7 @@
             <option value="news">新闻</option>
             <option value="company">公司信息</option>
             <option value="page_texts">页面文字</option>
+            <option value="ral_colors">🎨 RAL颜色</option>
           </select>
           <input v-model="searchQuery" class="form-control" placeholder="关键词（留空查全部未翻译）" @keyup.enter="doSearch" />
           <button class="btn btn-outline" @click="doSearch" :disabled="searching || !searchLang">
@@ -580,8 +581,8 @@ const saving = ref(false)
 const savedMsg = ref(false)
 
 const selectedLang = ref('')
-const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero', 'ui_texts_static']
-const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字' }
+const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero', 'ui_texts_static', 'ral_colors']
+const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字', ral_colors: '🎨 RAL颜色' }
 const selectedPages = ref([...allPages])
 const concurrency = ref(3)
 const translating = ref(false)

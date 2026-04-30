@@ -192,6 +192,12 @@ export const api = {
   deleteNewsCategory: (id, moveToId) => request(`/news-categories/${id}${moveToId ? `?move_to=${moveToId}` : ''}`, { method: 'DELETE' }),
   moveArticles: (article_ids, category_id) => request('/news-categories/move', { method: 'POST', body: JSON.stringify({ article_ids, category_id }) }),
 
+  // RAL Color Chart
+  getRalColors: () => {
+    const lang = getLangParam() || 'en'
+    return request(`/ral-colors?lang=${lang}`)
+  },
+
   // SEO
   getSeoSettings: () => request('/seo'),
   updateSeoSettings: (data) => request('/seo', { method: 'PUT', body: data }),
