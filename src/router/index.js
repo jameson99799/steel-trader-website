@@ -9,7 +9,8 @@ const publicRoutes = [
   { path: 'news/category/:catSlug', name: 'NewsCategory', component: () => import('../views/News.vue') },
   { path: 'news/:slug', name: 'NewsDetail', component: () => import('../views/NewsDetail.vue') },
   { path: 'about', name: 'About', component: () => import('../views/About.vue') },
-  { path: 'contact', name: 'Contact', component: () => import('../views/Contact.vue') }
+  { path: 'contact', name: 'Contact', component: () => import('../views/Contact.vue') },
+  { path: 'ral-colors', name: 'RalColors', component: () => import('../views/RalColors.vue') }
 ]
 
 const routes = [
@@ -33,6 +34,7 @@ const routes = [
   { path: '/news/:slug?', redirect: to => `/en/news${to.params.slug ? '/' + to.params.slug : ''}` },
   { path: '/about', redirect: '/en/about' },
   { path: '/contact', redirect: '/en/contact' },
+  { path: '/ral-colors', redirect: '/en/ral-colors' },
   {
     path: '/admin/login',
     name: 'AdminLogin',

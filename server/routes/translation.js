@@ -460,7 +460,18 @@ const UI_TEXTS_EN = {
     "articleNotFound": "Article not found",
     "inquiryForProduct": "I would like to inquire about",
     "browseArticlesIn": "Browse articles in:",
-    "latestNews": "Latest News"
+    "latestNews": "Latest News",
+    "ralColorChart": "RAL Color Chart",
+    "ralColorBtn": "RAL Color",
+    "ralSearchPlaceholder": "Search RAL code or color name…",
+    "ralNoResult": "No colors found",
+    "ralColors": "colors",
+    "ralClickToEnlarge": "Click to zoom in",
+    "ralColorCode": "RAL Code",
+    "ralColorName": "Color Name",
+    "ralHexValue": "HEX Value",
+    "ralSubtitle": "Standard RAL color reference for steel coil and prepainted products",
+    "ralAllColors": "All Colors"
 };
 
 function collectUITexts() {

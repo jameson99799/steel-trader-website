@@ -16,16 +16,16 @@
           <p class="page-subtitle">{{ activeCategory ? t('browseArticlesIn') + ' ' + localizedValue(activeCategory, 'name') : t('newsSubtitle') }}</p>
 
           <!-- Category buttons + RAL Color button -->
-          <div class="cat-buttons" v-if="categories.length || true">
+          <div class="cat-buttons">
             <router-link
               v-for="c in categories"
               :key="c.id"
               :to="langPath(`/news/category/${c.slug}`)"
               :class="['cat-btn', activeCatSlug === c.slug ? 'active' : '']"
             >{{ localizedValue(c, 'name') }}</router-link>
-            <button class="cat-btn ral-btn" @click="openRalModal">
-              <span class="ral-icon">🎨</span> RAL Color
-            </button>
+            <router-link :to="langPath('/ral-colors')" class="cat-btn ral-btn">
+              <span class="ral-icon">🎨</span> {{ t('ralColorBtn') }}
+            </router-link>
           </div>
         </div>
       </div>
@@ -67,75 +67,6 @@
         </div>
       </div>
     </div>
-
-    <!-- ── RAL Color Modal ───────────────────────────────────────────────── -->
-    <div v-if="ralModalOpen" class="ral-overlay" @click.self="closeRalModal">
-      <div class="ral-modal">
-        <div class="ral-modal-header">
-          <div class="ral-header-left">
-            <span class="ral-title-icon">🎨</span>
-            <h2 class="ral-title">RAL Color Chart</h2>
-            <span class="ral-count">{{ ralFiltered.length }} colors</span>
-          </div>
-          <button class="ral-close" @click="closeRalModal">✕</button>
-        </div>
-
-        <!-- Search -->
-        <div class="ral-search-wrap">
-          <span class="ral-search-icon">🔍</span>
-          <input
-            v-model="ralSearch"
-            class="ral-search"
-            placeholder="Search RAL code or color name… (e.g. 9002 or white)"
-            @input="filterRal"
-          />
-          <button v-if="ralSearch" class="ral-search-clear" @click="ralSearch=''; filterRal()">✕</button>
-        </div>
-
-        <!-- Color Grid -->
-        <div class="ral-grid-wrap">
-          <div v-if="ralLoading" class="ral-loading">
-            <div class="ral-spinner"></div>
-            <span>Loading colors...</span>
-          </div>
-          <div v-else-if="ralFiltered.length === 0" class="ral-empty">
-            No colors found for "{{ ralSearch }}"
-          </div>
-          <div v-else class="ral-grid">
-            <div
-              v-for="color in ralFiltered"
-              :key="color.code"
-              class="ral-chip"
-              :title="'RAL ' + color.code + ' — ' + color.name"
-              @click="openRalDetail(color)"
-            >
-              <div class="ral-swatch" :style="{ background: color.hex }">
-                <div class="ral-swatch-overlay">
-                  <span class="ral-zoom-icon">🔍</span>
-                </div>
-              </div>
-              <div class="ral-chip-info">
-                <span class="ral-code">RAL {{ color.code }}</span>
-                <span class="ral-name">{{ color.name }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── RAL Color Detail Lightbox ──────────────────────────────────────── -->
-    <div v-if="ralDetail" class="ral-detail-overlay" @click.self="ralDetail=null">
-      <div class="ral-detail-card">
-        <button class="ral-detail-close" @click="ralDetail=null">✕</button>
-        <div class="ral-detail-swatch" :style="{ background: ralDetail.hex }"></div>
-        <div class="ral-detail-info">
-          <p class="ral-detail-code">RAL {{ ralDetail.code }}</p>
-          <p class="ral-detail-name">{{ ralDetail.name }}</p>
-          <p class="ral-detail-hex">{{ ralDetail.hex }}</p>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -161,49 +92,6 @@ const activeCategory = computed(() =>
   activeCatSlug.value ? categories.value.find(c => c.slug === activeCatSlug.value) : null
 )
 
-// ── RAL Color Modal ─────────────────────────────────────────────────────────
-const ralModalOpen = ref(false)
-const ralLoading = ref(false)
-const ralColors = ref([])
-const ralSearch = ref('')
-const ralFiltered = ref([])
-const ralDetail = ref(null)
-
-function filterRal() {
-  const q = ralSearch.value.trim().toLowerCase()
-  if (!q) { ralFiltered.value = ralColors.value; return }
-  ralFiltered.value = ralColors.value.filter(c =>
-    c.code.includes(q) ||
-    c.name.toLowerCase().includes(q) ||
-    c.name_zh.toLowerCase().includes(q) ||
-    c.name_en.toLowerCase().includes(q) ||
-    c.hex.toLowerCase().includes(q)
-  )
-}
-
-async function openRalModal() {
-  ralModalOpen.value = true
-  document.body.style.overflow = 'hidden'
-  if (ralColors.value.length === 0) {
-    ralLoading.value = true
-    try {
-      ralColors.value = await api.getRalColors()
-      filterRal()
-    } catch (e) { console.error(e) }
-    finally { ralLoading.value = false }
-  }
-}
-
-function closeRalModal() {
-  ralModalOpen.value = false
-  document.body.style.overflow = ''
-}
-
-function openRalDetail(color) {
-  ralDetail.value = color
-}
-
-// ── News ─────────────────────────────────────────────────────────────────────
 function formatDate(d) {
   if (!d) return ''
   return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -289,18 +177,19 @@ onMounted(() => { loadCategories(); loadNews() })
 /* RAL button — rainbow gradient border */
 .ral-btn {
   border: 2px solid transparent;
-  background: linear-gradient(var(--white,#fff),var(--white,#fff)) padding-box,
-              linear-gradient(135deg,#e74c3c,#e67e22,#f1c40f,#2ecc71,#3498db,#9b59b6) border-box;
-  color: #555; font-weight: 700;
+  background:
+    linear-gradient(var(--white, #fff), var(--white, #fff)) padding-box,
+    linear-gradient(135deg, #e74c3c, #e67e22, #f1c40f, #2ecc71, #3498db, #9b59b6) border-box;
+  color: #555;
 }
 .ral-btn:hover {
-  background: linear-gradient(135deg,#e74c3c,#e67e22,#f1c40f,#2ecc71,#3498db,#9b59b6) border-box;
-  background: linear-gradient(135deg,#e74c3c10,#3498db10) padding-box,
-              linear-gradient(135deg,#e74c3c,#e67e22,#f1c40f,#2ecc71,#3498db,#9b59b6) border-box;
+  background:
+    linear-gradient(135deg, rgba(231,76,60,.06), rgba(52,152,219,.06)) padding-box,
+    linear-gradient(135deg, #e74c3c, #e67e22, #f1c40f, #2ecc71, #3498db, #9b59b6) border-box;
   color: #333; transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(100,100,200,.25);
+  box-shadow: 0 4px 16px rgba(100,100,200,.2);
 }
-.ral-icon { font-size: 16px; }
+.ral-icon { font-size: 15px; }
 
 /* ── News Grid ── */
 .page-content { padding: var(--spacing-2xl) 0; }
@@ -327,156 +216,10 @@ onMounted(() => { loadCategories(); loadNews() })
 .loading-state, .empty-state { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
 .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
 @keyframes spin { to { transform: rotate(360deg); } }
-
-/* ══════════════════════════════════════════
-   RAL COLOR MODAL
-══════════════════════════════════════════ */
-.ral-overlay {
-  position: fixed; inset: 0; z-index: 9000;
-  background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
-  display: flex; align-items: center; justify-content: center;
-  padding: 20px;
-  animation: fadeIn .18s ease;
-}
-@keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
-
-.ral-modal {
-  background: #fff; border-radius: 16px;
-  width: 100%; max-width: 1100px; height: 88vh;
-  display: flex; flex-direction: column;
-  box-shadow: 0 24px 80px rgba(0,0,0,.35);
-  overflow: hidden;
-  animation: slideUp .2s ease;
-}
-@keyframes slideUp { from { transform: translateY(24px); opacity:0 } to { transform: translateY(0); opacity:1 } }
-
-.ral-modal-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 20px 24px 16px;
-  border-bottom: 1px solid #e5e7eb;
-  background: linear-gradient(135deg, #f8faff 0%, #fff 100%);
-  flex-shrink: 0;
-}
-.ral-header-left { display: flex; align-items: center; gap: 12px; }
-.ral-title-icon { font-size: 28px; }
-.ral-title { font-size: 22px; font-weight: 800; color: #1a1a2e; margin: 0; }
-.ral-count { font-size: 13px; color: #6b7280; background: #f3f4f6; padding: 3px 10px; border-radius: 20px; }
-.ral-close {
-  width: 36px; height: 36px; border-radius: 50%; border: none;
-  background: #f3f4f6; color: #6b7280; font-size: 16px;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: all .18s;
-}
-.ral-close:hover { background: #e5e7eb; color: #374151; }
-
-.ral-search-wrap {
-  position: relative; padding: 14px 24px;
-  border-bottom: 1px solid #f0f0f0; flex-shrink: 0;
-  background: #fafafa;
-}
-.ral-search-icon { position: absolute; left: 38px; top: 50%; transform: translateY(-50%); font-size: 16px; }
-.ral-search {
-  width: 100%; padding: 11px 40px 11px 44px;
-  border: 2px solid #e5e7eb; border-radius: 10px;
-  font-size: 15px; outline: none; background: #fff;
-  transition: border-color .18s;
-}
-.ral-search:focus { border-color: #3b82f6; }
-.ral-search-clear {
-  position: absolute; right: 38px; top: 50%; transform: translateY(-50%);
-  background: none; border: none; color: #9ca3af; font-size: 16px;
-  cursor: pointer; padding: 4px;
-}
-.ral-search-clear:hover { color: #374151; }
-
-.ral-grid-wrap {
-  flex: 1; overflow-y: auto; padding: 20px 24px;
-}
-.ral-loading, .ral-empty {
-  display: flex; align-items: center; justify-content: center;
-  gap: 12px; padding: 60px; color: #6b7280; font-size: 16px;
-}
-.ral-spinner {
-  width: 28px; height: 28px; border: 3px solid #e5e7eb;
-  border-top-color: #3b82f6; border-radius: 50%;
-  animation: spin .7s linear infinite;
-}
-
-.ral-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 14px;
-}
-
-.ral-chip {
-  border-radius: 10px; overflow: hidden;
-  border: 1px solid #e5e7eb; cursor: pointer;
-  transition: transform .18s, box-shadow .18s;
-  background: #fff;
-}
-.ral-chip:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,.14); }
-
-.ral-swatch {
-  height: 90px; position: relative;
-}
-.ral-swatch-overlay {
-  position: absolute; inset: 0; background: rgba(0,0,0,.0);
-  display: flex; align-items: center; justify-content: center;
-  transition: background .18s;
-}
-.ral-chip:hover .ral-swatch-overlay { background: rgba(0,0,0,.18); }
-.ral-zoom-icon { font-size: 20px; opacity: 0; transition: opacity .18s; }
-.ral-chip:hover .ral-zoom-icon { opacity: 1; }
-
-.ral-chip-info {
-  padding: 8px 8px 10px;
-  background: #fff; border-top: 1px solid #f0f0f0;
-}
-.ral-code {
-  display: block; font-size: 12px; font-weight: 700;
-  color: #374151; letter-spacing: .5px;
-}
-.ral-name {
-  display: block; font-size: 11px; color: #6b7280;
-  margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-
-/* ── RAL Detail Lightbox ── */
-.ral-detail-overlay {
-  position: fixed; inset: 0; z-index: 9100;
-  background: rgba(0,0,0,.7); backdrop-filter: blur(6px);
-  display: flex; align-items: center; justify-content: center;
-  animation: fadeIn .15s ease;
-}
-.ral-detail-card {
-  background: #fff; border-radius: 20px;
-  width: 320px; overflow: hidden;
-  box-shadow: 0 32px 80px rgba(0,0,0,.4);
-  position: relative;
-  animation: slideUp .18s ease;
-}
-.ral-detail-close {
-  position: absolute; top: 12px; right: 12px;
-  width: 32px; height: 32px; border-radius: 50%;
-  background: rgba(0,0,0,.3); border: none; color: #fff;
-  font-size: 14px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: background .15s;
-}
-.ral-detail-close:hover { background: rgba(0,0,0,.5); }
-.ral-detail-swatch { height: 220px; }
-.ral-detail-info { padding: 20px 24px 24px; text-align: center; }
-.ral-detail-code { font-size: 20px; font-weight: 800; color: #1a1a2e; margin: 0 0 6px; }
-.ral-detail-name { font-size: 16px; color: #374151; margin: 0 0 8px; }
-.ral-detail-hex { font-size: 13px; color: #9ca3af; font-family: monospace; margin: 0; }
-
-/* Responsive */
 @media (max-width: 1024px) { .news-grid { grid-template-columns: repeat(2,1fr); } }
 @media (max-width: 640px) {
   .news-grid { grid-template-columns: 1fr; }
   .page-title { font-size: var(--text-4xl); }
   .cat-btn { padding: 8px 16px; font-size: 13px; }
-  .ral-grid { grid-template-columns: repeat(auto-fill, minmax(100px,1fr)); gap: 10px; }
-  .ral-modal { height: 95vh; border-radius: 12px; }
 }
 </style>
