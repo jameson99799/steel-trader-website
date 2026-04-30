@@ -1,20 +1,21 @@
 <template>
   <div class="ral-page">
+
     <!-- Page Header -->
     <div class="page-header">
       <div class="container">
         <div class="header-content">
           <nav class="breadcrumb">
             <router-link :to="langPath('/')" class="breadcrumb-link">{{ t('home') }}</router-link>
-            <svg class="breadcrumb-sep" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+            <svg class="breadcrumb-sep" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+            </svg>
             <span class="breadcrumb-current">{{ t('ralColorChart') }}</span>
           </nav>
-          <h1 class="page-title">
-            <span class="palette-icon">🎨</span> {{ t('ralColorChart') }}
-          </h1>
-          <p class="page-subtitle">{{ t('ralSubtitle') }}</p>
 
-          <!-- Search bar -->
+          <h1 class="page-title">🎨 {{ t('ralColorChart') }}</h1>
+
+          <!-- Search -->
           <div class="search-wrap">
             <span class="search-icon">🔍</span>
             <input
@@ -24,10 +25,6 @@
               @input="filterColors"
             />
             <button v-if="searchQuery" class="search-clear" @click="searchQuery=''; filterColors()">✕</button>
-          </div>
-
-          <div class="result-count" v-if="!loading">
-            {{ filtered.length }} {{ t('ralColors') }}
           </div>
         </div>
       </div>
@@ -65,52 +62,35 @@
 
     <!-- Detail Lightbox -->
     <transition name="fade">
-      <div v-if="detail" class="lightbox" @click.self="detail = null">
+      <div v-if="detail" class="lightbox" @click.self="closeDetail">
         <div class="lightbox-card">
-          <button class="lb-close" @click="detail = null">✕</button>
-          <div class="lb-swatch" :style="{ background: detail.hex }">
-            <span class="lb-code-badge">RAL {{ detail.code }}</span>
-          </div>
+          <button class="lb-close" @click="closeDetail">✕</button>
+          <!-- Color swatch: 80% of card height -->
+          <div class="lb-swatch" :style="{ background: detail.hex }"></div>
+          <!-- Info: only RAL code + localized name -->
           <div class="lb-body">
-            <h2 class="lb-name">{{ detail.name }}</h2>
-            <div class="lb-meta">
-              <div class="lb-meta-row">
-                <span class="lb-label">{{ t('ralColorCode') }}</span>
-                <span class="lb-value mono">RAL {{ detail.code }}</span>
-              </div>
-              <div class="lb-meta-row">
-                <span class="lb-label">{{ t('ralColorName') }}</span>
-                <span class="lb-value">{{ detail.name }}</span>
-              </div>
-              <div class="lb-meta-row" v-if="detail.name !== detail.name_en">
-                <span class="lb-label">English</span>
-                <span class="lb-value">{{ detail.name_en }}</span>
-              </div>
-              <div class="lb-meta-row">
-                <span class="lb-label">{{ t('ralHexValue') }}</span>
-                <span class="lb-value mono">{{ detail.hex }}</span>
-              </div>
-            </div>
-            <div class="lb-swatch-mini" :style="{ background: detail.hex }"></div>
+            <p class="lb-code">RAL {{ detail.code }}</p>
+            <p class="lb-name">{{ detail.name }}</p>
           </div>
         </div>
       </div>
     </transition>
+
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const { t, langPath } = useLang()
 
-const colors = ref([])
+const colors   = ref([])
 const filtered = ref([])
-const loading = ref(true)
+const loading  = ref(true)
 const searchQuery = ref('')
-const detail = ref(null)
+const detail   = ref(null)
 
 function filterColors() {
   const q = searchQuery.value.trim().toLowerCase()
@@ -134,16 +114,26 @@ function closeDetail() {
   document.body.style.overflow = ''
 }
 
-// Close on ESC
-function onKey(e) { if (e.key === 'Escape') closeDetail() }
+function onKey(e) {
+  if (e.key === 'Escape') closeDetail()
+}
 
 onMounted(async () => {
   window.addEventListener('keydown', onKey)
   try {
     colors.value = await api.getRalColors()
     filtered.value = colors.value
-  } catch (e) { console.error(e) }
-  finally { loading.value = false }
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loading.value = false
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKey)
+  // Always restore scroll when leaving page
+  document.body.style.overflow = ''
 })
 </script>
 
@@ -154,9 +144,10 @@ onMounted(async () => {
 .page-header {
   background: #fff;
   border-bottom: 1px solid #e5e7eb;
-  padding: 40px 0 32px;
+  padding: 36px 0 28px;
 }
 .header-content { text-align: center; }
+
 .breadcrumb {
   display: flex; align-items: center; justify-content: center;
   gap: 8px; margin-bottom: 16px; font-size: 14px;
@@ -167,18 +158,15 @@ onMounted(async () => {
 .breadcrumb-current { color: #111827; font-weight: 600; }
 
 .page-title {
-  font-size: clamp(28px, 5vw, 42px);
+  font-size: clamp(26px, 4vw, 38px);
   font-weight: 800; color: #111827;
-  margin: 0 0 10px; display: flex; align-items: center;
-  justify-content: center; gap: 12px;
+  margin: 0 0 24px;
 }
-.palette-icon { font-size: 36px; }
-.page-subtitle { color: #6b7280; font-size: 16px; margin: 0 0 28px; }
 
 /* ── Search ── */
 .search-wrap {
   position: relative;
-  max-width: 560px; margin: 0 auto 12px;
+  max-width: 520px; margin: 0 auto;
 }
 .search-icon {
   position: absolute; left: 16px; top: 50%;
@@ -201,16 +189,10 @@ onMounted(async () => {
   color: #9ca3af; font-size: 16px; cursor: pointer; padding: 4px;
 }
 .search-clear:hover { color: #374151; }
-.result-count {
-  font-size: 13px; color: #9ca3af;
-  margin-top: 4px;
-}
 
 /* ── Grid ── */
-.page-content { padding: 40px 0 60px; }
-.loading-wrap {
-  display: flex; justify-content: center; padding: 80px;
-}
+.page-content { padding: 36px 0 60px; }
+.loading-wrap { display: flex; justify-content: center; padding: 80px; }
 .spinner {
   width: 40px; height: 40px;
   border: 3px solid #e5e7eb;
@@ -219,6 +201,7 @@ onMounted(async () => {
   animation: spin .8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
 .empty-wrap {
   text-align: center; padding: 80px;
   color: #6b7280; font-size: 16px;
@@ -270,21 +253,24 @@ onMounted(async () => {
 }
 
 /* ── Lightbox ── */
+.fade-enter-active, .fade-leave-active { transition: opacity .2s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
 .lightbox {
   position: fixed; inset: 0; z-index: 9000;
   background: rgba(0,0,0,.65); backdrop-filter: blur(6px);
   display: flex; align-items: center; justify-content: center;
-  padding: 20px;
+  padding: 24px;
 }
-.fade-enter-active, .fade-leave-active { transition: opacity .2s; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
 
 .lightbox-card {
   background: #fff; border-radius: 20px;
-  width: 100%; max-width: 680px;       /* 2× original 320px */
+  width: 100%; max-width: 640px;
   overflow: hidden; position: relative;
   box-shadow: 0 40px 100px rgba(0,0,0,.45);
   animation: slideUp .2s ease;
+  /* Total height: swatch 80% + info 20% */
+  display: flex; flex-direction: column;
 }
 @keyframes slideUp {
   from { transform: translateY(20px); opacity: 0; }
@@ -293,52 +279,39 @@ onMounted(async () => {
 
 .lb-close {
   position: absolute; top: 14px; right: 14px; z-index: 10;
-  width: 34px; height: 34px; border-radius: 50%;
+  width: 36px; height: 36px; border-radius: 50%;
   border: none; background: rgba(0,0,0,.35);
-  color: #fff; font-size: 15px; cursor: pointer;
+  color: #fff; font-size: 16px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: background .15s;
 }
 .lb-close:hover { background: rgba(0,0,0,.55); }
 
-/* Swatch: full width, aspect 16/9 with height ~1× original */
+/* Swatch: 80% of the card */
 .lb-swatch {
-  width: 100%; height: 300px;     /* 1× increase from original 220px */
-  position: relative;
-  display: flex; align-items: flex-end;
-}
-.lb-code-badge {
-  margin: 0 0 16px 20px;
-  background: rgba(0,0,0,.45);
-  color: #fff; font-size: 15px; font-weight: 700;
-  padding: 6px 14px; border-radius: 20px;
-  backdrop-filter: blur(4px);
+  flex: 4;          /* ratio 4:1 with lb-body */
+  min-height: 320px;
 }
 
+/* Info: 20% of the card — only code + name */
 .lb-body {
-  padding: 24px 28px 28px;
+  flex: 1;
+  min-height: 80px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 14px 24px;
+  background: #fff;
+  border-top: 1px solid #f0f0f0;
+  gap: 4px;
+}
+.lb-code {
+  font-size: 15px; font-weight: 700;
+  color: #374151; margin: 0;
+  letter-spacing: .5px;
 }
 .lb-name {
-  font-size: 22px; font-weight: 800;
-  color: #111827; margin: 0 0 18px;
-}
-.lb-meta { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
-.lb-meta-row {
-  display: flex; align-items: center;
-  padding: 10px 14px;
-  background: #f8faff; border-radius: 8px;
-  gap: 12px;
-}
-.lb-label {
-  font-size: 12px; font-weight: 600; text-transform: uppercase;
-  color: #9ca3af; letter-spacing: .5px; min-width: 90px;
-}
-.lb-value { font-size: 15px; color: #374151; font-weight: 500; }
-.lb-value.mono { font-family: 'Courier New', monospace; color: #1a56db; }
-
-.lb-swatch-mini {
-  width: 100%; height: 10px; border-radius: 6px;
-  margin-top: 4px;
+  font-size: 18px; font-weight: 700;
+  color: #111827; margin: 0;
 }
 
 /* Responsive */
@@ -346,6 +319,6 @@ onMounted(async () => {
   .color-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
   .chip-swatch { height: 80px; }
   .lightbox-card { max-width: 100%; border-radius: 14px; }
-  .lb-swatch { height: 200px; }
+  .lb-swatch { min-height: 220px; }
 }
 </style>
