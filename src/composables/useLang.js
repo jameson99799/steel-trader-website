@@ -55,7 +55,11 @@ const builtInTranslations = {
     articleNotFound: '文章未找到',
     inquiryForProduct: '我想咨询以下产品',
     browseArticlesIn: '浏览分类：',
-    latestNews: '最新文章'
+    latestNews: '最新文章',
+    ralColorChart: 'RAL 色卡',
+    ralColorBtn: 'RAL 色卡',
+    ralSearchPlaceholder: '搜索您想要的颜色',
+    ralNoResult: '未找到颜色'
   },
   en: {
     home: 'Home', products: 'Products', about: 'About Us', contact: 'Contact',
@@ -111,7 +115,11 @@ const builtInTranslations = {
     articleNotFound: 'Article not found',
     inquiryForProduct: 'I would like to inquire about',
     browseArticlesIn: 'Browse articles in:',
-    latestNews: 'Latest News'
+    latestNews: 'Latest News',
+    ralColorChart: 'RAL Color',
+    ralColorBtn: 'RAL Color',
+    ralSearchPlaceholder: 'Search for your desired color.',
+    ralNoResult: 'No colors found'
   }
 }
 
