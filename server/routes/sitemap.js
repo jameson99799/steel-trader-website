@@ -142,10 +142,20 @@ router.get('/products', (req, res) => {
     try {
         const now = new Date().toISOString().split('T')[0]
         const activeLangs = getActiveLangs()
-        const products = getAll(`SELECT id, slug, name_en, updated_at, created_at FROM products WHERE status = 1 ORDER BY id DESC`)
+
+        // Primary: status=1 (active). Fallback: all products (handles non-standard status values)
+        let products = getAll(`SELECT id, slug, name_en, updated_at, created_at FROM products WHERE status = 1 ORDER BY id DESC`)
+        if (!products || products.length === 0) {
+            products = getAll(`SELECT id, slug, name_en, updated_at, created_at FROM products ORDER BY id DESC`)
+            if (products && products.length > 0) {
+                console.log(`[sitemap] WARN: No products with status=1 found; using all ${products.length} products as fallback`)
+            }
+        } else {
+            console.log(`[sitemap] Products sitemap: ${products.length} products found`)
+        }
 
         const urls = []
-        for (const p of products) {
+        for (const p of products || []) {
             const prodSlug = p.slug || p.id
             const prodPath = `/products/${prodSlug}`
             const lastmod = toDateStr(p.updated_at || p.created_at, now)
@@ -162,7 +172,7 @@ router.get('/products', (req, res) => {
 
         res.send(buildUrlset(urls))
     } catch (e) {
-        console.error('Products sitemap error:', e)
+        console.error('Products sitemap error:', e.message, e.stack)
         res.send(emptyUrlset())
     }
 })
