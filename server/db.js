@@ -1058,6 +1058,39 @@ async function initDb() {
   })
   insertAllColors()
 
+  // ── One-time migration: strip trailing -id from product and news slugs ──────
+  // Runs safely every startup (idempotent: only changes slugs that still end with -id)
+  try {
+    // Products: slug like 'galvanized-steel-coil-223' → 'galvanized-steel-coil'
+    const products = db.prepare("SELECT id, slug FROM products WHERE slug IS NOT NULL").all()
+    for (const p of products) {
+      const suffix = `-${p.id}`
+      if (p.slug.endsWith(suffix)) {
+        const newSlug = p.slug.slice(0, -suffix.length)
+        if (newSlug.length > 0) {
+          // Check uniqueness — if clash, keep the original slug
+          const clash = db.prepare("SELECT id FROM products WHERE slug = ? AND id != ?").get(newSlug, p.id)
+          if (!clash) db.prepare("UPDATE products SET slug = ? WHERE id = ?").run(newSlug, p.id)
+        }
+      }
+    }
+    // News: slug like 'gi-coil-introduction-45' → 'gi-coil-introduction'
+    const articles = db.prepare("SELECT id, slug FROM news WHERE slug IS NOT NULL").all()
+    for (const a of articles) {
+      const suffix = `-${a.id}`
+      if (a.slug.endsWith(suffix)) {
+        const newSlug = a.slug.slice(0, -suffix.length)
+        if (newSlug.length > 0) {
+          const clash = db.prepare("SELECT id FROM news WHERE slug = ? AND id != ?").get(newSlug, a.id)
+          if (!clash) db.prepare("UPDATE news SET slug = ? WHERE id = ?").run(newSlug, a.id)
+        }
+      }
+    }
+    console.log('[db] Slug migration complete (ID suffixes stripped from product/news slugs)')
+  } catch (e) {
+    console.warn('[db] Slug migration skipped:', e.message)
+  }
+
   return db
 }
 

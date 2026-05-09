@@ -6,15 +6,27 @@ import { loadTranslationsForLang, translateNews } from '../helpers/translate.js'
 
 const router = Router()
 
-// Generate SEO-friendly slug: title words + article ID (no timestamps)
-function slugify(text, id) {
-    const base = text
+// Generate SEO-friendly slug from title (no ID suffix)
+function slugify(text) {
+    return text
         .toLowerCase()
         .replace(/[^\w\s-]/g, '')
         .replace(/[\s_-]+/g, '-')
         .replace(/^-+|-+$/g, '')
-        .substring(0, 80) // max 80 chars for readability
-    return id ? `${base}-${id}` : base
+        .substring(0, 80)
+}
+
+// Generate unique slug for news (appends -2, -3 ... if slug already exists)
+function uniqueSlug(base, excludeId = null) {
+    let slug = base
+    let counter = 2
+    while (true) {
+        const exists = excludeId
+            ? getOne('SELECT id FROM news WHERE slug = ? AND id != ?', [slug, excludeId])
+            : getOne('SELECT id FROM news WHERE slug = ?', [slug])
+        if (!exists) return slug
+        slug = `${base}-${counter++}`
+    }
 }
 
 // Resolve category: accepts category_id (number) or category_name (string)
@@ -105,9 +117,9 @@ router.post('/', authMiddleware, upload.single('cover_image'), (req, res) => {
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [title, title_en || null, 'temp', summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status), parseInt(sort_order), render_mode, resolvedCatId]
     )
-    // Generate clean SEO slug: title_en (preferred) or title + article ID
+    // Generate clean SEO slug without ID
     const newId = result.lastInsertRowid
-    const cleanSlug = slugify(title_en || title, newId)
+    const cleanSlug = uniqueSlug(slugify(title_en || title), newId)
     run('UPDATE news SET slug = ? WHERE id = ?', [cleanSlug, newId])
     res.json({ id: newId, slug: cleanSlug, category_id: resolvedCatId, message: '创建成功' })
 })
@@ -121,8 +133,8 @@ router.put('/:id', authMiddleware, upload.single('cover_image'), (req, res) => {
     const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, category_id, category_name } = req.body
     const resolvedCatId = resolveCategoryId(category_id, category_name) ?? existing.category_id
     const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || existing.cover_image)
-    // Regenerate clean SEO slug on update
-    const updatedSlug = slugify(title_en || title, id)
+    // Regenerate clean SEO slug without ID
+    const updatedSlug = uniqueSlug(slugify(title_en || title), id)
 
     run(
         `UPDATE news SET title=?, title_en=?, slug=?, summary=?, summary_en=?, content=?, cover_image=?, seo_title=?, seo_description=?, seo_keywords=?, status=?, sort_order=?, render_mode=?, category_id=?, updated_at=CURRENT_TIMESTAMP

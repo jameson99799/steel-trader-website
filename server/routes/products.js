@@ -12,6 +12,20 @@ function slugify(text) {
     .replace(/[^\w\s-]/g, '')
     .replace(/[\s_-]+/g, '-')
     .replace(/^-+|-+$/g, '')
+    .substring(0, 80)
+}
+
+// Generate unique slug (appends -2, -3 ... if slug already exists)
+function uniqueSlug(base, excludeId = null) {
+  let slug = base
+  let counter = 2
+  while (true) {
+    const exists = excludeId
+      ? getOne('SELECT id FROM products WHERE slug = ? AND id != ?', [slug, excludeId])
+      : getOne('SELECT id FROM products WHERE slug = ?', [slug])
+    if (!exists) return slug
+    slug = `${base}-${counter++}`
+  }
 }
 
 router.get('/', (req, res) => {
@@ -122,9 +136,10 @@ router.post('/', authMiddleware, upload.array('images', 10), async (req, res) =>
   // Auto-generate slug from name_en or name + id
   const newId = result.lastInsertRowid
   const base = slugify(name_en || name)
-  run('UPDATE products SET slug = ? WHERE id = ?', [`${base}-${newId}`, newId])
+  const slug = uniqueSlug(base, newId)
+  run('UPDATE products SET slug = ? WHERE id = ?', [slug, newId])
 
-  res.json({ id: newId, slug: `${base}-${newId}`, message: '创建成功' })
+  res.json({ id: newId, slug, message: '创建成功' })
 })
 
 router.put('/:id', authMiddleware, upload.array('images', 10), async (req, res) => {
@@ -152,9 +167,8 @@ router.put('/:id', authMiddleware, upload.array('images', 10), async (req, res) 
     images = images ? `${images},${imageUrls.join(',')}` : imageUrls.join(',')
   }
 
-  // Regenerate slug if name changed (keeps ID suffix for uniqueness)
   const newBase = slugify(name_en || name)
-  const newSlug = `${newBase}-${id}`
+  const newSlug = uniqueSlug(newBase, id)
 
   run(`
     UPDATE products SET name=?, name_en=?, category_id=?, description=?, description_en=?, specs=?, images=?, detail_content=?,
