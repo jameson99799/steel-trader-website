@@ -291,7 +291,7 @@ async function save() {
   saving.value = true
   try {
     const fd = new FormData()
-    Object.entries(form.value).forEach(([k,v]) => fd.append(k, v || ''))
+    Object.entries(form.value).forEach(([k,v]) => fd.append(k, v !== null && v !== undefined ? v : ''))
     if (ogFile.value) fd.append('og_image', ogFile.value)
     await api.updateSeoSettings(fd)
     alert('SEO设置保存成功！')
@@ -308,6 +308,7 @@ async function runAudit() {
 }
 
 async function triggerRefresh() {
+  await save() // Auto save the values first
   refreshing.value = true
   refreshResult.value = null
   try {

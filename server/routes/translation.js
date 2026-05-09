@@ -1223,7 +1223,7 @@ router.get('/status/:type/:id', authMiddleware, (req, res) => {
     }
 
     // Get translations count per language for this item
-    const rows = getAll('SELECT language_code, COUNT(*) as c FROM translations WHERE item_type=? AND item_id=? GROUP BY language_code', [type, id])
+    const rows = getAll('SELECT language_code, COUNT(*) as c FROM translations WHERE content_type=? AND content_id=? GROUP BY language_code', [type, id])
     const countMap = {}
     rows.forEach(r => countMap[r.language_code] = r.c)
 
