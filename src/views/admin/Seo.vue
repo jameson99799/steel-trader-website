@@ -172,6 +172,36 @@
         </div>
       </div>
     </div>
+
+    <!-- Auto Freshness Refresh Card -->
+    <div class="seo-card refresh-card" style="grid-column: 1 / -1;">
+      <h3>⏰ 内容自动刷新日期（SEO 鲜度信号）</h3>
+      <p class="refresh-desc">
+        <strong>什么是内容鲜度？</strong> Google 会根据内容的更新时间判断“新鲜度”（Freshness），更新时间越近的页面越容易被优先抚取和排名。
+        设置后，系统每 6 小时自动将超过指定天数的产品 / 文章的 <code>updated_at</code> 刷新为当前时间，同时更新 Sitemap 中的 <code>lastmod</code>，让 Google 更频繁地重新抚取。
+        <br/><strong style="color:#dc2626;">注意：</strong> 此功能适用于内容本身定期有效但不常编辑的页面（如产品规格页）。设为 0 表示不启用。
+      </p>
+      <div class="grid grid-2">
+        <div class="form-group">
+          <label>📰 文章自动刷新间隔（天）</label>
+          <input type="number" v-model.number="form.article_refresh_days" class="form-control" min="0" max="365" placeholder="0" />
+          <small>超过此天数的文章将自动刷新更新时间。0 = 不启用。建议值：30-90 天</small>
+        </div>
+        <div class="form-group">
+          <label>📦 产品自动刷新间隔（天）</label>
+          <input type="number" v-model.number="form.product_refresh_days" class="form-control" min="0" max="365" placeholder="0" />
+          <small>超过此天数的产品页将自动刷新更新时间。0 = 不启用。建议值：60-90 天</small>
+        </div>
+      </div>
+      <div class="refresh-actions">
+        <button class="btn btn-refresh" @click="triggerRefresh" :disabled="refreshing">
+          {{ refreshing ? '刷新中...' : '⚡ 立即应用并刷新超期内容' }}
+        </button>
+        <span v-if="refreshResult" class="refresh-result">
+          ✅ 已刷新 {{ refreshResult.articlesUpdated }} 篇文章、{{ refreshResult.productsUpdated }} 个产品
+        </span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -181,6 +211,8 @@ import api from '../../api'
 
 const saving = ref(false)
 const auditing = ref(false)
+const refreshing = ref(false)
+const refreshResult = ref(null)
 const ogFile = ref(null)
 const ogPreview = ref(null)
 const auditResult = ref(null)
@@ -192,7 +224,6 @@ const form = ref({
   google_analytics: '',
   google_search_console: '',
   robots_txt: 'User-agent: *\nAllow: /\n',
-  // GEO SEO fields
   geo_region: '',
   geo_placename: '',
   geo_lat: '',
@@ -200,7 +231,9 @@ const form = ref({
   hreflang_en: 'en',
   hreflang_zh: 'zh-CN',
   local_business_type: 'Manufacturer',
-  local_business_address: ''
+  local_business_address: '',
+  article_refresh_days: 0,
+  product_refresh_days: 0
 })
 
 const scoreClass = computed(() => {
@@ -238,7 +271,6 @@ async function load() {
         google_analytics: data.google_analytics || '',
         google_search_console: data.google_search_console || '',
         robots_txt: data.robots_txt || 'User-agent: *\nAllow: /\n',
-        // GEO fields
         geo_region: data.geo_region || '',
         geo_placename: data.geo_placename || '',
         geo_lat: data.geo_lat || '',
@@ -246,7 +278,9 @@ async function load() {
         hreflang_en: data.hreflang_en || 'en',
         hreflang_zh: data.hreflang_zh || 'zh-CN',
         local_business_type: data.local_business_type || 'Manufacturer',
-        local_business_address: data.local_business_address || ''
+        local_business_address: data.local_business_address || '',
+        article_refresh_days: data.article_refresh_days || 0,
+        product_refresh_days: data.product_refresh_days || 0
       }
       if (data.og_image) ogPreview.value = data.og_image
     }
@@ -271,6 +305,24 @@ async function runAudit() {
     auditResult.value = await api.seoAudit()
   } catch(e) { alert('检测失败: ' + e.message) }
   auditing.value = false
+}
+
+async function triggerRefresh() {
+  refreshing.value = true
+  refreshResult.value = null
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    const res = await fetch('/api/seo/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        article_refresh_days: form.value.article_refresh_days,
+        product_refresh_days: form.value.product_refresh_days
+      })
+    })
+    refreshResult.value = await res.json()
+  } catch(e) { alert('刷新失败: ' + e.message) }
+  refreshing.value = false
 }
 
 onMounted(load)
@@ -389,4 +441,24 @@ onMounted(load)
   .audit-categories { grid-template-columns: 1fr; }
   .audit-score-card { flex-direction: column; text-align: center; }
 }
+
+/* ── Grid utilities ─────────────────────────────── */
+.grid { display: grid; gap: 16px; }
+.grid-2 { grid-template-columns: 1fr 1fr; }
+.grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+@media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+/* ── Refresh Card ──────────────────────────────── */
+.refresh-card { border-top: 3px solid #f59e0b; }
+.refresh-desc {
+  font-size: 13px; color: var(--text-secondary);
+  background: #fffbeb; border: 1px solid #fde68a;
+  border-radius: 8px; padding: 12px 16px; margin-bottom: 18px; line-height: 1.7;
+}
+.refresh-desc code { background: #fef3c7; padding: 1px 4px; border-radius: 3px; font-size: 12px; color: #92400e; }
+.refresh-actions { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
+.btn-refresh { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
+.btn-refresh:hover { opacity: 0.9; }
+.btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+.refresh-result { font-size: 14px; color: #16a34a; font-weight: 600; }
 </style>

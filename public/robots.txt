@@ -5,7 +5,6 @@ Allow: /
 Disallow: /admin/
 Disallow: /crm/
 Disallow: /uploads/temp/
-Disallow: /api/
 
 # Crawl rate limit
 Crawl-delay: 1

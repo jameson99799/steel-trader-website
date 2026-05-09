@@ -144,9 +144,9 @@ router.get('/products', (req, res) => {
         const activeLangs = getActiveLangs()
 
         // Primary: status=1 (active). Fallback: all products (handles non-standard status values)
-        let products = getAll(`SELECT id, slug, name_en, created_at FROM products WHERE status = 1 ORDER BY id DESC`)
+        let products = getAll(`SELECT id, slug, name_en, COALESCE(updated_at, created_at) as lastmod_date FROM products WHERE status = 1 ORDER BY id DESC`)
         if (!products || products.length === 0) {
-            products = getAll(`SELECT id, slug, name_en, created_at FROM products ORDER BY id DESC`)
+            products = getAll(`SELECT id, slug, name_en, COALESCE(updated_at, created_at) as lastmod_date FROM products ORDER BY id DESC`)
             if (products && products.length > 0) {
                 console.log(`[sitemap] WARN: No products with status=1 found; using all ${products.length} products as fallback`)
             }
@@ -158,7 +158,7 @@ router.get('/products', (req, res) => {
         for (const p of products || []) {
             const prodSlug = p.slug || p.id
             const prodPath = `/products/${prodSlug}`
-            const lastmod = toDateStr(p.created_at, now)
+            const lastmod = toDateStr(p.lastmod_date, now)
             for (const l of activeLangs) {
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + prodPath,

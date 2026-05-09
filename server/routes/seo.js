@@ -20,7 +20,8 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
     const {
         site_title, site_description, site_keywords, google_analytics, google_search_console, robots_txt,
         geo_region, geo_placename, geo_lat, geo_lng, hreflang_en, hreflang_zh,
-        local_business_type, local_business_address
+        local_business_type, local_business_address,
+        article_refresh_days, product_refresh_days
     } = req.body
     const og_image = req.file ? `/uploads/${req.file.filename}` : existing?.og_image
 
@@ -30,22 +31,26 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
             google_analytics=?, google_search_console=?, robots_txt=?,
             geo_region=?, geo_placename=?, geo_lat=?, geo_lng=?,
             hreflang_en=?, hreflang_zh=?, local_business_type=?, local_business_address=?,
+            article_refresh_days=?, product_refresh_days=?,
             updated_at=CURRENT_TIMESTAMP WHERE id=1`,
             [site_title, site_description, site_keywords, og_image,
                 google_analytics, google_search_console, robots_txt,
                 geo_region, geo_placename, geo_lat, geo_lng,
-                hreflang_en, hreflang_zh, local_business_type, local_business_address]
+                hreflang_en, hreflang_zh, local_business_type, local_business_address,
+                parseInt(article_refresh_days) || 0, parseInt(product_refresh_days) || 0]
         )
     } else {
         run(
             `INSERT INTO seo_settings
             (id, site_title, site_description, site_keywords, og_image, google_analytics, google_search_console, robots_txt,
-             geo_region, geo_placename, geo_lat, geo_lng, hreflang_en, hreflang_zh, local_business_type, local_business_address)
-            VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+             geo_region, geo_placename, geo_lat, geo_lng, hreflang_en, hreflang_zh, local_business_type, local_business_address,
+             article_refresh_days, product_refresh_days)
+            VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [site_title, site_description, site_keywords, og_image,
                 google_analytics, google_search_console, robots_txt,
                 geo_region, geo_placename, geo_lat, geo_lng,
-                hreflang_en, hreflang_zh, local_business_type, local_business_address]
+                hreflang_en, hreflang_zh, local_business_type, local_business_address,
+                parseInt(article_refresh_days) || 0, parseInt(product_refresh_days) || 0]
         )
     }
     // Sync robots.txt to static file so it takes effect immediately
@@ -59,6 +64,37 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
     }
     res.json({ message: '保存成功' })
 })
+
+// ── Immediate content-freshness refresh ─────────────────────
+router.post('/refresh', authMiddleware, (req, res) => {
+    const settings = getOne('SELECT * FROM seo_settings WHERE id = 1') || {}
+    const articleDays = parseInt(req.body.article_refresh_days ?? settings.article_refresh_days) || 0
+    const productDays = parseInt(req.body.product_refresh_days ?? settings.product_refresh_days) || 0
+    let articlesUpdated = 0
+    let productsUpdated = 0
+    try {
+        if (articleDays > 0) {
+            const info = run(
+                `UPDATE news SET updated_at = CURRENT_TIMESTAMP WHERE status = 1
+                 AND (julianday('now') - julianday(COALESCE(updated_at, created_at))) >= ?`,
+                [articleDays]
+            )
+            articlesUpdated = info.changes || 0
+        }
+        if (productDays > 0) {
+            const info = run(
+                `UPDATE products SET updated_at = CURRENT_TIMESTAMP WHERE status = 1
+                 AND (julianday('now') - julianday(COALESCE(updated_at, created_at))) >= ?`,
+                [productDays]
+            )
+            productsUpdated = info.changes || 0
+        }
+        res.json({ message: '刷新完成', articlesUpdated, productsUpdated })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
 
 // ── SEO Audit Endpoint ───────────────────────────────────────
 router.get('/audit', authMiddleware, (req, res) => {

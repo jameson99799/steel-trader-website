@@ -71,6 +71,33 @@ async function startServer() {
     setTimeout(autoSeaPoolCheck, 3000)
     setInterval(autoSeaPoolCheck, 6 * 60 * 60 * 1000)
 
+    // ── Auto content-freshness scheduler (SEO date refresh) ────────────
+    function autoFreshnessRefresh() {
+      try {
+        const settings = getOne('SELECT article_refresh_days, product_refresh_days FROM seo_settings WHERE id = 1')
+        const articleDays = parseInt(settings?.article_refresh_days) || 0
+        const productDays = parseInt(settings?.product_refresh_days) || 0
+        if (articleDays > 0) {
+          const r = run(
+            `UPDATE news SET updated_at = CURRENT_TIMESTAMP WHERE status = 1
+             AND (julianday('now') - julianday(COALESCE(updated_at, created_at))) >= ?`,
+            [articleDays]
+          )
+          if ((r.changes || 0) > 0) console.log(`✓ Freshness refresh: updated ${r.changes} articles (>${articleDays}d old)`)
+        }
+        if (productDays > 0) {
+          const r = run(
+            `UPDATE products SET updated_at = CURRENT_TIMESTAMP WHERE status = 1
+             AND (julianday('now') - julianday(COALESCE(updated_at, created_at))) >= ?`,
+            [productDays]
+          )
+          if ((r.changes || 0) > 0) console.log(`✓ Freshness refresh: updated ${r.changes} products (>${productDays}d old)`)
+        }
+      } catch (e) { console.warn('Freshness refresh error:', e.message) }
+    }
+    setTimeout(autoFreshnessRefresh, 10000) // Run 10s after startup
+    setInterval(autoFreshnessRefresh, 6 * 60 * 60 * 1000) // Then every 6 hours
+
     // CORS 配置
     const corsOptions = {
       origin: NODE_ENV === 'production'
