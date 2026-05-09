@@ -132,7 +132,7 @@ router.get('/static', (req, res) => {
         res.send(buildUrlset(urls))
     } catch (e) {
         console.error('Static sitemap error:', e)
-        res.send(emptyUrlset())
+        res.status(500).send('Internal Server Error')
     }
 })
 
@@ -173,7 +173,7 @@ router.get('/products', (req, res) => {
         res.send(buildUrlset(urls))
     } catch (e) {
         console.error('Products sitemap error:', e.message, e.stack)
-        res.send(emptyUrlset())
+        res.status(500).send('Internal Server Error')
     }
 })
 
@@ -204,7 +204,7 @@ router.get('/news', (req, res) => {
         res.send(buildUrlset(urls))
     } catch (e) {
         console.error('News sitemap error:', e)
-        res.send(emptyUrlset())
+        res.status(500).send('Internal Server Error')
     }
 })
 
