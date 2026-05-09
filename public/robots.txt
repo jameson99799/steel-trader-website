@@ -1,12 +1,14 @@
 User-agent: *
 Allow: /
 
-# Block admin panel only
+# Block admin panel and sensitive paths
 Disallow: /admin/
+Disallow: /crm/
 Disallow: /uploads/temp/
+Disallow: /api/
 
-# Allow API access (required for SPA rendering by search engines)
-Allow: /api/
+# Crawl rate limit
+Crawl-delay: 1
 
 # Sitemap
 Sitemap: https://www.sunseasteel.com/sitemap.xml

@@ -423,6 +423,39 @@ async function startServer() {
             }
           }
 
+          // ── Products category page (e.g. /products/category/galvanized-steel-coil) ──
+          const prodCatMatch = subPath.match(/^\/products\/category\/([^/]+)$/)
+          if (prodCatMatch) {
+            const catSlug = prodCatMatch[1]
+            const cat = getOne('SELECT * FROM categories WHERE slug = ?', [catSlug]) ||
+                         getOne('SELECT * FROM categories WHERE lower(name_en) = ?', [catSlug.replace(/-/g, ' ')])
+            if (cat) {
+              const catName = cat.name_en || cat.name
+              pageTitle = `${catName} Steel Coil Products - Manufacturer & Exporter | ${companyName}`
+              pageDesc = `Browse all ${catName} products from ${companyName}. Factory-direct steel coil manufacturer in Shandong, China. ASTM / JIS / EN certified. Competitive FOB pricing and fast global shipping.`
+              extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+                { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
+                { '@type': 'ListItem', position: 2, name: 'Products', item: `${siteUrl}/${lang}/products` },
+                { '@type': 'ListItem', position: 3, name: catName, item: pageCanonical }
+              ] })
+              const catProducts = getAll('SELECT id, slug, name_en, name, description_en, description FROM products WHERE category_id = ? AND status = 1 ORDER BY sort_order DESC, id DESC LIMIT 30', [cat.id])
+              if (catProducts.length) {
+                const catProdItems = catProducts.map(p =>
+                  `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a><p>${esc((p.description_en || p.description || '').substring(0, 150))}</p></li>`
+                ).join('')
+                ssrContent = `<section id="ssr-cat-products"><h1>${esc(catName)}</h1><ul>${catProdItems}</ul></section>`
+                extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'ItemList',
+                  name: catName,
+                  itemListElement: catProducts.map((p, i) => ({
+                    '@type': 'ListItem', position: i + 1,
+                    name: p.name_en || p.name,
+                    url: `${siteUrl}/${lang}/products/${p.slug || p.id}`
+                  }))
+                })
+              }
+            }
+          }
+
           // ── Static pages with SSR content injection ──
           if (subPath === '/products' || subPath === '/products/') {
             pageTitle = `Steel Products - GI, GL, PPGI, PPGL, CRC Coils & Sheets | ${companyName}`
@@ -493,6 +526,15 @@ async function startServer() {
 
           // ── Homepage BreadcrumbList + WebSite schema + SSR content ──
           if (!subPath || subPath === '/') {
+            // Keyword-rich homepage title (overrides bare company name from seoSettings)
+            const baseTitle = seoSettings.site_title || companyName
+            pageTitle = baseTitle.toLowerCase().includes('gi') || baseTitle.toLowerCase().includes('steel coil')
+              ? baseTitle
+              : `${companyName} | GI GL PPGI PPGL CRC Steel Coil Manufacturer & Exporter`
+            // Keyword-rich homepage description
+            if (!pageDesc) {
+              pageDesc = `Shandong Sunsea Steel Co., Ltd — Professional manufacturer and exporter of Galvanized (GI), Galvalume (GL), Prepainted (PPGI/PPGL) and Cold Rolled (CRC) steel coils. ASTM A653 / JIS G3302 / EN 10346 certified. Factory direct pricing, global shipping from Shandong, China.`
+            }
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` }
             ] })
@@ -546,6 +588,9 @@ async function startServer() {
         // Use company logo as default og:image when no page-specific image is available
         const ogImage = pageImage || `${siteUrl}/uploads/logo.png`
         const safeDesc = (pageDesc || '').substring(0, 160)
+        const robotsMeta = isNotFound
+          ? `<meta name="robots" content="noindex, follow" />`
+          : `<meta name="robots" content="index, follow" />`
         const extraMeta = `
   <meta property="og:type" content="${esc(ogType)}" />
   <meta property="og:title" content="${esc(pageTitle)}" />
@@ -566,10 +611,12 @@ async function startServer() {
         html = html.replace(/<title>[^<]*<\/title>/, `<title>${esc(pageTitle)}</title>`)
         html = html.replace(/<meta\s+name="description"\s+content="[^"]*"/, `<meta name="description" content="${esc(pageDesc)}"`)
         html = html.replace(/<meta\s+name="keywords"\s+content="[^"]*"/, `<meta name="keywords" content="${esc(pageKeywords)}"`)
+        html = html.replace(/<meta\s+name="robots"\s+content="[^"]*"/, robotsMeta.replace(/\//g, ''))
         // Remove existing canonical if present, then add correct one via </head> injection
         html = html.replace(/<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/, '')
         const canonicalTag = `<link rel="canonical" href="${esc(pageCanonical)}">`
         html = html.replace('</head>', `${canonicalTag}\n  ${extraMeta}\n  ${extraSchemas}\n</head>`)
+
 
         // ── Inject SSR content for SEO/GEO crawlers ──
         // Insert real content inside <body> so non-JS crawlers can read it
