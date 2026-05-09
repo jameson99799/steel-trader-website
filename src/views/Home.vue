@@ -57,14 +57,20 @@
         </div>
         
         <div class="products-grid">
-          <router-link 
-            v-for="product in featuredProducts" 
-            :key="product.id" 
+          <router-link
+            v-for="(product, index) in featuredProducts"
+            :key="product.id"
             :to="langPath(`/products/${product.slug || product.id}`)"
             class="product-card"
           >
             <div class="product-image">
-              <img :src="product.images?.split(',')[0] || '/placeholder.svg'" :alt="localizedValue(product, 'name')" loading="lazy" />
+              <img
+                :src="product.images?.split(',')[0] || '/placeholder.svg'"
+                :alt="localizedValue(product, 'name')"
+                :loading="index === 0 ? 'eager' : 'lazy'"
+                :fetchpriority="index === 0 ? 'high' : 'auto'"
+                width="400" height="300"
+              />
               <div class="product-overlay">
                 <div class="product-actions">
                   <button class="action-btn" :aria-label="'View ' + localizedValue(product, 'name')">
@@ -105,7 +111,7 @@
             class="category-card"
           >
             <div class="category-image">
-              <img :src="cat.image || '/placeholder.svg'" :alt="localizedValue(cat, 'name')" loading="lazy" />
+              <img :src="cat.image || '/placeholder.svg'" :alt="localizedValue(cat, 'name')" loading="lazy" width="400" height="300" />
               <div class="category-overlay">
                 <div class="category-icon">
                   <svg viewBox="0 0 20 20" fill="currentColor">
@@ -232,12 +238,14 @@ onMounted(async () => {
 /* Hero Section */
 .hero {
   position: relative;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100svh;
+  min-height: 600px;
   display: flex;
   align-items: center;
   background: var(--primary-gradient);
   overflow: hidden;
+  contain: layout style;
 }
 
 .hero-background {

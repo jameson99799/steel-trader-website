@@ -188,7 +188,7 @@ onMounted(async () => {
 
 .qr-zoom-hint {
   font-size: 10px;
-  color: #94a3b8;
+  color: #64748b;
   margin-top: 3px;
   text-align: left;
 }
@@ -229,13 +229,13 @@ onMounted(async () => {
 .row-label {
   font-size: 11px;
   font-weight: 700;
-  color: #94a3b8;
+  color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   line-height: 1;
   white-space: nowrap;
 }
-.row-label small { font-weight: 400; text-transform: none; letter-spacing: 0; color: #cbd5e1; font-size: 10px; }
+.row-label small { font-weight: 400; text-transform: none; letter-spacing: 0; color: #64748b; font-size: 10px; }
 
 /* Increased font size by 3 — was 12px → now 15px */
 .row-num {

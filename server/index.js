@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import compression from 'compression'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { readFileSync } from 'fs'
@@ -106,6 +107,16 @@ async function startServer() {
       credentials: true
     }
     app.use(cors(corsOptions))
+
+    // Gzip compression — reduces JS/CSS/HTML by ~70%, boosts PageSpeed
+    app.use(compression({
+      level: 6, // Balance between speed and compression ratio
+      threshold: 1024, // Only compress responses > 1KB
+      filter: (req, res) => {
+        if (req.headers['x-no-compression']) return false
+        return compression.filter(req, res)
+      }
+    }))
 
     // 请求体解析
     app.use(express.json({ limit: '10mb' }))
