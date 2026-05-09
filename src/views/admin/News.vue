@@ -36,23 +36,54 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in newsList" :key="item.id">
-            <td><input type="checkbox" :value="item.id" v-model="selectedIds" /></td>
-            <td><img v-if="item.cover_image" :src="item.cover_image" class="thumb" /></td>
-            <td>
-              <div class="title-wrap">{{ item.title }}</div>
-              <div class="title-en">{{ item.title_en }}</div>
-            </td>
-            <td><span class="cat-badge" v-if="item.category_name">{{ item.category_name }}</span></td>
-            <td><span :class="['status-badge', item.status ? 'active' : 'inactive']">{{ item.status ? '已发布' : '草稿' }}</span></td>
-            <td>{{ item.sort_order }}</td>
-            <td>{{ item.created_at?.substring(0,10) }}</td>
-            <td class="actions">
-              <button class="btn btn-sm btn-outline" @click="openEdit(item)">编辑</button>
-              <button class="btn btn-sm btn-outline" @click="translateNews(item)" style="color:#059669;border-color:#059669;" :disabled="translatingId === item.id">{{ translatingId === item.id ? '翻译中...' : '🌐 翻译' }}</button>
-              <button class="btn btn-sm btn-danger" @click="deleteItem(item.id)">删除</button>
-            </td>
-          </tr>
+          <template v-for="item in newsList" :key="item.id">
+            <tr>
+              <td><input type="checkbox" :value="item.id" v-model="selectedIds" /></td>
+              <td><img v-if="item.cover_image" :src="item.cover_image" class="thumb" /></td>
+              <td>
+                <div class="title-wrap">{{ item.title }}</div>
+                <div class="title-en">{{ item.title_en }}</div>
+              </td>
+              <td><span class="cat-badge" v-if="item.category_name">{{ item.category_name }}</span></td>
+              <td><span :class="['status-badge', item.status ? 'active' : 'inactive']">{{ item.status ? '已发布' : '草稿' }}</span></td>
+              <td>{{ item.sort_order }}</td>
+              <td>{{ item.created_at?.substring(0,10) }}</td>
+              <td class="actions">
+                <button class="btn btn-sm btn-outline" @click="openEdit(item)">编辑</button>
+                
+                <div class="translation-dropdown" style="position:relative;display:inline-block" @click.stop>
+                  <button class="btn btn-sm btn-outline" @click="toggleTranslateMenu(item)" style="color:#059669;border-color:#059669;" :disabled="translatingId === item.id">
+                    {{ translatingId === item.id ? '翻译中...' : '🌐 翻译 ▼' }}
+                  </button>
+                  <div v-if="activeTranslateMenu === item.id" class="dropdown-menu shadow" style="position:absolute;top:100%;right:0;background:white;border:1px solid #ddd;border-radius:6px;z-index:100;min-width:180px;padding:8px 0;margin-top:4px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                    <div v-if="item._loadingStatus" style="padding:8px 12px;font-size:13px;color:#666;text-align:center;">正在检测状态...</div>
+                    <div v-else class="lang-list">
+                      <div style="padding:0 8px 8px;border-bottom:1px solid #f1f5f9;"><button class="btn btn-primary btn-sm" @click="translateNews(item)" style="width:100%">一键翻译所有语言</button></div>
+                      <div v-for="l in item._translationStatus" :key="l.code" 
+                           @click="translateNews(item, l.code, l.name)" 
+                           :style="{ color: l.translated ? '#16a34a' : '#2563eb', cursor: 'pointer', padding: '8px 12px', borderBottom: '1px solid #f8fafc', fontSize: '13px', fontWeight: '500', display: 'flex', alignItems: 'center' }">
+                        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:8px;" :style="{ background: l.translated ? '#16a34a' : '#2563eb' }"></span>
+                        {{ l.name }} <span style="margin-left:auto;font-size:11px;opacity:0.8;">{{ l.translated ? '已翻译' : '未翻译' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button class="btn btn-sm btn-danger" @click="deleteItem(item.id)">删除</button>
+              </td>
+            </tr>
+            <tr v-if="translatingItemLog && translatingItemLog.id === item.id" class="log-row">
+              <td colspan="8" style="padding: 0; border: none;">
+                <div style="background: #1e293b; color: #a5b4fc; padding: 12px 16px; margin: 0 16px 16px; border-radius: 6px; font-family: 'Fira Mono', monospace; font-size: 13px; max-height: 250px; overflow-y: auto;">
+                  <div style="color: white; margin-bottom: 8px; font-weight: 600; display:flex; justify-content:space-between;">
+                    <span>📡 翻译日志 - {{ translatingItemLog.langName }}</span>
+                    <button @click="translatingItemLog = null" style="background:none;border:none;color:#94a3b8;cursor:pointer;">✕ 关闭</button>
+                  </div>
+                  <pre style="margin:0;white-space:pre-wrap;line-height:1.5;">{{ translatingItemLog.log }}</pre>
+                </div>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
       <div v-else class="empty">暂无文章，点击"新建文章"开始创建</div>
@@ -359,14 +390,70 @@ async function batchMove() {
   await loadNews()
 }
 
-async function translateNews(item) {
-  if (!confirm(`翻译文章「${item.title_en || item.title}」到所有已配置的语言？`)) return
-  translatingId.value = item.id
+// Dropdown and Log state
+const activeTranslateMenu = ref(null)
+const translatingItemLog = ref(null)
+
+// Close menu when clicking outside
+onMounted(() => {
+  document.addEventListener('click', () => {
+    activeTranslateMenu.value = null
+  })
+  loadCategories()
+  loadNews()
+})
+
+async function toggleTranslateMenu(item) {
+  if (activeTranslateMenu.value === item.id) {
+    activeTranslateMenu.value = null
+    return
+  }
+  activeTranslateMenu.value = item.id
+  if (item._translationStatus) return // Already loaded
+
+  item._loadingStatus = true
   try {
-    const res = await api.translateItem('news', item.id)
-    alert(`✅ 翻译完成！已翻译 ${res.fields || 0} 个字段到 ${res.languages || 0} 种语言。${res.errors?.length ? `\n⚠️ ${res.errors.length} 个错误` : ''}`)
+    const res = await api.getItemTranslationStatus('news', item.id)
+    item._translationStatus = res.status || []
   } catch (e) {
-    alert('翻译失败: ' + e.message)
+    console.error('Failed to load status', e)
+  }
+  item._loadingStatus = false
+}
+
+async function translateNews(item, targetLangCode = null, targetLangName = null) {
+  const langLabel = targetLangName ? targetLangName : '所有未翻译的语言'
+  if (!confirm(`开始翻译文章「${item.title_en || item.title}」(${langLabel})？`)) return
+  
+  translatingId.value = item.id
+  activeTranslateMenu.value = null // close menu
+  translatingItemLog.value = { id: item.id, langName: targetLangName || '全部语言', log: '开始翻译...\n' }
+  
+  try {
+    translatingItemLog.value.log += `正在调用后台 AI 引擎翻译...\n`
+    const res = await api.translateItem('news', item.id, targetLangCode)
+    
+    translatingItemLog.value.log += `\n✅ 翻译完成！\n共翻译了 ${res.fields || 0} 个字段到 ${res.languages || 1} 种语言。\n`
+    if (res.results?.length) {
+      res.results.forEach(r => {
+         translatingItemLog.value.log += `[${r.lang}] 字段 ${r.field}: 成功\n`
+      })
+    }
+    if (res.errors?.length) {
+      translatingItemLog.value.log += `\n⚠️ 遇到 ${res.errors.length} 个错误：\n`
+      res.errors.forEach(e => {
+         translatingItemLog.value.log += `[${e.lang}] 字段 ${e.field}: ${e.error}\n`
+      })
+    }
+    // Refresh status visually if it was open
+    if (item._translationStatus && targetLangCode) {
+       const s = item._translationStatus.find(x => x.code === targetLangCode)
+       if (s) s.translated = true
+    } else if (item._translationStatus && !targetLangCode) {
+       item._translationStatus.forEach(s => s.translated = true)
+    }
+  } catch (e) {
+    translatingItemLog.value.log += `\n❌ 翻译失败: ${e.message}\n`
   } finally {
     translatingId.value = null
   }

@@ -323,22 +323,36 @@ router.get('/url-list', authMiddleware, (req, res) => {
     res.json({ urls, total: urls.length })
 })
 
-// POST /api/indexing/submit — legacy sitemap ping for Bing/Yandex
+// POST /api/indexing/submit — IndexNow ping for Bing/Yandex
 router.post('/submit', authMiddleware, async (req, res) => {
-    const { sitemapUrl } = req.body
-    if (!sitemapUrl) return res.status(400).json({ error: '请提供 sitemapUrl' })
-    const encodedUrl = encodeURIComponent(sitemapUrl)
+    const urls = getAllSiteUrls()
     const results = []
+
+    // Yandex Sitemap Ping (Backup)
     try {
-        const bingRes = await fetch(`https://www.bing.com/indexnow?url=${encodedUrl}&key=sunseasteel`, {
-            method: 'GET', signal: AbortSignal.timeout(15000)
+        const yRes = await fetch(`https://webmaster.yandex.com/ping?sitemap=https://www.sunseasteel.com/sitemap.xml`, { method: 'GET', signal: AbortSignal.timeout(10000) })
+        results.push({ engine: 'Yandex (Sitemap)', status: yRes.status, success: yRes.ok, message: yRes.ok ? '✅ Yandex Sitemap 已收到通知' : `⚠️ Yandex ${yRes.status}` })
+    } catch (e) { results.push({ engine: 'Yandex (Sitemap)', success: false, message: `❌ ${e.message}` }) }
+
+    // IndexNow API (Supported by Bing, Yandex, Seznam, Naver)
+    try {
+        const indexNowBody = {
+            host: 'www.sunseasteel.com',
+            key: 'sunseasteel',
+            keyLocation: 'https://www.sunseasteel.com/sunseasteel.txt',
+            urlList: urls
+        }
+        
+        const inRes = await fetch(`https://api.indexnow.org/indexnow`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
+            body: JSON.stringify(indexNowBody),
+            signal: AbortSignal.timeout(15000)
         })
-        results.push({ engine: 'Bing (IndexNow)', status: bingRes.status, success: bingRes.ok || bingRes.status === 202, message: (bingRes.ok || bingRes.status === 202) ? '✅ Bing IndexNow 已收到通知' : `⚠️ Bing 返回 ${bingRes.status}` })
-    } catch (e) { results.push({ engine: 'Bing', success: false, message: `⚠️ ${e.message}` }) }
-    try {
-        const yRes = await fetch(`https://webmaster.yandex.com/ping?sitemap=${encodedUrl}`, { method: 'GET', signal: AbortSignal.timeout(10000) })
-        results.push({ engine: 'Yandex', status: yRes.status, success: yRes.ok, message: yRes.ok ? '✅ Yandex 已收到通知' : `⚠️ Yandex ${yRes.status}` })
-    } catch (e) { results.push({ engine: 'Yandex', success: false, message: `❌ ${e.message}` }) }
+        const ok = inRes.ok || inRes.status === 200 || inRes.status === 202
+        results.push({ engine: 'IndexNow (Bing/Yandex)', status: inRes.status, success: ok, message: ok ? `✅ 成功推送 ${urls.length} 个 URL` : `⚠️ 失败 HTTP ${inRes.status}` })
+    } catch (e) { results.push({ engine: 'IndexNow', success: false, message: `⚠️ ${e.message}` }) }
+
     res.json({ results, submitted_at: new Date().toISOString() })
 })
 

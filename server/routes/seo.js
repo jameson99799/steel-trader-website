@@ -37,7 +37,7 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
                 google_analytics, google_search_console, robots_txt,
                 geo_region, geo_placename, geo_lat, geo_lng,
                 hreflang_en, hreflang_zh, local_business_type, local_business_address,
-                parseInt(article_refresh_days) || 0, parseInt(product_refresh_days) || 0]
+                parseInt(article_refresh_days ?? existing.article_refresh_days) || 0, parseInt(product_refresh_days ?? existing.product_refresh_days) || 0]
         )
     } else {
         run(

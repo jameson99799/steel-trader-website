@@ -1098,15 +1098,21 @@ router.post('/run', authMiddleware, async (req, res) => {
 // ─── Translate single product or article ─────────────────────────────────────
 
 router.post('/translate-item', authMiddleware, async (req, res) => {
-    const { type, id } = req.body
+    const { type, id, target_lang } = req.body
     if (!type || !id) return res.status(400).json({ error: 'type and id required' })
 
     const s = getOne('SELECT * FROM translation_settings WHERE id=1')
     if (!s?.api_key) return res.status(400).json({ error: 'AI API key not configured' })
 
-    // Get all non-English active languages
-    const langs = getAll("SELECT code, name FROM languages WHERE code != 'en' AND status=1")
-    if (langs.length === 0) return res.status(400).json({ error: 'No target languages configured' })
+    // Get non-English active languages (filter by target_lang if provided)
+    let langsSql = "SELECT code, name FROM languages WHERE code != 'en' AND status=1"
+    let langsParams = []
+    if (target_lang) {
+        langsSql += " AND code = ?"
+        langsParams.push(target_lang)
+    }
+    const langs = getAll(langsSql, langsParams)
+    if (langs.length === 0) return res.status(400).json({ error: 'No target languages configured or selected language invalid' })
 
     // Collect items for this single product/article
     let items = []
@@ -1175,6 +1181,65 @@ router.post('/translate-item', authMiddleware, async (req, res) => {
     }
 
     res.json({ success: true, results: allResults, errors: allErrors, languages: langs.length, fields: items.length })
+})
+
+// Check translation status for a specific item across all active languages
+router.get('/status/:type/:id', authMiddleware, (req, res) => {
+    const { type, id } = req.params
+    if (!['product', 'news'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
+
+    const langs = getAll("SELECT code, name FROM languages WHERE code != 'en' AND status=1")
+    if (!langs.length) return res.json({ status: [] })
+
+    // We can count how many fields are expected
+    let expectedFields = 0
+    if (type === 'product') {
+        const r = getOne('SELECT name_en, description_en, seo_title, seo_description, seo_keywords, detail_content, faq_items, specs FROM products WHERE id=?', [id])
+        if (r) {
+            if (r.name_en) expectedFields++
+            if (r.description_en) expectedFields++
+            if (r.seo_title) expectedFields++
+            if (r.seo_description) expectedFields++
+            if (r.seo_keywords) expectedFields++
+            if (r.detail_content?.length > 10) expectedFields++
+            try { const f = JSON.parse(r.faq_items); expectedFields += Array.isArray(f) ? f.filter(x=>x.question||x.answer).length * 2 : 0 } catch(e){}
+            try { const s = JSON.parse(r.specs); expectedFields += Array.isArray(s) ? s.filter(x=>x.name||x.value).length * 2 : 0 } catch(e){}
+        }
+    } else if (type === 'news') {
+        const r = getOne('SELECT title_en, summary_en, seo_title, seo_description, seo_keywords, content, faq_items FROM news WHERE id=?', [id])
+        if (r) {
+            if (r.title_en) expectedFields++
+            if (r.summary_en) expectedFields++
+            if (r.seo_title) expectedFields++
+            if (r.seo_description) expectedFields++
+            if (r.seo_keywords) expectedFields++
+            if (r.content?.length > 10) expectedFields++
+            try { const f = JSON.parse(r.faq_items); expectedFields += Array.isArray(f) ? f.filter(x=>x.question||x.answer).length * 2 : 0 } catch(e){}
+        }
+    }
+
+    if (expectedFields === 0) {
+        return res.json({ status: langs.map(l => ({ code: l.code, name: l.name, translated: true, ratio: '0/0' })) })
+    }
+
+    // Get translations count per language for this item
+    const rows = getAll('SELECT language_code, COUNT(*) as c FROM translations WHERE item_type=? AND item_id=? GROUP BY language_code', [type, id])
+    const countMap = {}
+    rows.forEach(r => countMap[r.language_code] = r.c)
+
+    const status = langs.map(l => {
+        const c = countMap[l.code] || 0
+        return {
+            code: l.code,
+            name: l.name,
+            translated: c >= expectedFields, // Full translation check
+            count: c,
+            total: expectedFields,
+            ratio: `${c}/${expectedFields}`
+        }
+    })
+
+    res.json({ status })
 })
 
 // ─── Progress ─────────────────────────────────────────────────────────────────
