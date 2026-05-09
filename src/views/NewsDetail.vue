@@ -20,6 +20,11 @@
             <h1 class="article-title">{{ localizedValue(article, 'title') }}</h1>
             <div class="article-meta">
               <span class="article-date">{{ formatDate(article.created_at) }}</span>
+              <span class="article-author" v-if="seoSettings?.default_news_author">
+                <span class="meta-divider">•</span>
+                <svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px;" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
+                {{ seoSettings.default_news_author }}
+              </span>
             </div>
             <p class="article-summary" v-if="localizedValue(article, 'summary')">
               {{ localizedValue(article, 'summary') }}
@@ -144,6 +149,7 @@ const pageTexts = ref(null)
 const articleIframe = ref(null)
 const company = ref(null)
 const relatedNews = ref([])
+const seoSettings = ref(null)
 
 // ── Template variable substitution helper ────────────────────────────────
 function resolveTemplateVars(html) {
@@ -221,16 +227,18 @@ async function loadArticle(slug) {
   loading.value = true
   article.value = null
   try {
-    const [art, cats, texts, comp] = await Promise.all([
+    const [art, cats, texts, comp, seoRes] = await Promise.all([
       api.getNewsItem(slug),
       api.getCategories(),
       api.getPageTexts(),
-      api.getCompany()
+      api.getCompany(),
+      fetch('/api/seo').then(r => r.json()).catch(() => ({}))
     ])
     article.value = art
     allCategories.value = cats || []
     pageTexts.value = texts
     company.value = comp
+    seoSettings.value = seoRes
     if (article.value) {
       document.title = article.value.seo_title || localizedValue(article.value, 'title')
 
@@ -250,6 +258,7 @@ async function loadArticle(slug) {
         'datePublished': a.created_at,
         ...(a.updated_at && { 'dateModified': a.updated_at }),
         ...(a.cover_image && { 'image': a.cover_image.startsWith('http') ? a.cover_image : siteUrl + a.cover_image }),
+        ...(seoRes?.default_news_author && { 'author': { '@type': 'Person', 'name': seoRes.default_news_author } }),
         'publisher': {
           '@type': 'Organization',
           'name': document.title || 'SunSea Steel'
@@ -346,8 +355,10 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
   margin-bottom: var(--spacing);
 }
 
-.article-meta { margin-bottom: var(--spacing); }
+.article-meta { margin-bottom: var(--spacing); display:flex; align-items:center; gap:8px; color:var(--text-muted); font-size:var(--text-sm); }
 .article-date { color: var(--text-muted); font-size: var(--text-sm); }
+.meta-divider { color: #cbd5e1; }
+.article-author { color: var(--text-secondary); font-weight: 500; }
 
 .article-summary {
   font-size: var(--text-lg); color: var(--text-secondary);

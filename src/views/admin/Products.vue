@@ -58,8 +58,8 @@
                   <button class="btn btn-sm btn-outline" @click="previewProduct(product)" style="color:#2563eb;border-color:#2563eb;">👁 预览</button>
                   <button class="btn btn-sm btn-outline" @click="duplicateProduct(product)" style="color:#0077b5;border-color:#0077b5;">📋 复制</button>
                   
-                  <div class="translation-dropdown" style="position:relative;display:inline-block" @click.stop>
-                    <button class="btn btn-sm btn-outline" @click="toggleTranslateMenu(product)" style="color:#059669;border-color:#059669;" :disabled="translatingId === product.id">
+                  <div class="translation-dropdown" style="position:relative;display:block" @click.stop>
+                    <button class="btn btn-sm btn-outline" @click="toggleTranslateMenu(product)" style="color:#059669;border-color:#059669;width:100%;" :disabled="translatingId === product.id">
                       {{ translatingId === product.id ? '翻译中...' : '🌐 翻译 ▼' }}
                     </button>
                     <div v-if="activeTranslateMenu === product.id" class="dropdown-menu shadow" style="position:absolute;bottom:100%;right:0;background:white;border:1px solid #ddd;border-radius:6px;z-index:100;min-width:180px;padding:8px 0;margin-bottom:4px;box-shadow:0 -4px 12px rgba(0,0,0,0.1);">

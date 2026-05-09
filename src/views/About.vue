@@ -127,7 +127,7 @@
               </div>
               <div class="advantage-content">
                 <h3>{{ adv }}</h3>
-                <p>{{ t('advantagesPageDesc') }}</p>
+                <p>{{ index === 0 ? t('factoryDirectDesc') : index === 1 ? t('qualityAssuranceDesc') : index === 2 ? t('fastDeliveryDesc') : t('customServiceDesc') }}</p>
               </div>
             </div>
           </div>

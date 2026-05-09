@@ -21,7 +21,7 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
         site_title, site_description, site_keywords, google_analytics, google_search_console, robots_txt,
         geo_region, geo_placename, geo_lat, geo_lng, hreflang_en, hreflang_zh,
         local_business_type, local_business_address,
-        article_refresh_days, product_refresh_days
+        article_refresh_days, product_refresh_days, default_news_author
     } = req.body
     const og_image = req.file ? `/uploads/${req.file.filename}` : existing?.og_image
 
@@ -31,26 +31,26 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
             google_analytics=?, google_search_console=?, robots_txt=?,
             geo_region=?, geo_placename=?, geo_lat=?, geo_lng=?,
             hreflang_en=?, hreflang_zh=?, local_business_type=?, local_business_address=?,
-            article_refresh_days=?, product_refresh_days=?,
+            article_refresh_days=?, product_refresh_days=?, default_news_author=?,
             updated_at=CURRENT_TIMESTAMP WHERE id=1`,
             [site_title, site_description, site_keywords, og_image,
                 google_analytics, google_search_console, robots_txt,
                 geo_region, geo_placename, geo_lat, geo_lng,
                 hreflang_en, hreflang_zh, local_business_type, local_business_address,
-                parseInt(article_refresh_days ?? existing.article_refresh_days) || 0, parseInt(product_refresh_days ?? existing.product_refresh_days) || 0]
+                parseInt(article_refresh_days ?? existing.article_refresh_days) || 0, parseInt(product_refresh_days ?? existing.product_refresh_days) || 0, default_news_author]
         )
     } else {
         run(
             `INSERT INTO seo_settings
             (id, site_title, site_description, site_keywords, og_image, google_analytics, google_search_console, robots_txt,
              geo_region, geo_placename, geo_lat, geo_lng, hreflang_en, hreflang_zh, local_business_type, local_business_address,
-             article_refresh_days, product_refresh_days)
-            VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+             article_refresh_days, product_refresh_days, default_news_author)
+            VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [site_title, site_description, site_keywords, og_image,
                 google_analytics, google_search_console, robots_txt,
                 geo_region, geo_placename, geo_lat, geo_lng,
                 hreflang_en, hreflang_zh, local_business_type, local_business_address,
-                parseInt(article_refresh_days) || 0, parseInt(product_refresh_days) || 0]
+                parseInt(article_refresh_days) || 0, parseInt(product_refresh_days) || 0, default_news_author]
         )
     }
     // Sync robots.txt to static file so it takes effect immediately

@@ -131,8 +131,32 @@
             &copy; {{ new Date().getFullYear() }} {{ localizedValue(company, 'name') }}. All rights reserved.
           </p>
           <div class="footer-nav">
-            <a href="#" class="footer-nav-link">Privacy Policy</a>
-            <a href="#" class="footer-nav-link">Terms of Service</a>
+            <a href="javascript:void(0)" @click.prevent="showLegalModal('privacy')" class="footer-nav-link">Privacy Policy</a>
+            <a href="javascript:void(0)" @click.prevent="showLegalModal('terms')" class="footer-nav-link">Terms of Service</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Legal Modals -->
+    <div v-if="activeModal" class="legal-modal-overlay" @click.self="activeModal = null">
+      <div class="legal-modal">
+        <div class="legal-modal-header">
+          <h3>{{ activeModal === 'privacy' ? 'Privacy Policy' : 'Terms of Service' }}</h3>
+          <button class="modal-close" @click="activeModal = null">✕</button>
+        </div>
+        <div class="legal-modal-body">
+          <div v-if="activeModal === 'privacy'">
+            <p><strong>1. Information Collection</strong><br/>We collect information from you when you submit inquiries or contact forms. This includes your name, email, phone, and requirements.</p>
+            <p><strong>2. Information Use</strong><br/>Any of the information we collect from you may be used to respond to your customer service requests and support needs.</p>
+            <p><strong>3. Information Protection</strong><br/>We implement a variety of security measures to maintain the safety of your personal information. We do not sell, trade, or otherwise transfer to outside parties your personally identifiable information.</p>
+            <p><strong>4. Consent</strong><br/>By using our site, you consent to our website privacy policy.</p>
+          </div>
+          <div v-if="activeModal === 'terms'">
+            <p><strong>1. Introduction</strong><br/>By accessing this website, you are agreeing to be bound by these website Terms and Conditions of Use.</p>
+            <p><strong>2. Use License</strong><br/>Permission is granted to temporarily view the materials on our website for personal, non-commercial transitory viewing only.</p>
+            <p><strong>3. Disclaimer</strong><br/>The materials on our website are provided "as is". We make no warranties, expressed or implied, and hereby disclaim and negate all other warranties.</p>
+            <p><strong>4. Limitations</strong><br/>In no event shall we or our suppliers be liable for any damages arising out of the use or inability to use the materials on our website.</p>
           </div>
         </div>
       </div>
@@ -150,6 +174,11 @@ const company = ref(null)
 const categories = ref([])
 const pageTexts = ref(null)
 const latestNews = ref([])
+const activeModal = ref(null)
+
+function showLegalModal(type) {
+  activeModal.value = type
+}
 
 onMounted(async () => {
   try {
@@ -432,4 +461,35 @@ onMounted(async () => {
     justify-content: center;
   }
 }
+
+.legal-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+}
+.legal-modal {
+  background: #fff;
+  border-radius: 8px;
+  width: 100%; max-width: 600px;
+  max-height: 80vh;
+  display: flex; flex-direction: column;
+  color: #333;
+}
+.legal-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.legal-modal-header h3 { margin: 0; font-size: 18px; color: #333; }
+.modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: #999; }
+.legal-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  line-height: 1.6;
+}
+.legal-modal-body p { margin: 0 0 16px; }
+.legal-modal-body strong { color: #111; }
 </style>

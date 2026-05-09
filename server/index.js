@@ -427,6 +427,7 @@ async function startServer() {
                 datePublished: article.created_at,
                 ...(article.updated_at && { dateModified: article.updated_at }),
                 ...(pageImage && { image: pageImage }),
+                ...(seoSettings.default_news_author && { author: { '@type': 'Person', name: seoSettings.default_news_author } }),
                 publisher: { '@type': 'Organization', name: companyName, logo: { '@type': 'ImageObject', url: `${siteUrl}/uploads/logo.png` } },
                 mainEntityOfPage: { '@type': 'WebPage', '@id': pageCanonical }
               })

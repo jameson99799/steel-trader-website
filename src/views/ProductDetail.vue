@@ -356,6 +356,9 @@ const sanitizedDetailContent = computed(() => {
 
   // Strip <script> tags for security
   html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+
+  // Strip placeholder comments
+  html = html.replace(/<span\s+class=["'](?:hero-tip|replace-tip)["'][^>]*>.*?<\/span>/gi, '')
   
   // Extract <style> tags and scope them to .product-detail-html
   html = html.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (match, css) => {

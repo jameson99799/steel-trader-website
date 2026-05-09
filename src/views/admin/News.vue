@@ -3,6 +3,10 @@
     <div class="page-header">
       <h2>📰 新闻管理</h2>
       <div style="display:flex;gap:8px;">
+        <div style="display:flex;align-items:center;background:#f8fafc;padding:2px 8px;border-radius:6px;border:1px solid #e2e8f0;">
+          <span style="font-size:13px;color:#64748b;margin-right:6px;">文章作者:</span>
+          <input v-model="defaultAuthor" @blur="saveAuthor" class="form-control" style="width:180px;height:28px;padding:2px 8px;font-size:13px;" placeholder="全局作者名称" />
+        </div>
         <button class="btn btn-outline" @click="showCatModal = true" style="color:#7c3aed;border-color:#c4b5fd;">📂 分组管理</button>
         <button class="btn btn-primary" @click="openCreate">+ 新建文章</button>
       </div>
@@ -394,14 +398,47 @@ async function batchMove() {
 const activeTranslateMenu = ref(null)
 const translatingItemLog = ref(null)
 
+const defaultAuthor = ref('Jameson-SUNSEA STEEL')
+
 // Close menu when clicking outside
-onMounted(() => {
+onMounted(async () => {
   document.addEventListener('click', () => {
     activeTranslateMenu.value = null
   })
   loadCategories()
   loadNews()
+  try {
+    const seoRes = await fetch('/api/seo', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('adminToken') } }).then(r => r.json())
+    if (seoRes && seoRes.default_news_author !== undefined) {
+      defaultAuthor.value = seoRes.default_news_author || 'Jameson-SUNSEA STEEL'
+    }
+  } catch (e) {
+    console.error('Failed to load author', e)
+  }
 })
+
+async function saveAuthor() {
+  try {
+    const seoRes = await fetch('/api/seo', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('adminToken') } }).then(r => r.json())
+    const formData = new FormData()
+    // Append all existing fields so we don't overwrite them
+    Object.keys(seoRes).forEach(k => {
+      if (k !== 'id' && k !== 'updated_at' && seoRes[k] !== null && seoRes[k] !== undefined) {
+        formData.append(k, seoRes[k])
+      }
+    })
+    formData.set('default_news_author', defaultAuthor.value)
+    
+    await fetch('/api/seo', {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + localStorage.getItem('adminToken') },
+      body: formData
+    })
+  } catch (e) {
+    console.error('Failed to save author', e)
+    alert('保存作者失败')
+  }
+}
 
 async function toggleTranslateMenu(item) {
   if (activeTranslateMenu.value === item.id) {
