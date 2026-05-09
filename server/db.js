@@ -1,4 +1,4 @@
-﻿import Database from 'better-sqlite3'
+import Database from 'better-sqlite3'
 import bcrypt from 'bcryptjs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
@@ -107,6 +107,11 @@ async function initDb() {
   // Migration: add faq_items for GEO (Generative Engine Optimization) FAQ schema
   try { db.exec("ALTER TABLE products ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }
   try { db.exec("ALTER TABLE news ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }
+  // Migration: add updated_at to products for freshness tracking
+  try { db.exec('ALTER TABLE products ADD COLUMN updated_at DATETIME') } catch (e) { }
+  // Migration: auto content-refresh interval settings for SEO freshness
+  try { db.exec('ALTER TABLE seo_settings ADD COLUMN article_refresh_days INTEGER DEFAULT 0') } catch (e) { }
+  try { db.exec('ALTER TABLE seo_settings ADD COLUMN product_refresh_days INTEGER DEFAULT 0') } catch (e) { }
 
   // ── Google Indexing Queue ──────────────────────────────────────────────────
   // Tracks every URL submission: status, response, quota usage
