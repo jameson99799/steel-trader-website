@@ -144,9 +144,9 @@ router.get('/products', (req, res) => {
         const activeLangs = getActiveLangs()
 
         // Primary: status=1 (active). Fallback: all products (handles non-standard status values)
-        let products = getAll(`SELECT id, slug, name_en, updated_at, created_at FROM products WHERE status = 1 ORDER BY id DESC`)
+        let products = getAll(`SELECT id, slug, name_en, created_at FROM products WHERE status = 1 ORDER BY id DESC`)
         if (!products || products.length === 0) {
-            products = getAll(`SELECT id, slug, name_en, updated_at, created_at FROM products ORDER BY id DESC`)
+            products = getAll(`SELECT id, slug, name_en, created_at FROM products ORDER BY id DESC`)
             if (products && products.length > 0) {
                 console.log(`[sitemap] WARN: No products with status=1 found; using all ${products.length} products as fallback`)
             }
@@ -158,7 +158,7 @@ router.get('/products', (req, res) => {
         for (const p of products || []) {
             const prodSlug = p.slug || p.id
             const prodPath = `/products/${prodSlug}`
-            const lastmod = toDateStr(p.updated_at || p.created_at, now)
+            const lastmod = toDateStr(p.created_at, now)
             for (const l of activeLangs) {
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + prodPath,
@@ -183,13 +183,13 @@ router.get('/news', (req, res) => {
     try {
         const now = new Date().toISOString().split('T')[0]
         const activeLangs = getActiveLangs()
-        const news = getAll(`SELECT slug, id, title_en, updated_at FROM news WHERE status = 1 ORDER BY id DESC`)
+        const news = getAll(`SELECT slug, id, title_en, created_at FROM news WHERE status = 1 ORDER BY id DESC`)
 
         const urls = []
         for (const n of news) {
             const slug = n.slug || n.id
             const newsPath = `/news/${slug}`
-            const lastmod = toDateStr(n.updated_at, now)
+            const lastmod = toDateStr(n.created_at, now)
             for (const l of activeLangs) {
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + newsPath,
