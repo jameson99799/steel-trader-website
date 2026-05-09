@@ -271,18 +271,7 @@
       </div>
     </div>
 
-    <!-- SEO Sitemap Link (small bar, below map) -->
-    <div class="sitemap-bar">
-      <div class="container">
-        <div class="sitemap-bar-inner">
-          <div class="sitemap-bar-text">
-            <strong>Google SEO Sitemap</strong>
-            <span>Helps Google index all pages, products and news automatically.</span>
-          </div>
-          <a href="/sitemap.xml" target="_blank" class="sitemap-btn">sitemap.xml</a>
-        </div>
-      </div>
-    </div>
+
 </template>
 
 <script setup>
