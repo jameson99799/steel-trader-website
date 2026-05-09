@@ -122,6 +122,7 @@ async function startServer() {
       app.use(express.static(join(__dirname, '..', 'dist'), {
         maxAge: '1y',
         etag: true,
+        index: false, // Let Node SSR handler serve / so meta injection runs
         setHeaders(res, path) {
           // index.html must NOT be cached — it references hashed JS/CSS
           if (path.endsWith('.html') || path.endsWith('/')) {
@@ -246,6 +247,11 @@ async function startServer() {
               const baseProductTitle = product.seo_title || product.name_en || product.name || pageTitle
               pageTitle = baseProductTitle.includes(companyName) ? baseProductTitle : `${baseProductTitle} | ${companyName}`
               pageDesc = product.seo_description || product.description_en || product.description || pageDesc
+              // Always ensure a meaningful description for product pages
+              if (!pageDesc) {
+                const catName = product.category_name_en || product.category_name || 'steel coil'
+                pageDesc = `${product.name_en || product.name} — Professional ${catName} manufacturer and exporter. Factory direct supply from Shandong, China. ASTM/JIS/EN certified. Contact ${companyName} for competitive pricing.`
+              }
               pageKeywords = product.seo_keywords || pageKeywords
               ogType = 'product'
               const images = (product.images || '').split(',').filter(Boolean)
@@ -298,8 +304,19 @@ async function startServer() {
                   if (fl.length) faqHtml = '<h2>Frequently Asked Questions</h2>' + fl.map(f => `<h3>${esc(f.question)}</h3><p>${esc(f.answer)}</p>`).join('')
                 } catch (e) {}
               }
-              const detailHtml = product.detail_content ? product.detail_content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') : ''
-              ssrContent = `<article id="ssr-product"><h1>${pName}</h1><p>${pDesc}</p>${specsHtml}${detailHtml}${faqHtml}</article>`
+              const waLink = company.whatsapp ? `https://api.whatsapp.com/send?phone=${company.whatsapp.replace(/[^0-9]/g, '')}` : '#'
+              const detailHtml = product.detail_content ? product.detail_content
+                .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                .replace(/\{\{email\}\}/g, company.email || '')
+                .replace(/\{\{phone\}\}/g, company.phone || '')
+                .replace(/\{\{whatsapp\}\}/g, company.whatsapp || '')
+                .replace(/\{\{whatsapp_link\}\}/g, waLink)
+                .replace(/\{\{company_name\}\}/g, companyName)
+                : ''
+              // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
+              const hasFaqInDetail = /frequently asked|<h[23][^>]*>\s*faq/i.test(detailHtml)
+              ssrContent = `<article id="ssr-product"><h1>${pName}</h1><p>${pDesc}</p>${specsHtml}${detailHtml}${hasFaqInDetail ? '' : faqHtml}</article>`
             } else {
               // Product not found — return 404 status to prevent soft 404
               isNotFound = true
@@ -321,6 +338,10 @@ async function startServer() {
               const baseArticleTitle = article.seo_title || article.title_en || article.title || pageTitle
               pageTitle = baseArticleTitle.includes(companyName) ? baseArticleTitle : `${baseArticleTitle} | ${companyName}`
               pageDesc = article.seo_description || article.summary_en || article.summary || pageDesc
+              // Always ensure a meaningful description for news articles
+              if (!pageDesc) {
+                pageDesc = `${(article.title_en || article.title || '').substring(0, 100)} — Steel industry insights and technical guides from ${companyName}.`
+              }
               pageKeywords = article.seo_keywords || pageKeywords
               ogType = 'article'
               if (article.cover_image) pageImage = article.cover_image.startsWith('http') ? article.cover_image : `${siteUrl}${article.cover_image}`
