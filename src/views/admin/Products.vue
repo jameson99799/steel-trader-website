@@ -35,7 +35,8 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="product in pagedProducts" :key="product.id">
+            <template v-for="product in pagedProducts" :key="product.id">
+              <tr>
               <td>
                 <img :src="product.images?.split(',')[0] || '/placeholder.svg'" class="product-thumb" />
               </td>
@@ -56,12 +57,42 @@
                   <button class="btn btn-sm btn-secondary" @click="openModal(product)">✏️ 编辑</button>
                   <button class="btn btn-sm btn-outline" @click="previewProduct(product)" style="color:#2563eb;border-color:#2563eb;">👁 预览</button>
                   <button class="btn btn-sm btn-outline" @click="duplicateProduct(product)" style="color:#0077b5;border-color:#0077b5;">📋 复制</button>
-                  <button class="btn btn-sm btn-outline" @click="translateProduct(product)" style="color:#059669;border-color:#059669;" :disabled="translatingId === product.id">{{ translatingId === product.id ? '...' : '🌐 翻译' }}</button>
+                  
+                  <div class="translation-dropdown" style="position:relative;display:inline-block" @click.stop>
+                    <button class="btn btn-sm btn-outline" @click="toggleTranslateMenu(product)" style="color:#059669;border-color:#059669;" :disabled="translatingId === product.id">
+                      {{ translatingId === product.id ? '翻译中...' : '🌐 翻译 ▼' }}
+                    </button>
+                    <div v-if="activeTranslateMenu === product.id" class="dropdown-menu shadow" style="position:absolute;bottom:100%;right:0;background:white;border:1px solid #ddd;border-radius:6px;z-index:100;min-width:180px;padding:8px 0;margin-bottom:4px;box-shadow:0 -4px 12px rgba(0,0,0,0.1);">
+                      <div v-if="product._loadingStatus" style="padding:8px 12px;font-size:13px;color:#666;text-align:center;">正在检测状态...</div>
+                      <div v-else class="lang-list">
+                        <div style="padding:0 8px 8px;border-bottom:1px solid #f1f5f9;"><button class="btn btn-primary btn-sm" @click="translateProduct(product)" style="width:100%">一键翻译所有语言</button></div>
+                        <div v-for="l in product._translationStatus" :key="l.code" 
+                             @click="translateProduct(product, l.code, l.name)" 
+                             :style="{ color: l.translated ? '#16a34a' : '#2563eb', cursor: 'pointer', padding: '8px 12px', borderBottom: '1px solid #f8fafc', fontSize: '13px', fontWeight: '500', display: 'flex', alignItems: 'center' }">
+                          <span style="display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:8px;" :style="{ background: l.translated ? '#16a34a' : '#2563eb' }"></span>
+                          {{ l.name }} <span style="margin-left:auto;font-size:11px;opacity:0.8;">{{ l.translated ? '已翻译' : '未翻译' }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <button class="btn btn-sm btn-outline" @click="$router.push(`/admin/products/ai/${product.id}`)" style="color:#7c3aed;border-color:#7c3aed;">🤖 AI</button>
                   <button class="btn btn-sm btn-danger" @click="handleDelete(product)">🗑 删除</button>
                 </div>
               </td>
             </tr>
+            <tr v-if="translatingItemLog && translatingItemLog.id === product.id" class="log-row">
+              <td colspan="6" style="padding: 0; border: none;">
+                <div style="background: #1e293b; color: #a5b4fc; padding: 12px 16px; margin: 0 16px 16px; border-radius: 6px; font-family: 'Fira Mono', monospace; font-size: 13px; max-height: 250px; overflow-y: auto;">
+                  <div style="color: white; margin-bottom: 8px; font-weight: 600; display:flex; justify-content:space-between;">
+                    <span>📡 翻译日志 - {{ translatingItemLog.langName }}</span>
+                    <button @click="translatingItemLog = null" style="background:none;border:none;color:#94a3b8;cursor:pointer;">✕ 关闭</button>
+                  </div>
+                  <pre style="margin:0;white-space:pre-wrap;line-height:1.5;">{{ translatingItemLog.log }}</pre>
+                </div>
+              </td>
+            </tr>
+          </template>
           </tbody>
         </table>
         <p v-else class="text-center" style="color: var(--secondary);">暂无商品</p>
@@ -777,14 +808,66 @@ async function onRefProductChange() {
   }
 }
 
-async function translateProduct(product) {
-  if (!confirm(`翻译产品「${product.name_en || product.name}」到所有已配置的语言？`)) return
-  translatingId.value = product.id
+const activeTranslateMenu = ref(null)
+const translatingItemLog = ref(null)
+
+onMounted(() => {
+  document.addEventListener('click', () => {
+    activeTranslateMenu.value = null
+  })
+})
+
+async function toggleTranslateMenu(item) {
+  if (activeTranslateMenu.value === item.id) {
+    activeTranslateMenu.value = null
+    return
+  }
+  activeTranslateMenu.value = item.id
+  if (item._translationStatus) return // Already loaded
+
+  item._loadingStatus = true
   try {
-    const res = await api.translateItem('product', product.id)
-    alert(`✅ 翻译完成！已翻译 ${res.fields || 0} 个字段到 ${res.languages || 0} 种语言。${res.errors?.length ? `\n⚠️ ${res.errors.length} 个错误` : ''}`)
+    const res = await api.getItemTranslationStatus('product', item.id)
+    item._translationStatus = res.status || []
   } catch (e) {
-    alert('翻译失败: ' + e.message)
+    console.error('Failed to load status', e)
+  }
+  item._loadingStatus = false
+}
+
+async function translateProduct(product, targetLangCode = null, targetLangName = null) {
+  const langLabel = targetLangName ? targetLangName : '所有未翻译的语言'
+  if (!confirm(`开始翻译产品「${product.name_en || product.name}」(${langLabel})？`)) return
+  
+  translatingId.value = product.id
+  activeTranslateMenu.value = null // close menu
+  translatingItemLog.value = { id: product.id, langName: targetLangName || '全部语言', log: '开始翻译...\n' }
+  
+  try {
+    translatingItemLog.value.log += `正在调用后台 AI 引擎翻译...\n`
+    const res = await api.translateItem('product', product.id, targetLangCode)
+    
+    translatingItemLog.value.log += `\n✅ 翻译完成！\n共翻译了 ${res.fields || 0} 个字段到 ${res.languages || 1} 种语言。\n`
+    if (res.results?.length) {
+      res.results.forEach(r => {
+         translatingItemLog.value.log += `[${r.lang}] 字段 ${r.field}: 成功\n`
+      })
+    }
+    if (res.errors?.length) {
+      translatingItemLog.value.log += `\n⚠️ 遇到 ${res.errors.length} 个错误：\n`
+      res.errors.forEach(e => {
+         translatingItemLog.value.log += `[${e.lang}] 字段 ${e.field}: ${e.error}\n`
+      })
+    }
+    // Refresh status visually if it was open
+    if (product._translationStatus && targetLangCode) {
+       const s = product._translationStatus.find(x => x.code === targetLangCode)
+       if (s) s.translated = true
+    } else if (product._translationStatus && !targetLangCode) {
+       product._translationStatus.forEach(s => s.translated = true)
+    }
+  } catch (e) {
+    translatingItemLog.value.log += `\n❌ 翻译失败: ${e.message}\n`
   } finally {
     translatingId.value = null
   }
