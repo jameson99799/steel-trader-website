@@ -126,6 +126,7 @@
             <div class="form-group" style="flex:1">
               <label>目标语言</label>
               <select v-model="selectedLang" class="form-control">
+                <option value="all">🌍 全部语言</option>
                 <option v-for="l in nonEnLangs" :key="l.code" :value="l.code">
                   {{ l.flag }} {{ l.name }} — {{ l.ai_translated ? '✓ 已翻译' : '待翻译' }}
                 </option>
@@ -167,7 +168,7 @@
               <div class="progress-fill" :style="{ width: progressPct + '%' }" :class="{ error: progressErrors > 0 }"></div>
             </div>
             <div class="progress-text">
-              {{ progressDone }}/{{ progressTotal }} 页面  |  ✅ {{ progressOk }} 项  |  ⚠️ {{ progressErrors }} 错误
+              {{ progressDone }}/{{ progressTotal }} 项任务  |  ✅ {{ progressOk }} 项  |  ⚠️ {{ progressErrors }} 错误
               <span v-if="translating" class="spin">⏳</span>
             </div>
           </div>
@@ -203,7 +204,7 @@
             <h4>⚠️ 错误日志 ({{ translateResult.errors.length }} 个)</h4>
             <div v-for="(e, i) in translateResult.errors" :key="i" class="error-row">
               <code>{{ e.errorCode || 'ERR' }}</code>
-              <strong>{{ e.itemName || e.item || e.page || `Batch ${e.batch}` }}</strong>: {{ e.error }}
+              <strong>[{{ e.targetLang || '?' }}] {{ e.itemName || e.item || e.page || `Batch ${e.batch}` }}</strong>: {{ e.error }}
             </div>
           </div>
         </div>
@@ -622,7 +623,7 @@ onMounted(async () => {
     languages.value = langs || []
     await loadChannels()
     if (nonEnLangs.value.length > 0) {
-      selectedLang.value = nonEnLangs.value[0].code
+      selectedLang.value = 'all'
       searchLang.value = nonEnLangs.value[0].code
     }
     // Load granular translation data
@@ -823,7 +824,7 @@ async function runPages(pages) {
   progressOk.value = 0
   progressErrors.value = 0
 
-  addLog('info', `开始翻译 → 目标语言: ${selectedLang.value}，范围: ${pages.map(p => pageLabels[p] || p).join(', ')}`)
+  addLog('info', `开始翻译 → 目标语言: ${selectedLang.value === 'all' ? '全部语言' : selectedLang.value}，范围: ${pages.map(p => pageLabels[p] || p).join(', ')}`)
 
   addLog('info', `📋 正在获取待翻译内容列表...`)
   let allItemsList = []
@@ -832,7 +833,7 @@ async function runPages(pages) {
       const items = await api.getTranslationItems(page)
       allItemsList.push(...(items || []))
     }
-    addLog('ok', `📋 共发现 ${allItemsList.length} 个待翻译项目`)
+    addLog('ok', `📋 共发现 ${allItemsList.length} 个基础待翻译项目`)
   } catch (e) {
     addLog('error', `❌ 获取翻译列表失败: ${e.message}`)
     translating.value = false
@@ -845,7 +846,21 @@ async function runPages(pages) {
     return
   }
 
-  await runItems(allItemsList)
+  let finalItems = []
+  if (selectedLang.value === 'all') {
+    const langs = nonEnLangs.value.map(l => l.code)
+    for (const item of allItemsList) {
+      for (const lang of langs) {
+        finalItems.push({ ...item, targetLang: lang })
+      }
+    }
+  } else {
+    for (const item of allItemsList) {
+      finalItems.push({ ...item, targetLang: selectedLang.value })
+    }
+  }
+
+  await runItems(finalItems)
 }
 
 async function runItems(itemsList) {
@@ -861,7 +876,7 @@ async function runItems(itemsList) {
   const CONCURRENCY = concurrency.value || 3
   const BULK_SIZE = 1
 
-  addLog('info', `⚡ 陪读蛙模式: ${CONCURRENCY} 个产品同时翻译, 每个产品内部多段并发`)
+  addLog('info', `⚡ 陪读蛙模式: ${CONCURRENCY} 个项目同时翻译, 每个项目内部多段并发`)
 
   let queueIdx = 0
   let consecutiveFailures = 0
@@ -885,49 +900,49 @@ async function runItems(itemsList) {
       }
 
       const totalFields = chunk.reduce((s, c) => s + (c.fields?.length || 0), 0)
-      addLog('info', `→ 正在翻译: ${chunk[0].itemName} (${totalFields} 个字段)...`)
+      addLog('info', `→ 正在翻译: [${chunk[0].targetLang}] ${chunk[0].itemName} (${totalFields} 个字段)...`)
 
       try {
         const item = chunk[0]
-        const res = await api.runTranslationOne(selectedLang.value, item.type, item.id)
+        const res = await api.runTranslationOne(item.targetLang, item.type, item.id)
         const ok = res.results?.length || 0
         const errs = res.errors?.length || 0
         progressOk.value += ok
         progressErrors.value += errs
 
-        if (res.results) allResults.push(...res.results)
-        if (res.errors) allErrors.push(...res.errors)
+        if (res.results) allResults.push(...res.results.map(r => ({ ...r, targetLang: item.targetLang })))
+        if (res.errors) allErrors.push(...res.errors.map(e => ({ ...e, targetLang: item.targetLang })))
 
         if (errs > 0 && ok === 0) {
           consecutiveFailures++
           for (const e of res.errors) {
             const code = e.errorCode ? `[${e.errorCode}]` : ''
-            addLog('error', `   ❌ ${e.itemName || ''} ${code}: ${(e.error || '').slice(0, 120)}`)
+            addLog('error', `   ❌ [${item.targetLang}] ${e.itemName || ''} ${code}: ${(e.error || '').slice(0, 120)}`)
           }
-          for (const item of chunk) newFailed.push(item)
+          for (const it of chunk) newFailed.push(it)
           if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
             addLog('error', `🛑 连续 ${MAX_CONSECUTIVE_FAILURES} 次失败，自动停止翻译！请检查API密钥或网络连接`)
             aborted = true
           }
         } else if (errs > 0) {
           consecutiveFailures = 0  // 有成功就重置
-          if (ok > 0) addLog('warn', `   ⚠️「${chunk[0].itemName}」: ${ok} 成功, ${errs} 错误`)
-          for (const item of chunk) newFailed.push(item)
+          if (ok > 0) addLog('warn', `   ⚠️ [${item.targetLang}]「${chunk[0].itemName}」: ${ok} 成功, ${errs} 错误`)
+          for (const it of chunk) newFailed.push(it)
         } else if (ok === 0) {
           consecutiveFailures = 0
-          addLog('ok', `   ✔「${chunk[0].itemName}」无需翻译`)
+          addLog('ok', `   ✔ [${item.targetLang}]「${chunk[0].itemName}」无需翻译`)
         } else {
           consecutiveFailures = 0
-          addLog('ok', `   ✅「${chunk[0].itemName}」翻译成功: ${ok} 个字段`)
+          addLog('ok', `   ✅ [${item.targetLang}]「${chunk[0].itemName}」翻译成功: ${ok} 个字段`)
         }
       } catch (e) {
         consecutiveFailures++
         progressErrors.value += chunk.length
-        for (const item of chunk) {
-          allErrors.push({ item: item.itemName, error: e.message, errorCode: 'ERR_API' })
-          newFailed.push(item)
+        for (const it of chunk) {
+          allErrors.push({ item: it.itemName, error: e.message, errorCode: 'ERR_API', targetLang: it.targetLang })
+          newFailed.push(it)
         }
-        addLog('error', `   ❌「${chunk[0].itemName}」翻译失败 (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}): ${e.message}`)
+        addLog('error', `   ❌ [${chunk[0].targetLang}]「${chunk[0].itemName}」翻译失败 (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}): ${e.message}`)
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
           addLog('error', `🛑 连续 ${MAX_CONSECUTIVE_FAILURES} 次失败，自动停止翻译！请检查API密钥或网络连接`)
           aborted = true
