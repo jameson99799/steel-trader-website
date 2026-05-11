@@ -30,7 +30,7 @@ if [ "$LOCAL" = "$REMOTE" ]; then
   read -r -n1 REPLY; echo
   [[ ! $REPLY =~ ^[Yy]$ ]] && echo "Cancelled." && exit 0
 fi
-git pull
+git reset --hard origin/master
 ok "Code: $(git log --oneline -1)"
 
 # 2. Rebuild and restart (zero-downtime: build new, then swap)
