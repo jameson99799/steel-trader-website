@@ -270,11 +270,13 @@ async function startServer() {
         let ogType = 'website'
         let extraSchemas = ''
         let isNotFound = false  // Track soft 404
+        let matchedRoute = false
         let ssrContent = ''    // Server-rendered content for SEO/GEO crawlers
 
           // ── Product detail page ──
-          const productMatch = subPath.match(/^\/products\/(.+)$/)
+          const productMatch = subPath.match(/^\/products\/(?!category\/)(.+)$/)
           if (productMatch) {
+            matchedRoute = true
             const slug = productMatch[1]
             let product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.slug=?', [slug])
             if (!product) {
@@ -401,6 +403,7 @@ async function startServer() {
           // ── News detail page (skip /news/category/ URLs) ──
           const newsMatch = subPath.match(/^\/news\/(?!category\/)(.+)$/)
           if (newsMatch) {
+            matchedRoute = true
             const slug = newsMatch[1]
             let article = getOne('SELECT * FROM news WHERE slug=?', [slug])
             if (!article) {
@@ -485,6 +488,7 @@ async function startServer() {
           // ── News category page (e.g. /news/category/product-introduction) ──
           const catPageMatch = subPath.match(/^\/news\/category\/([^/]+)$/)
           if (catPageMatch) {
+            matchedRoute = true
             const catSlug = catPageMatch[1]
             const cat = getOne('SELECT * FROM news_categories WHERE slug = ?', [catSlug])
             if (cat) {
@@ -515,12 +519,17 @@ async function startServer() {
                 ).join('')
                 ssrContent = `<section id="ssr-category"><h1>${esc(catName)}</h1><ul>${articleLinks}</ul></section>`
               }
+            } else {
+              isNotFound = true
+              pageTitle = 'Category Not Found | ' + companyName
+              pageDesc = 'The requested category could not be found.'
             }
           }
 
           // ── Products category page (e.g. /products/category/galvanized-steel-coil) ──
           const prodCatMatch = subPath.match(/^\/products\/category\/([^/]+)$/)
           if (prodCatMatch) {
+            matchedRoute = true
             const catSlug = prodCatMatch[1]
             const cat = getOne('SELECT * FROM categories WHERE slug = ?', [catSlug]) ||
                          getOne('SELECT * FROM categories WHERE lower(name_en) = ?', [catSlug.replace(/-/g, ' ')])
@@ -548,11 +557,16 @@ async function startServer() {
                   }))
                 })
               }
+            } else {
+              isNotFound = true
+              pageTitle = 'Category Not Found | ' + companyName
+              pageDesc = 'The requested category could not be found.'
             }
           }
 
           // ── Static pages with SSR content injection ──
           if (subPath === '/products' || subPath === '/products/') {
+            matchedRoute = true
             pageTitle = `Steel Products - GI, GL, PPGI, PPGL, CRC Coils & Sheets | ${companyName}`
             pageDesc = `Manufacturer & Exporter of Galvanized Steel (GI), Galvalume (GL), PPGI, PPGL & CRC Coils. ASTM A653/JIS G3302/EN 10346 compliant. Factory direct pricing from Shandong, China.`
             // SSR product list for GEO crawlers
@@ -574,6 +588,7 @@ async function startServer() {
               { '@type': 'ListItem', position: 2, name: 'Products', item: pageCanonical }
             ] })
           } else if (subPath === '/news' || subPath === '/news/') {
+            matchedRoute = true
             pageTitle = `Steel Industry News & Technical Guides | ${companyName}`
             pageDesc = `Latest galvanized steel news, PPGI/PPGL technical guides, coil specifications, and market analysis from ${companyName}. Expert insights for steel buyers.`
             // SSR recent article list for GEO crawlers
@@ -587,6 +602,7 @@ async function startServer() {
               { '@type': 'ListItem', position: 2, name: 'News', item: pageCanonical }
             ] })
           } else if (subPath === '/about' || subPath === '/about/') {
+            matchedRoute = true
             pageTitle = `About Us | ${companyName}`
             pageDesc = company.description_en || `Learn about ${companyName} — a professional steel coil manufacturer and exporter based in Shandong, China.`
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
@@ -602,6 +618,7 @@ async function startServer() {
               description: (company.description_en || '').substring(0, 300)
             })
           } else if (subPath === '/contact' || subPath === '/contact/') {
+            matchedRoute = true
             pageTitle = `Contact Us | ${companyName}`
             pageDesc = `Get in touch with ${companyName}. Request a quote, ask product questions, or schedule a factory visit.`
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
@@ -621,6 +638,7 @@ async function startServer() {
 
           // ── Homepage BreadcrumbList + WebSite schema + SSR content ──
           if (!subPath || subPath === '/') {
+            matchedRoute = true
             // Keyword-rich homepage title (overrides bare company name from seoSettings)
             const baseTitle = seoSettings.site_title || companyName
             pageTitle = baseTitle.toLowerCase().includes('gi') || baseTitle.toLowerCase().includes('steel coil')
@@ -643,6 +661,13 @@ async function startServer() {
             const companyDesc = esc(company.description_en || company.description || '')
             const homeProductList = homeProducts.map(p => `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a></li>`).join('')
             ssrContent = `<section id="ssr-home"><h1>${esc(companyName)}</h1><p>${companyDesc}</p><h2>Main Products</h2><ul>${homeProductList}</ul></section>`
+          }
+
+          // ── Catch-all for invalid routes ──
+          if (!matchedRoute) {
+            isNotFound = true
+            pageTitle = 'Page Not Found | ' + companyName
+            pageDesc = 'The requested page could not be found.'
           }
 
         // ── Global Organization schema (on every page) ──
