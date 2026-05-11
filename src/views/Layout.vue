@@ -10,13 +10,15 @@
 </template>
 
 <script setup>
-import { onMounted, watch } from 'vue'
+import { onMounted, watch, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import SiteHeader from '../components/SiteHeader.vue'
-import SiteFooter from '../components/SiteFooter.vue'
-import FloatingContact from '../components/FloatingContact.vue'
 import api from '../api'
+
+// Async load below-the-fold components to reduce Total Blocking Time
+const SiteFooter = defineAsyncComponent(() => import('../components/SiteFooter.vue'))
+const FloatingContact = defineAsyncComponent(() => import('../components/FloatingContact.vue'))
 
 const route = useRoute()
 const router = useRouter()

@@ -215,14 +215,16 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const { t, localizedValue, langPath } = useLang()
-const hero = ref({})
+const hero = ref(window.__INITIAL_STATE__?.hero || {})
 const featuredProducts = ref([])
 const categories = ref([])
 const pageTexts = ref({})
 
 onMounted(async () => {
   try {
-    hero.value = await api.getHero()
+    if (!window.__INITIAL_STATE__?.hero) {
+      hero.value = await api.getHero()
+    }
     const productsRes = await api.getProducts({ featured: '1', limit: 12 })
     featuredProducts.value = productsRes.data
     const tree = await api.getCategoryTree()

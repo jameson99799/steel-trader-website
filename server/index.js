@@ -735,14 +735,21 @@ async function startServer() {
         // Remove existing canonical if present, then add correct one via </head> injection
         html = html.replace(/<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/, '')
         const canonicalTag = `<link rel="canonical" href="${esc(pageCanonical)}">`
-        html = html.replace('</head>', `${canonicalTag}\n  ${extraMeta}\n  ${extraSchemas}\n</head>`)
-
-
-        // ── Inject SSR content for SEO/GEO crawlers ──
+        
+        // ── Inject SSR content and INITIAL_STATE for hydration ──
         // Insert real content inside <body> so non-JS crawlers can read it
         if (ssrContent) {
           html = html.replace('<div id="app">', `<div id="ssr-content" style="display:none">${ssrContent}</div>\n<div id="app">`)
         }
+        
+        // Inject state for instant LCP rendering
+        const initialState = {
+          hero: getOne('SELECT * FROM hero_slides WHERE status=1 ORDER BY sort_order LIMIT 1') || {},
+          company: company,
+          pageTexts: getOne('SELECT * FROM page_texts WHERE id = 1') || {}
+        }
+        const stateTag = `<script>window.__INITIAL_STATE__ = ${JSON.stringify(initialState)}</script>`
+        html = html.replace('</head>', `${canonicalTag}\n  ${extraMeta}\n  ${extraSchemas}\n  ${stateTag}\n</head>`)
 
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
