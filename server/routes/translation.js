@@ -105,7 +105,11 @@ async function callAI(settings, messages, maxTokens = 8000) {
 
 router.post('/models', authMiddleware, async (req, res) => {
     const s = getOne('SELECT * FROM translation_settings WHERE id = 1')
-    const apiUrl = (req.body.api_url || s?.api_url || 'https://api.openai.com/v1').replace(/\/$/, '') + '/models'
+    let baseApiUrl = (req.body.api_url || s?.api_url || 'https://api.openai.com/v1').replace(/\/$/, '')
+    if (baseApiUrl.endsWith('/chat/completions')) {
+        baseApiUrl = baseApiUrl.replace(/\/chat\/completions$/, '')
+    }
+    const apiUrl = baseApiUrl + '/models'
     const apiKey = (req.body.api_key && !req.body.api_key.includes('****')) ? req.body.api_key : (s?.api_key || '')
     if (!apiKey) return res.status(400).json({ error: 'API key not configured' })
     try {
@@ -113,7 +117,13 @@ router.post('/models', authMiddleware, async (req, res) => {
             headers: { 'Authorization': `Bearer ${apiKey}` }
         })
         if (result.status !== 200) return res.status(502).json({ error: `AI API ${result.status}: ${JSON.stringify(result.body)}` })
-        const models = (result.body?.data || []).map(m => m.id).filter(Boolean).sort()
+        let body = result.body
+        if (typeof body === 'string') {
+            try { body = JSON.parse(body) } catch(e) {}
+        }
+        let modelsList = body?.data || body || []
+        if (!Array.isArray(modelsList) && Array.isArray(body?.models)) modelsList = body.models
+        const models = (Array.isArray(modelsList) ? modelsList : []).map(m => m.id || m).filter(Boolean).sort()
         res.json({ models })
     } catch (e) {
         res.status(500).json({ error: e.message })

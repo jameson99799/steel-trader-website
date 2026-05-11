@@ -149,13 +149,23 @@ router.post('/channels/:id/test', authMiddleware, async (req, res) => {
 router.get('/channels/:id/models', authMiddleware, async (req, res) => {
     const channel = getOne('SELECT * FROM ai_channels WHERE id = ?', [req.params.id])
     if (!channel) return res.status(404).json({ error: '渠道不存在' })
-    const apiUrl = channel.api_url.replace(/\/$/, '') + '/models'
+    let baseApiUrl = channel.api_url.replace(/\/$/, '')
+    if (baseApiUrl.endsWith('/chat/completions')) {
+        baseApiUrl = baseApiUrl.replace(/\/chat\/completions$/, '')
+    }
+    const apiUrl = baseApiUrl + '/models'
     try {
         const result = await httpRequest(apiUrl, {
             headers: { 'Authorization': `Bearer ${channel.api_key}` }
         })
         if (result.status !== 200) return res.status(502).json({ error: `AI API ${result.status}: ${JSON.stringify(result.body)}` })
-        const models = (result.body?.data || []).map(m => m.id).filter(Boolean).sort()
+        let body = result.body
+        if (typeof body === 'string') {
+            try { body = JSON.parse(body) } catch(e) {}
+        }
+        let modelsList = body?.data || body || []
+        if (!Array.isArray(modelsList) && Array.isArray(body?.models)) modelsList = body.models
+        const models = (Array.isArray(modelsList) ? modelsList : []).map(m => m.id || m).filter(Boolean).sort()
         res.json({ models })
     } catch (e) {
         res.status(500).json({ error: e.message })

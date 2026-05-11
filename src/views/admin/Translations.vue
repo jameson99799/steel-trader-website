@@ -77,13 +77,15 @@
         </div>
         <div class="form-group">
           <label>模型选择 <button class="btn btn-outline btn-xs" @click="fetchChannelModels" :disabled="fetchingChModels" style="margin-left:8px">{{ fetchingChModels ? '搜索中...' : '🔍 搜索可用模型' }}</button></label>
-          <div class="model-list" v-if="channelModelList.length">
-            <div v-for="m in channelModelList" :key="m" class="model-item"
+          <input v-if="channelModelList.length" v-model="modelSearchQuery" class="form-control" placeholder="🔍 模糊搜索模型名称..." style="margin-bottom: 8px; width: 100%;" />
+          <div class="model-list" v-if="filteredChannelModelList.length">
+            <div v-for="m in filteredChannelModelList" :key="m" class="model-item"
                  :class="{ selected: channelForm.models.includes(m) }"
                  @click="toggleModel(m)">
               <span class="model-check">{{ channelForm.models.includes(m) ? '☑' : '☐' }}</span> {{ m }}
             </div>
           </div>
+          <div v-else-if="channelModelList.length && !filteredChannelModelList.length" class="empty-tip" style="padding: 10px 0;">未找到匹配的模型</div>
           <div v-if="channelForm.models.length" class="selected-models">
             <span class="ch-label">已选模型：</span>
             <span v-for="m in channelForm.models" :key="m" class="model-tag removable" @click="removeModel(m)">{{ m }} ×</span>
@@ -552,6 +554,12 @@ const channels = ref([])
 const showChannelDialog = ref(false)
 const editingChannel = ref(null)
 const channelModelList = ref([])
+const modelSearchQuery = ref('')
+const filteredChannelModelList = computed(() => {
+  if (!modelSearchQuery.value) return channelModelList.value
+  const q = modelSearchQuery.value.toLowerCase()
+  return channelModelList.value.filter(m => m.toLowerCase().includes(q))
+})
 const fetchingChModels = ref(false)
 const savingChannel = ref(false)
 const channelForm = reactive({
@@ -677,6 +685,7 @@ async function loadChannels() {
 function openChannelDialog(ch = null) {
   editingChannel.value = ch
   channelModelList.value = ch?.models || []
+  modelSearchQuery.value = ''
   if (ch) {
     channelForm.name = ch.name
     channelForm.api_url = ch.api_url
