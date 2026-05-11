@@ -704,9 +704,9 @@ async function startServer() {
         // ── Replace meta tags in HTML ──
         html = html.replace(/<html\s+lang="[^"]*"/, `<html lang="${esc(lang)}"`)
         html = html.replace(/<title>[^<]*<\/title>/, `<title>${esc(pageTitle)}</title>`)
-        html = html.replace(/<meta\s+name="description"\s+content="[^"]*"/, `<meta name="description" content="${esc(pageDesc)}"`)
-        html = html.replace(/<meta\s+name="keywords"\s+content="[^"]*"/, `<meta name="keywords" content="${esc(pageKeywords)}"`)
-        html = html.replace(/<meta\s+name="robots"\s+content="[^"]*"/, robotsMeta.replace(/\//g, ''))
+        html = html.replace(/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/, `<meta name="description" content="${esc(pageDesc)}">`)
+        html = html.replace(/<meta\s+name="keywords"\s+content="[^"]*"\s*\/?>/, `<meta name="keywords" content="${esc(pageKeywords)}">`)
+        html = html.replace(/<meta\s+name="robots"\s+content="[^"]*"\s*\/?>/, robotsMeta)
         // Remove existing canonical if present, then add correct one via </head> injection
         html = html.replace(/<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/, '')
         const canonicalTag = `<link rel="canonical" href="${esc(pageCanonical)}">`
