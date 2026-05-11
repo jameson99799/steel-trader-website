@@ -691,9 +691,15 @@ DO NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", "GI GL PPGI PPGL CRC Steel C
                 for (let i = 0; i < blocks.length; i += BLOCK_BATCH) {
                     const batch = blocks.slice(i, i + BLOCK_BATCH)
                     blockTasks.push(async () => {
-                        const numberedText = batch.map((b, idx) => `${idx + 1}. ${b.innerHTML}`).join('\n')
+                        const numberedText = batch.map((b, idx) => `---BLOCK ${idx + 1}---\n${b.innerHTML}`).join('\n')
                         const blockPrompt = `Translate HTML blocks to ${langName}. Context: "${contextName}" steel product page.
-Return JSON {"1":"translated html","2":"...",...}. Keep ALL HTML tags, attributes, URLs unchanged. Translate only visible text.
+Return the translated blocks in the exact same format using ---BLOCK N--- separators. Keep ALL HTML tags, attributes, URLs unchanged. Translate only visible text.
+Example output format:
+---BLOCK 1---
+<p>Translated HTML</p>
+---BLOCK 2---
+<div>Translated HTML</div>
+
 Glossary(zh): Galvalume/GL=镀铝锌 PPGI=彩涂镀锌 PPGL=彩涂镀铝锌 GI=镀锌 CRC=冷轧卷
 Do NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T${overrideNote}`
                         for (let retry = 0; retry <= 2; retry++) {
@@ -702,14 +708,28 @@ Do NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T${overrid
                                     { role: 'system', content: blockPrompt },
                                     { role: 'user', content: numberedText }
                                 ], 8000)
-                                const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
-                                if (jsonMatch) {
-                                    const translations = JSON.parse(jsonMatch[0])
-                                    for (let j = 0; j < batch.length; j++) {
-                                        const translated = translations[String(j + 1)]
-                                        if (translated) batch[j].translated = translated
+                                
+                                const blockMatches = [...aiContent.matchAll(/---[\s]*BLOCK[\s]+(\d+)[\s]*---[\r\n]+([\s\S]*?)(?=\r?\n---[\s]*BLOCK|$)/gi)]
+                                if (blockMatches.length > 0) {
+                                    for (const match of blockMatches) {
+                                        const idx = parseInt(match[1]) - 1
+                                        if (idx >= 0 && idx < batch.length && match[2]) {
+                                            batch[idx].translated = match[2].trim()
+                                        }
                                     }
                                     break
+                                } else {
+                                    // Fallback: in case AI still outputs JSON
+                                    const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
+                                    if (jsonMatch) {
+                                        const translations = JSON.parse(jsonMatch[0])
+                                        for (let j = 0; j < batch.length; j++) {
+                                            const translated = translations[String(j + 1)]
+                                            if (translated) batch[j].translated = translated
+                                        }
+                                        break
+                                    }
+                                    throw new Error('No valid block separators or JSON found in AI response')
                                 }
                             } catch (e) {
                                 if (retry >= 2) errors.push({ error: e.message, errorCode: 'ERR_BLOCK', itemName: item.itemName })
