@@ -322,7 +322,9 @@ router.post('/optimize-all', authMiddleware, async (req, res) => {
         { table: 'news', columns: ['content', 'cover_image'] },
         { table: 'categories', columns: ['image'] },
         { table: 'hero_slides', columns: ['image_url'] },
-        { table: 'company', columns: ['about_image'] }
+        { table: 'company', columns: ['about_image', 'logo', 'favicon', 'whatsapp_qr', 'wechat_qr'] },
+        { table: 'banners', columns: ['image'] },
+        { table: 'seo_settings', columns: ['og_image'] }
       ]
 
       for (const t of tablesToUpdate) {

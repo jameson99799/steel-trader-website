@@ -26,28 +26,10 @@ export default defineConfig({
       }
     },
     // Split chunks intelligently to reduce initial bundle size
+    // Rely on Vite's native async chunking
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          // Vendor: heavy libraries go into separate chunks
-          if (id.includes('node_modules/vue') || id.includes('node_modules/@vue')) {
-            return 'vue-vendor'
-          }
-          if (id.includes('node_modules/vue-router')) {
-            return 'router'
-          }
-          if (id.includes('node_modules/quill') || id.includes('node_modules/@vueup')) {
-            return 'editor'
-          }
-          // Admin pages — only loaded when visiting /admin
-          if (id.includes('src/views/admin/')) {
-            return 'admin'
-          }
-          // CRM pages
-          if (id.includes('src/views/crm/')) {
-            return 'crm'
-          }
-        }
+        // Let Vite handle it automatically
       }
     },
     // Reduce chunk size warnings threshold

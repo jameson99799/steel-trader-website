@@ -131,8 +131,8 @@
             &copy; {{ new Date().getFullYear() }} {{ localizedValue(company, 'name') }}. All rights reserved.
           </p>
           <div class="footer-nav">
-            <a href="javascript:void(0)" @click.prevent="showLegalModal('privacy')" class="footer-nav-link">Privacy Policy</a>
-            <a href="javascript:void(0)" @click.prevent="showLegalModal('terms')" class="footer-nav-link">Terms of Service</a>
+            <a :href="langPath('/about#privacy')" @click.prevent="showLegalModal('privacy')" class="footer-nav-link">Privacy Policy</a>
+            <a :href="langPath('/about#terms')" @click.prevent="showLegalModal('terms')" class="footer-nav-link">Terms of Service</a>
           </div>
         </div>
       </div>

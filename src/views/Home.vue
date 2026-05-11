@@ -8,9 +8,9 @@
       <div class="container">
         <div class="hero-content">
           <div class="hero-text">
-            <span class="hero-badge">{{ localizedValue(hero, 'tag') }}</span>
-            <h1 class="hero-title">{{ localizedValue(hero, 'title') }}</h1>
-            <h2 class="hero-subtitle">{{ localizedValue(hero, 'subtitle') }}</h2>
+            <span class="hero-badge" style="min-height:20px;display:inline-block;">{{ localizedValue(hero, 'tag') }}</span>
+            <h1 class="hero-title" style="min-height:1.2em;">{{ localizedValue(hero, 'title') }}</h1>
+            <h2 class="hero-subtitle" style="min-height:1.5em;">{{ localizedValue(hero, 'subtitle') }}</h2>
             
             <div class="hero-stats">
               <div class="stat-item">
