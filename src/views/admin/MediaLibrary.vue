@@ -3,8 +3,28 @@
     <div class="page-header">
       <h1>📷 图库管理</h1>
       <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline" @click="optimizeAllImages" :disabled="optimizing" style="color:#d97706;border-color:#d97706;">
+          {{ optimizing ? '正在压缩优化中...' : '🚀 一键优化所有旧图片 (WebP)' }}
+        </button>
         <button class="btn btn-primary" @click="showUploadModal = true">📤 上传图片</button>
         <button class="btn btn-secondary" @click="showGroupMgr = !showGroupMgr">📁 分组管理</button>
+      </div>
+    </div>
+
+    <!-- Optimization Progress Modal -->
+    <div v-if="optimizing || optimizeResult" class="modal-overlay">
+      <div class="modal" style="max-width:400px; padding: 24px; text-align: center;">
+        <h3 style="margin-top:0;">{{ optimizeResult ? '✅ 优化完成' : '🚀 正在批量优化图片...' }}</h3>
+        <p v-if="optimizing" style="color:#64748b;font-size:14px;">
+          系统正在将服务器中残留的 JPG/PNG 历史图片无损压缩为 WebP 格式。<br/>
+          这需要消耗一定的时间，请勿关闭此页面。
+        </p>
+        <div v-if="optimizeResult" style="text-align:left; background:#f0fdf4; padding:12px; border-radius:8px; margin:16px 0; font-size:14px; color:#166534;">
+          <p style="margin:4px 0">扫描到旧图片: <b>{{ optimizeResult.total }}</b> 张</p>
+          <p style="margin:4px 0">成功压缩转码: <b>{{ optimizeResult.successCount }}</b> 张</p>
+          <p style="margin:4px 0" v-if="optimizeResult.errorCount">处理失败: <b style="color:red">{{ optimizeResult.errorCount }}</b> 张</p>
+        </div>
+        <button v-if="optimizeResult" class="btn btn-primary" @click="closeOptimizeResult" style="width:100%">确认</button>
       </div>
     </div>
 
@@ -185,6 +205,9 @@ const replaceInput = ref(null)
 const renamingId = ref(null)
 const renameValue = ref('')
 const renameInput = ref(null)
+
+const optimizing = ref(false)
+const optimizeResult = ref(null)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage)))
 
@@ -374,6 +397,35 @@ async function saveRename(item) {
     item.original_filename = newName
   } catch (e) { console.error('Rename failed:', e) }
   renamingId.value = null
+}
+
+async function optimizeAllImages() {
+  if (!confirm('此操作将扫描所有未优化的历史 JPG/PNG 图片，将其转换为体积更小的 WebP 格式，并自动替换关联的文章和产品中的旧地址。\n\n这可能需要几十秒到几分钟，确定开始吗？')) return
+  
+  optimizing.value = true
+  optimizeResult.value = null
+  try {
+    const res = await fetch('/api/media/optimize-all', {
+      method: 'POST',
+      headers: headers()
+    })
+    const data = await res.json()
+    if (res.ok) {
+      optimizeResult.value = data
+    } else {
+      alert('优化失败: ' + data.error)
+      optimizing.value = false
+    }
+  } catch (e) {
+    alert('优化异常: ' + e.message)
+    optimizing.value = false
+  }
+}
+
+function closeOptimizeResult() {
+  optimizeResult.value = null
+  optimizing.value = false
+  loadMedia()
 }
 
 onMounted(() => { loadGroups(); loadMedia() })

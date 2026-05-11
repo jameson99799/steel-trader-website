@@ -16,16 +16,29 @@ router.get('/', (req, res) => {
 })
 
 router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
-    const existing = getOne('SELECT * FROM seo_settings WHERE id = 1')
+    const existing = getOne('SELECT * FROM seo_settings WHERE id = 1') || {}
     const {
-        site_title, site_description, site_keywords, google_analytics, google_search_console, robots_txt,
-        geo_region, geo_placename, geo_lat, geo_lng, hreflang_en, hreflang_zh,
-        local_business_type, local_business_address,
-        article_refresh_days, product_refresh_days, default_news_author
+        site_title = existing.site_title,
+        site_description = existing.site_description,
+        site_keywords = existing.site_keywords,
+        google_analytics = existing.google_analytics,
+        google_search_console = existing.google_search_console,
+        robots_txt = existing.robots_txt,
+        geo_region = existing.geo_region,
+        geo_placename = existing.geo_placename,
+        geo_lat = existing.geo_lat,
+        geo_lng = existing.geo_lng,
+        hreflang_en = existing.hreflang_en,
+        hreflang_zh = existing.hreflang_zh,
+        local_business_type = existing.local_business_type,
+        local_business_address = existing.local_business_address,
+        article_refresh_days = existing.article_refresh_days,
+        product_refresh_days = existing.product_refresh_days,
+        default_news_author = existing.default_news_author
     } = req.body
     const og_image = req.file ? `/uploads/${req.file.filename}` : existing?.og_image
 
-    if (existing) {
+    if (existing && existing.id) {
         run(
             `UPDATE seo_settings SET site_title=?, site_description=?, site_keywords=?, og_image=?,
             google_analytics=?, google_search_console=?, robots_txt=?,
@@ -37,7 +50,7 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
                 google_analytics, google_search_console, robots_txt,
                 geo_region, geo_placename, geo_lat, geo_lng,
                 hreflang_en, hreflang_zh, local_business_type, local_business_address,
-                parseInt(article_refresh_days ?? existing.article_refresh_days) || 0, parseInt(product_refresh_days ?? existing.product_refresh_days) || 0, default_news_author]
+                parseInt(article_refresh_days) || 0, parseInt(product_refresh_days) || 0, default_news_author]
         )
     } else {
         run(
