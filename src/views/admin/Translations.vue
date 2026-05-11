@@ -76,8 +76,11 @@
           </div>
         </div>
         <div class="form-group">
-          <label>模型选择 <button class="btn btn-outline btn-xs" @click="fetchChannelModels" :disabled="fetchingChModels" style="margin-left:8px">{{ fetchingChModels ? '搜索中...' : '🔍 搜索可用模型' }}</button></label>
-          <input v-if="channelModelList.length" v-model="modelSearchQuery" class="form-control" placeholder="🔍 模糊搜索模型名称..." style="margin-bottom: 8px; width: 100%;" />
+          <label>模型选择 <button class="btn btn-outline btn-xs" @click="fetchChannelModels" :disabled="fetchingChModels" style="margin-left:8px">{{ fetchingChModels ? '获取中...' : '🔍 一键获取可用模型' }}</button></label>
+          <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <input v-model="modelSearchQuery" class="form-control" placeholder="🔍 搜索已获取的模型，或手动输入模型名称按回车添加..." @keyup.enter="addManualModel" style="flex:1;" />
+            <button class="btn btn-outline" @click="addManualModel" :disabled="!modelSearchQuery.trim()">➕ 添加</button>
+          </div>
           <div class="model-list" v-if="filteredChannelModelList.length">
             <div v-for="m in filteredChannelModelList" :key="m" class="model-item"
                  :class="{ selected: channelForm.models.includes(m) }"
@@ -86,6 +89,7 @@
             </div>
           </div>
           <div v-else-if="channelModelList.length && !filteredChannelModelList.length" class="empty-tip" style="padding: 10px 0;">未找到匹配的模型</div>
+          <div v-else-if="!channelModelList.length" class="empty-tip" style="padding: 10px 0;">点击上方「一键获取可用模型」，或直接在输入框手动添加</div>
           <div v-if="channelForm.models.length" class="selected-models">
             <span class="ch-label">已选模型：</span>
             <span v-for="m in channelForm.models" :key="m" class="model-tag removable" @click="removeModel(m)">{{ m }} ×</span>
@@ -560,6 +564,19 @@ const filteredChannelModelList = computed(() => {
   const q = modelSearchQuery.value.toLowerCase()
   return channelModelList.value.filter(m => m.toLowerCase().includes(q))
 })
+
+function addManualModel() {
+  const m = modelSearchQuery.value.trim()
+  if (!m) return
+  if (!channelForm.models.includes(m)) {
+    channelForm.models.push(m)
+  }
+  if (!channelModelList.value.includes(m)) {
+    channelModelList.value.push(m)
+  }
+  modelSearchQuery.value = ''
+}
+
 const fetchingChModels = ref(false)
 const savingChannel = ref(false)
 const channelForm = reactive({
