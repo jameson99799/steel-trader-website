@@ -288,11 +288,12 @@ router.post('/optimize-all', authMiddleware, async (req, res) => {
   const imagesToOptimize = files.filter(f => targetExts.includes(f.match(/\.[^.]+$/)?.[0].toLowerCase()))
 
   if (imagesToOptimize.length === 0) {
-    return res.json({ message: '没有需要优化的图片', total: 0, successCount: 0, errorCount: 0 })
+    return res.json({ message: '没有需要优化的图片', total: 0, successCount: 0, errorCount: 0, errors: [] })
   }
 
   let successCount = 0
   let errorCount = 0
+  let errors = []
 
   for (const filename of imagesToOptimize) {
     const oldPath = join(uploadDir, filename)
@@ -341,10 +342,11 @@ router.post('/optimize-all', authMiddleware, async (req, res) => {
     } catch (err) {
       console.error(`Failed to optimize ${filename}:`, err)
       errorCount++
+      errors.push({ filename, reason: err.message })
     }
   }
 
-  res.json({ message: '优化完成', successCount, errorCount, total: imagesToOptimize.length })
+  res.json({ message: '优化完成', successCount, errorCount, total: imagesToOptimize.length, errors })
 })
 
 export default router

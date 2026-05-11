@@ -23,6 +23,14 @@
           <p style="margin:4px 0">扫描到旧图片: <b>{{ optimizeResult.total }}</b> 张</p>
           <p style="margin:4px 0">成功压缩转码: <b>{{ optimizeResult.successCount }}</b> 张</p>
           <p style="margin:4px 0" v-if="optimizeResult.errorCount">处理失败: <b style="color:red">{{ optimizeResult.errorCount }}</b> 张</p>
+          <div v-if="optimizeResult.errors && optimizeResult.errors.length" style="margin-top:8px;font-size:12px;color:#b91c1c;">
+            <strong>失败原因：</strong>
+            <ul style="margin:4px 0;padding-left:16px;max-height:100px;overflow-y:auto;">
+              <li v-for="err in optimizeResult.errors" :key="err.filename" style="margin-bottom:2px;">
+                {{ err.filename }} - {{ err.reason }}
+              </li>
+            </ul>
+          </div>
         </div>
         <button v-if="optimizeResult" class="btn btn-primary" @click="closeOptimizeResult" style="width:100%">确认</button>
       </div>
