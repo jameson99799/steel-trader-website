@@ -24,19 +24,23 @@
     window.dataLayer = window.dataLayer || [];
     function gtag() { dataLayer.push(arguments); }
     (function() {
+      let loaded = false;
       function loadGtag() {
+        if (loaded) return;
+        loaded = true;
         var s = document.createElement('script');
         s.src = 'https://www.googletagmanager.com/gtag/js?id=G-9XX57W2ZKS';
         s.async = true;
         document.head.appendChild(s);
         gtag('js', new Date());
         gtag('config', 'G-9XX57W2ZKS');
+        // Clean up listeners
+        ['scroll','mousemove','touchstart','click'].forEach(e => window.removeEventListener(e, loadGtag));
       }
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(loadGtag);
-      } else {
-        setTimeout(loadGtag, 2000);
-      }
+      // Load on first interaction to avoid PageSpeed penalties
+      ['scroll','mousemove','touchstart','click'].forEach(e => window.addEventListener(e, loadGtag, {once:true, passive:true}));
+      // Fallback: load after 5 seconds anyway if no interaction
+      setTimeout(loadGtag, 5000);
     })();
   </script>
 </head>
