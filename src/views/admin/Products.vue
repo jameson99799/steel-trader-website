@@ -59,21 +59,23 @@
                   <button class="btn btn-sm btn-outline" @click="duplicateProduct(product)" style="color:#0077b5;border-color:#0077b5;">📋 复制</button>
                   
                   <div class="translation-dropdown" style="position:relative;display:block" @click.stop>
-                    <button class="btn btn-sm btn-outline" @click="toggleTranslateMenu(product)" style="color:#059669;border-color:#059669;width:100%;" :disabled="translatingId === product.id">
+                    <button class="btn btn-sm btn-outline" @click="toggleTranslateMenu(product, $event)" style="color:#059669;border-color:#059669;width:100%;" :disabled="translatingId === product.id">
                       {{ translatingId === product.id ? '翻译中...' : '🌐 翻译 ▼' }}
                     </button>
-                    <div v-if="activeTranslateMenu === product.id" class="dropdown-menu shadow" style="position:absolute;bottom:100%;right:0;background:white;border:1px solid #ddd;border-radius:6px;z-index:100;min-width:180px;padding:8px 0;margin-bottom:4px;box-shadow:0 -4px 12px rgba(0,0,0,0.1);">
-                      <div v-if="product._loadingStatus" style="padding:8px 12px;font-size:13px;color:#666;text-align:center;">正在检测状态...</div>
-                      <div v-else class="lang-list">
-                        <div style="padding:0 8px 8px;border-bottom:1px solid #f1f5f9;"><button class="btn btn-primary btn-sm" @click="translateProduct(product)" style="width:100%">一键翻译所有语言</button></div>
-                        <div v-for="l in product._translationStatus" :key="l.code" 
-                             @click="translateProduct(product, l.code, l.name)" 
-                             :style="{ color: l.translated ? '#16a34a' : '#2563eb', cursor: 'pointer', padding: '8px 12px', borderBottom: '1px solid #f8fafc', fontSize: '13px', fontWeight: '500', display: 'flex', alignItems: 'center' }">
-                          <span style="display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:8px;" :style="{ background: l.translated ? '#16a34a' : '#2563eb' }"></span>
-                          {{ l.name }} <span style="margin-left:auto;font-size:11px;opacity:0.8;">{{ l.translated ? '已翻译' : '未翻译' }}</span>
+                    <Teleport to="body">
+                      <div v-if="activeTranslateMenu === product.id" class="dropdown-menu shadow" :style="{position:'fixed', top: translateMenuPos.top, right: translateMenuPos.right, background:'white', border:'1px solid #ddd', borderRadius:'6px', zIndex:10000, minWidth:'180px', padding:'8px 0', marginTop:'4px', boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}" @click.stop>
+                        <div v-if="product._loadingStatus" style="padding:8px 12px;font-size:13px;color:#666;text-align:center;">正在检测状态...</div>
+                        <div v-else class="lang-list">
+                          <div style="padding:0 8px 8px;border-bottom:1px solid #f1f5f9;"><button class="btn btn-primary btn-sm" @click="translateProduct(product)" style="width:100%">一键翻译所有语言</button></div>
+                          <div v-for="l in product._translationStatus" :key="l.code" 
+                               @click="translateProduct(product, l.code, l.name)" 
+                               :style="{ color: l.translated ? '#16a34a' : '#2563eb', cursor: 'pointer', padding: '8px 12px', borderBottom: '1px solid #f8fafc', fontSize: '13px', fontWeight: '500', display: 'flex', alignItems: 'center' }">
+                            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:8px;" :style="{ background: l.translated ? '#16a34a' : '#2563eb' }"></span>
+                            {{ l.name }} <span style="margin-left:auto;font-size:11px;opacity:0.8;">{{ l.translated ? '已翻译' : '未翻译' }}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    </Teleport>
                   </div>
 
                   <button class="btn btn-sm btn-outline" @click="$router.push(`/admin/products/ai/${product.id}`)" style="color:#7c3aed;border-color:#7c3aed;">🤖 AI</button>
@@ -809,6 +811,7 @@ async function onRefProductChange() {
 }
 
 const activeTranslateMenu = ref(null)
+const translateMenuPos = ref({ top: '0px', right: '0px' })
 const translatingItemLog = ref(null)
 
 onMounted(() => {
@@ -817,12 +820,19 @@ onMounted(() => {
   })
 })
 
-async function toggleTranslateMenu(item) {
+async function toggleTranslateMenu(item, event) {
   if (activeTranslateMenu.value === item.id) {
     activeTranslateMenu.value = null
     return
   }
   activeTranslateMenu.value = item.id
+  if (event) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    translateMenuPos.value = {
+      top: rect.bottom + 'px',
+      right: (window.innerWidth - rect.right) + 'px'
+    }
+  }
   if (item._translationStatus) return // Already loaded
 
   item._loadingStatus = true
