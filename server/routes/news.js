@@ -49,7 +49,7 @@ function resolveCategoryId(category_id, category_name) {
 // GET all news (public)
 router.get('/', (req, res) => {
     const { status = '1', page = 1, limit = 12, category_id, category_slug } = req.query
-    let sql = 'SELECT n.*, nc.name as category_name, nc.name_en as category_name_en, nc.slug as category_slug FROM news n LEFT JOIN news_categories nc ON n.category_id = nc.id WHERE 1=1'
+    let sql = 'SELECT n.id, n.title, n.title_en, n.slug, n.summary, n.summary_en, n.cover_image, n.status, n.sort_order, n.category_id, n.created_at, n.render_mode, nc.name as category_name, nc.name_en as category_name_en, nc.slug as category_slug FROM news n LEFT JOIN news_categories nc ON n.category_id = nc.id WHERE 1=1'
     const params = []
 
     if (status !== 'all') {
@@ -65,7 +65,7 @@ router.get('/', (req, res) => {
         params.push(category_slug)
     }
 
-    const countSql = sql.replace('SELECT n.*, nc.name as category_name, nc.name_en as category_name_en, nc.slug as category_slug', 'SELECT COUNT(*) as total')
+    const countSql = sql.replace('SELECT n.id, n.title, n.title_en, n.slug, n.summary, n.summary_en, n.cover_image, n.status, n.sort_order, n.category_id, n.created_at, n.render_mode, nc.name as category_name, nc.name_en as category_name_en, nc.slug as category_slug', 'SELECT COUNT(*) as total')
     const total = getOne(countSql, params)?.total || 0
 
     sql += ' ORDER BY n.sort_order, n.id DESC LIMIT ? OFFSET ?'

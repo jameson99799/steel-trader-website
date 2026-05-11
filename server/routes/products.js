@@ -30,7 +30,7 @@ function uniqueSlug(base, excludeId = null) {
 
 router.get('/', (req, res) => {
   const { category_id, featured, status, page = 1, limit = 20 } = req.query
-  let sql = 'SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE 1=1'
+  let sql = 'SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description, p.description_en, p.is_featured, p.status, p.sort_order, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE 1=1'
   const params = []
 
   if (category_id) {
@@ -55,7 +55,7 @@ router.get('/', (req, res) => {
 
   sql += ' ORDER BY p.sort_order DESC, p.id DESC'
 
-  const countSql = sql.replace('SELECT p.*, c.name as category_name, c.name_en as category_name_en', 'SELECT COUNT(*) as total')
+  const countSql = sql.replace('SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description, p.description_en, p.is_featured, p.status, p.sort_order, c.name as category_name, c.name_en as category_name_en', 'SELECT COUNT(*) as total')
   const totalResult = getOne(countSql, params)
   const total = totalResult?.total || 0
 

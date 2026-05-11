@@ -977,22 +977,31 @@ const loadCategories = async () => {
 }
 
 const openModal = async (product = null) => {
-  editingProduct.value = product
-  form.name = product?.name || ''
-  form.name_en = product?.name_en || ''
-  form.category_id = product?.category_id || null
-  form.description = product?.description || ''
-  form.description_en = product?.description_en || ''
-  form.detail_content = product?.detail_content || ''
-  form.is_featured = product?.is_featured || 0
-  form.status = product?.status ?? 1
-  form.sort_order = product?.sort_order || 0
-  form.seo_title = product?.seo_title || ''
-  form.seo_description = product?.seo_description || ''
-  form.seo_keywords = product?.seo_keywords || ''
-  existingImages.value = product?.images?.split(',').filter(Boolean) || []
-  specs.value = product?.specs ? JSON.parse(product.specs) : []
-  faqItems.value = product?.faq_items ? (typeof product.faq_items === 'string' ? JSON.parse(product.faq_items) : product.faq_items) : []
+  let fullProduct = product;
+  if (product && product.id) {
+    try {
+      fullProduct = await api.getProduct(product.id)
+    } catch (e) {
+      console.error('Failed to fetch full product details', e)
+    }
+  }
+
+  editingProduct.value = fullProduct
+  form.name = fullProduct?.name || ''
+  form.name_en = fullProduct?.name_en || ''
+  form.category_id = fullProduct?.category_id || null
+  form.description = fullProduct?.description || ''
+  form.description_en = fullProduct?.description_en || ''
+  form.detail_content = fullProduct?.detail_content || ''
+  form.is_featured = fullProduct?.is_featured || 0
+  form.status = fullProduct?.status ?? 1
+  form.sort_order = fullProduct?.sort_order || 0
+  form.seo_title = fullProduct?.seo_title || ''
+  form.seo_description = fullProduct?.seo_description || ''
+  form.seo_keywords = fullProduct?.seo_keywords || ''
+  existingImages.value = fullProduct?.images?.split(',').filter(Boolean) || []
+  specs.value = fullProduct?.specs ? JSON.parse(fullProduct.specs) : []
+  faqItems.value = fullProduct?.faq_items ? (typeof fullProduct.faq_items === 'string' ? JSON.parse(fullProduct.faq_items) : fullProduct.faq_items) : []
   imageFiles.value = []
   
   // Reset editor state

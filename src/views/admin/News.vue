@@ -762,15 +762,22 @@ async function openCreate() {
 
 async function openEdit(item) {
   editId.value = item.id
+  let fullItem = item
+  try {
+    fullItem = await api.getNewsItem(item.id)
+  } catch(e) {
+    console.error('Failed to fetch full article', e)
+  }
+
   form.value = {
-    title: item.title || '', title_en: item.title_en || '',
-    summary: item.summary || '', summary_en: item.summary_en || '',
-    cover_image: null, cover_preview: item.cover_image || null,
-    status: item.status ?? 1, sort_order: item.sort_order || 0,
-    seo_title: item.seo_title || '', seo_description: item.seo_description || '',
-    seo_keywords: item.seo_keywords || '', content: item.content || '',
-    render_mode: item.render_mode || 'direct',
-    category_id: item.category_id || null
+    title: fullItem.title || '', title_en: fullItem.title_en || '',
+    summary: fullItem.summary || '', summary_en: fullItem.summary_en || '',
+    cover_image: null, cover_preview: fullItem.cover_image || null,
+    status: fullItem.status ?? 1, sort_order: fullItem.sort_order || 0,
+    seo_title: fullItem.seo_title || '', seo_description: fullItem.seo_description || '',
+    seo_keywords: fullItem.seo_keywords || '', content: fullItem.content || '',
+    render_mode: fullItem.render_mode || 'direct',
+    category_id: fullItem.category_id || null
   }
   activeTab.value = 'basic'
   newsEditorMode.value = 'visual'
