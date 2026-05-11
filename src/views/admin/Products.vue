@@ -63,7 +63,7 @@
                       {{ translatingId === product.id ? '翻译中...' : '🌐 翻译 ▼' }}
                     </button>
                     <Teleport to="body">
-                      <div v-if="activeTranslateMenu === product.id" class="dropdown-menu shadow" :style="{position:'fixed', top: translateMenuPos.top, right: translateMenuPos.right, background:'white', border:'1px solid #ddd', borderRadius:'6px', zIndex:10000, minWidth:'180px', padding:'8px 0', marginTop:'4px', boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}" @click.stop>
+                      <div v-if="activeTranslateMenu === product.id" class="dropdown-menu shadow" :style="{position:'fixed', top: translateMenuPos.top, bottom: translateMenuPos.bottom, right: translateMenuPos.right, background:'white', border:'1px solid #ddd', borderRadius:'6px', zIndex:10000, minWidth:'180px', padding:'8px 0', marginTop:'4px', marginBottom:'4px', boxShadow:'0 4px 12px rgba(0,0,0,0.15)', maxHeight:'280px', overflowY:'auto'}" @click.stop>
                         <div v-if="product._loadingStatus" style="padding:8px 12px;font-size:13px;color:#666;text-align:center;">正在检测状态...</div>
                         <div v-else class="lang-list">
                           <div style="padding:0 8px 8px;border-bottom:1px solid #f1f5f9;"><button class="btn btn-primary btn-sm" @click="translateProduct(product)" style="width:100%">一键翻译所有语言</button></div>
@@ -828,9 +828,22 @@ async function toggleTranslateMenu(item, event) {
   activeTranslateMenu.value = item.id
   if (event) {
     const rect = event.currentTarget.getBoundingClientRect()
-    translateMenuPos.value = {
-      top: rect.bottom + 'px',
-      right: (window.innerWidth - rect.right) + 'px'
+    const spaceBelow = window.innerHeight - rect.bottom
+    const spaceAbove = rect.top
+    const menuHeight = 350
+
+    if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+      translateMenuPos.value = {
+        bottom: (window.innerHeight - rect.top) + 'px',
+        top: 'auto',
+        right: (window.innerWidth - rect.right) + 'px'
+      }
+    } else {
+      translateMenuPos.value = {
+        top: rect.bottom + 'px',
+        bottom: 'auto',
+        right: (window.innerWidth - rect.right) + 'px'
+      }
     }
   }
   if (item._translationStatus) return // Already loaded
