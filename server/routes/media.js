@@ -270,74 +270,81 @@ router.post('/:id/replace', authMiddleware, upload.single('file'), async (req, r
   }
 })
 
-// ─── Batch Optimize All Historical Images ─────────────────────────────────────
+// ─── Batch Optimize All Historical Images (Disk-based) ──────────────────────────
 router.post('/optimize-all', authMiddleware, async (req, res) => {
   let sharp = null
   try { const m = await import('sharp'); sharp = m.default } catch {}
   if (!sharp) return res.status(500).json({ error: '服务器未安装 sharp 图像处理库，无法压缩' })
 
-  // Find all images that are NOT webp (we use mimetype or extension check)
-  const items = getAll(`SELECT * FROM media WHERE status=1 AND mimetype != 'image/webp' AND filepath NOT LIKE '%.webp'`)
-  if (!items || items.length === 0) return res.json({ message: '没有需要优化的图片', count: 0 })
+  let files = []
+  try {
+    files = fs.readdirSync(uploadDir)
+  } catch (e) {
+    return res.status(500).json({ error: '无法读取上传目录' })
+  }
+
+  // Target legacy image formats
+  const targetExts = ['.jpg', '.jpeg', '.png', '.bmp']
+  const imagesToOptimize = files.filter(f => targetExts.includes(f.match(/\.[^.]+$/)?.[0].toLowerCase()))
+
+  if (imagesToOptimize.length === 0) {
+    return res.json({ message: '没有需要优化的图片', total: 0, successCount: 0, errorCount: 0 })
+  }
 
   let successCount = 0
   let errorCount = 0
 
-  for (const media of items) {
-    const oldPath = join(uploadDir, media.filename)
-    if (!fs.existsSync(oldPath)) {
-      errorCount++
-      continue
-    }
+  for (const filename of imagesToOptimize) {
+    const oldPath = join(uploadDir, filename)
+    const newFilename = filename.replace(/\.[^.]+$/, '.webp')
+    const newPath = join(uploadDir, newFilename)
 
     try {
-      const newFilename = media.filename.replace(/\.[^.]+$/, '.webp')
-      const newPath = join(uploadDir, newFilename)
       const meta = await sharp(oldPath)
         .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
         .webp({ quality: 85, effort: 4 })
         .toFile(newPath)
-      
+
+      const oldFilepath = `/uploads/${filename}`
       const newFilepath = `/uploads/${newFilename}`
-      const oldFilepath = media.filepath
 
-      // Update media table
-      run(`UPDATE media SET filename=?, filepath=?, mimetype=?, filesize=?, width=?, height=?, updated_at=datetime('now') WHERE id=?`,
-        [newFilename, newFilepath, 'image/webp', meta.size, meta.width, meta.height, media.id])
+      // 1. Update media table
+      run(`UPDATE media SET filename=?, filepath=?, mimetype=?, filesize=?, width=?, height=?, updated_at=datetime('now') WHERE filepath=?`,
+        [newFilename, newFilepath, 'image/webp', meta.size, meta.width, meta.height, oldFilepath])
 
-      // Update references in product_images
-      run('UPDATE product_images SET image_url=? WHERE media_id=?', [newFilepath, media.id])
+      // 2. Update product_images table
+      run('UPDATE product_images SET image_url=? WHERE image_url=?', [newFilepath, oldFilepath])
 
-      // Update rich text fields globally
-      run("UPDATE products SET detail_content=REPLACE(detail_content, ?, ?) WHERE detail_content LIKE ?",
-        [oldFilepath, newFilepath, `%${oldFilepath}%`])
-      run("UPDATE products SET images=REPLACE(images, ?, ?) WHERE images LIKE ?",
-        [oldFilepath, newFilepath, `%${oldFilepath}%`])
-      try {
-        run("UPDATE news SET content=REPLACE(content, ?, ?) WHERE content LIKE ?",
-          [oldFilepath, newFilepath, `%${oldFilepath}%`])
-        run("UPDATE news SET cover_image=REPLACE(cover_image, ?, ?) WHERE cover_image LIKE ?",
-          [oldFilepath, newFilepath, `%${oldFilepath}%`])
-        run("UPDATE categories SET image=REPLACE(image, ?, ?) WHERE image LIKE ?",
-          [oldFilepath, newFilepath, `%${oldFilepath}%`])
-        run("UPDATE hero_slides SET image_url=REPLACE(image_url, ?, ?) WHERE image_url LIKE ?",
-          [oldFilepath, newFilepath, `%${oldFilepath}%`])
-        run("UPDATE company SET about_image=REPLACE(about_image, ?, ?) WHERE about_image LIKE ?",
-          [oldFilepath, newFilepath, `%${oldFilepath}%`])
-      } catch (e) {
-        // ignore missing tables/columns during global replace
+      // 3. Update rich text globally
+      const tablesToUpdate = [
+        { table: 'products', columns: ['detail_content', 'images'] },
+        { table: 'news', columns: ['content', 'cover_image'] },
+        { table: 'categories', columns: ['image'] },
+        { table: 'hero_slides', columns: ['image_url'] },
+        { table: 'company', columns: ['about_image'] }
+      ]
+
+      for (const t of tablesToUpdate) {
+        for (const col of t.columns) {
+          try {
+            run(`UPDATE ${t.table} SET ${col}=REPLACE(${col}, ?, ?) WHERE ${col} LIKE ?`,
+              [oldFilepath, newFilepath, `%${oldFilepath}%`])
+          } catch (e) {
+            // ignore missing columns during global replace
+          }
+        }
       }
 
-      // Delete the old file
+      // Delete original file
       fs.unlinkSync(oldPath)
       successCount++
     } catch (err) {
-      console.error(`Failed to optimize ${media.filename}:`, err)
+      console.error(`Failed to optimize ${filename}:`, err)
       errorCount++
     }
   }
 
-  res.json({ message: '优化完成', successCount, errorCount, total: items.length })
+  res.json({ message: '优化完成', successCount, errorCount, total: imagesToOptimize.length })
 })
 
 export default router
