@@ -116,6 +116,67 @@
       </div>
     </div>
 
+    <!-- ── Translation Prompts Management ── -->
+    <div class="card" style="margin-top:20px">
+      <div class="card-header-row" style="cursor:pointer" @click="promptsCollapsed = !promptsCollapsed">
+        <h3>{{ promptsCollapsed ? '▶' : '▼' }} 💬 翻译业务规则提示词</h3>
+        <button class="btn btn-primary btn-sm" @click.stop="openPromptDialog()">➕ 添加规则</button>
+      </div>
+      <div class="card-body" v-show="!promptsCollapsed">
+        <div class="page-desc">
+          在这里设置您想要的全局翻译业务规则（比如：特定术语翻译、不希望被翻译的品牌词、不要加HTML标签等）。
+          系统在翻译时，会自动将**底层必需的JSON解析排版要求**与您在此处设定的**默认规则**无缝拼接，确保翻译既符合格式规范，又能完全遵从您的要求。
+        </div>
+        <div v-if="prompts.length === 0" class="empty-tip">暂无提示词规则，请点击「添加规则」创建</div>
+        <div v-else class="channel-list">
+          <div v-for="p in prompts" :key="p.id" class="channel-card" :class="{ 'is-default': p.is_default }">
+            <div class="ch-header">
+              <div class="ch-name">
+                <span class="ch-badge" v-if="p.is_default">默认规则</span>
+                <span v-if="p.is_system" class="model-tag" style="background:#f1f5f9;color:#475569;margin-right:8px;font-size:11px">系统内置</span>
+                {{ p.name }}
+              </div>
+              <div class="ch-actions">
+                <button class="btn btn-outline btn-xs" @click="copyPrompt(p)">📄 复制</button>
+                <button class="btn btn-outline btn-xs" @click="openPromptDialog(p)">✏️ 编辑</button>
+                <button class="btn btn-outline btn-xs" @click="setDefaultPrompt(p.id)" v-if="!p.is_default">⭐ 设为默认</button>
+                <button class="btn btn-outline btn-xs btn-danger" @click="deletePrompt(p.id)" v-if="!p.is_system">🗑️</button>
+              </div>
+            </div>
+            <div class="ch-info" style="margin-top:8px; display:block">
+              <pre style="white-space:pre-wrap; font-size:12px; color:#475569; background:#f8fafc; padding:8px; border-radius:4px; max-height:100px; overflow-y:auto">{{ p.content }}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Prompt Dialog -->
+    <div class="modal-overlay" v-if="showPromptDialog" @click.self="showPromptDialog = false">
+      <div class="modal-box">
+        <h3>{{ editingPrompt ? (editingPrompt.is_system ? '查看系统规则' : '编辑业务规则') : '添加业务规则' }}</h3>
+        <div class="form-group">
+          <label>规则名称</label>
+          <input v-model="promptForm.name" class="form-control" placeholder="例如：我的专业翻译规则" :disabled="editingPrompt && editingPrompt.is_system" />
+        </div>
+        <div class="form-group">
+          <label>指令内容 <span style="font-size:12px;color:#64748b;font-weight:normal">(无需写“请翻译成某某语言”或“返回JSON格式”等底层排版指令，只写您的定制业务规则即可)</span></label>
+          <textarea v-model="promptForm.content" class="form-control" rows="8" placeholder="例如：\n1. 请将钢卷统一翻译为卷材\n2. 翻译过程中不要使用<br>标签\n3. 不要翻译 SHANDONG SUNSEA STEEL..." :disabled="editingPrompt && editingPrompt.is_system"></textarea>
+        </div>
+        <div class="form-group" v-if="!editingPrompt || !editingPrompt.is_system">
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="promptForm.is_default" /> 设为默认规则（全局翻译时使用）
+          </label>
+        </div>
+        <div class="btn-row" style="justify-content:flex-end">
+          <button class="btn btn-outline" @click="showPromptDialog = false">关闭</button>
+          <button v-if="!editingPrompt || !editingPrompt.is_system" class="btn btn-primary" @click="savePrompt" :disabled="savingPrompt">
+            {{ savingPrompt ? '保存中...' : '💾 保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── 后台翻译任务面板 ── -->
     <div class="card" style="margin-top:20px">
       <div class="card-header-row" style="cursor:pointer" @click="jobPanelCollapsed = !jobPanelCollapsed">
@@ -724,6 +785,86 @@ async function testChannel(ch) {
   }
 }
 
+// ── Translation Prompts Management ──
+const promptsCollapsed = ref(true)
+const prompts = ref([])
+const showPromptDialog = ref(false)
+const editingPrompt = ref(null)
+const savingPrompt = ref(false)
+const promptForm = reactive({ name: '', content: '', is_default: false })
+
+async function loadPrompts() {
+  try {
+    prompts.value = await api.getTranslationPrompts()
+  } catch (e) {
+    console.error('Failed to load prompts:', e)
+  }
+}
+
+function openPromptDialog(prompt = null) {
+  editingPrompt.value = prompt
+  if (prompt) {
+    promptForm.name = prompt.name
+    promptForm.content = prompt.content
+    promptForm.is_default = !!prompt.is_default
+  } else {
+    // If adding a new prompt, pre-fill with the default/system prompt's content if available
+    promptForm.name = ''
+    promptForm.content = ''
+    const sysPrompt = prompts.value.find(p => p.is_system) || prompts.value[0]
+    if (sysPrompt) {
+      promptForm.content = sysPrompt.content
+    }
+    promptForm.is_default = true
+  }
+  showPromptDialog.value = true
+}
+
+function copyPrompt(prompt) {
+  editingPrompt.value = null
+  promptForm.name = prompt.name + ' (Copy)'
+  promptForm.content = prompt.content
+  promptForm.is_default = false
+  showPromptDialog.value = true
+}
+
+async function savePrompt() {
+  if (!promptForm.name.trim() || !promptForm.content.trim()) return alert('名称和内容不能为空')
+  savingPrompt.value = true
+  try {
+    if (editingPrompt.value) {
+      await api.updateTranslationPrompt(editingPrompt.value.id, promptForm)
+    } else {
+      await api.createTranslationPrompt(promptForm)
+    }
+    showPromptDialog.value = false
+    await loadPrompts()
+  } catch (e) {
+    alert('保存失败: ' + e.message)
+  } finally {
+    savingPrompt.value = false
+  }
+}
+
+async function deletePrompt(id) {
+  if (!confirm('确定删除此提示词规则吗？')) return
+  try {
+    await api.deleteTranslationPrompt(id)
+    await loadPrompts()
+  } catch (e) {
+    alert('删除失败: ' + e.message)
+  }
+}
+
+async function setDefaultPrompt(id) {
+  try {
+    await api.setTranslationPromptDefault(id)
+    await loadPrompts()
+  } catch (e) {
+    alert('设置默认失败: ' + e.message)
+  }
+}
+
 const languages = ref([])
 const models = ref([])
 const fetchingModels = ref(false)
@@ -924,6 +1065,7 @@ onMounted(async () => {
     }
     languages.value = langs || []
     await loadChannels()
+    await loadPrompts()
     if (nonEnLangs.value.length > 0) {
       selectedLang.value = 'all'
       searchLang.value = nonEnLangs.value[0].code

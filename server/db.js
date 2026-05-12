@@ -158,6 +158,29 @@ async function initDb() {
   // Migration: add default_model to ai_channels
   try { db.exec("ALTER TABLE ai_channels ADD COLUMN default_model TEXT DEFAULT ''") } catch (e) { }
 
+  // Translation Prompts table for custom translation business rules
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS translation_prompts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      content TEXT NOT NULL,
+      is_system INTEGER DEFAULT 0,
+      is_default INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // Add default translation prompt if empty
+  try {
+    const hasPrompt = db.prepare('SELECT id FROM translation_prompts LIMIT 1').get()
+    if (!hasPrompt) {
+      db.prepare(`
+        INSERT INTO translation_prompts (name, content, is_system, is_default)
+        VALUES (?, ?, 1, 1)
+      `).run('系统默认业务规则', 'Glossary(zh): Galvalume/GL=镀铝锌 ALUZINC=镀铝锌 PPGI=彩涂镀锌 PPGL=彩涂镀铝锌 GI=镀锌 CRC=冷轧卷\nDo NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T, model numbers.')
+    }
+  } catch (e) { }
+
   // ═══════════════════════════════════════════════════════════════════════════════
   // CRM Tables
   // ═══════════════════════════════════════════════════════════════════════════════

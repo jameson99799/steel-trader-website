@@ -533,6 +533,17 @@ const PAGES = {
 async function translateBatch(settings, items, targetLang, langName, overrideNote, aiConcurrency = 3) {
     const results = []
     const errors = []
+    
+    // Fetch custom rules
+    let businessRules = ''
+    try {
+        const defaultPromptRow = getOne('SELECT content FROM translation_prompts WHERE is_default = 1')
+        if (defaultPromptRow && defaultPromptRow.content) {
+            businessRules = `\n\n[Translation Rules]:\n${defaultPromptRow.content}`
+        }
+    } catch (e) {}
+    const fullOverride = businessRules + (overrideNote ? `\n\n${overrideNote}` : '')
+
     const shortItems = items.filter(i => !i.long_html)
     const longItems = items.filter(i => i.long_html)
 
@@ -570,9 +581,7 @@ Rules:
 - Translate ALL text completely and naturally
 - Keep HTML tags, product codes, units (mm, kg, MPa) unchanged
 - Keep URLs, email addresses unchanged
-- DO NOT skip any numbered item
-GLOSSARY (Chinese): Galvalume/GL=镀铝锌, ALUZINC=镀铝锌, PPGI=彩涂镀锌, PPGL=彩涂镀铝锌, GI=镀锌, CRC=冷轧卷
-DO NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", "GI GL PPGI PPGL CRC Steel Coil", ASTM, JIS, EN, GB/T${overrideNote}`
+- DO NOT skip any numbered item${fullOverride}`
 
         const MAX_RETRIES = 2
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -708,10 +717,7 @@ Example output format:
 ---BLOCK 1---
 <p>Translated HTML</p>
 ---BLOCK 2---
-<div>Translated HTML</div>
-
-Glossary(zh): Galvalume/GL=镀铝锌 PPGI=彩涂镀锌 PPGL=彩涂镀铝锌 GI=镀锌 CRC=冷轧卷
-Do NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T${overrideNote}`
+<div>Translated HTML</div>${fullOverride}`
                         for (let retry = 0; retry <= 2; retry++) {
                             try {
                                 const aiContent = await callAI(settings, [
@@ -763,9 +769,7 @@ Rules:
 - Translate ALL visible text content completely
 - Preserve ALL HTML tags, attributes, class names, styles, URLs exactly as-is
 - Keep product codes, model numbers, units unchanged
-- Return ONLY the translated HTML (no wrapper, no explanation)
-Glossary(zh): Galvalume/GL=镀铝锌 PPGI=彩涂镀锌 PPGL=彩涂镀铝锌 GI=镀锌 CRC=冷轧卷
-Do NOT translate: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T${overrideNote}`
+- Return ONLY the translated HTML (no wrapper, no explanation)${fullOverride}`
 
                 for (let retry = 0; retry <= 2; retry++) {
                     try {
@@ -890,10 +894,19 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
 
     const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static' }
     const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
-    const overrideNote = manualOverrides.length > 0
+    let overrideNote = manualOverrides.length > 0
         ? '\n\nUse these approved translations as reference:\n' +
         manualOverrides.slice(0, 8).map(o => `"${o.original_text}" → "${o.translated_text}"`).join('\n')
         : ''
+
+    let businessRules = ''
+    try {
+        const defaultPromptRow = getOne('SELECT content FROM translation_prompts WHERE is_default = 1')
+        if (defaultPromptRow && defaultPromptRow.content) {
+            businessRules = `\n\n[Translation Rules]:\n${defaultPromptRow.content}`
+        }
+    } catch (e) {}
+    overrideNote = businessRules + overrideNote
 
     // Collect ALL fields from ALL requested items into one big list
     let allShortItems = []
@@ -931,8 +944,7 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
         const batch = allShortItems.slice(i, i + BATCH)
         const numberedText = batch.map((item, idx) => `${idx + 1}. ${item.text}`).join('\n')
         const systemPrompt = `Translate numbered lines to ${langRow.name}. Steel company context. Return JSON {"1":"...","2":"..."}.
-Keep unchanged: codes, HTML, ASTM/JIS/EN/GB/T, "SHANDONG SUNSEA STEEL CO., LTD".
-Glossary(zh): Galvalume/GL=镀铝锌 ALUZINC=镀铝锌 PPGI=彩涂镀锌 PPGL=彩涂镀铝锌 GI=镀锌 CRC=冷轧卷.${overrideNote}`
+Keep unchanged: codes, HTML, ASTM/JIS/EN/GB/T.${overrideNote}`
 
         const MAX_RETRIES = 2
         let attempt = 0
@@ -1003,9 +1015,7 @@ Glossary(zh): Galvalume/GL=镀铝锌 ALUZINC=镀铝锌 PPGI=彩涂镀锌 PPGL=�
                 }
                 const blockPrompt = `You are translating HTML content for a steel products company website from English to ${langRow.name}.
 Translate each numbered HTML block. Preserve ALL HTML tags, attributes, CSS, and structure exactly. Only translate visible text content.
-Return ONLY a JSON object like {"1":"<translated html>","2":"<translated html>"}.
-GLOSSARY: Galvalume/GL=镀铝锌, ALUZINC=镀铝锌, PPGI=彩涂镀锌, PPGL=彩涂镀铝锌, GI=镀锌, CRC=冷轧卷 (for Chinese).
-DO NOT TRANSLATE: "SHANDONG SUNSEA STEEL CO., LTD", ASTM, JIS, EN, GB/T, model numbers.${contextName}${prevContext}${overrideNote}`
+Return ONLY a JSON object like {"1":"<translated html>","2":"<translated html>"}.${contextName}${prevContext}${overrideNote}`
                 try {
                     const aiContent = await callAI(enhanced, [
                         { role: 'system', content: blockPrompt },
@@ -2137,6 +2147,67 @@ router.post('/batch-action', authMiddleware, (req, res) => {
     res.json({ success: true });
 });
 
+// ─── Translation Prompts Management ─────────────────────────────────────────
+
+router.get('/prompts', authMiddleware, (req, res) => {
+    try {
+        const prompts = getAll('SELECT * FROM translation_prompts ORDER BY is_default DESC, created_at DESC')
+        res.json(prompts)
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+router.post('/prompts', authMiddleware, (req, res) => {
+    const { name, content, is_default } = req.body
+    if (!name || !content) return res.status(400).json({ error: 'Name and content are required' })
+    try {
+        if (is_default) run('UPDATE translation_prompts SET is_default = 0')
+        const r = run('INSERT INTO translation_prompts (name, content, is_default) VALUES (?, ?, ?)', [name, content, is_default ? 1 : 0])
+        res.json({ id: r.lastInsertRowid, name, content, is_default: is_default ? 1 : 0 })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+router.put('/prompts/:id', authMiddleware, (req, res) => {
+    const { name, content, is_default } = req.body
+    const id = req.params.id
+    try {
+        const existing = getOne('SELECT * FROM translation_prompts WHERE id = ?', [id])
+        if (!existing) return res.status(404).json({ error: 'Prompt not found' })
+        if (existing.is_system && content !== existing.content) {
+            return res.status(400).json({ error: 'Cannot modify system prompt content' })
+        }
+        if (is_default) run('UPDATE translation_prompts SET is_default = 0')
+        run('UPDATE translation_prompts SET name = ?, content = ?, is_default = ? WHERE id = ?', [name, existing.is_system ? existing.content : content, is_default ? 1 : 0, id])
+        res.json({ success: true })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+router.delete('/prompts/:id', authMiddleware, (req, res) => {
+    try {
+        const existing = getOne('SELECT * FROM translation_prompts WHERE id = ?', [req.params.id])
+        if (!existing) return res.status(404).json({ error: 'Prompt not found' })
+        if (existing.is_system) return res.status(400).json({ error: 'Cannot delete system prompt' })
+        run('DELETE FROM translation_prompts WHERE id = ?', [req.params.id])
+        res.json({ success: true })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+router.put('/prompts/:id/default', authMiddleware, (req, res) => {
+    try {
+        run('UPDATE translation_prompts SET is_default = 0')
+        run('UPDATE translation_prompts SET is_default = 1 WHERE id = ?', [req.params.id])
+        res.json({ success: true })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
 
 export default router
 

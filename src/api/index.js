@@ -254,6 +254,13 @@ export const api = {
   runSelectiveTranslation: (type, ids, languages) => request('/translation/run-selective', { method: 'POST', body: JSON.stringify({ type, ids, languages }) }),
   auditTranslations: () => request('/translation/audit-translations'),
 
+  // Translation Prompts
+  getTranslationPrompts: () => request('/translation/prompts'),
+  createTranslationPrompt: (data) => request('/translation/prompts', { method: 'POST', body: JSON.stringify(data) }),
+  updateTranslationPrompt: (id, data) => request(`/translation/prompts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteTranslationPrompt: (id) => request(`/translation/prompts/${id}`, { method: 'DELETE' }),
+  setTranslationPromptDefault: (id) => request(`/translation/prompts/${id}/default`, { method: 'PUT' }),
+
   // Translation Jobs (background server-side)
   getTranslationJobs: () => request('/translation-jobs'),
   getActiveTranslationJob: () => request('/translation-jobs/active'),
