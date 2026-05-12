@@ -419,6 +419,10 @@
 
         <!-- Toolbar -->
         <div class="gt-toolbar">
+          <div class="form-group" style="flex:1;min-width:160px">
+            <label>搜索标题</label>
+            <input v-model="gtSearchQuery" class="form-control" placeholder="输入名称或标题模糊搜索..." @input="filterGranularItems" />
+          </div>
           <div class="form-group" v-if="granularTab === 'product'" style="flex:1;min-width:160px">
             <label>产品分组</label>
             <select v-model="gtCategoryId" class="form-control" @change="filterGranularItems">
@@ -1557,6 +1561,7 @@ async function switchGranularTab(tab) {
   granularTab.value = tab
   gtPage.value = 1
   gtCategoryId.value = ''
+  gtSearchQuery.value = ''
   gtSelectedIds.value = []
   await loadGranularStatus()
 }
@@ -1583,6 +1588,16 @@ async function loadGranularStatus() {
 
 function filterGranularItems() {
   let items = [...gtAllItems.value]
+  
+  if (gtSearchQuery.value) {
+    const q = gtSearchQuery.value.toLowerCase()
+    items = items.filter(i => {
+      const nameMatch = i.name_en?.toLowerCase().includes(q) || i.name?.toLowerCase().includes(q)
+      const titleMatch = i.title_en?.toLowerCase().includes(q) || i.title?.toLowerCase().includes(q)
+      return nameMatch || titleMatch
+    })
+  }
+
   if (granularTab.value === 'product' && gtCategoryId.value) {
     items = items.filter(i => String(i.category_id) === String(gtCategoryId.value))
   }
@@ -1624,8 +1639,8 @@ async function startGranularTranslation() {
   gtAddLog('info',
     '开始精细化翻译 → ' + (type === 'product' ? '产品' : '文章') +
     ' ' + ids.length + ' 项, 语言: ' + langNames +
-    ', 语言并发: ' + Math.min(CONCURRENCY, langs.length))
-  gtAddLog('info', '📋 策略：每个项目的所有语言并发翻译，项目之间顺序执行')
+    ', 全局并发: ' + Math.min(CONCURRENCY, ids.length * langs.length))
+  gtAddLog('info', '📋 策略：所有选中的语言和项目进入全局任务池，最大并发执行')
 
   // ── 翻译单个项目的单种语言（含重试，超时不重试）──
   async function translateOneLang(itemId, langCode, itemName) {
@@ -1698,33 +1713,28 @@ async function startGranularTranslation() {
     return hasError
   }
 
-  // ── 并发翻译单个项目的所有语言 ──
-  async function translateOneItem(itemId) {
-    const item = gtAllItems.value.find(i => i.id === itemId)
-    const itemName = item?.name || '#' + itemId
-    gtAddLog('info', '📦「' + itemName + '」开始翻译 (' + langs.length + ' 种语言，' + Math.min(CONCURRENCY, langs.length) + ' 并发)')
-    let itemHasError = false
-    let langQueueIdx = 0
-    async function langWorker() {
-      while (langQueueIdx < langs.length) {
-        if (gtAborted) break
-        const idx = langQueueIdx++
-        if (idx >= langs.length) break
-        const hasErr = await translateOneLang(itemId, langs[idx], itemName)
-        if (hasErr) itemHasError = true
-      }
+  // ── 建立全局任务池并并发执行 ──
+  const queue = []
+  for (const itemId of ids) {
+    const itemName = gtAllItems.value.find(i => i.id === itemId)?.name_en || gtAllItems.value.find(i => i.id === itemId)?.name || '#' + itemId
+    for (const langCode of langs) {
+      queue.push({ itemId, langCode, itemName })
     }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, langs.length) }, () => langWorker()))
-    if (gtAborted) gtAddLog('warn', '📦「' + itemName + '」翻译已停止')
-    else if (itemHasError) gtAddLog('error', '📦「' + itemName + '」部分语言翻译失败 ✗')
-    else gtAddLog('ok', '📦「' + itemName + '」全部语言翻译成功 ✓')
   }
 
-  // ── 项目顺序执行（Article A 完成后再翻译 Article B）──
-  for (const itemId of ids) {
-    if (gtAborted) break
-    await translateOneItem(itemId)
+  let qIdx = 0
+  async function worker() {
+    while (qIdx < queue.length) {
+      if (gtAborted) break
+      const idx = qIdx++
+      if (idx >= queue.length) break
+      const { itemId, langCode, itemName } = queue[idx]
+      await translateOneLang(itemId, langCode, itemName)
+    }
   }
+
+  const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, () => worker())
+  await Promise.all(workers)
 
   gtAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
   const failedItemCount = [...new Set(gtFailedIds.value.map(f => f.id))].length
@@ -1772,49 +1782,46 @@ async function retryGranularFailed() {
 
   gtAddLog('info', '🔄 重试 ' + failedItemIds.length + ' 个项目的 ' + failedPairs.length + ' 个失败语言')
 
-  // For each failed item, only translate its failed languages
-  for (const itemId of failedItemIds) {
-    if (gtAborted) break
-    const itemFailedLangs = failedPairs.filter(f => f.id === itemId).map(f => f.lang)
-    const itemName = failedPairs.find(f => f.id === itemId)?.itemName || '#' + itemId
-    gtAddLog('info', '📦「' + itemName + '」重试 ' + itemFailedLangs.length + ' 种失败语言')
-
-    let langQueueIdx = 0
-    async function langWorker() {
-      while (langQueueIdx < itemFailedLangs.length) {
-        if (gtAborted) break
-        const idx = langQueueIdx++
-        if (idx >= itemFailedLangs.length) break
-        const langCode = itemFailedLangs[idx]
-        const langObj = gtLangs.value.find(l => l.code === langCode)
-        const langLabel = langObj ? (langObj.flag || '') + ' ' + langObj.name : langCode
-        gtAddLog('info', '  🔄「' + itemName + '」→ ' + langLabel + ' 重试中...')
-        try {
-          const res = await api.runTranslationOne(langCode, type, itemId, signal)
-          const ok = res.results?.length || 0
-          const errs = res.errors?.length || 0
-          gtProgressOk.value += ok
-          if (errs > 0) {
-            gtProgressErrors.value += errs
-            for (const e of (res.errors || []))
-              gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] ' + (e.errorCode || '') + ' ' + (e.error || '').slice(0, 150))
-            if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode))
-              gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
-          }
-          if (ok > 0 && errs === 0) {
-            gtAddLog('ok', '  ✅「' + itemName + '」[' + langLabel + '] ' + ok + ' 个字段 (重试成功)')
-          }
-        } catch (e) {
-          gtProgressErrors.value++
+  let qIdx = 0
+  async function worker() {
+    while (qIdx < failedPairs.length) {
+      if (gtAborted) break
+      const idx = qIdx++
+      if (idx >= failedPairs.length) break
+      const { id: itemId, lang: langCode, itemName } = failedPairs[idx]
+      
+      const langObj = gtLangs.value.find(l => l.code === langCode)
+      const langLabel = langObj ? (langObj.flag || '') + ' ' + langObj.name : langCode
+      gtAddLog('info', '  🔄「' + itemName + '」→ ' + langLabel + ' 重试中...')
+      
+      try {
+        const res = await api.runTranslationOne(langCode, type, itemId, signal)
+        const ok = res.results?.length || 0
+        const errs = res.errors?.length || 0
+        gtProgressOk.value += ok
+        if (errs > 0) {
+          gtProgressErrors.value += errs
+          for (const e of (res.errors || []))
+            gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] ' + (e.errorCode || '') + ' ' + (e.error || '').slice(0, 150))
           if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode))
             gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
-          gtAddLog('error', '  ❌「' + itemName + '」[' + langLabel + '] ' + e.message)
         }
-        gtProgressDone.value++
+        if (ok > 0 && errs === 0) {
+          gtAddLog('ok', '  ✅「' + itemName + '」[' + langLabel + '] ' + ok + ' 个字段 (重试成功)')
+        }
+      } catch (e) {
+        gtProgressErrors.value++
+        if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode))
+          gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
+        gtAddLog('error', '  ❌「' + itemName + '」[' + langLabel + '] ' + e.message)
       }
+      gtProgressDone.value++
     }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, itemFailedLangs.length) }, () => langWorker()))
   }
+
+  // Run workers globally across all failed pairs
+  const workers = Array.from({ length: Math.min(CONCURRENCY, failedPairs.length) }, () => worker())
+  await Promise.all(workers)
 
   gtAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
   gtAddLog(gtFailedIds.value.length ? 'warn' : 'ok',

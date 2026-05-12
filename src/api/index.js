@@ -247,7 +247,7 @@ export const api = {
     return request('/translation/override', { method: 'POST', body: JSON.stringify(data) })
   },
   getTranslations: (lang) => request(`/translation/${lang}`),
-  translateItem: (type, id, target_lang) => request('/translation/translate-item', { method: 'POST', body: JSON.stringify({ type, id, target_lang }) }),
+
   getItemTranslationStatus: (type, id) => request(`/translation/status/${type}/${id}`),
   getTranslationContent: (lang) => request(`/translation/content/${lang}`),
   getTranslationStatus: (type) => request(`/translation/translation-status?type=${type}`),

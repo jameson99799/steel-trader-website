@@ -463,34 +463,79 @@ async function translateNews(item, targetLangCode = null, targetLangName = null)
   if (!confirm(`开始翻译文章「${item.title_en || item.title}」(${langLabel})？`)) return
   
   translatingId.value = item.id
-  activeTranslateMenu.value = null // close menu
-  translatingItemLog.value = { id: item.id, langName: targetLangName || '全部语言', log: '开始翻译...\n' }
+  activeTranslateMenu.value = null
+  translatingItemLog.value = { id: item.id, langName: targetLangName || '全部语言', log: '🚀 开始执行底层翻译引擎...\n' }
+  const logAppend = (msg) => { translatingItemLog.value.log += msg + '\n' }
   
   try {
-    translatingItemLog.value.log += `正在调用后台 AI 引擎翻译...\n`
-    const res = await api.translateItem('news', item.id, targetLangCode)
+    let langsToRun = []
+    if (targetLangCode) {
+      langsToRun.push({ code: targetLangCode, name: targetLangName })
+    } else {
+      if (item._translationStatus) {
+        langsToRun = item._translationStatus.filter(l => !l.translated)
+      } else {
+        const statusRes = await api.getItemTranslationStatus('news', item.id)
+        langsToRun = (statusRes.status || []).filter(l => !l.translated)
+        item._translationStatus = statusRes.status || []
+      }
+    }
+
+    if (langsToRun.length === 0) {
+      logAppend('✅ 所有语言均已翻译，无需重复操作。')
+      translatingId.value = null
+      return
+    }
+
+    logAppend(`📋 准备翻译 ${langsToRun.length} 种语言...`)
     
-    translatingItemLog.value.log += `\n✅ 翻译完成！\n共翻译了 ${res.fields || 0} 个字段到 ${res.languages || 1} 种语言。\n`
-    if (res.results?.length) {
-      res.results.forEach(r => {
-         translatingItemLog.value.log += `[${r.lang}] 字段 ${r.field}: 成功\n`
-      })
+    const CONCURRENCY = 3
+    let qIdx = 0
+    let totalOk = 0
+    let totalErrs = 0
+
+    async function worker() {
+      while (qIdx < langsToRun.length) {
+        const idx = qIdx++
+        if (idx >= langsToRun.length) break
+        const l = langsToRun[idx]
+        logAppend(`  🔄 [${l.name}] 翻译中...`)
+        
+        try {
+          const res = await api.runTranslationOne(l.code, 'news', item.id, null)
+          const ok = res.results?.length || 0
+          const errs = res.errors?.length || 0
+          
+          if (errs > 0) {
+            logAppend(`  ⚠️ [${l.name}] 部分/全部失败，错误 ${errs} 个：`)
+            res.errors.forEach(e => logAppend(`     - 字段 ${e.field}: ${e.error.slice(0,100)}`))
+            totalErrs += errs
+          }
+          if (ok > 0) {
+            logAppend(`  ✅ [${l.name}] 成功翻译 ${ok} 个字段`)
+            totalOk += ok
+          }
+          if (ok === 0 && errs === 0) {
+            logAppend(`  ✔ [${l.name}] 无需翻译`)
+          }
+          
+          if (errs === 0 && item._translationStatus) {
+            const s = item._translationStatus.find(x => x.code === l.code)
+            if (s) s.translated = true
+          }
+        } catch (e) {
+          logAppend(`  ❌ [${l.name}] 翻译异常: ${e.message}`)
+          totalErrs++
+        }
+      }
     }
-    if (res.errors?.length) {
-      translatingItemLog.value.log += `\n⚠️ 遇到 ${res.errors.length} 个错误：\n`
-      res.errors.forEach(e => {
-         translatingItemLog.value.log += `[${e.lang}] 字段 ${e.field}: ${e.error}\n`
-      })
-    }
-    // Refresh status visually if it was open
-    if (item._translationStatus && targetLangCode) {
-       const s = item._translationStatus.find(x => x.code === targetLangCode)
-       if (s) s.translated = true
-    } else if (item._translationStatus && !targetLangCode) {
-       item._translationStatus.forEach(s => s.translated = true)
-    }
+
+    const workers = Array.from({ length: Math.min(CONCURRENCY, langsToRun.length) }, () => worker())
+    await Promise.all(workers)
+
+    logAppend(`\n🏁 翻译执行完毕！成功字段: ${totalOk}, 错误数: ${totalErrs}`)
   } catch (e) {
-    translatingItemLog.value.log += `\n❌ 翻译失败: ${e.message}\n`
+    logAppend(`\n❌ 执行失败: ${e.message}`)
   } finally {
     translatingId.value = null
   }
