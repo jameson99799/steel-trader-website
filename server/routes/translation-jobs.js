@@ -204,6 +204,8 @@ async function runJobInBackground(jobId) {
                 manualOverrides.slice(0, 8).map(o => `"${o.original_text}" → "${o.translated_text}"`).join('\n')
                 : ''
 
+            jobLog(jobId, 'info', `正在翻译${item.itemName}至${langRow.name}语言`)
+
             try {
                 const { results, errors } = await translateBatch(enhanced, items, item.targetLang, langRow.name, overrideNote)
                 const ok = results.length
@@ -212,23 +214,25 @@ async function runJobInBackground(jobId) {
                 okTotal += ok
                 if (errs > 0 && ok === 0) {
                     errTotal += errs
-                    newFailed.push(item)
-                    const errMsg = errors[0]?.error || 'unknown error'
-                    jobLog(jobId, 'error', `   ❌ [${item.targetLang}]「${item.itemName}」失败: ${errMsg.slice(0, 150)}`)
+                    const errMsg = errors[0]?.error || '未知错误'
+                    newFailed.push({ ...item, error: errMsg })
+                    jobLog(jobId, 'error', `${item.itemName}翻译${langRow.name}语言失败（${errMsg.slice(0, 150)}）`)
                 } else if (errs > 0) {
                     errTotal += errs
-                    newFailed.push(item)
-                    jobLog(jobId, 'warn', `   ⚠️ [${item.targetLang}]「${item.itemName}」部分成功: ${ok} 成功, ${errs} 错误`)
+                    const errMsg = `部分成功: ${ok}成功, ${errs}错误`
+                    newFailed.push({ ...item, error: errMsg })
+                    jobLog(jobId, 'warn', `${item.itemName}翻译${langRow.name}语言失败（${errMsg}）`)
                 } else if (ok > 0) {
-                    jobLog(jobId, 'ok', `   ✅ [${item.targetLang}]「${item.itemName}」翻译成功: ${ok} 个字段`)
+                    jobLog(jobId, 'ok', `${item.itemName}翻译${langRow.name}语言成功`)
                     run('UPDATE languages SET ai_translated=1 WHERE code=?', [item.targetLang])
                 } else {
-                    jobLog(jobId, 'ok', `   ✔ [${item.targetLang}]「${item.itemName}」无需翻译`)
+                    jobLog(jobId, 'ok', `${item.itemName}翻译${langRow.name}语言成功`)
                 }
             } catch (e) {
                 errTotal++
-                newFailed.push(item)
-                jobLog(jobId, 'error', `   ❌ [${item.targetLang}]「${item.itemName}」异常: ${e.message.slice(0, 150)}`)
+                const errMsg = e.message || '未知错误'
+                newFailed.push({ ...item, error: errMsg })
+                jobLog(jobId, 'error', `${item.itemName}翻译${langRow.name}语言失败（${errMsg.slice(0, 150)}）`)
             }
 
             processingItems.delete(item)
@@ -259,7 +263,7 @@ async function runJobInBackground(jobId) {
     // ── Auto-retry failed items once (only for non-retry jobs) ──
     if (!isRetry && newFailed.length > 0) {
         jobLog(jobId, 'info', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-        jobLog(jobId, 'info', `🔄 自动重试 ${newFailed.length} 个失败项目（最后一次自动重试）...`)
+        jobLog(jobId, 'info', `${okTotal}个产品或者文章翻译成功，${newFailed.length}个产品或者文章翻译失败，开始重试翻译失败的产品或者文章`)
         // Mark this job as having done auto-retry
         updateJobProgress(jobId, { auto_retried: 1 })
 
@@ -282,20 +286,24 @@ async function runJobInBackground(jobId) {
             const items = pageItems.filter(pi => String(pi.id) === String(item.id))
             if (!items.length) continue
 
+            jobLog(jobId, 'info', `正在翻译${item.itemName}至${langRow.name}语言`)
+
             try {
                 const { results, errors } = await translateBatch(enhanced, items, item.targetLang, langRow.name, '')
                 if (results.length > 0) {
-                    jobLog(jobId, 'ok', `   ✅ 重试成功 [${item.targetLang}]「${item.itemName}」`)
+                    jobLog(jobId, 'ok', `${item.itemName}翻译${langRow.name}语言成功`)
                     okTotal++
                     errTotal = Math.max(0, errTotal - errors.length)
                     run('UPDATE languages SET ai_translated=1 WHERE code=?', [item.targetLang])
                 } else {
-                    jobLog(jobId, 'error', `   ❌ 重试仍失败 [${item.targetLang}]「${item.itemName}」(需手动重试)`)
-                    stillFailed.push(item)
+                    const errMsg = errors[0]?.error || '重试无返回结果'
+                    jobLog(jobId, 'error', `${item.itemName}翻译${langRow.name}语言失败（${errMsg.slice(0, 150)}）`)
+                    stillFailed.push({ ...item, error: errMsg })
                 }
             } catch (e) {
-                jobLog(jobId, 'error', `   ❌ 重试异常 [${item.targetLang}]「${item.itemName}」: ${e.message.slice(0, 100)}`)
-                stillFailed.push(item)
+                const errMsg = e.message || '未知错误'
+                jobLog(jobId, 'error', `${item.itemName}翻译${langRow.name}语言失败（${errMsg.slice(0, 100)}）`)
+                stillFailed.push({ ...item, error: errMsg })
             }
         }
         
@@ -316,20 +324,20 @@ async function runJobInBackground(jobId) {
         }
 
         if (stillFailed.length > 0) {
-            jobLog(jobId, 'warn', `⚠️ ${stillFailed.length} 个项目自动重试后仍失败，请手动点击重试`)
+            const firstErr = stillFailed[0]?.error || '未知错误'
+            jobLog(jobId, 'warn', `${okTotal}个产品或者文章翻译成功，${stillFailed.length}个产品翻译失败，请手动重试，失败原因：${firstErr.slice(0, 80)}`)
         } else {
-            jobLog(jobId, 'ok', '✅ 所有失败项目重试成功！')
+            jobLog(jobId, 'ok', `${okTotal}个产品或者文章翻译成功，现在已经全部完整的翻译完成`)
         }
     } else {
         updateJobProgress(jobId, { failed_items: JSON.stringify(newFailed) })
+        if (newFailed.length > 0) {
+            const firstErr = newFailed[0]?.error || '未知错误'
+            jobLog(jobId, 'warn', `${okTotal}个产品或者文章翻译成功，${newFailed.length}个产品翻译失败，请手动重试，失败原因：${firstErr.slice(0, 80)}`)
+        } else {
+            jobLog(jobId, 'ok', `${okTotal}个产品或者文章翻译成功，现在已经全部完整的翻译完成`)
+        }
     }
-
-    jobLog(jobId, 'info', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-    const failedCount = JSON.parse(getOne('SELECT failed_items FROM translation_jobs WHERE id=?', [jobId])?.failed_items || '[]').length
-    jobLog(jobId, failedCount > 0 ? 'warn' : 'ok',
-        `🏁 翻译完成: 成功 ${okTotal} 项, 错误 ${errTotal} 项` +
-        (failedCount > 0 ? ` | ${failedCount} 个项目需要手动重试` : ' | 全部成功！')
-    )
 
     updateJobProgress(jobId, {
         status: 'done',
