@@ -120,7 +120,7 @@
     <div class="card" style="margin-top:20px">
       <div class="card-body">
         <h3 class="section-title">🌐 全站翻译</h3>
-        <p class="page-desc">选择目标语言和翻译范围，点击「翻译」。翻译同步执行，完成后显示结果和错误日志。</p>
+        <p class="page-desc">选择目标语言和翻译范围，点击「翻译」。任务会提交到服务器后台运行——即使关闭浏览器也不会中断。</p>
 
         <div v-if="nonEnLangs.length === 0" class="empty-tip">
           请先在 <a href="/admin/languages">🌍 语言管理</a> 中添加目标语言
@@ -157,66 +157,72 @@
             </div>
           </div>
           <div class="btn-row" style="gap:8px">
-            <button class="btn btn-primary" @click="startTranslate" :disabled="translating || !selectedLang">
-              {{ translating ? '⏳ 翻译中...' : '🚀 开始翻译' }}
+            <button class="btn btn-primary" @click="startBatchTranslate" :disabled="batchSubmitting || !selectedLang">
+              {{ batchSubmitting ? '⏳ 提交中...' : '🚀 提交翻译任务' }}
             </button>
-            <button v-if="failedItems.length" class="btn btn-warning" @click="retryFailed" :disabled="translating">
-              🔄 重新翻译全部未完成 ({{ failedItems.length }})
-            </button>
-            <button v-if="translating" class="btn btn-outline" @click="abortTranslation">
-              ⛔ 停止
-            </button>
-          </div>
-
-          <!-- Real-time Progress Bar -->
-          <div v-if="progressTotal > 0" class="progress-bar-wrap">
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: progressPct + '%' }" :class="{ error: progressErrors > 0 }"></div>
-            </div>
-            <div class="progress-text">
-              {{ progressDone }}/{{ progressTotal }} 项任务  |  ✅ {{ progressOk }} 项  |  ⚠️ {{ progressErrors }} 错误
-              <span v-if="translating" class="spin">⏳</span>
-            </div>
-          </div>
-
-          <!-- Real-time Log -->
-          <div v-if="logEntries.length" class="log-panel" ref="logPanelRef">
-            <div class="log-header">
-              <span>📝 实时日志 ({{ logEntries.length }} 条)</span>
-              <button class="btn btn-sm btn-outline" @click="logEntries = []">× 清空</button>
-            </div>
-            <div class="log-body">
-              <div v-for="(log, i) in logEntries" :key="i" :class="['log-entry', log.type]">
-                <span class="log-time">{{ log.time }}</span>
-                <span class="log-icon">{{ log.type === 'ok' ? '✅' : log.type === 'error' ? '❌' : log.type === 'warn' ? '⚠️' : 'ℹ️' }}</span>
-                <span class="log-msg">{{ log.msg }}</span>
-              </div>
-            </div>
           </div>
         </div>  <!-- end translate-panel -->
-
-        <!-- Translation Results -->
-        <div v-if="translateResult" class="result-panel">
-          <div class="result-summary" :class="translateResult.errors?.length ? 'has-error' : 'all-ok'">
-            <strong>翻译完成：</strong>
-            成功 {{ translateResult.translated }} / {{ translateResult.total }} 项
-            <span v-if="translateResult.errors?.length" class="err-count">
-              ，{{ translateResult.errors.length }} 个错误
-            </span>
-          </div>
-
-          <!-- Error logs -->
-          <div v-if="translateResult.errors?.length" class="error-log">
-            <h4>⚠️ 错误日志 ({{ translateResult.errors.length }} 个)</h4>
-            <div v-for="(e, i) in translateResult.errors" :key="i" class="error-row">
-              <code>{{ e.errorCode || 'ERR' }}</code>
-              <strong>[{{ e.targetLang || '?' }}] {{ e.itemName || e.item || e.page || `Batch ${e.batch}` }}</strong>: {{ e.error }}
-            </div>
-          </div>
-        </div>
       </div>
     </div>
 
+    <!-- ── Background Task Monitor ── -->
+    <div class="card" style="margin-top:20px">
+      <div class="card-header-row" style="cursor:pointer" @click="bgCollapsed = !bgCollapsed">
+        <h3>{{ bgCollapsed ? '▶' : '▼' }} 📡 后台翻译任务
+          <span v-if="bgStatus.pending + bgStatus.running > 0" class="bg-badge running">{{ bgStatus.running }} 运行中 / {{ bgStatus.pending }} 等待</span>
+          <span v-else-if="bgStatus.total > 0" class="bg-badge idle">{{ bgStatus.success }} ✅ / {{ bgStatus.error }} ❌</span>
+        </h3>
+      </div>
+      <div class="card-body" v-show="!bgCollapsed">
+        <p class="page-desc">翻译任务在服务器后台运行，关闭浏览器不会中断。翻译失败的任务会自动重试一次，二次失败需手动重试。日志保留 3 天。</p>
+
+        <!-- Stats row -->
+        <div v-if="bgStatus.total > 0" class="bg-stats">
+          <div class="bg-stat"><span class="bg-num">{{ bgStatus.total }}</span><span class="bg-label">总计</span></div>
+          <div class="bg-stat running"><span class="bg-num">{{ bgStatus.running }}</span><span class="bg-label">运行中</span></div>
+          <div class="bg-stat pending"><span class="bg-num">{{ bgStatus.pending }}</span><span class="bg-label">等待中</span></div>
+          <div class="bg-stat success"><span class="bg-num">{{ bgStatus.success }}</span><span class="bg-label">成功</span></div>
+          <div class="bg-stat error"><span class="bg-num">{{ bgStatus.error }}</span><span class="bg-label">失败</span></div>
+        </div>
+
+        <!-- Progress bar -->
+        <div v-if="bgStatus.total > 0" class="progress-bar-wrap">
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: bgProgressPct + '%' }" :class="{ error: bgStatus.error > 0 }"></div>
+          </div>
+          <div class="progress-text">
+            {{ bgStatus.success + bgStatus.error }}/{{ bgStatus.total }} 已完成
+            <span v-if="bgStatus.running > 0" class="spin">⏳</span>
+            <span v-if="bgStatus.workerPaused" style="color:#f59e0b;margin-left:8px">⏸ 已暂停</span>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="btn-row" style="gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button v-if="bgStatus.workerPaused" class="btn btn-primary btn-sm" @click="bgAction('resume')">▶️ 恢复</button>
+          <button v-else-if="bgStatus.running > 0 || bgStatus.pending > 0" class="btn btn-outline btn-sm" @click="bgAction('pause')">⏸ 暂停</button>
+          <button v-if="bgStatus.error > 0" class="btn btn-warning btn-sm" @click="bgAction('retry_failed')">🔄 重试全部失败 ({{ bgStatus.error }})</button>
+          <button v-if="bgStatus.success > 0" class="btn btn-outline btn-sm" @click="bgAction('clear_completed')">🧹 清除成功记录</button>
+          <button v-if="bgStatus.total > 0" class="btn btn-outline btn-sm" style="color:#ef4444" @click="bgAction('clear_logs')">🗑 清空全部日志</button>
+          <button class="btn btn-outline btn-sm" @click="fetchBgStatus" :disabled="bgLoading">🔄 刷新</button>
+        </div>
+
+        <!-- Task log list -->
+        <div v-if="bgLogs.length" class="bg-log-list">
+          <div v-for="task in bgLogs" :key="task.id" class="bg-log-item" :class="task.status">
+            <span class="bg-log-status">{{ task.status === 'success' ? '✅' : task.status === 'error' ? '❌' : task.status === 'running' ? '⏳' : '⏱️' }}</span>
+            <span class="bg-log-lang">[{{ task.target_lang }}]</span>
+            <span class="bg-log-name">{{ task.item_name || task.item_type + '_' + task.item_id }}</span>
+            <span class="bg-log-msg" v-if="task.log_message">{{ task.log_message }}</span>
+            <span class="bg-log-err" v-if="task.error_message && task.status === 'error'">{{ task.error_message.slice(0, 120) }}</span>
+            <span class="bg-log-time">{{ formatTime(task.updated_at) }}</span>
+            <button v-if="task.status === 'error'" class="btn btn-xs btn-outline" @click="bgAction('retry_single', task.id)" style="margin-left:4px">重试</button>
+          </div>
+        </div>
+        <div v-else-if="!bgLoading" class="empty-tip">暂无翻译任务记录</div>
+        <div v-if="bgLoading" class="empty-tip">⏳ 加载中...</div>
+      </div>
+    </div>
 
     <!-- ── Granular Translation (Products / Articles) ── -->
     <div class="card" style="margin-top:20px">
@@ -264,7 +270,10 @@
           <span class="gt-selected-count" v-if="gtSelectedIds.length">已选 {{ gtSelectedIds.length }} 项</span>
           <div style="flex:1"></div>
           <button class="btn btn-primary" @click="startGranularTranslation" :disabled="gtTranslating || !gtSelectedIds.length">
-            {{ gtTranslating ? '⏳ 翻译中...' : '🚀 开始翻译' }}
+            {{ gtTranslating ? '⏳ 翻译中...' : '🚀 浏览器翻译' }}
+          </button>
+          <button class="btn btn-outline" @click="submitGranularToBg" :disabled="batchSubmitting || !gtSelectedIds.length" style="border-color:#3b82f6;color:#3b82f6">
+            📡 提交后台翻译
           </button>
           <button v-if="gtFailedIds.length" class="btn btn-warning" @click="retryGranularFailed" :disabled="gtTranslating">
             🔄 重试失败 ({{ [...new Set(gtFailedIds.map(f => f.id))].length }} 项 {{ gtFailedIds.length }} 语言)
@@ -633,6 +642,85 @@ const nonEnLangs = computed(() => languages.value.filter(l => l.code !== 'en'))
 
 const progressPct = computed(() => progressTotal.value ? Math.round(progressDone.value / progressTotal.value * 100) : 0)
 
+// ─── Background Task Monitoring ──────────────────────────────────────────────
+const bgCollapsed = ref(false)
+const bgLoading = ref(false)
+const bgLogs = ref([])
+const bgStatus = reactive({ total: 0, pending: 0, running: 0, success: 0, error: 0, workerRunning: false, workerPaused: false })
+const bgProgressPct = computed(() => bgStatus.total ? Math.round((bgStatus.success + bgStatus.error) / bgStatus.total * 100) : 0)
+const batchSubmitting = ref(false)
+let bgPollTimer = null
+
+function formatTime(dt) {
+  if (!dt) return ''
+  try {
+    const d = new Date(dt + (dt.includes('Z') || dt.includes('+') ? '' : 'Z'))
+    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  } catch { return dt }
+}
+
+async function fetchBgStatus() {
+  bgLoading.value = true
+  try {
+    const res = await api.batchTranslationStatus(1, 200)
+    bgStatus.total = res.total || 0
+    bgStatus.pending = res.pending || 0
+    bgStatus.running = res.running || 0
+    bgStatus.success = res.success || 0
+    bgStatus.error = res.error || 0
+    bgStatus.workerRunning = res.workerRunning || false
+    bgStatus.workerPaused = res.workerPaused || false
+    bgLogs.value = res.logs || []
+  } catch (e) {
+    console.error('Failed to fetch bg status:', e)
+  } finally {
+    bgLoading.value = false
+  }
+}
+
+function startBgPolling() {
+  stopBgPolling()
+  bgPollTimer = setInterval(async () => {
+    if (bgStatus.running > 0 || bgStatus.pending > 0) {
+      await fetchBgStatus()
+    }
+  }, 3000)
+}
+function stopBgPolling() {
+  if (bgPollTimer) { clearInterval(bgPollTimer); bgPollTimer = null }
+}
+
+async function bgAction(action, taskId) {
+  try {
+    await api.batchTranslationAction(action, taskId)
+    await fetchBgStatus()
+    startBgPolling()
+  } catch (e) {
+    alert('操作失败: ' + e.message)
+  }
+}
+
+async function startBatchTranslate() {
+  if (!selectedLang.value) return alert('请选择目标语言')
+  if (!selectedPages.value.length) return alert('请至少选择一个翻译范围')
+  batchSubmitting.value = true
+  try {
+    const res = await api.batchTranslationStart(selectedPages.value, selectedLang.value, concurrency.value)
+    bgCollapsed.value = false
+    await fetchBgStatus()
+    startBgPolling()
+    if (res.totalAdded === 0) {
+      alert('✅ 所有内容已翻译完成，无需重复翻译')
+    } else {
+      alert(`✅ 已提交 ${res.totalAdded} 个翻译任务到后台队列！\n关闭浏览器也不会中断。`)
+    }
+  } catch (e) {
+    alert('提交失败: ' + e.message)
+  } finally {
+    batchSubmitting.value = false
+  }
+}
+
 onMounted(async () => {
   try {
     const [s, langs] = await Promise.all([
@@ -653,9 +741,19 @@ onMounted(async () => {
     }
     // Load granular translation data
     loadGranularStatus()
+    // Load background task status
+    await fetchBgStatus()
+    if (bgStatus.running > 0 || bgStatus.pending > 0) {
+      bgCollapsed.value = false
+      startBgPolling()
+    }
   } catch (e) {
     console.error('Failed to load settings:', e)
   }
+})
+
+onUnmounted(() => {
+  stopBgPolling()
 })
 
 const saveSettings = async () => {
@@ -809,107 +907,200 @@ function addLog(type, msg) {
   }, 50)
 }
 
-let pollTimer = null;
-
-async function fetchStatus() {
-  try {
-    const res = await api.httpRequest('/api/translation/batch-status');
-    if (res) {
-      progressTotal.value = res.total;
-      progressDone.value = res.success + res.error; 
-      progressOk.value = res.success;
-      progressErrors.value = res.error;
-      
-      translating.value = res.workerRunning && !res.workerPaused;
-      
-      if (res.logs) {
-        logEntries.value = res.logs.map(log => ({
-          time: log.updated_at.split(' ')[1] || log.updated_at,
-          type: log.status === 'success' ? 'ok' : (log.status === 'error' ? 'error' : (log.status === 'running' ? 'info' : 'warn')),
-          msg: `[${log.target_lang}] ${log.item_name} ${log.status === 'error' ? '❌ ' + log.error_message : (log.status === 'success' ? '✅ 完成' : '⏳ ' + log.status)}`
-        }));
-      }
-      
-      failedItems.value = new Array(res.error).fill(1);
-      
-      if (translating.value) {
-        if (!pollTimer) pollTimer = setInterval(fetchStatus, 2000);
-      } else {
-        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-      }
-    }
-  } catch(e) {
-    console.error(e);
-  }
+function abortTranslation() {
+  aborted = true
+  addLog('warn', '用户停止了翻译')
+  // Reset translating state after a short delay to let workers finish
+  setTimeout(() => {
+    translating.value = false
+    addLog('info', '📛 翻译已停止，可以重新开始')
+  }, 1000)
 }
 
-onMounted(() => {
-  fetchStatus();
-});
 
-onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer);
-});
+const failedItems = ref([])
+const channelCollapsed = ref(true)
+
+const startTranslate = async () => {
+  if (!selectedLang.value) return alert('请选择目标语言')
+  if (!selectedPages.value.length) return alert('请至少选择一个翻译范围')
+  aborted = false
+  const pages = [...selectedPages.value]
+  await runPages(pages)
+}
+
+async function retryFailed() {
+  if (!failedItems.value.length) return
+  const items = [...failedItems.value]
+  failedItems.value = []
+  addLog('info', `🔄 重试 ${items.length} 个失败项目`)
+  aborted = false
+  await runItems(items)
+}
 
 async function runPages(pages) {
+  translating.value = true
+  translateResult.value = null
+  failedPages.value = []
+  failedItems.value = []
+  progressTotal.value = 0
+  progressDone.value = 0
+  progressOk.value = 0
+  progressErrors.value = 0
+
+  addLog('info', `开始翻译 → 目标语言: ${selectedLang.value === 'all' ? '全部语言' : selectedLang.value}，范围: ${pages.map(p => pageLabels[p] || p).join(', ')}`)
+
+  addLog('info', `📋 正在获取待翻译内容列表...`)
+  let allItemsList = []
   try {
-    await api.httpRequest('/api/translation/batch-start', {
-      method: 'POST',
-      body: JSON.stringify({ pages, lang: selectedLang.value, concurrency: concurrency.value }),
-      headers: { 'Content-Type': 'application/json' }
-    });
-    translating.value = true;
-    addLog('info', `🚀 后台翻译已启动！请等待...`);
-    fetchStatus();
+    for (const page of pages) {
+      const items = await api.getTranslationItems(page)
+      allItemsList.push(...(items || []))
+    }
+    addLog('ok', `📋 共发现 ${allItemsList.length} 个基础待翻译项目`)
   } catch (e) {
-    addLog('error', `❌ 启动失败: ${e.message}`);
+    addLog('error', `❌ 获取翻译列表失败: ${e.message}`)
+    translating.value = false
+    return
   }
+
+  if (allItemsList.length === 0) {
+    addLog('ok', `✔ 无需翻译（已全部翻译）`)
+    translating.value = false
+    return
+  }
+
+  let finalItems = []
+  if (selectedLang.value === 'all') {
+    const langs = nonEnLangs.value.map(l => l.code)
+    for (const item of allItemsList) {
+      for (const lang of langs) {
+        finalItems.push({ ...item, targetLang: lang })
+      }
+    }
+  } else {
+    for (const item of allItemsList) {
+      finalItems.push({ ...item, targetLang: selectedLang.value })
+    }
+  }
+
+  await runItems(finalItems)
 }
 
 async function runItems(itemsList) {
-  try {
-    await api.httpRequest('/api/translation/batch-start', {
-      method: 'POST',
-      body: JSON.stringify({ explicitItems: itemsList, lang: selectedLang.value, concurrency: concurrency.value }),
-      headers: { 'Content-Type': 'application/json' }
-    });
-    translating.value = true;
-    addLog('info', `🚀 精细翻译后台任务已启动！`);
-    fetchStatus();
-  } catch (e) {
-    addLog('error', `❌ 启动失败: ${e.message}`);
+  translating.value = true
+  progressTotal.value = itemsList.length
+  progressDone.value = 0
+  progressOk.value = 0
+  progressErrors.value = 0
+  const allResults = []
+  const allErrors = []
+  const newFailed = []
+
+  const CONCURRENCY = concurrency.value || 3
+  const BULK_SIZE = 1
+
+  addLog('info', `⚡ 陪读蛙模式: ${CONCURRENCY} 个项目同时翻译, 每个项目内部多段并发`)
+
+  let queueIdx = 0
+  let consecutiveFailures = 0
+  const MAX_CONSECUTIVE_FAILURES = 3
+
+  async function worker() {
+    while (queueIdx < itemsList.length) {
+      if (aborted) break
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) break
+
+      const chunk = []
+      while (queueIdx < itemsList.length && chunk.length < BULK_SIZE) {
+        chunk.push(itemsList[queueIdx++])
+      }
+      if (chunk.length === 0) break
+
+      if (aborted || consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        for (const item of chunk) { newFailed.push(item); progressDone.value++ }
+        addLog('warn', `⏭ 跳过 ${chunk.length} 个项目（已停止）`)
+        continue
+      }
+
+      const totalFields = chunk.reduce((s, c) => s + (c.fields?.length || 0), 0)
+      addLog('info', `→ 正在翻译: [${chunk[0].targetLang}] ${chunk[0].itemName} (${totalFields} 个字段)...`)
+
+      try {
+        const item = chunk[0]
+        const res = await api.runTranslationOne(item.targetLang, item.type, item.id)
+        const ok = res.results?.length || 0
+        const errs = res.errors?.length || 0
+        progressOk.value += ok
+        progressErrors.value += errs
+
+        if (res.results) allResults.push(...res.results.map(r => ({ ...r, targetLang: item.targetLang })))
+        if (res.errors) allErrors.push(...res.errors.map(e => ({ ...e, targetLang: item.targetLang })))
+
+        if (errs > 0 && ok === 0) {
+          consecutiveFailures++
+          for (const e of res.errors) {
+            const code = e.errorCode ? `[${e.errorCode}]` : ''
+            addLog('error', `   ❌ [${item.targetLang}] ${e.itemName || ''} ${code}: ${(e.error || '').slice(0, 120)}`)
+          }
+          for (const it of chunk) newFailed.push(it)
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            addLog('error', `🛑 连续 ${MAX_CONSECUTIVE_FAILURES} 次失败，自动停止翻译！请检查API密钥或网络连接`)
+            aborted = true
+          }
+        } else if (errs > 0) {
+          consecutiveFailures = 0  // 有成功就重置
+          if (ok > 0) addLog('warn', `   ⚠️ [${item.targetLang}]「${chunk[0].itemName}」: ${ok} 成功, ${errs} 错误`)
+          for (const it of chunk) newFailed.push(it)
+        } else if (ok === 0) {
+          consecutiveFailures = 0
+          addLog('ok', `   ✔ [${item.targetLang}]「${chunk[0].itemName}」无需翻译`)
+        } else {
+          consecutiveFailures = 0
+          addLog('ok', `   ✅ [${item.targetLang}]「${chunk[0].itemName}」翻译成功: ${ok} 个字段`)
+        }
+      } catch (e) {
+        consecutiveFailures++
+        progressErrors.value += chunk.length
+        for (const it of chunk) {
+          allErrors.push({ item: it.itemName, error: e.message, errorCode: 'ERR_API', targetLang: it.targetLang })
+          newFailed.push(it)
+        }
+        addLog('error', `   ❌ [${chunk[0].targetLang}]「${chunk[0].itemName}」翻译失败 (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}): ${e.message}`)
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          addLog('error', `🛑 连续 ${MAX_CONSECUTIVE_FAILURES} 次失败，自动停止翻译！请检查API密钥或网络连接`)
+          aborted = true
+        }
+      }
+
+      progressDone.value += chunk.length
+    }
   }
-}
 
-async function actionBatch(action) {
-  try {
-    await api.httpRequest('/api/translation/batch-action', {
-      method: 'POST',
-      body: JSON.stringify({ action }),
-      headers: { 'Content-Type': 'application/json' }
-    });
-    fetchStatus();
-  } catch (e) {
-    console.error(e);
+  const workers = Array.from({ length: Math.min(CONCURRENCY, Math.ceil(itemsList.length / BULK_SIZE)) }, () => worker())
+  await Promise.all(workers)
+
+  failedItems.value = newFailed
+  failedPages.value = newFailed.length > 0 ? ['has_failures'] : []
+  translateResult.value = {
+    total: progressOk.value + progressErrors.value,
+    translated: progressOk.value,
+    results: allResults,
+    errors: allErrors
   }
-}
 
-function abortTranslation() {
-  actionBatch('pause');
-}
+  addLog('info', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+  addLog(newFailed.length ? 'warn' : 'ok',
+    `🏁 翻译完成: 成功 ${progressOk.value} 项, 错误 ${progressErrors.value} 项` +
+    (newFailed.length ? ` | ${newFailed.length} 个项目需要重新翻译` : ' | 全部成功！')
+  )
+  if (newFailed.length) {
+    addLog('info', `💡 点击「🔄 重新翻译全部未完成」可重新翻译所有有错误和失败的项目: ${newFailed.map(i => i.itemName).slice(0, 5).join(', ')}${newFailed.length > 5 ? '...' : ''}`)
+  }
+  addLog('info', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
 
-function resumeTranslation() {
-  actionBatch('resume');
-}
-
-function clearLogs() {
-  actionBatch('clear_logs');
-  logEntries.value = [];
-  progressTotal.value = 0;
-  progressDone.value = 0;
-  progressOk.value = 0;
-  progressErrors.value = 0;
-  failedItems.value = [];
+  translating.value = false
+  languages.value = await api.getLanguages()
 }
 
 // ── Search mode: untranslated or translated content ──
@@ -1080,37 +1271,258 @@ function filterGranularItems() {
   gtFilteredItems.value = items
 }
 
+async function submitGranularToBg() {
+  if (!gtSelectedIds.value.length) return alert('请选择要翻译的项目')
+  batchSubmitting.value = true
+  try {
+    const type = granularTab.value
+    const explicitItems = gtSelectedIds.value.map(id => {
+      const item = gtFilteredItems.value.find(x => x.id === id) || gtAllItems.value.find(x => x.id === id)
+      return { type, id: String(id), itemName: item?.name || `${type}_${id}` }
+    })
+    const res = await api.batchTranslationStart([], gtSelectedLang.value, gtConcurrency.value, explicitItems)
+    bgCollapsed.value = false
+    await fetchBgStatus()
+    startBgPolling()
+    if (res.totalAdded === 0) {
+      alert('✅ 所选内容已全部翻译完成，无需重复翻译')
+    } else {
+      alert(`✅ 已提交 ${res.totalAdded} 个翻译任务到后台队列！\n关闭浏览器也不会中断。`)
+    }
+  } catch (e) {
+    alert('提交失败: ' + e.message)
+  } finally {
+    batchSubmitting.value = false
+  }
+}
+
 async function startGranularTranslation() {
   if (!gtSelectedIds.value.length) return alert('请选择要翻译的项目')
-  const itemsList = gtSelectedIds.value.map(id => {
-     const item = gtAllItems.value.find(i => i.id === id)
-     return { type: granularTab.value, id, itemName: item?.name || item?.name_en || ('#'+id) }
-  })
-  try {
-    await api.httpRequest('/api/translation/batch-start', {
-      method: 'POST',
-      body: JSON.stringify({ explicitItems: itemsList, lang: gtSelectedLang.value, concurrency: gtConcurrency.value }),
-      headers: { 'Content-Type': 'application/json' }
-    });
-    gtTranslating.value = true;
-    translating.value = true;
-    gtAddLog('info', `🚀 精细翻译后台任务已启动！进度请查看上方【全站后台翻译】面板！`);
-    fetchStatus();
-    
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  } catch (e) {
-    gtAddLog('error', `❌ 启动失败: ${e.message}`);
+  const ids = [...gtSelectedIds.value]
+  // Cancel any previous session's pending HTTP requests immediately
+  if (window._gtAbortController) window._gtAbortController.abort()
+  window._gtAbortController = new AbortController()
+  const signal = window._gtAbortController.signal
+  gtAborted = false
+  gtTranslating.value = true
+  gtFailedIds.value = []
+
+  const langs = gtSelectedLang.value === 'all'
+    ? gtLangs.value.map(l => l.code)
+    : [gtSelectedLang.value]
+  const langNames = gtSelectedLang.value === 'all'
+    ? '全部语言'
+    : (gtLangs.value.find(l => l.code === gtSelectedLang.value)?.name || gtSelectedLang.value)
+  const type = granularTab.value
+  // CONCURRENCY = 每个项目内「语言」的并发数（并发数越大速度越快，但需注意 API 限流）
+  const CONCURRENCY = gtConcurrency.value || 3
+
+  gtProgressTotal.value = ids.length * langs.length
+  gtProgressDone.value = 0
+  gtProgressOk.value = 0
+  gtProgressErrors.value = 0
+
+  gtAddLog('info',
+    '开始精细化翻译 → ' + (type === 'product' ? '产品' : '文章') +
+    ' ' + ids.length + ' 项, 语言: ' + langNames +
+    ', 语言并发: ' + Math.min(CONCURRENCY, langs.length))
+  gtAddLog('info', '📋 策略：每个项目的所有语言并发翻译，项目之间顺序执行')
+
+  // ── 翻译单个项目的单种语言（含重试，超时不重试）──
+  async function translateOneLang(itemId, langCode, itemName) {
+    if (gtAborted) return false
+    const langObj = gtLangs.value.find(l => l.code === langCode)
+    const langLabel = langObj ? (langObj.flag || '') + ' ' + langObj.name : langCode
+    gtAddLog('info', '  🔄「' + itemName + '」→ ' + langLabel + ' 翻译中...')
+    let retries = 0
+    let success = false
+    let hasError = false
+    while (!success && retries <= 1) {  // max 1 retry (not 2)
+      if (gtAborted) break
+      try {
+        const res = await api.runTranslationOne(langCode, type, itemId, signal)
+        const ok = res.results?.length || 0
+        const errs = res.errors?.length || 0
+        gtProgressOk.value += ok
+        if (errs > 0 && ok === 0) {
+          retries++
+          if (retries > 1) {
+            gtProgressErrors.value += errs
+            hasError = true
+            if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode)) gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
+            for (const e of (res.errors || []))
+              gtAddLog('error', '  ❌「' + itemName + '」[' + langLabel + '] ' + (e.error || '').slice(0, 120))
+          } else {
+            gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] 失败，重试 1/1...')
+          }
+          continue
+        }
+        if (errs > 0) {
+          gtProgressErrors.value += errs
+          // Show what specifically failed
+          for (const e of (res.errors || []))
+            gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] ' + (e.errorCode || '') + ' ' + (e.error || '').slice(0, 150))
+          if (ok > 0) {
+            gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] 部分成功: ' + ok + ' 成功, ' + errs + ' 错误（可重试修复）')
+          }
+          hasError = true
+          if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode)) gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
+        } else if (ok > 0) {
+          gtAddLog('ok', '  ✅「' + itemName + '」[' + langLabel + '] ' + ok + ' 个字段')
+        } else {
+          gtAddLog('ok', '  ✔「' + itemName + '」[' + langLabel + '] 无需翻译')
+        }
+        success = true
+      } catch (e) {
+        // 524 = Cloudflare timeout, 504 = gateway timeout — don't retry, it will just timeout again
+        const isTimeout = e.message.includes('524') || e.message.includes('504') ||
+          e.message.includes('timeout') || e.message.includes('超时')
+        if (isTimeout) {
+          gtProgressErrors.value++
+          hasError = true
+          if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode)) gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
+          gtAddLog('error', '  ⏱️「' + itemName + '」[' + langLabel + '] 请求超时 — 文章内容过长，建议降低并发数或联系服务器管理员增加超时配置')
+          break  // exit retry loop immediately, no point retrying a timeout
+        }
+        retries++
+        if (retries > 1) {
+          gtProgressErrors.value++
+          hasError = true
+          if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode)) gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
+          gtAddLog('error', '  ❌「' + itemName + '」[' + langLabel + '] ' + e.message)
+        } else {
+          gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] 失败，重试 1/1...')
+        }
+      }
+    }
+    gtProgressDone.value++
+    return hasError
+  }
+
+  // ── 并发翻译单个项目的所有语言 ──
+  async function translateOneItem(itemId) {
+    const item = gtAllItems.value.find(i => i.id === itemId)
+    const itemName = item?.name || '#' + itemId
+    gtAddLog('info', '📦「' + itemName + '」开始翻译 (' + langs.length + ' 种语言，' + Math.min(CONCURRENCY, langs.length) + ' 并发)')
+    let itemHasError = false
+    let langQueueIdx = 0
+    async function langWorker() {
+      while (langQueueIdx < langs.length) {
+        if (gtAborted) break
+        const idx = langQueueIdx++
+        if (idx >= langs.length) break
+        const hasErr = await translateOneLang(itemId, langs[idx], itemName)
+        if (hasErr) itemHasError = true
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, langs.length) }, () => langWorker()))
+    if (gtAborted) gtAddLog('warn', '📦「' + itemName + '」翻译已停止')
+    else if (itemHasError) gtAddLog('error', '📦「' + itemName + '」部分语言翻译失败 ✗')
+    else gtAddLog('ok', '📦「' + itemName + '」全部语言翻译成功 ✓')
+  }
+
+  // ── 项目顺序执行（Article A 完成后再翻译 Article B）──
+  for (const itemId of ids) {
+    if (gtAborted) break
+    await translateOneItem(itemId)
+  }
+
+  gtAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  const failedItemCount = [...new Set(gtFailedIds.value.map(f => f.id))].length
+  gtAddLog(gtFailedIds.value.length ? 'warn' : 'ok',
+    '🏁 翻译完成: 成功 ' + gtProgressOk.value + ' 项, 错误 ' + gtProgressErrors.value + ' 项' +
+    (gtFailedIds.value.length ? ' | ' + failedItemCount + ' 个项目 ' + gtFailedIds.value.length + ' 个语言失败' : ' | 全部成功！')
+  )
+  gtAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  if (!gtAborted) {
+    gtTranslating.value = false
+    await loadGranularStatus()
   }
 }
 
 function stopGranularTranslation() {
-  actionBatch('pause');
-  gtTranslating.value = false;
+  gtAborted = true
+  // Cancel ALL in-flight fetch requests immediately → frees browser connections
+  if (window._gtAbortController) {
+    window._gtAbortController.abort()
+    window._gtAbortController = null
+  }
+  gtTranslating.value = false
+  gtAddLog('warn', '⛔ 已停止翻译，所有进行中的请求已取消')
 }
 
 async function retryGranularFailed() {
-  actionBatch('retry_failed');
-  gtFailedIds.value = [];
+  if (!gtFailedIds.value.length) return
+  const failedPairs = [...gtFailedIds.value]  // [{id, lang, itemName}, ...]
+  const failedItemIds = [...new Set(failedPairs.map(f => f.id))]
+
+  // Cancel any previous session
+  if (window._gtAbortController) window._gtAbortController.abort()
+  window._gtAbortController = new AbortController()
+  const signal = window._gtAbortController.signal
+  gtAborted = false
+  gtTranslating.value = true
+  gtFailedIds.value = []
+  const type = granularTab.value
+  const CONCURRENCY = gtConcurrency.value || 3
+
+  gtProgressTotal.value = failedPairs.length
+  gtProgressDone.value = 0
+  gtProgressOk.value = 0
+  gtProgressErrors.value = 0
+
+  gtAddLog('info', '🔄 重试 ' + failedItemIds.length + ' 个项目的 ' + failedPairs.length + ' 个失败语言')
+
+  // For each failed item, only translate its failed languages
+  for (const itemId of failedItemIds) {
+    if (gtAborted) break
+    const itemFailedLangs = failedPairs.filter(f => f.id === itemId).map(f => f.lang)
+    const itemName = failedPairs.find(f => f.id === itemId)?.itemName || '#' + itemId
+    gtAddLog('info', '📦「' + itemName + '」重试 ' + itemFailedLangs.length + ' 种失败语言')
+
+    let langQueueIdx = 0
+    async function langWorker() {
+      while (langQueueIdx < itemFailedLangs.length) {
+        if (gtAborted) break
+        const idx = langQueueIdx++
+        if (idx >= itemFailedLangs.length) break
+        const langCode = itemFailedLangs[idx]
+        const langObj = gtLangs.value.find(l => l.code === langCode)
+        const langLabel = langObj ? (langObj.flag || '') + ' ' + langObj.name : langCode
+        gtAddLog('info', '  🔄「' + itemName + '」→ ' + langLabel + ' 重试中...')
+        try {
+          const res = await api.runTranslationOne(langCode, type, itemId, signal)
+          const ok = res.results?.length || 0
+          const errs = res.errors?.length || 0
+          gtProgressOk.value += ok
+          if (errs > 0) {
+            gtProgressErrors.value += errs
+            for (const e of (res.errors || []))
+              gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] ' + (e.errorCode || '') + ' ' + (e.error || '').slice(0, 150))
+            if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode))
+              gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
+          }
+          if (ok > 0 && errs === 0) {
+            gtAddLog('ok', '  ✅「' + itemName + '」[' + langLabel + '] ' + ok + ' 个字段 (重试成功)')
+          }
+        } catch (e) {
+          gtProgressErrors.value++
+          if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode))
+            gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
+          gtAddLog('error', '  ❌「' + itemName + '」[' + langLabel + '] ' + e.message)
+        }
+        gtProgressDone.value++
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, itemFailedLangs.length) }, () => langWorker()))
+  }
+
+  gtAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  gtAddLog(gtFailedIds.value.length ? 'warn' : 'ok',
+    '🏁 重试完成: 成功 ' + gtProgressOk.value + ' 项, 仍失败 ' + gtFailedIds.value.length + ' 个语言')
+  gtAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  gtTranslating.value = false
+  await loadGranularStatus()
 }
 
 // ── Translation Audit ──────────────────────────────────────────────────────
@@ -1536,4 +1948,30 @@ input:checked + .slider:before { transform: translateX(18px); }
 .audit-ui-keys { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 0; }
 .audit-ui-key { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-family: monospace; }
 .audit-missing-fields { font-size: 11px; color: #94a3b8; margin-left: 6px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Background Task Monitor ── */
+.bg-badge { font-size: 12px; font-weight: 500; padding: 2px 10px; border-radius: 12px; margin-left: 12px; }
+.bg-badge.running { background: #dbeafe; color: #1d4ed8; animation: pulse 1.5s infinite; }
+.bg-badge.idle { background: #f1f5f9; color: #64748b; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+.bg-stats { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.bg-stat { display: flex; flex-direction: column; align-items: center; padding: 8px 16px; border-radius: 8px; background: #f8fafc; min-width: 70px; }
+.bg-stat .bg-num { font-size: 22px; font-weight: 700; color: #334155; }
+.bg-stat .bg-label { font-size: 11px; color: #94a3b8; }
+.bg-stat.running .bg-num { color: #2563eb; }
+.bg-stat.pending .bg-num { color: #f59e0b; }
+.bg-stat.success .bg-num { color: #16a34a; }
+.bg-stat.error .bg-num { color: #dc2626; }
+.bg-log-list { margin-top: 16px; max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+.bg-log-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; flex-wrap: wrap; }
+.bg-log-item:last-child { border-bottom: none; }
+.bg-log-item.error { background: #fef2f2; }
+.bg-log-item.running { background: #eff6ff; }
+.bg-log-item.pending { background: #fffbeb; }
+.bg-log-status { flex-shrink: 0; }
+.bg-log-lang { font-weight: 600; color: #3b82f6; flex-shrink: 0; min-width: 40px; }
+.bg-log-name { font-weight: 500; color: #334155; flex: 1; min-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bg-log-msg { font-size: 12px; color: #16a34a; }
+.bg-log-err { font-size: 12px; color: #dc2626; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bg-log-time { font-size: 11px; color: #94a3b8; flex-shrink: 0; margin-left: auto; }
 </style>

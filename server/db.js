@@ -551,38 +551,6 @@ async function initDb() {
   try { db.exec("ALTER TABLE mail_templates ADD COLUMN created_by TEXT DEFAULT ''") } catch (e) { }
   try { db.exec("ALTER TABLE mail_contacts ADD COLUMN created_by TEXT DEFAULT ''") } catch (e) { }
   try { db.exec("ALTER TABLE mail_tasks ADD COLUMN created_by TEXT DEFAULT ''") } catch (e) { }
-  try { db.exec(`CREATE TABLE IF NOT EXISTS translations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            language_code TEXT NOT NULL,
-            content_type TEXT NOT NULL,
-            content_id INTEGER,
-            content_field TEXT NOT NULL,
-            original_text TEXT,
-            translated_text TEXT,
-            is_manual INTEGER DEFAULT 0,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(language_code, content_type, content_id, content_field)
-        );
-        CREATE TABLE IF NOT EXISTS translation_tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            target_lang TEXT NOT NULL,
-            item_type TEXT NOT NULL,
-            item_id INTEGER,
-            item_name TEXT,
-            status TEXT DEFAULT 'pending',
-            error_message TEXT,
-            retry_count INTEGER DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS ral_colors (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            code TEXT NOT NULL,
-            name TEXT,
-            hex TEXT,
-            rgb TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );`) } catch (e) { }
   try { db.exec("ALTER TABLE mail_logs ADD COLUMN created_by TEXT DEFAULT ''") } catch (e) { }
   try { db.exec("ALTER TABLE smtp_accounts ADD COLUMN created_by TEXT DEFAULT ''") } catch (e) { }
   try { db.exec("ALTER TABLE contact_groups ADD COLUMN created_by TEXT DEFAULT ''") } catch (e) { }
@@ -880,6 +848,25 @@ async function initDb() {
   `)
   // Unique index for translations
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_translations_unique ON translations(language_code, content_type, COALESCE(content_id,-1), content_field)') } catch (e) { }
+
+  // Translation background tasks queue
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS translation_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      target_lang TEXT NOT NULL,
+      item_type TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      item_name TEXT DEFAULT '',
+      status TEXT DEFAULT 'pending',
+      retry_count INTEGER DEFAULT 0,
+      error_message TEXT,
+      log_message TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  // Add log_message column if missing (upgrade path)
+  try { db.exec('ALTER TABLE translation_tasks ADD COLUMN log_message TEXT') } catch (e) { }
 
   // 初始化默认数据
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count

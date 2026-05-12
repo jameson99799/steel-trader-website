@@ -254,6 +254,11 @@ export const api = {
   runSelectiveTranslation: (type, ids, languages) => request('/translation/run-selective', { method: 'POST', body: JSON.stringify({ type, ids, languages }) }),
   auditTranslations: () => request('/translation/audit-translations'),
 
+  // Background translation queue
+  batchTranslationStart: (pages, lang, concurrency, explicitItems) => request('/translation/batch-start', { method: 'POST', body: JSON.stringify({ pages, lang, concurrency, explicitItems }) }),
+  batchTranslationStatus: (page, pageSize) => request(`/translation/batch-status?page=${page || 1}&pageSize=${pageSize || 200}`),
+  batchTranslationAction: (action, taskId) => request('/translation/batch-action', { method: 'POST', body: JSON.stringify({ action, task_id: taskId }) }),
+
   // AI Channels
   getAIChannels: () => request('/ai/channels'),
   createAIChannel: (data) => request('/ai/channels', { method: 'POST', body: JSON.stringify(data) }),
