@@ -1519,6 +1519,7 @@ const gtCategories = ref([])
 const gtLangs = ref([])
 const gtSelectedLang = ref('all')
 const gtConcurrency = concurrency
+const gtSearchQuery = ref('')
 const gtAllItems = ref([])
 const gtFilteredItems = ref([])
 const gtSelectedIds = ref([])
@@ -1602,8 +1603,8 @@ function filterGranularItems() {
   if (gtSearchQuery.value) {
     const q = gtSearchQuery.value.toLowerCase()
     items = items.filter(i => {
-      const nameMatch = (i.name_en || '').toLowerCase().includes(q) || (i.name || '').toLowerCase().includes(q)
-      const titleMatch = (i.title_en || '').toLowerCase().includes(q) || (i.title || '').toLowerCase().includes(q)
+      const nameMatch = i.name_en ? String(i.name_en).toLowerCase().includes(q) : false
+      const titleMatch = i.title_en ? String(i.title_en).toLowerCase().includes(q) : false
       return nameMatch || titleMatch
     })
   }

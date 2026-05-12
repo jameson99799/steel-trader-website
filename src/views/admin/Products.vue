@@ -86,7 +86,10 @@
                 <div style="background: #1e293b; color: #a5b4fc; padding: 12px 16px; margin: 0 16px 16px; border-radius: 6px; font-family: 'Fira Mono', monospace; font-size: 13px; max-height: 250px; overflow-y: auto;">
                   <div style="color: white; margin-bottom: 8px; font-weight: 600; display:flex; justify-content:space-between;">
                     <span>📡 翻译日志 - {{ translatingItemLog.langName }}</span>
-                    <button @click="translatingItemLog = null" style="background:none;border:none;color:#94a3b8;cursor:pointer;">✕ 关闭</button>
+                    <div>
+                      <button v-if="translatingId === product.id" @click="translatingItemLog.aborted = true" style="background:transparent;border:1px solid #ef4444;color:#ef4444;cursor:pointer;margin-right:16px;border-radius:4px;padding:2px 8px;font-size:12px;">🛑 中止翻译</button>
+                      <button @click="translatingItemLog = null" style="background:none;border:none;color:#94a3b8;cursor:pointer;">✕ 关闭</button>
+                    </div>
                   </div>
                   <pre style="margin:0;white-space:pre-wrap;line-height:1.5;">{{ translatingItemLog.log }}</pre>
                 </div>
@@ -880,6 +883,10 @@ async function translateProduct(product, targetLangCode = null, targetLangName =
       while (qIdx < langsToRun.length) {
         const idx = qIdx++
         if (idx >= langsToRun.length) break
+        if (translatingItemLog.value?.aborted) {
+          logAppend('🛑 翻译已被中止')
+          break
+        }
         const l = langsToRun[idx]
         logAppend(`  🔄 [${l.name}] 翻译中...`)
         
