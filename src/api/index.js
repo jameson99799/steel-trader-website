@@ -254,10 +254,15 @@ export const api = {
   runSelectiveTranslation: (type, ids, languages) => request('/translation/run-selective', { method: 'POST', body: JSON.stringify({ type, ids, languages }) }),
   auditTranslations: () => request('/translation/audit-translations'),
 
-  // Background translation queue
-  batchTranslationStart: (pages, lang, concurrency, explicitItems) => request('/translation/batch-start', { method: 'POST', body: JSON.stringify({ pages, lang, concurrency, explicitItems }) }),
-  batchTranslationStatus: (page, pageSize) => request(`/translation/batch-status?page=${page || 1}&pageSize=${pageSize || 200}`),
-  batchTranslationAction: (action, taskId) => request('/translation/batch-action', { method: 'POST', body: JSON.stringify({ action, task_id: taskId }) }),
+  // Translation Jobs (background server-side)
+  getTranslationJobs: () => request('/translation-jobs'),
+  getActiveTranslationJob: () => request('/translation-jobs/active'),
+  getTranslationJob: (id) => request(`/translation-jobs/${id}`),
+  getTranslationJobLogsSince: (id, logId) => request(`/translation-jobs/${id}/logs-since/${logId}`),
+  createTranslationJob: (data) => request('/translation-jobs', { method: 'POST', body: JSON.stringify(data) }),
+  abortTranslationJob: (id) => request(`/translation-jobs/${id}/abort`, { method: 'POST' }),
+  retryFailedTranslationJob: (id) => request(`/translation-jobs/${id}/retry-failed`, { method: 'POST' }),
+  clearTranslationJobLogs: () => request('/translation-jobs/logs', { method: 'DELETE' }),
 
   // AI Channels
   getAIChannels: () => request('/ai/channels'),

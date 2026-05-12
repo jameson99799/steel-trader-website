@@ -1953,8 +1953,8 @@ router.post('/sync-images', authMiddleware, (req, res) => {
 
 let workerRunning = false;
 let workerPaused = false;
+let activeWorkers = 0;
 let workerConcurrency = 3;
-let lastWorkerActivity = null;
 
 async function executeTranslationTask(targetLang, contentType, contentId) {
     const langRow = getOne('SELECT * FROM languages WHERE code=?', [targetLang])
@@ -1990,92 +1990,52 @@ async function executeTranslationTask(targetLang, contentType, contentId) {
 async function processTranslationQueue() {
     if (workerRunning) return;
     workerRunning = true;
-    console.log('[TranslationWorker] Queue processing started');
     
     try {
-        while (true) {
-            if (workerPaused) {
-                await new Promise(r => setTimeout(r, 2000));
+        while (!workerPaused) {
+            if (activeWorkers >= workerConcurrency) {
+                await new Promise(r => setTimeout(r, 1000));
                 continue;
             }
-
-            // Collect up to `workerConcurrency` pending tasks
-            const tasks = getAll(
-                `SELECT * FROM translation_tasks WHERE status='pending' ORDER BY id ASC LIMIT ?`,
-                [workerConcurrency]
-            );
-
-            if (tasks.length === 0) {
-                // No pending tasks — check if we should auto-retry failed ones (retry_count = 0 means first failure)
-                const failedToRetry = getAll("SELECT id FROM translation_tasks WHERE status='error' AND retry_count = 0");
-                if (failedToRetry.length > 0) {
-                    console.log(`[TranslationWorker] Auto-retrying ${failedToRetry.length} failed tasks (first retry)`);
-                    run("UPDATE translation_tasks SET status='pending', retry_count = 1, error_message = NULL, log_message = '自动重试（第1次失败后）', updated_at = CURRENT_TIMESTAMP WHERE status='error' AND retry_count = 0");
-                    continue; // loop again to pick up the newly pending tasks
+            
+            // Fetch next task
+            const task = getOne("SELECT * FROM translation_tasks WHERE status='pending' ORDER BY id ASC LIMIT 1");
+            if (!task) {
+                // If no pending, check if we should auto-retry failed ones
+                const allFinished = getOne("SELECT count(*) as c FROM translation_tasks WHERE status='pending' OR status='running'");
+                if (allFinished && allFinished.c === 0) {
+                    // Try to auto-retry errors once
+                    const errorCount = run("UPDATE translation_tasks SET status='error', status='pending', retry_count = retry_count + 1 WHERE status='error' AND retry_count = 0");
+                    if (errorCount && errorCount.changes > 0) {
+                        continue; // loop again to pick up the newly pending tasks
+                    }
                 }
-                break; // queue truly empty, stop worker
+                break; // queue truly empty
             }
 
-            // Mark all as running
-            for (const task of tasks) {
-                run("UPDATE translation_tasks SET status='running', updated_at=CURRENT_TIMESTAMP WHERE id=?", [task.id]);
-            }
+            // Mark running
+            run("UPDATE translation_tasks SET status='running', updated_at=CURRENT_TIMESTAMP WHERE id=?", [task.id]);
+            activeWorkers++;
 
-            // Execute concurrently
-            const promises = tasks.map(async (task) => {
-                lastWorkerActivity = new Date().toISOString();
+            (async () => {
                 try {
                     const result = await executeTranslationTask(task.target_lang, task.item_type, task.item_id);
-                    const okCount = result.results?.length || 0;
-                    const errCount = result.errors?.length || 0;
-
-                    if (errCount > 0 && okCount === 0) {
+                    if (result.errors && result.errors.length > 0 && (!result.results || result.results.length === 0)) {
                         const errMsg = (result.errors[0].error || 'Unknown error').slice(0, 500);
-                        run("UPDATE translation_tasks SET status='error', error_message=?, log_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                            [errMsg, `❌ 翻译失败: ${errMsg}`, task.id]);
-                    } else if (errCount > 0) {
-                        // Partial success
-                        run("UPDATE translation_tasks SET status='success', error_message=?, log_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                            [`${okCount} 成功, ${errCount} 错误`, `⚠️ ${okCount} 字段成功, ${errCount} 字段失败`, task.id]);
-                    } else if (okCount === 0) {
-                        run("UPDATE translation_tasks SET status='success', log_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                            ['✔ 无需翻译（已全部翻译）', task.id]);
+                        run("UPDATE translation_tasks SET status='error', error_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", [errMsg, task.id]);
                     } else {
-                        run("UPDATE translation_tasks SET status='success', error_message=NULL, log_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                            [`✅ 成功翻译 ${okCount} 个字段`, task.id]);
+                        run("UPDATE translation_tasks SET status='success', error_message=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?", [task.id]);
                     }
                 } catch (e) {
-                    run("UPDATE translation_tasks SET status='error', error_message=?, log_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                        [(e.message || 'Error').slice(0, 500), `❌ API 错误: ${(e.message || '').slice(0, 200)}`, task.id]);
+                    run("UPDATE translation_tasks SET status='error', error_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", [(e.message || 'Error').slice(0, 500), task.id]);
+                } finally {
+                    activeWorkers--;
                 }
-            });
-
-            await Promise.all(promises);
+            })();
         }
-    } catch (e) {
-        console.error('[TranslationWorker] Fatal error:', e.message);
     } finally {
         workerRunning = false;
-        lastWorkerActivity = new Date().toISOString();
-        console.log('[TranslationWorker] Queue processing stopped');
     }
-}
-
-// ─── Crash recovery: reset stuck 'running' tasks on module load ──────────────
-try {
-    const stuck = run("UPDATE translation_tasks SET status='pending', log_message='服务重启，重新排队' WHERE status='running'");
-    if (stuck?.changes > 0) {
-        console.log(`[TranslationWorker] Recovered ${stuck.changes} stuck tasks from previous crash`);
-    }
-    // If there are pending tasks, auto-start the worker
-    const pendingCount = getOne("SELECT COUNT(*) as c FROM translation_tasks WHERE status='pending'");
-    if (pendingCount?.c > 0) {
-        console.log(`[TranslationWorker] Found ${pendingCount.c} pending tasks, auto-starting worker`);
-        setTimeout(() => processTranslationQueue(), 3000);
-    }
-} catch (e) {
-    // Table may not exist yet on first run — that's fine
-    console.log('[TranslationWorker] Crash recovery skipped (table may not exist yet)');
 }
 
 // ─── Background Batch API ────────────────────────────────────────────────────
@@ -2149,43 +2109,36 @@ router.post('/batch-start', authMiddleware, async (req, res) => {
 });
 
 router.get('/batch-status', authMiddleware, (req, res) => {
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = Math.min(parseInt(req.query.pageSize) || 200, 500);
-    const offset = (page - 1) * pageSize;
-
     const total = getOne("SELECT COUNT(*) as c FROM translation_tasks")?.c || 0;
     const pending = getOne("SELECT COUNT(*) as c FROM translation_tasks WHERE status='pending'")?.c || 0;
     const running = getOne("SELECT COUNT(*) as c FROM translation_tasks WHERE status='running'")?.c || 0;
     const success = getOne("SELECT COUNT(*) as c FROM translation_tasks WHERE status='success'")?.c || 0;
     const error = getOne("SELECT COUNT(*) as c FROM translation_tasks WHERE status='error'")?.c || 0;
     
-    const logs = getAll("SELECT * FROM translation_tasks ORDER BY updated_at DESC LIMIT ? OFFSET ?", [pageSize, offset]);
+    const logs = getAll("SELECT * FROM translation_tasks ORDER BY updated_at DESC LIMIT 100");
     
-    res.json({ total, pending, running, success, error, workerRunning, workerPaused, lastWorkerActivity, logs, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+    res.json({ total, pending, running, success, error, workerRunning, workerPaused, logs });
 });
 
 router.post('/batch-action', authMiddleware, (req, res) => {
-    const { action, task_id } = req.body;
+    const { action } = req.body;
     if (action === 'pause') {
         workerPaused = true;
     } else if (action === 'resume') {
         workerPaused = false;
         processTranslationQueue();
     } else if (action === 'retry_failed') {
-        run("UPDATE translation_tasks SET status='pending', retry_count=0, error_message=NULL, log_message='手动重试全部失败' WHERE status='error'");
-        workerPaused = false;
-        processTranslationQueue();
-    } else if (action === 'retry_single' && task_id) {
-        run("UPDATE translation_tasks SET status='pending', retry_count=0, error_message=NULL, log_message='手动重试' WHERE id=? AND status='error'", [task_id]);
+        run("UPDATE translation_tasks SET status='pending', retry_count=0 WHERE status='error'");
         workerPaused = false;
         processTranslationQueue();
     } else if (action === 'clear_logs') {
         run("DELETE FROM translation_tasks");
-    } else if (action === 'clear_completed') {
-        run("DELETE FROM translation_tasks WHERE status='success'");
     }
     res.json({ success: true });
 });
 
 
 export default router
+
+// ── Named exports for background job system ──
+export { PAGES, translateBatch, enhanceWithDefaultChannel, upsertTranslation }

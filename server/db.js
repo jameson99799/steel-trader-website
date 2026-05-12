@@ -849,24 +849,40 @@ async function initDb() {
   // Unique index for translations
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_translations_unique ON translations(language_code, content_type, COALESCE(content_id,-1), content_field)') } catch (e) { }
 
-  // Translation background tasks queue
+  // ── Background Translation Jobs ──────────────────────────────────────────────
+  // Stores each background translation job (survives browser close / server restart)
   db.exec(`
-    CREATE TABLE IF NOT EXISTS translation_tasks (
+    CREATE TABLE IF NOT EXISTS translation_jobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      target_lang TEXT NOT NULL,
-      item_type TEXT NOT NULL,
-      item_id TEXT NOT NULL,
-      item_name TEXT DEFAULT '',
       status TEXT DEFAULT 'pending',
-      retry_count INTEGER DEFAULT 0,
-      error_message TEXT,
-      log_message TEXT,
+      target_lang TEXT NOT NULL DEFAULT '',
+      pages TEXT DEFAULT '[]',
+      total_items INTEGER DEFAULT 0,
+      done_items INTEGER DEFAULT 0,
+      ok_items INTEGER DEFAULT 0,
+      error_items INTEGER DEFAULT 0,
+      failed_items TEXT DEFAULT '[]',
+      is_retry INTEGER DEFAULT 0,
+      auto_retried INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      finished_at DATETIME
     )
   `)
-  // Add log_message column if missing (upgrade path)
-  try { db.exec('ALTER TABLE translation_tasks ADD COLUMN log_message TEXT') } catch (e) { }
+  // Per-log-line table for translation jobs (each addLog call = one row)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS translation_job_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id INTEGER NOT NULL,
+      level TEXT DEFAULT 'info',
+      message TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  // Index for fast per-job log retrieval
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tjl_job_id ON translation_job_logs(job_id)') } catch (e) { }
+  // Migrate: add explicit items column for retry jobs that target specific items
+  try { db.exec("ALTER TABLE translation_jobs ADD COLUMN explicit_items TEXT DEFAULT '[]'") } catch (e) { }
 
   // 初始化默认数据
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count

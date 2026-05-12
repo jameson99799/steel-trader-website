@@ -116,11 +116,116 @@
       </div>
     </div>
 
+    <!-- ── 后台翻译任务面板 ── -->
+    <div class="card" style="margin-top:20px">
+      <div class="card-header-row" style="cursor:pointer" @click="jobPanelCollapsed = !jobPanelCollapsed">
+        <h3>{{ jobPanelCollapsed ? '▶' : '▼' }} 🖥️ 后台翻译任务
+          <span v-if="activeJob && activeJob.status === 'running'" class="badge-running">运行中</span>
+          <span v-else-if="latestJob && latestJob.status === 'done'" class="badge-done">已完成</span>
+          <span v-else-if="latestJob && latestJob.status === 'aborted'" class="badge-aborted">已中止</span>
+        </h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-outline btn-xs" @click.stop="clearJobLogs" v-if="jobList.length" title="清空所有日志">🗑️ 清空日志</button>
+          <button class="btn btn-outline btn-xs" @click.stop="loadJobList">🔄 刷新</button>
+        </div>
+      </div>
+      <div class="card-body" v-show="!jobPanelCollapsed">
+        <p class="page-desc">翻译任务在服务器后台运行，关闭浏览器后仍会继续。日志保留 3 天，可手动清空。</p>
+
+        <!-- Active job progress -->
+        <div v-if="activeJob" class="job-active-box">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <strong>🔄 任务 #{{ activeJob.id }} — 正在运行</strong>
+            <button class="btn btn-sm btn-danger-outline" @click="abortJob(activeJob.id)">⛔ 中止</button>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: activeJobPct + '%' }"></div>
+            </div>
+            <div class="progress-text">
+              {{ activeJob.done_items }}/{{ activeJob.total_items }} 项 | ✅ {{ activeJob.ok_items }} | ⚠️ {{ activeJob.error_items }} 错误
+            </div>
+          </div>
+          <!-- Live log panel -->
+          <div class="log-panel" style="margin-top:12px" ref="jobLogPanelRef">
+            <div class="log-header">
+              <span>📝 实时日志 ({{ activeJobLogs.length }} 条)</span>
+              <span style="font-size:12px;color:#94a3b8">每 2 秒自动刷新</span>
+            </div>
+            <div class="log-body">
+              <div v-for="log in activeJobLogs" :key="log.id" :class="['log-entry', log.level]">
+                <span class="log-time">{{ log.created_at?.slice(11,19) }}</span>
+                <span class="log-icon">{{ log.level === 'ok' ? '✅' : log.level === 'error' ? '❌' : log.level === 'warn' ? '⚠️' : 'ℹ️' }}</span>
+                <span class="log-msg">{{ log.message }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Latest completed job display -->
+        <div v-else-if="latestJob && !activeJob">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span>
+              任务 #{{ latestJob.id }} —
+              <span v-if="latestJob.status==='done'" style="color:#22c55e">✅ 已完成</span>
+              <span v-else-if="latestJob.status==='aborted'" style="color:#f59e0b">⛔ 已中止</span>
+              <span v-else-if="latestJob.status==='error'" style="color:#ef4444">❌ 错误</span>
+              | 成功 {{ latestJob.ok_items }} | 失败 {{ latestJob.error_items }}
+            </span>
+            <button class="btn btn-outline btn-xs" @click="viewJobLogs(latestJob.id)">📋 查看日志</button>
+          </div>
+          <!-- Failed items -->
+          <div v-if="latestJob.failed_items?.length" style="margin-top:12px">
+            <div class="result-summary has-error" style="margin-bottom:8px">
+              ⚠️ {{ latestJob.failed_items.length }} 个项目{{ latestJob.auto_retried ? '（已自动重试一次）' : '' }}失败，需手动重试
+            </div>
+            <div style="max-height:120px;overflow-y:auto;font-size:12px;color:#94a3b8;margin-bottom:8px">
+              <div v-for="(f, i) in latestJob.failed_items.slice(0,20)" :key="i">
+                [{{ f.targetLang }}] {{ f.itemName || f.type + '#' + f.id }}
+              </div>
+              <div v-if="latestJob.failed_items.length > 20" style="color:#f59e0b">...还有 {{ latestJob.failed_items.length - 20 }} 项</div>
+            </div>
+            <button class="btn btn-warning" @click="retryJobFailed(latestJob.id)" :disabled="!!activeJob">
+              🔄 手动重试失败项目 ({{ latestJob.failed_items.length }})
+            </button>
+          </div>
+          <!-- Job log panel after completion -->
+          <div v-if="latestJobLogs.length" class="log-panel" style="margin-top:12px">
+            <div class="log-header"><span>📝 任务日志 ({{ latestJobLogs.length }} 条)</span></div>
+            <div class="log-body">
+              <div v-for="log in latestJobLogs" :key="log.id" :class="['log-entry', log.level]">
+                <span class="log-time">{{ log.created_at?.slice(11,19) }}</span>
+                <span class="log-icon">{{ log.level === 'ok' ? '✅' : log.level === 'error' ? '❌' : log.level === 'warn' ? '⚠️' : 'ℹ️' }}</span>
+                <span class="log-msg">{{ log.message }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="empty-tip">暂无翻译任务记录。点击「🚀 在服务器后台启动翻译」开始。</div>
+
+        <!-- Job history list -->
+        <div v-if="jobList.length > 1" style="margin-top:16px">
+          <div class="section-title" style="font-size:13px;margin-bottom:8px">历史任务记录</div>
+          <div class="job-history-list">
+            <div v-for="job in jobList.slice(0, 10)" :key="job.id" class="job-history-item"
+                 :class="job.status" @click="viewJobLogs(job.id)">
+              <span>#{{ job.id }}</span>
+              <span>{{ job.target_lang === 'all' ? '🌍 全部语言' : job.target_lang }}</span>
+              <span :class="'badge-' + job.status">{{ { running:'运行中', done:'✅完成', aborted:'⛔中止', error:'❌错误', pending:'等待中' }[job.status] || job.status }}</span>
+              <span style="color:#94a3b8;font-size:11px">{{ job.ok_items }}/{{ job.total_items }}</span>
+              <span style="color:#94a3b8;font-size:11px">{{ job.created_at?.slice(5,16) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Per-language per-page Translation -->
     <div class="card" style="margin-top:20px">
       <div class="card-body">
         <h3 class="section-title">🌐 全站翻译</h3>
-        <p class="page-desc">选择目标语言和翻译范围，点击「翻译」。任务会提交到服务器后台运行——即使关闭浏览器也不会中断。</p>
+        <p class="page-desc">选择目标语言和翻译范围，点击「后台启动」在服务器后台运行翻译任务（关闭浏览器不中断），或点击「浏览器内翻译」在本地执行（关闭浏览器会停止）。</p>
 
         <div v-if="nonEnLangs.length === 0" class="empty-tip">
           请先在 <a href="/admin/languages">🌍 语言管理</a> 中添加目标语言
@@ -157,72 +262,69 @@
             </div>
           </div>
           <div class="btn-row" style="gap:8px">
-            <button class="btn btn-primary" @click="startBatchTranslate" :disabled="batchSubmitting || !selectedLang">
-              {{ batchSubmitting ? '⏳ 提交中...' : '🚀 提交翻译任务' }}
+            <button class="btn btn-primary" @click="startBackgroundTranslate" :disabled="!!activeJob || !selectedLang">
+              {{ activeJob ? '⏳ 后台任务运行中...' : '🚀 在服务器后台启动翻译' }}
+            </button>
+            <button class="btn btn-outline" @click="startTranslate" :disabled="translating || !selectedLang" style="font-size:12px">
+              {{ translating ? '⏳ 翻译中...' : '💻 浏览器内翻译（调试用）' }}
+            </button>
+            <button v-if="failedItems.length" class="btn btn-warning" @click="retryFailed" :disabled="translating">
+              🔄 重新翻译全部未完成 ({{ failedItems.length }})
+            </button>
+            <button v-if="translating" class="btn btn-outline" @click="abortTranslation">
+              ⛔ 停止
             </button>
           </div>
+
+          <!-- Real-time Progress Bar -->
+          <div v-if="progressTotal > 0" class="progress-bar-wrap">
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: progressPct + '%' }" :class="{ error: progressErrors > 0 }"></div>
+            </div>
+            <div class="progress-text">
+              {{ progressDone }}/{{ progressTotal }} 项任务  |  ✅ {{ progressOk }} 项  |  ⚠️ {{ progressErrors }} 错误
+              <span v-if="translating" class="spin">⏳</span>
+            </div>
+          </div>
+
+          <!-- Real-time Log -->
+          <div v-if="logEntries.length" class="log-panel" ref="logPanelRef">
+            <div class="log-header">
+              <span>📝 实时日志 ({{ logEntries.length }} 条)</span>
+              <button class="btn btn-sm btn-outline" @click="logEntries = []">× 清空</button>
+            </div>
+            <div class="log-body">
+              <div v-for="(log, i) in logEntries" :key="i" :class="['log-entry', log.type]">
+                <span class="log-time">{{ log.time }}</span>
+                <span class="log-icon">{{ log.type === 'ok' ? '✅' : log.type === 'error' ? '❌' : log.type === 'warn' ? '⚠️' : 'ℹ️' }}</span>
+                <span class="log-msg">{{ log.msg }}</span>
+              </div>
+            </div>
+          </div>
         </div>  <!-- end translate-panel -->
+
+        <!-- Translation Results -->
+        <div v-if="translateResult" class="result-panel">
+          <div class="result-summary" :class="translateResult.errors?.length ? 'has-error' : 'all-ok'">
+            <strong>翻译完成：</strong>
+            成功 {{ translateResult.translated }} / {{ translateResult.total }} 项
+            <span v-if="translateResult.errors?.length" class="err-count">
+              ，{{ translateResult.errors.length }} 个错误
+            </span>
+          </div>
+
+          <!-- Error logs -->
+          <div v-if="translateResult.errors?.length" class="error-log">
+            <h4>⚠️ 错误日志 ({{ translateResult.errors.length }} 个)</h4>
+            <div v-for="(e, i) in translateResult.errors" :key="i" class="error-row">
+              <code>{{ e.errorCode || 'ERR' }}</code>
+              <strong>[{{ e.targetLang || '?' }}] {{ e.itemName || e.item || e.page || `Batch ${e.batch}` }}</strong>: {{ e.error }}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- ── Background Task Monitor ── -->
-    <div class="card" style="margin-top:20px">
-      <div class="card-header-row" style="cursor:pointer" @click="bgCollapsed = !bgCollapsed">
-        <h3>{{ bgCollapsed ? '▶' : '▼' }} 📡 后台翻译任务
-          <span v-if="bgStatus.pending + bgStatus.running > 0" class="bg-badge running">{{ bgStatus.running }} 运行中 / {{ bgStatus.pending }} 等待</span>
-          <span v-else-if="bgStatus.total > 0" class="bg-badge idle">{{ bgStatus.success }} ✅ / {{ bgStatus.error }} ❌</span>
-        </h3>
-      </div>
-      <div class="card-body" v-show="!bgCollapsed">
-        <p class="page-desc">翻译任务在服务器后台运行，关闭浏览器不会中断。翻译失败的任务会自动重试一次，二次失败需手动重试。日志保留 3 天。</p>
-
-        <!-- Stats row -->
-        <div v-if="bgStatus.total > 0" class="bg-stats">
-          <div class="bg-stat"><span class="bg-num">{{ bgStatus.total }}</span><span class="bg-label">总计</span></div>
-          <div class="bg-stat running"><span class="bg-num">{{ bgStatus.running }}</span><span class="bg-label">运行中</span></div>
-          <div class="bg-stat pending"><span class="bg-num">{{ bgStatus.pending }}</span><span class="bg-label">等待中</span></div>
-          <div class="bg-stat success"><span class="bg-num">{{ bgStatus.success }}</span><span class="bg-label">成功</span></div>
-          <div class="bg-stat error"><span class="bg-num">{{ bgStatus.error }}</span><span class="bg-label">失败</span></div>
-        </div>
-
-        <!-- Progress bar -->
-        <div v-if="bgStatus.total > 0" class="progress-bar-wrap">
-          <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: bgProgressPct + '%' }" :class="{ error: bgStatus.error > 0 }"></div>
-          </div>
-          <div class="progress-text">
-            {{ bgStatus.success + bgStatus.error }}/{{ bgStatus.total }} 已完成
-            <span v-if="bgStatus.running > 0" class="spin">⏳</span>
-            <span v-if="bgStatus.workerPaused" style="color:#f59e0b;margin-left:8px">⏸ 已暂停</span>
-          </div>
-        </div>
-
-        <!-- Action buttons -->
-        <div class="btn-row" style="gap:8px;margin-top:12px;flex-wrap:wrap">
-          <button v-if="bgStatus.workerPaused" class="btn btn-primary btn-sm" @click="bgAction('resume')">▶️ 恢复</button>
-          <button v-else-if="bgStatus.running > 0 || bgStatus.pending > 0" class="btn btn-outline btn-sm" @click="bgAction('pause')">⏸ 暂停</button>
-          <button v-if="bgStatus.error > 0" class="btn btn-warning btn-sm" @click="bgAction('retry_failed')">🔄 重试全部失败 ({{ bgStatus.error }})</button>
-          <button v-if="bgStatus.success > 0" class="btn btn-outline btn-sm" @click="bgAction('clear_completed')">🧹 清除成功记录</button>
-          <button v-if="bgStatus.total > 0" class="btn btn-outline btn-sm" style="color:#ef4444" @click="bgAction('clear_logs')">🗑 清空全部日志</button>
-          <button class="btn btn-outline btn-sm" @click="fetchBgStatus" :disabled="bgLoading">🔄 刷新</button>
-        </div>
-
-        <!-- Task log list -->
-        <div v-if="bgLogs.length" class="bg-log-list">
-          <div v-for="task in bgLogs" :key="task.id" class="bg-log-item" :class="task.status">
-            <span class="bg-log-status">{{ task.status === 'success' ? '✅' : task.status === 'error' ? '❌' : task.status === 'running' ? '⏳' : '⏱️' }}</span>
-            <span class="bg-log-lang">[{{ task.target_lang }}]</span>
-            <span class="bg-log-name">{{ task.item_name || task.item_type + '_' + task.item_id }}</span>
-            <span class="bg-log-msg" v-if="task.log_message">{{ task.log_message }}</span>
-            <span class="bg-log-err" v-if="task.error_message && task.status === 'error'">{{ task.error_message.slice(0, 120) }}</span>
-            <span class="bg-log-time">{{ formatTime(task.updated_at) }}</span>
-            <button v-if="task.status === 'error'" class="btn btn-xs btn-outline" @click="bgAction('retry_single', task.id)" style="margin-left:4px">重试</button>
-          </div>
-        </div>
-        <div v-else-if="!bgLoading" class="empty-tip">暂无翻译任务记录</div>
-        <div v-if="bgLoading" class="empty-tip">⏳ 加载中...</div>
-      </div>
-    </div>
 
     <!-- ── Granular Translation (Products / Articles) ── -->
     <div class="card" style="margin-top:20px">
@@ -270,10 +372,7 @@
           <span class="gt-selected-count" v-if="gtSelectedIds.length">已选 {{ gtSelectedIds.length }} 项</span>
           <div style="flex:1"></div>
           <button class="btn btn-primary" @click="startGranularTranslation" :disabled="gtTranslating || !gtSelectedIds.length">
-            {{ gtTranslating ? '⏳ 翻译中...' : '🚀 浏览器翻译' }}
-          </button>
-          <button class="btn btn-outline" @click="submitGranularToBg" :disabled="batchSubmitting || !gtSelectedIds.length" style="border-color:#3b82f6;color:#3b82f6">
-            📡 提交后台翻译
+            {{ gtTranslating ? '⏳ 翻译中...' : '🚀 开始翻译' }}
           </button>
           <button v-if="gtFailedIds.length" class="btn btn-warning" @click="retryGranularFailed" :disabled="gtTranslating">
             🔄 重试失败 ({{ [...new Set(gtFailedIds.map(f => f.id))].length }} 项 {{ gtFailedIds.length }} 语言)
@@ -549,7 +648,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import api from '../../api'
 
 defineOptions({ name: 'TranslationsPage' })
@@ -638,88 +737,142 @@ const searchResults = ref([])
 const searching = ref(false)
 const searched = ref(false)
 
+// ── Background Job System State ──────────────────────────────────────────────
+const jobPanelCollapsed = ref(false)
+const jobList = ref([])
+const activeJob = ref(null)        // currently running job (or null)
+const latestJob = ref(null)        // most recently completed job
+const activeJobLogs = ref([])      // live logs for active job
+const latestJobLogs = ref([])      // logs for latest completed job
+const jobLogPanelRef = ref(null)
+let jobPollTimer = null
+let lastLogId = 0
+
+const activeJobPct = computed(() =>
+  activeJob.value?.total_items
+    ? Math.min(100, Math.round(activeJob.value.done_items / activeJob.value.total_items * 100))
+    : 0
+)
+
+async function loadJobList() {
+  try {
+    const jobs = await api.getTranslationJobs()
+    jobList.value = jobs || []
+    const running = jobs.find(j => j.status === 'running')
+    if (running) {
+      activeJob.value = running
+      if (!jobPollTimer) startJobPolling(running.id)
+    } else {
+      activeJob.value = null
+      stopJobPolling()
+      if (jobs.length) {
+        latestJob.value = jobs[0]
+        if (!latestJobLogs.value.length) await viewJobLogs(jobs[0].id)
+      }
+    }
+  } catch (e) { /* silent */ }
+}
+
+function startJobPolling(jobId) {
+  lastLogId = 0
+  activeJobLogs.value = []
+  stopJobPolling()
+  jobPollTimer = setInterval(() => pollJobStatus(jobId), 2000)
+  pollJobStatus(jobId) // immediate first poll
+}
+
+function stopJobPolling() {
+  if (jobPollTimer) { clearInterval(jobPollTimer); jobPollTimer = null }
+}
+
+async function pollJobStatus(jobId) {
+  try {
+    const res = await api.getTranslationJobLogsSince(jobId, lastLogId)
+    if (res.logs?.length) {
+      activeJobLogs.value.push(...res.logs)
+      lastLogId = res.logs[res.logs.length - 1].id
+      // Auto-scroll log panel
+      await nextTick()
+      const el = jobLogPanelRef.value?.querySelector?.('.log-body')
+      if (el) el.scrollTop = el.scrollHeight
+    }
+    if (res.job) {
+      if (activeJob.value) Object.assign(activeJob.value, res.job)
+      if (res.job.status !== 'running') {
+        stopJobPolling()
+        activeJob.value = null
+        await loadJobList()
+      }
+    }
+  } catch (e) { /* silent */ }
+}
+
+async function viewJobLogs(jobId) {
+  try {
+    const detail = await api.getTranslationJob(jobId)
+    latestJob.value = { ...detail, logs: undefined }
+    latestJobLogs.value = detail.logs || []
+  } catch (e) { /* silent */ }
+}
+
+async function startBackgroundTranslate() {
+  if (!selectedLang.value) return alert('请选择目标语言')
+  if (!selectedPages.value.length) return alert('请至少选择一个翻译范围')
+  if (activeJob.value) return alert('当前已有后台任务在运行，请等待完成或先中止')
+  if (!confirm(`确定在服务器后台启动翻译任务？\n目标语言: ${selectedLang.value === 'all' ? '全部语言' : selectedLang.value}\n范围: ${selectedPages.value.join(', ')}`)) return
+  try {
+    const res = await api.createTranslationJob({ lang: selectedLang.value, pages: selectedPages.value, concurrency: concurrency.value })
+    jobPanelCollapsed.value = false
+    // Immediately reflect new running state
+    activeJob.value = { id: res.jobId, status: 'running', total_items: 0, done_items: 0, ok_items: 0, error_items: 0 }
+    activeJobLogs.value = []
+    lastLogId = 0
+    await loadJobList()
+    startJobPolling(res.jobId)
+    // Scroll to job panel
+    setTimeout(() => document.querySelector('.card')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 300)
+  } catch (e) {
+    alert('启动失败: ' + e.message)
+  }
+}
+
+async function abortJob(jobId) {
+  if (!confirm('确定中止当前翻译任务？')) return
+  try {
+    await api.abortTranslationJob(jobId)
+    stopJobPolling()
+    activeJob.value = null
+    await loadJobList()
+  } catch (e) { alert('中止失败: ' + e.message) }
+}
+
+async function retryJobFailed(jobId) {
+  if (!confirm('确定手动重试所有失败项目？')) return
+  try {
+    const res = await api.retryFailedTranslationJob(jobId)
+    activeJob.value = { id: res.jobId, status: 'running', total_items: 0, done_items: 0, ok_items: 0, error_items: 0 }
+    activeJobLogs.value = []
+    lastLogId = 0
+    jobPanelCollapsed.value = false
+    startJobPolling(res.jobId)
+    await loadJobList()
+  } catch (e) { alert('创建重试任务失败: ' + e.message) }
+}
+
+async function clearJobLogs() {
+  if (!confirm('确定清空所有翻译日志？（任务记录保留，日志内容删除）')) return
+  try {
+    await api.clearTranslationJobLogs()
+    activeJobLogs.value = []
+    latestJobLogs.value = []
+    await loadJobList()
+  } catch (e) { alert('清空失败: ' + e.message) }
+}
+// ── End Background Job System ────────────────────────────────────────────────
+
 const nonEnLangs = computed(() => languages.value.filter(l => l.code !== 'en'))
 
 const progressPct = computed(() => progressTotal.value ? Math.round(progressDone.value / progressTotal.value * 100) : 0)
-
-// ─── Background Task Monitoring ──────────────────────────────────────────────
-const bgCollapsed = ref(false)
-const bgLoading = ref(false)
-const bgLogs = ref([])
-const bgStatus = reactive({ total: 0, pending: 0, running: 0, success: 0, error: 0, workerRunning: false, workerPaused: false })
-const bgProgressPct = computed(() => bgStatus.total ? Math.round((bgStatus.success + bgStatus.error) / bgStatus.total * 100) : 0)
-const batchSubmitting = ref(false)
-let bgPollTimer = null
-
-function formatTime(dt) {
-  if (!dt) return ''
-  try {
-    const d = new Date(dt + (dt.includes('Z') || dt.includes('+') ? '' : 'Z'))
-    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  } catch { return dt }
-}
-
-async function fetchBgStatus() {
-  bgLoading.value = true
-  try {
-    const res = await api.batchTranslationStatus(1, 200)
-    bgStatus.total = res.total || 0
-    bgStatus.pending = res.pending || 0
-    bgStatus.running = res.running || 0
-    bgStatus.success = res.success || 0
-    bgStatus.error = res.error || 0
-    bgStatus.workerRunning = res.workerRunning || false
-    bgStatus.workerPaused = res.workerPaused || false
-    bgLogs.value = res.logs || []
-  } catch (e) {
-    console.error('Failed to fetch bg status:', e)
-  } finally {
-    bgLoading.value = false
-  }
-}
-
-function startBgPolling() {
-  stopBgPolling()
-  bgPollTimer = setInterval(async () => {
-    if (bgStatus.running > 0 || bgStatus.pending > 0) {
-      await fetchBgStatus()
-    }
-  }, 3000)
-}
-function stopBgPolling() {
-  if (bgPollTimer) { clearInterval(bgPollTimer); bgPollTimer = null }
-}
-
-async function bgAction(action, taskId) {
-  try {
-    await api.batchTranslationAction(action, taskId)
-    await fetchBgStatus()
-    startBgPolling()
-  } catch (e) {
-    alert('操作失败: ' + e.message)
-  }
-}
-
-async function startBatchTranslate() {
-  if (!selectedLang.value) return alert('请选择目标语言')
-  if (!selectedPages.value.length) return alert('请至少选择一个翻译范围')
-  batchSubmitting.value = true
-  try {
-    const res = await api.batchTranslationStart(selectedPages.value, selectedLang.value, concurrency.value)
-    bgCollapsed.value = false
-    await fetchBgStatus()
-    startBgPolling()
-    if (res.totalAdded === 0) {
-      alert('✅ 所有内容已翻译完成，无需重复翻译')
-    } else {
-      alert(`✅ 已提交 ${res.totalAdded} 个翻译任务到后台队列！\n关闭浏览器也不会中断。`)
-    }
-  } catch (e) {
-    alert('提交失败: ' + e.message)
-  } finally {
-    batchSubmitting.value = false
-  }
-}
 
 onMounted(async () => {
   try {
@@ -741,20 +894,13 @@ onMounted(async () => {
     }
     // Load granular translation data
     loadGranularStatus()
-    // Load background task status
-    await fetchBgStatus()
-    if (bgStatus.running > 0 || bgStatus.pending > 0) {
-      bgCollapsed.value = false
-      startBgPolling()
-    }
+    // Load background job list
+    await loadJobList()
   } catch (e) {
     console.error('Failed to load settings:', e)
   }
 })
 
-onUnmounted(() => {
-  stopBgPolling()
-})
 
 const saveSettings = async () => {
   saving.value = true; savedMsg.value = false
@@ -1269,31 +1415,6 @@ function filterGranularItems() {
     items = items.slice(start, start + gtPageSize)
   }
   gtFilteredItems.value = items
-}
-
-async function submitGranularToBg() {
-  if (!gtSelectedIds.value.length) return alert('请选择要翻译的项目')
-  batchSubmitting.value = true
-  try {
-    const type = granularTab.value
-    const explicitItems = gtSelectedIds.value.map(id => {
-      const item = gtFilteredItems.value.find(x => x.id === id) || gtAllItems.value.find(x => x.id === id)
-      return { type, id: String(id), itemName: item?.name || `${type}_${id}` }
-    })
-    const res = await api.batchTranslationStart([], gtSelectedLang.value, gtConcurrency.value, explicitItems)
-    bgCollapsed.value = false
-    await fetchBgStatus()
-    startBgPolling()
-    if (res.totalAdded === 0) {
-      alert('✅ 所选内容已全部翻译完成，无需重复翻译')
-    } else {
-      alert(`✅ 已提交 ${res.totalAdded} 个翻译任务到后台队列！\n关闭浏览器也不会中断。`)
-    }
-  } catch (e) {
-    alert('提交失败: ' + e.message)
-  } finally {
-    batchSubmitting.value = false
-  }
 }
 
 async function startGranularTranslation() {
@@ -1949,29 +2070,24 @@ input:checked + .slider:before { transform: translateX(18px); }
 .audit-ui-key { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-family: monospace; }
 .audit-missing-fields { font-size: 11px; color: #94a3b8; margin-left: 6px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ── Background Task Monitor ── */
-.bg-badge { font-size: 12px; font-weight: 500; padding: 2px 10px; border-radius: 12px; margin-left: 12px; }
-.bg-badge.running { background: #dbeafe; color: #1d4ed8; animation: pulse 1.5s infinite; }
-.bg-badge.idle { background: #f1f5f9; color: #64748b; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-.bg-stats { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-.bg-stat { display: flex; flex-direction: column; align-items: center; padding: 8px 16px; border-radius: 8px; background: #f8fafc; min-width: 70px; }
-.bg-stat .bg-num { font-size: 22px; font-weight: 700; color: #334155; }
-.bg-stat .bg-label { font-size: 11px; color: #94a3b8; }
-.bg-stat.running .bg-num { color: #2563eb; }
-.bg-stat.pending .bg-num { color: #f59e0b; }
-.bg-stat.success .bg-num { color: #16a34a; }
-.bg-stat.error .bg-num { color: #dc2626; }
-.bg-log-list { margin-top: 16px; max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
-.bg-log-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; flex-wrap: wrap; }
-.bg-log-item:last-child { border-bottom: none; }
-.bg-log-item.error { background: #fef2f2; }
-.bg-log-item.running { background: #eff6ff; }
-.bg-log-item.pending { background: #fffbeb; }
-.bg-log-status { flex-shrink: 0; }
-.bg-log-lang { font-weight: 600; color: #3b82f6; flex-shrink: 0; min-width: 40px; }
-.bg-log-name { font-weight: 500; color: #334155; flex: 1; min-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bg-log-msg { font-size: 12px; color: #16a34a; }
-.bg-log-err { font-size: 12px; color: #dc2626; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bg-log-time { font-size: 11px; color: #94a3b8; flex-shrink: 0; margin-left: auto; }
+/* ── Background Job Panel ── */
+.badge-running { display: inline-block; background: #3b82f6; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; margin-left: 8px; animation: pulse 1.5s ease-in-out infinite; }
+.badge-done { display: inline-block; background: #22c55e; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; margin-left: 8px; }
+.badge-aborted { display: inline-block; background: #f59e0b; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; margin-left: 8px; }
+.badge-error { display: inline-block; background: #ef4444; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+.badge-pending { display: inline-block; background: #94a3b8; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.6; } }
+
+.job-active-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 10px; padding: 16px; }
+.job-history-list { display: flex; flex-direction: column; gap: 4px; }
+.job-history-item { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; cursor: pointer; font-size: 13px; transition: background .15s; }
+.job-history-item:hover { background: #f1f5f9; }
+.job-history-item.running { border-color: #93c5fd; background: #eff6ff; }
+.job-history-item.done { border-color: #86efac; }
+.job-history-item.aborted { border-color: #fde68a; }
+.job-history-item.error { border-color: #fca5a5; }
+
+.btn-danger-outline { background: transparent; border: 1px solid #ef4444; color: #ef4444; }
+.btn-danger-outline:hover { background: #fef2f2; }
+
 </style>

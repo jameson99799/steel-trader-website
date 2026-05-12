@@ -21,6 +21,7 @@ import seoRoutes from './routes/seo.js'
 import sitemapRoutes from './routes/sitemap.js'
 import languagesRoutes from './routes/languages.js'
 import translationRoutes from './routes/translation.js'
+import translationJobsRoutes, { resetStaleJobs } from './routes/translation-jobs.js'
 import sslRoutes from './routes/ssl.js'
 import emailRoutes from './routes/email.js'
 import indexingRoutes, { startIndexingScheduler } from './routes/indexing.js'
@@ -45,6 +46,7 @@ async function startServer() {
     // 初始化数据库
     await initDb()
     console.log('✓ Database initialized')
+    resetStaleJobs() // Reset any translation jobs stuck in 'running' from previous crash
 
     // Start Google Indexing background scheduler (survives pm2 restarts)
     if (NODE_ENV === 'production') {
@@ -194,6 +196,7 @@ async function startServer() {
     app.use('/sitemap-news.xml', (req, res, next) => { req.url = '/news'; sitemapRoutes(req, res, next) })
     app.use('/api/languages', languagesRoutes)
     app.use('/api/translation', translationRoutes)
+    app.use('/api/translation-jobs', translationJobsRoutes)
     app.use('/api', sslRoutes)
     app.use('/api/email', emailRoutes)
     app.use('/api/indexing', indexingRoutes)
