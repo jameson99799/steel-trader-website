@@ -338,19 +338,30 @@
               </select>
             </div>
           </div>
-          <div class="btn-row" style="gap:8px">
+          <div class="btn-row" style="gap:8px; margin-bottom:8px">
             <button class="btn btn-primary" @click="startBackgroundTranslate" :disabled="!!activeJob || !selectedLang">
               {{ activeJob ? '⏳ 后台任务运行中...' : '🚀 在服务器后台启动翻译' }}
             </button>
             <button class="btn btn-outline" @click="startTranslate" :disabled="translating || !selectedLang" style="font-size:12px">
-              {{ translating ? '⏳ 翻译中...' : '💻 浏览器内翻译（调试用）' }}
+              {{ translating ? '⏳ 翻译中...' : '💻 浏览器内翻译' }}
+            </button>
+            <button class="btn btn-outline" @click="openExplicitModal('product')">
+              📦 指定产品翻译...
+            </button>
+            <button class="btn btn-outline" @click="openExplicitModal('news')">
+              📰 指定文章翻译...
             </button>
             <button v-if="failedItems.length" class="btn btn-warning" @click="retryFailed" :disabled="translating">
-              🔄 重新翻译全部未完成 ({{ failedItems.length }})
+              🔄 重试未完成 ({{ failedItems.length }})
             </button>
             <button v-if="translating" class="btn btn-outline" @click="abortTranslation">
               ⛔ 停止
             </button>
+          </div>
+          
+          <div v-if="explicitItems.length > 0" class="explicit-selection-info" style="margin-bottom:12px; padding:8px 12px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
+            <span>🎯 <strong>精确指定模式：</strong> 已指定 <strong>{{ explicitItems.length }}</strong> 个{{ explicitType === 'product' ? '产品' : '文章' }}。启动时将<strong>仅</strong>翻译这些指定项。</span>
+            <button class="btn btn-xs btn-outline" @click="clearExplicitItems" style="background:#fff;color:#ef4444;border-color:#fecaca">✕ 清除指定</button>
           </div>
 
           <!-- Real-time Progress Bar -->
@@ -403,44 +414,22 @@
     </div>
 
 
-    <!-- ── Granular Translation (Products / Articles) ── -->
-    <div class="card" style="margin-top:20px">
-      <div class="card-header-row" style="cursor:pointer" @click="granularCollapsed = !granularCollapsed">
-        <h3>{{ granularCollapsed ? '▶' : '▼' }} 🎯 精细化翻译</h3>
-      </div>
-      <div class="card-body" v-show="!granularCollapsed">
-        <p class="page-desc">选择特定产品或文章，翻译到指定语言。支持批量选择、实时进度、失败重试。</p>
-
-        <!-- Tabs -->
-        <div class="gt-tabs">
-          <button class="gt-tab" :class="{ active: granularTab === 'product' }" @click="switchGranularTab('product')">📦 产品翻译</button>
-          <button class="gt-tab" :class="{ active: granularTab === 'news' }" @click="switchGranularTab('news')">📰 文章翻译</button>
-        </div>
-
+    <!-- Explicit Selection Modal -->
+    <div class="modal-overlay" v-if="showExplicitModal" @click.self="showExplicitModal = false">
+      <div class="modal-box" style="max-width:900px; width:95%; height:85vh; display:flex; flex-direction:column;">
+        <h3>{{ explicitType === 'product' ? '📦 选择特定产品' : '📰 选择特定文章' }}</h3>
+        
         <!-- Toolbar -->
-        <div class="gt-toolbar">
+        <div class="gt-toolbar" style="margin-top:16px;">
           <div class="form-group" style="flex:1;min-width:160px">
             <label>搜索标题</label>
-            <input v-model="gtSearchQuery" class="form-control" placeholder="输入名称或标题模糊搜索..." @input="filterGranularItems" />
+            <input v-model="gtSearchQuery" class="form-control" placeholder="输入名称或标题搜索..." @input="filterGranularItems" />
           </div>
-          <div class="form-group" v-if="granularTab === 'product'" style="flex:1;min-width:160px">
+          <div class="form-group" v-if="explicitType === 'product'" style="flex:1;min-width:160px">
             <label>产品分组</label>
             <select v-model="gtCategoryId" class="form-control" @change="filterGranularItems">
               <option value="">全部产品</option>
               <option v-for="cat in gtCategories" :key="cat.id" :value="cat.id">{{ cat.name_en }}</option>
-            </select>
-          </div>
-          <div class="form-group" style="flex:1;min-width:160px">
-            <label>目标语言</label>
-            <select v-model="gtSelectedLang" class="form-control">
-              <option value="all">🌍 全部语言</option>
-              <option v-for="l in gtLangs" :key="l.code" :value="l.code">{{ l.flag }} {{ l.name }}</option>
-            </select>
-          </div>
-          <div class="form-group" style="width:110px">
-            <label>并发数</label>
-            <select v-model="gtConcurrency" class="form-control">
-              <option v-for="n in 10" :key="n" :value="n">{{ n }} 并发</option>
             </select>
           </div>
         </div>
@@ -448,31 +437,24 @@
         <!-- Actions bar -->
         <div class="gt-actions">
           <label class="gt-select-all">
-            <input type="checkbox" :checked="gtAllSelected" @change="toggleGtSelectAll" /> 全选
+            <input type="checkbox" :checked="gtAllSelected" @change="toggleGtSelectAll" /> 全选本页
           </label>
           <span class="gt-selected-count" v-if="gtSelectedIds.length">已选 {{ gtSelectedIds.length }} 项</span>
           <div style="flex:1"></div>
-          <button class="btn btn-primary" @click="startGranularTranslation" :disabled="gtTranslating || !gtSelectedIds.length">
-            {{ gtTranslating ? '⏳ 翻译中...' : '🚀 开始翻译' }}
-          </button>
-          <button v-if="gtFailedIds.length" class="btn btn-warning" @click="retryGranularFailed" :disabled="gtTranslating">
-            🔄 重试失败 ({{ [...new Set(gtFailedIds.map(f => f.id))].length }} 项 {{ gtFailedIds.length }} 语言)
-          </button>
-          <button v-if="gtTranslating" class="btn btn-outline" @click="stopGranularTranslation()">⛔ 停止</button>
         </div>
 
         <!-- Loading -->
         <div v-if="gtLoading" class="empty-tip">⏳ 加载中...</div>
 
         <!-- Item list -->
-        <div v-else class="gt-list">
-          <div v-for="item in gtFilteredItems" :key="item.id" class="gt-item" :class="gtOverallStatus(item)">
-            <label class="gt-item-check">
+        <div v-else class="gt-list" style="flex:1; overflow-y:auto; border-top:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0; padding:12px 0;">
+          <div v-for="item in gtFilteredItems" :key="item.id" class="gt-item" :class="gtOverallStatus(item)" @click="toggleExplicitItem(item.id)">
+            <label class="gt-item-check" @click.stop>
               <input type="checkbox" :value="item.id" v-model="gtSelectedIds" />
             </label>
             <span class="gt-status-dot" :class="gtOverallStatus(item)"></span>
             <div class="gt-item-info">
-              <span class="gt-item-name">{{ item.name }}</span>
+              <span class="gt-item-name">{{ item.name || item.title_en }}</span>
               <span class="gt-item-category" v-if="item.category_name">{{ item.category_name }}</span>
             </div>
             <div class="gt-lang-tags">
@@ -483,40 +465,19 @@
               </span>
             </div>
           </div>
-          <div v-if="!gtFilteredItems.length" class="empty-tip">暂无{{ granularTab === 'product' ? '产品' : '文章' }}数据</div>
+          <div v-if="!gtFilteredItems.length" class="empty-tip">暂无数据</div>
         </div>
 
         <!-- Pagination (news) -->
-        <div v-if="granularTab === 'news' && gtTotalPages > 1" class="gt-pagination">
+        <div v-if="explicitType === 'news' && gtTotalPages > 1" class="gt-pagination" style="padding-top:12px">
           <button class="btn btn-outline btn-sm" :disabled="gtPage <= 1" @click="gtPage--; filterGranularItems()">← 上一页</button>
           <span>第 {{ gtPage }} / {{ gtTotalPages }} 页</span>
           <button class="btn btn-outline btn-sm" :disabled="gtPage >= gtTotalPages" @click="gtPage++; filterGranularItems()">下一页 →</button>
         </div>
 
-        <!-- Progress -->
-        <div v-if="gtProgressTotal > 0" class="progress-bar-wrap">
-          <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: gtProgressPct + '%' }" :class="{ error: gtProgressErrors > 0 }"></div>
-          </div>
-          <div class="progress-text">
-            {{ gtProgressDone }}/{{ gtProgressTotal }} 项  |  ✅ {{ gtProgressOk }}  |  ⚠️ {{ gtProgressErrors }} 错误
-            <span v-if="gtTranslating" class="spin">⏳</span>
-          </div>
-        </div>
-
-        <!-- Log -->
-        <div v-if="gtLogEntries.length" class="log-panel" ref="gtLogPanelRef">
-          <div class="log-header">
-            <span>📝 翻译日志 ({{ gtLogEntries.length }})</span>
-            <button class="btn btn-sm btn-outline" @click="gtLogEntries = []">× 清空</button>
-          </div>
-          <div class="log-body">
-            <div v-for="(log, i) in gtLogEntries" :key="i" :class="['log-entry', log.type]">
-              <span class="log-time">{{ log.time }}</span>
-              <span class="log-icon">{{ log.type === 'ok' ? '✅' : log.type === 'error' ? '❌' : log.type === 'warn' ? '⚠️' : 'ℹ️' }}</span>
-              <span class="log-msg">{{ log.msg }}</span>
-            </div>
-          </div>
+        <div class="btn-row" style="justify-content:flex-end; margin-top:16px;">
+          <button class="btn btn-outline" @click="showExplicitModal = false">取消</button>
+          <button class="btn btn-primary" @click="confirmExplicitSelection">✅ 确定选择 ({{ gtSelectedIds.length }})</button>
         </div>
       </div>
     </div>
@@ -978,11 +939,16 @@ async function viewJobLogs(jobId) {
 
 async function startBackgroundTranslate() {
   if (!selectedLang.value) return alert('请选择目标语言')
-  if (!selectedPages.value.length) return alert('请至少选择一个翻译范围')
+  if (!selectedPages.value.length && explicitItems.value.length === 0) return alert('请至少选择一个翻译范围或指定翻译项')
   if (activeJob.value) return alert('当前已有后台任务在运行，请等待完成或先中止')
-  if (!confirm(`确定在服务器后台启动翻译任务？\n目标语言: ${selectedLang.value === 'all' ? '全部语言' : selectedLang.value}\n范围: ${selectedPages.value.join(', ')}`)) return
+  if (!confirm(`确定在服务器后台启动翻译任务？\n目标语言: ${selectedLang.value === 'all' ? '全部语言' : selectedLang.value}\n模式: ${explicitItems.value.length ? '精确指定 ' + explicitItems.value.length + ' 项' : selectedPages.value.join(', ')}`)) return
   try {
-    const res = await api.createTranslationJob({ lang: selectedLang.value, pages: selectedPages.value, concurrency: concurrency.value })
+    const res = await api.createTranslationJob({ 
+      lang: selectedLang.value, 
+      pages: selectedPages.value, 
+      concurrency: concurrency.value,
+      explicitItems: explicitItems.value.length ? explicitItems.value : null
+    })
     jobPanelCollapsed.value = false
     // Immediately reflect new running state
     activeJob.value = { id: res.jobId, status: 'running', total_items: 0, done_items: 0, ok_items: 0, error_items: 0 }
@@ -1261,9 +1227,9 @@ const channelCollapsed = ref(true)
 
 const startTranslate = async () => {
   if (!selectedLang.value) return alert('请选择目标语言')
-  if (!selectedPages.value.length) return alert('请至少选择一个翻译范围')
+  if (!selectedPages.value.length && explicitItems.value.length === 0) return alert('请至少选择一个翻译范围或指定翻译项')
   aborted = false
-  const pages = [...selectedPages.value]
+  const pages = explicitItems.value.length ? [] : [...selectedPages.value]
   await runPages(pages)
 }
 
@@ -1286,14 +1252,26 @@ async function runPages(pages) {
   progressOk.value = 0
   progressErrors.value = 0
 
-  addLog('info', `开始翻译 → 目标语言: ${selectedLang.value === 'all' ? '全部语言' : selectedLang.value}，范围: ${pages.map(p => pageLabels[p] || p).join(', ')}`)
+  addLog('info', `开始翻译 → 目标语言: ${selectedLang.value === 'all' ? '全部语言' : selectedLang.value}，模式: ${explicitItems.value.length ? '精确指定 ' + explicitItems.value.length + ' 项' : pages.map(p => pageLabels[p] || p).join(', ')}`)
 
   addLog('info', `📋 正在获取待翻译内容列表...`)
   let allItemsList = []
   try {
-    for (const page of pages) {
-      const items = await api.getTranslationItems(page)
-      allItemsList.push(...(items || []))
+    if (explicitItems.value && explicitItems.value.length > 0) {
+      // Use explicit items but try to fetch their names
+      for (const type of ['product', 'news']) {
+        const typeItems = explicitItems.value.filter(i => i.type === type)
+        if (typeItems.length) {
+          const items = await api.getTranslationItems(type)
+          const matched = items.filter(i => typeItems.find(ex => ex.id === i.id))
+          allItemsList.push(...matched)
+        }
+      }
+    } else {
+      for (const page of pages) {
+        const items = await api.getTranslationItems(page)
+        allItemsList.push(...(items || []))
+      }
     }
     addLog('ok', `📋 共发现 ${allItemsList.length} 个基础待翻译项目`)
   } catch (e) {
@@ -1511,44 +1489,24 @@ const doBatchReplace = async () => {
   }
 }
 
-// ── Granular Translation State ──────────────────────────────────────────────
-const granularCollapsed = ref(false)
-const granularTab = ref('product')
+// ── Explicit Selection Modal State ──────────────────────────────────────────────
+const explicitType = ref('product')
+const explicitItems = ref([])
+const showExplicitModal = ref(false)
+
 const gtCategoryId = ref('')
 const gtCategories = ref([])
 const gtLangs = ref([])
-const gtSelectedLang = ref('all')
-const gtConcurrency = concurrency
 const gtSearchQuery = ref('')
 const gtAllItems = ref([])
 const gtFilteredItems = ref([])
 const gtSelectedIds = ref([])
 const gtLoading = ref(false)
-const gtTranslating = ref(false)
-let gtAborted = false   // plain boolean — Vue ref auto-unwrap in templates breaks assignment
-const gtFailedIds = ref([])  // Array of { id, lang, itemName }
-const gtLogEntries = ref([])
-const gtLogPanelRef = ref(null)
-const gtProgressTotal = ref(0)
-const gtProgressDone = ref(0)
-const gtProgressOk = ref(0)
-const gtProgressErrors = ref(0)
 const gtPage = ref(1)
 const gtPageSize = 20
 const gtTotalPages = ref(1)
 
 const gtAllSelected = computed(() => gtFilteredItems.value.length > 0 && gtSelectedIds.value.length === gtFilteredItems.value.length)
-const gtProgressPct = computed(() => gtProgressTotal.value ? Math.round(gtProgressDone.value / gtProgressTotal.value * 100) : 0)
-
-function gtAddLog(type, msg) {
-  const now = new Date()
-  const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
-  gtLogEntries.value.push({ type, msg, time })
-  setTimeout(() => {
-    const el = gtLogPanelRef.value?.querySelector?.('.log-body')
-    if (el) el.scrollTop = el.scrollHeight
-  }, 50)
-}
 
 function gtOverallStatus(item) {
   const statuses = Object.values(item.languages || {})
@@ -1568,22 +1526,13 @@ function toggleGtSelectAll() {
   }
 }
 
-async function switchGranularTab(tab) {
-  granularTab.value = tab
-  gtPage.value = 1
-  gtCategoryId.value = ''
-  gtSearchQuery.value = ''
-  gtSelectedIds.value = []
-  await loadGranularStatus()
-}
-
 async function loadGranularStatus() {
   gtLoading.value = true
   try {
-    const res = await api.getTranslationStatus(granularTab.value)
+    const res = await api.getTranslationStatus(explicitType.value)
     gtAllItems.value = res.items || []
     gtLangs.value = res.languages || []
-    if (granularTab.value === 'product') {
+    if (explicitType.value === 'product') {
       const cats = await api.getCategories()
       gtCategories.value = cats || []
     }
@@ -1609,10 +1558,10 @@ function filterGranularItems() {
     })
   }
 
-  if (granularTab.value === 'product' && gtCategoryId.value) {
+  if (explicitType.value === 'product' && gtCategoryId.value) {
     items = items.filter(i => String(i.category_id) === String(gtCategoryId.value))
   }
-  if (granularTab.value === 'news') {
+  if (explicitType.value === 'news') {
     gtTotalPages.value = Math.ceil(items.length / gtPageSize) || 1
     if (gtPage.value > gtTotalPages.value) gtPage.value = gtTotalPages.value
     const start = (gtPage.value - 1) * gtPageSize
@@ -1621,225 +1570,34 @@ function filterGranularItems() {
   gtFilteredItems.value = items
 }
 
-async function startGranularTranslation() {
-  if (!gtSelectedIds.value.length) return alert('请选择要翻译的项目')
-  const ids = [...gtSelectedIds.value]
-  // Cancel any previous session's pending HTTP requests immediately
-  if (window._gtAbortController) window._gtAbortController.abort()
-  window._gtAbortController = new AbortController()
-  const signal = window._gtAbortController.signal
-  gtAborted = false
-  gtTranslating.value = true
-  gtFailedIds.value = []
-
-  const langs = gtSelectedLang.value === 'all'
-    ? gtLangs.value.map(l => l.code)
-    : [gtSelectedLang.value]
-  const langNames = gtSelectedLang.value === 'all'
-    ? '全部语言'
-    : (gtLangs.value.find(l => l.code === gtSelectedLang.value)?.name || gtSelectedLang.value)
-  const type = granularTab.value
-  // CONCURRENCY = 每个项目内「语言」的并发数（并发数越大速度越快，但需注意 API 限流）
-  const CONCURRENCY = gtConcurrency.value || 3
-
-  gtProgressTotal.value = ids.length * langs.length
-  gtProgressDone.value = 0
-  gtProgressOk.value = 0
-  gtProgressErrors.value = 0
-
-  gtAddLog('info',
-    '开始精细化翻译 → ' + (type === 'product' ? '产品' : '文章') +
-    ' ' + ids.length + ' 项, 语言: ' + langNames +
-    ', 全局并发: ' + Math.min(CONCURRENCY, ids.length * langs.length))
-  gtAddLog('info', '📋 策略：所有选中的语言和项目进入全局任务池，最大并发执行')
-
-  // ── 翻译单个项目的单种语言（含重试，超时不重试）──
-  async function translateOneLang(itemId, langCode, itemName) {
-    if (gtAborted) return false
-    const langObj = gtLangs.value.find(l => l.code === langCode)
-    const langLabel = langObj ? (langObj.flag || '') + ' ' + langObj.name : langCode
-    gtAddLog('info', '  🔄「' + itemName + '」→ ' + langLabel + ' 翻译中...')
-    let retries = 0
-    let success = false
-    let hasError = false
-    while (!success && retries <= 1) {  // max 1 retry (not 2)
-      if (gtAborted) break
-      try {
-        const res = await api.runTranslationOne(langCode, type, itemId, signal)
-        const ok = res.results?.length || 0
-        const errs = res.errors?.length || 0
-        gtProgressOk.value += ok
-        if (errs > 0 && ok === 0) {
-          retries++
-          if (retries > 1) {
-            gtProgressErrors.value += errs
-            hasError = true
-            if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode)) gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
-            for (const e of (res.errors || []))
-              gtAddLog('error', '  ❌「' + itemName + '」[' + langLabel + '] ' + (e.error || '').slice(0, 120))
-          } else {
-            gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] 失败，重试 1/1...')
-          }
-          continue
-        }
-        if (errs > 0) {
-          gtProgressErrors.value += errs
-          // Show what specifically failed
-          for (const e of (res.errors || []))
-            gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] ' + (e.errorCode || '') + ' ' + (e.error || '').slice(0, 150))
-          if (ok > 0) {
-            gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] 部分成功: ' + ok + ' 成功, ' + errs + ' 错误（可重试修复）')
-          }
-          hasError = true
-          if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode)) gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
-        } else if (ok > 0) {
-          gtAddLog('ok', '  ✅「' + itemName + '」[' + langLabel + '] ' + ok + ' 个字段')
-        } else {
-          gtAddLog('ok', '  ✔「' + itemName + '」[' + langLabel + '] 无需翻译')
-        }
-        success = true
-      } catch (e) {
-        // 524 = Cloudflare timeout, 504 = gateway timeout — don't retry, it will just timeout again
-        const isTimeout = e.message.includes('524') || e.message.includes('504') ||
-          e.message.includes('timeout') || e.message.includes('超时')
-        if (isTimeout) {
-          gtProgressErrors.value++
-          hasError = true
-          if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode)) gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
-          gtAddLog('error', '  ⏱️「' + itemName + '」[' + langLabel + '] 请求超时 — 文章内容过长，建议降低并发数或联系服务器管理员增加超时配置')
-          break  // exit retry loop immediately, no point retrying a timeout
-        }
-        retries++
-        if (retries > 1) {
-          gtProgressErrors.value++
-          hasError = true
-          if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode)) gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
-          gtAddLog('error', '  ❌「' + itemName + '」[' + langLabel + '] ' + e.message)
-        } else {
-          gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] 失败，重试 1/1...')
-        }
-      }
-    }
-    gtProgressDone.value++
-    return hasError
-  }
-
-  // ── 建立全局任务池并并发执行 ──
-  const queue = []
-  for (const itemId of ids) {
-    const itemName = gtAllItems.value.find(i => i.id === itemId)?.name_en || gtAllItems.value.find(i => i.id === itemId)?.name || '#' + itemId
-    for (const langCode of langs) {
-      queue.push({ itemId, langCode, itemName })
-    }
-  }
-
-  let qIdx = 0
-  async function worker() {
-    while (qIdx < queue.length) {
-      if (gtAborted) break
-      const idx = qIdx++
-      if (idx >= queue.length) break
-      const { itemId, langCode, itemName } = queue[idx]
-      await translateOneLang(itemId, langCode, itemName)
-    }
-  }
-
-  const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, () => worker())
-  await Promise.all(workers)
-
-  gtAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-  const failedItemCount = [...new Set(gtFailedIds.value.map(f => f.id))].length
-  gtAddLog(gtFailedIds.value.length ? 'warn' : 'ok',
-    '🏁 翻译完成: 成功 ' + gtProgressOk.value + ' 项, 错误 ' + gtProgressErrors.value + ' 项' +
-    (gtFailedIds.value.length ? ' | ' + failedItemCount + ' 个项目 ' + gtFailedIds.value.length + ' 个语言失败' : ' | 全部成功！')
-  )
-  gtAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-  if (!gtAborted) {
-    gtTranslating.value = false
-    await loadGranularStatus()
-  }
-}
-
-function stopGranularTranslation() {
-  gtAborted = true
-  // Cancel ALL in-flight fetch requests immediately → frees browser connections
-  if (window._gtAbortController) {
-    window._gtAbortController.abort()
-    window._gtAbortController = null
-  }
-  gtTranslating.value = false
-  gtAddLog('warn', '⛔ 已停止翻译，所有进行中的请求已取消')
-}
-
-async function retryGranularFailed() {
-  if (!gtFailedIds.value.length) return
-  const failedPairs = [...gtFailedIds.value]  // [{id, lang, itemName}, ...]
-  const failedItemIds = [...new Set(failedPairs.map(f => f.id))]
-
-  // Cancel any previous session
-  if (window._gtAbortController) window._gtAbortController.abort()
-  window._gtAbortController = new AbortController()
-  const signal = window._gtAbortController.signal
-  gtAborted = false
-  gtTranslating.value = true
-  gtFailedIds.value = []
-  const type = granularTab.value
-  const CONCURRENCY = gtConcurrency.value || 3
-
-  gtProgressTotal.value = failedPairs.length
-  gtProgressDone.value = 0
-  gtProgressOk.value = 0
-  gtProgressErrors.value = 0
-
-  gtAddLog('info', '🔄 重试 ' + failedItemIds.length + ' 个项目的 ' + failedPairs.length + ' 个失败语言')
-
-  let qIdx = 0
-  async function worker() {
-    while (qIdx < failedPairs.length) {
-      if (gtAborted) break
-      const idx = qIdx++
-      if (idx >= failedPairs.length) break
-      const { id: itemId, lang: langCode, itemName } = failedPairs[idx]
-      
-      const langObj = gtLangs.value.find(l => l.code === langCode)
-      const langLabel = langObj ? (langObj.flag || '') + ' ' + langObj.name : langCode
-      gtAddLog('info', '  🔄「' + itemName + '」→ ' + langLabel + ' 重试中...')
-      
-      try {
-        const res = await api.runTranslationOne(langCode, type, itemId, signal)
-        const ok = res.results?.length || 0
-        const errs = res.errors?.length || 0
-        gtProgressOk.value += ok
-        if (errs > 0) {
-          gtProgressErrors.value += errs
-          for (const e of (res.errors || []))
-            gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] ' + (e.errorCode || '') + ' ' + (e.error || '').slice(0, 150))
-          if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode))
-            gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
-        }
-        if (ok > 0 && errs === 0) {
-          gtAddLog('ok', '  ✅「' + itemName + '」[' + langLabel + '] ' + ok + ' 个字段 (重试成功)')
-        }
-      } catch (e) {
-        gtProgressErrors.value++
-        if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode))
-          gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
-        gtAddLog('error', '  ❌「' + itemName + '」[' + langLabel + '] ' + e.message)
-      }
-      gtProgressDone.value++
-    }
-  }
-
-  // Run workers globally across all failed pairs
-  const workers = Array.from({ length: Math.min(CONCURRENCY, failedPairs.length) }, () => worker())
-  await Promise.all(workers)
-
-  gtAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-  gtAddLog(gtFailedIds.value.length ? 'warn' : 'ok',
-    '🏁 重试完成: 成功 ' + gtProgressOk.value + ' 项, 仍失败 ' + gtFailedIds.value.length + ' 个语言')
-  gtAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-  gtTranslating.value = false
+async function openExplicitModal(type) {
+  explicitType.value = type
+  showExplicitModal.value = true
+  gtPage.value = 1
+  gtCategoryId.value = ''
+  gtSearchQuery.value = ''
+  gtSelectedIds.value = []
+  
   await loadGranularStatus()
+  
+  gtSelectedIds.value = explicitItems.value.filter(i => i.type === type).map(i => i.id)
+}
+
+function toggleExplicitItem(id) {
+  const idx = gtSelectedIds.value.indexOf(id)
+  if (idx === -1) gtSelectedIds.value.push(id)
+  else gtSelectedIds.value.splice(idx, 1)
+}
+
+function confirmExplicitSelection() {
+  const selected = gtSelectedIds.value.map(id => ({ type: explicitType.value, id }))
+  explicitItems.value = explicitItems.value.filter(i => i.type !== explicitType.value)
+  explicitItems.value.push(...selected)
+  showExplicitModal.value = false
+}
+
+function clearExplicitItems() {
+  explicitItems.value = []
 }
 
 // ── Translation Audit ──────────────────────────────────────────────────────
