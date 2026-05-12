@@ -540,7 +540,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import api from '../../api'
 
 defineOptions({ name: 'TranslationsPage' })
