@@ -24,6 +24,68 @@ function enhanceWithDefaultChannel(settings) {
     return s
 }
 
+// ─── Translation Prompts Management ─────────────────────────────────────────
+
+router.get('/prompts', authMiddleware, (req, res) => {
+    try {
+        const prompts = getAll('SELECT * FROM translation_prompts ORDER BY is_default DESC, created_at DESC')
+        res.json(prompts)
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+router.post('/prompts', authMiddleware, (req, res) => {
+    const { name, content, is_default } = req.body
+    if (!name || !content) return res.status(400).json({ error: 'Name and content are required' })
+    try {
+        if (is_default) run('UPDATE translation_prompts SET is_default = 0')
+        const r = run('INSERT INTO translation_prompts (name, content, is_default) VALUES (?, ?, ?)', [name, content, is_default ? 1 : 0])
+        res.json({ id: r.lastInsertRowid, name, content, is_default: is_default ? 1 : 0 })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+router.put('/prompts/:id', authMiddleware, (req, res) => {
+    const { name, content, is_default } = req.body
+    const id = req.params.id
+    try {
+        const existing = getOne('SELECT * FROM translation_prompts WHERE id = ?', [id])
+        if (!existing) return res.status(404).json({ error: 'Prompt not found' })
+        if (existing.is_system && content !== existing.content) {
+            return res.status(400).json({ error: 'Cannot modify system prompt content' })
+        }
+        if (is_default) run('UPDATE translation_prompts SET is_default = 0')
+        run('UPDATE translation_prompts SET name = ?, content = ?, is_default = ? WHERE id = ?', [name, existing.is_system ? existing.content : content, is_default ? 1 : 0, id])
+        res.json({ success: true })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+router.delete('/prompts/:id', authMiddleware, (req, res) => {
+    try {
+        const existing = getOne('SELECT * FROM translation_prompts WHERE id = ?', [req.params.id])
+        if (!existing) return res.status(404).json({ error: 'Prompt not found' })
+        if (existing.is_system) return res.status(400).json({ error: 'Cannot delete system prompt' })
+        run('DELETE FROM translation_prompts WHERE id = ?', [req.params.id])
+        res.json({ success: true })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+router.put('/prompts/:id/default', authMiddleware, (req, res) => {
+    try {
+        run('UPDATE translation_prompts SET is_default = 0')
+        run('UPDATE translation_prompts SET is_default = 1 WHERE id = ?', [req.params.id])
+        res.json({ success: true })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
 // ─── Settings ────────────────────────────────────────────────────────────────
 
 router.get('/settings', (req, res) => {
@@ -2146,68 +2208,6 @@ router.post('/batch-action', authMiddleware, (req, res) => {
     }
     res.json({ success: true });
 });
-
-// ─── Translation Prompts Management ─────────────────────────────────────────
-
-router.get('/prompts', authMiddleware, (req, res) => {
-    try {
-        const prompts = getAll('SELECT * FROM translation_prompts ORDER BY is_default DESC, created_at DESC')
-        res.json(prompts)
-    } catch (e) {
-        res.status(500).json({ error: e.message })
-    }
-})
-
-router.post('/prompts', authMiddleware, (req, res) => {
-    const { name, content, is_default } = req.body
-    if (!name || !content) return res.status(400).json({ error: 'Name and content are required' })
-    try {
-        if (is_default) run('UPDATE translation_prompts SET is_default = 0')
-        const r = run('INSERT INTO translation_prompts (name, content, is_default) VALUES (?, ?, ?)', [name, content, is_default ? 1 : 0])
-        res.json({ id: r.lastInsertRowid, name, content, is_default: is_default ? 1 : 0 })
-    } catch (e) {
-        res.status(500).json({ error: e.message })
-    }
-})
-
-router.put('/prompts/:id', authMiddleware, (req, res) => {
-    const { name, content, is_default } = req.body
-    const id = req.params.id
-    try {
-        const existing = getOne('SELECT * FROM translation_prompts WHERE id = ?', [id])
-        if (!existing) return res.status(404).json({ error: 'Prompt not found' })
-        if (existing.is_system && content !== existing.content) {
-            return res.status(400).json({ error: 'Cannot modify system prompt content' })
-        }
-        if (is_default) run('UPDATE translation_prompts SET is_default = 0')
-        run('UPDATE translation_prompts SET name = ?, content = ?, is_default = ? WHERE id = ?', [name, existing.is_system ? existing.content : content, is_default ? 1 : 0, id])
-        res.json({ success: true })
-    } catch (e) {
-        res.status(500).json({ error: e.message })
-    }
-})
-
-router.delete('/prompts/:id', authMiddleware, (req, res) => {
-    try {
-        const existing = getOne('SELECT * FROM translation_prompts WHERE id = ?', [req.params.id])
-        if (!existing) return res.status(404).json({ error: 'Prompt not found' })
-        if (existing.is_system) return res.status(400).json({ error: 'Cannot delete system prompt' })
-        run('DELETE FROM translation_prompts WHERE id = ?', [req.params.id])
-        res.json({ success: true })
-    } catch (e) {
-        res.status(500).json({ error: e.message })
-    }
-})
-
-router.put('/prompts/:id/default', authMiddleware, (req, res) => {
-    try {
-        run('UPDATE translation_prompts SET is_default = 0')
-        run('UPDATE translation_prompts SET is_default = 1 WHERE id = ?', [req.params.id])
-        res.json({ success: true })
-    } catch (e) {
-        res.status(500).json({ error: e.message })
-    }
-})
 
 export default router
 
