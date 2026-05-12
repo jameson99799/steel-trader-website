@@ -261,6 +261,8 @@ export const api = {
   getTranslationJobLogsSince: (id, logId) => request(`/translation-jobs/${id}/logs-since/${logId}`),
   createTranslationJob: (data) => request('/translation-jobs', { method: 'POST', body: JSON.stringify(data) }),
   abortTranslationJob: (id) => request(`/translation-jobs/${id}/abort`, { method: 'POST' }),
+  pauseTranslationJob: (id) => request(`/translation-jobs/${id}/pause`, { method: 'POST' }),
+  resumeTranslationJob: (id) => request(`/translation-jobs/${id}/resume`, { method: 'POST' }),
   retryFailedTranslationJob: (id) => request(`/translation-jobs/${id}/retry-failed`, { method: 'POST' }),
   clearTranslationJobLogs: () => request('/translation-jobs/logs', { method: 'DELETE' }),
 

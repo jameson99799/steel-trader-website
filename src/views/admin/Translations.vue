@@ -121,6 +121,7 @@
       <div class="card-header-row" style="cursor:pointer" @click="jobPanelCollapsed = !jobPanelCollapsed">
         <h3>{{ jobPanelCollapsed ? '▶' : '▼' }} 🖥️ 后台翻译任务
           <span v-if="activeJob && activeJob.status === 'running'" class="badge-running">运行中</span>
+          <span v-else-if="latestJob && latestJob.status === 'paused'" class="badge-warning" style="background:#fef3c7;color:#d97706;padding:2px 6px;border-radius:4px;font-size:11px">已暂停</span>
           <span v-else-if="latestJob && latestJob.status === 'done'" class="badge-done">已完成</span>
           <span v-else-if="latestJob && latestJob.status === 'aborted'" class="badge-aborted">已中止</span>
         </h3>
@@ -136,7 +137,10 @@
         <div v-if="activeJob" class="job-active-box">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <strong>🔄 任务 #{{ activeJob.id }} — 正在运行</strong>
-            <button class="btn btn-sm btn-danger-outline" @click="abortJob(activeJob.id)">⛔ 中止</button>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-sm btn-outline" @click="pauseJob(activeJob.id)">⏸ 暂停</button>
+              <button class="btn btn-sm btn-danger-outline" @click="abortJob(activeJob.id)">⛔ 中止</button>
+            </div>
           </div>
           <div class="progress-bar-wrap">
             <div class="progress-bar">
@@ -168,11 +172,15 @@
             <span>
               任务 #{{ latestJob.id }} —
               <span v-if="latestJob.status==='done'" style="color:#22c55e">✅ 已完成</span>
+              <span v-else-if="latestJob.status==='paused'" style="color:#f59e0b">⏸ 已暂停</span>
               <span v-else-if="latestJob.status==='aborted'" style="color:#f59e0b">⛔ 已中止</span>
               <span v-else-if="latestJob.status==='error'" style="color:#ef4444">❌ 错误</span>
               | 成功 {{ latestJob.ok_items }} | 失败 {{ latestJob.error_items }}
             </span>
-            <button class="btn btn-outline btn-xs" @click="viewJobLogs(latestJob.id)">📋 查看日志</button>
+            <div style="display:flex;gap:8px">
+              <button v-if="latestJob.status==='paused'" class="btn btn-outline btn-xs" @click="resumeJob(latestJob.id)">▶️ 继续翻译</button>
+              <button class="btn btn-outline btn-xs" @click="viewJobLogs(latestJob.id)">📋 查看日志</button>
+            </div>
           </div>
           <!-- Failed items -->
           <div v-if="latestJob.failed_items?.length" style="margin-top:12px">
@@ -212,7 +220,7 @@
                  :class="job.status" @click="viewJobLogs(job.id)">
               <span>#{{ job.id }}</span>
               <span>{{ job.target_lang === 'all' ? '🌍 全部语言' : job.target_lang }}</span>
-              <span :class="'badge-' + job.status">{{ { running:'运行中', done:'✅完成', aborted:'⛔中止', error:'❌错误', pending:'等待中' }[job.status] || job.status }}</span>
+              <span :class="'badge-' + job.status">{{ { running:'运行中', paused:'⏸暂停', done:'✅完成', aborted:'⛔中止', error:'❌错误', pending:'等待中' }[job.status] || job.status }}</span>
               <span style="color:#94a3b8;font-size:11px">{{ job.ok_items }}/{{ job.total_items }}</span>
               <span style="color:#94a3b8;font-size:11px">{{ job.created_at?.slice(5,16) }}</span>
             </div>
@@ -834,6 +842,26 @@ async function startBackgroundTranslate() {
   } catch (e) {
     alert('启动失败: ' + e.message)
   }
+}
+
+async function pauseJob(jobId) {
+  if (!confirm('确定暂停当前翻译任务？下次可继续执行。')) return
+  try {
+    await api.pauseTranslationJob(jobId)
+  } catch (e) { alert('暂停失败: ' + e.message) }
+}
+
+async function resumeJob(jobId) {
+  if (!confirm('确定继续该翻译任务？')) return
+  try {
+    await api.resumeTranslationJob(jobId)
+    activeJob.value = { id: jobId, status: 'running', total_items: latestJob.value.total_items, done_items: latestJob.value.done_items, ok_items: latestJob.value.ok_items, error_items: latestJob.value.error_items }
+    activeJobLogs.value = []
+    lastLogId = 0
+    jobPanelCollapsed.value = false
+    startJobPolling(jobId)
+    await loadJobList()
+  } catch (e) { alert('恢复任务失败: ' + e.message) }
 }
 
 async function abortJob(jobId) {

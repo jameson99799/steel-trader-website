@@ -864,6 +864,8 @@ async function initDb() {
       failed_items TEXT DEFAULT '[]',
       is_retry INTEGER DEFAULT 0,
       auto_retried INTEGER DEFAULT 0,
+      concurrency INTEGER DEFAULT 1,
+      pending_items TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       finished_at DATETIME
@@ -883,6 +885,9 @@ async function initDb() {
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tjl_job_id ON translation_job_logs(job_id)') } catch (e) { }
   // Migrate: add explicit items column for retry jobs that target specific items
   try { db.exec("ALTER TABLE translation_jobs ADD COLUMN explicit_items TEXT DEFAULT '[]'") } catch (e) { }
+  // Migrate: add concurrency and pending_items
+  try { db.exec("ALTER TABLE translation_jobs ADD COLUMN concurrency INTEGER DEFAULT 1") } catch (e) { }
+  try { db.exec("ALTER TABLE translation_jobs ADD COLUMN pending_items TEXT") } catch (e) { }
 
   // 初始化默认数据
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count

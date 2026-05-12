@@ -69,8 +69,8 @@ function updateJobProgress(jobId, fields) {
 // ─── Core background executor ─────────────────────────────────────────────────
 async function runJobInBackground(jobId) {
     // Mark as running
-    updateJobProgress(jobId, { status: 'running', done_items: 0, ok_items: 0, error_items: 0 })
-    jobLog(jobId, 'info', '🚀 后台翻译任务已启动，即使关闭浏览器也会继续运行...')
+    updateJobProgress(jobId, { status: 'running' })
+    jobLog(jobId, 'info', '🚀 后台翻译任务正在运行中...')
 
     const job = getOne('SELECT * FROM translation_jobs WHERE id=?', [jobId])
     if (!job) return
@@ -98,52 +98,62 @@ async function runJobInBackground(jobId) {
     const enhanced = enhanceWithDefaultChannel(s)
 
     // ── Collect items ──
-    let allItems = [] // { type, id, itemName, targetLang }
+    let pendingItems = []
 
-    if (isRetry && explicitItems.length > 0) {
-        // Retry mode: use explicit items list from parent job
-        for (const ei of explicitItems) {
-            allItems.push(ei)
-        }
-        jobLog(jobId, 'info', `🔄 重试模式: ${allItems.length} 个指定失败项目`)
+    if (job.pending_items) {
+        pendingItems = JSON.parse(job.pending_items)
+        jobLog(jobId, 'info', `▶️ 任务已恢复，继续翻译剩余 ${pendingItems.length} 个项目...`)
     } else {
-        // Normal mode: collect from pages
-        jobLog(jobId, 'info', `📋 正在收集翻译内容 (${pages.join(', ')})...`)
-        for (const page of pages) {
-            if (!PAGES[page]) continue
-            try {
-                const pageItems = PAGES[page]()
-                for (const item of pageItems) {
-                    for (const lc of langCodes) {
-                        allItems.push({ type: item.type, id: item.id, itemName: item.itemName || `${item.type}_${item.id}`, targetLang: lc })
-                    }
-                }
-            } catch (e) {
-                jobLog(jobId, 'warn', `⚠️ 获取页面 ${page} 内容失败: ${e.message}`)
+        let allItems = [] // { type, id, itemName, targetLang }
+        if (isRetry && explicitItems.length > 0) {
+            // Retry mode: use explicit items list from parent job
+            for (const ei of explicitItems) {
+                allItems.push(ei)
             }
+            jobLog(jobId, 'info', `🔄 重试模式: ${allItems.length} 个指定失败项目`)
+        } else {
+            // Normal mode: collect from pages
+            jobLog(jobId, 'info', `📋 正在收集翻译内容 (${pages.join(', ')})...`)
+            for (const page of pages) {
+                if (!PAGES[page]) continue
+                try {
+                    const pageItems = PAGES[page]()
+                    for (const item of pageItems) {
+                        for (const lc of langCodes) {
+                            allItems.push({ type: item.type, id: item.id, itemName: item.itemName || `${item.type}_${item.id}`, targetLang: lc })
+                        }
+                    }
+                } catch (e) {
+                    jobLog(jobId, 'warn', `⚠️ 获取页面 ${page} 内容失败: ${e.message}`)
+                }
+            }
+            // Deduplicate by type+id+lang
+            const seen = new Set()
+            allItems = allItems.filter(item => {
+                const k = `${item.targetLang}_${item.type}_${item.id}`
+                if (seen.has(k)) return false
+                seen.add(k)
+                return true
+            })
+            jobLog(jobId, 'ok', `📋 共 ${allItems.length} 个待翻译项目`)
         }
-        // Deduplicate by type+id+lang
-        const seen = new Set()
-        allItems = allItems.filter(item => {
-            const k = `${item.targetLang}_${item.type}_${item.id}`
-            if (seen.has(k)) return false
-            seen.add(k)
-            return true
-        })
-        jobLog(jobId, 'ok', `📋 共 ${allItems.length} 个待翻译项目`)
+        pendingItems = allItems
+        updateJobProgress(jobId, { total_items: pendingItems.length, done_items: 0, ok_items: 0, error_items: 0 })
     }
 
-    if (allItems.length === 0) {
+    if (pendingItems.length === 0) {
         jobLog(jobId, 'ok', '✔ 无需翻译（内容已全部翻译）')
         updateJobProgress(jobId, { status: 'done', finished_at: new Date().toISOString() })
         return
     }
 
-    updateJobProgress(jobId, { total_items: allItems.length })
-
-    const newFailed = []
-    let okTotal = 0
-    let errTotal = 0
+    const concurrencyLevel = job.concurrency || 1
+    const processingItems = new Set()
+    
+    let okTotal = job.ok_items || 0
+    let errTotal = job.error_items || 0
+    let doneTotal = job.done_items || 0
+    const newFailed = JSON.parse(job.failed_items || '[]')
 
     const TYPE_TO_PAGE = {
         product: 'products', news: 'news', company: 'company',
@@ -151,76 +161,103 @@ async function runJobInBackground(jobId) {
         hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors'
     }
 
-    // ── Process items one by one (sequential to avoid hammering AI API) ──
-    for (let i = 0; i < allItems.length; i++) {
-        if (abortFlags.get(jobId)) {
-            jobLog(jobId, 'warn', `🛑 用户已中止任务，已处理 ${i}/${allItems.length}`)
-            break
-        }
+    // ── Process items with concurrency ──
+    async function worker() {
+        while (pendingItems.length > 0) {
+            if (abortFlags.get(jobId)) break
+            
+            const item = pendingItems.shift()
+            processingItems.add(item)
 
-        const item = allItems[i]
-        const langRow = getOne('SELECT name FROM languages WHERE code=?', [item.targetLang])
-        if (!langRow) continue
-
-        const pageKey = TYPE_TO_PAGE[item.type] || item.type
-        if (!PAGES[pageKey]) {
-            jobLog(jobId, 'warn', `⚠️ 未知内容类型: ${item.type}，跳过`)
-            updateJobProgress(jobId, { done_items: i + 1, ok_items: okTotal, error_items: errTotal })
-            continue
-        }
-
-        const pageItems = PAGES[pageKey]()
-        const items = pageItems.filter(pi => String(pi.id) === String(item.id))
-
-        if (items.length === 0) {
-            updateJobProgress(jobId, { done_items: i + 1, ok_items: okTotal, error_items: errTotal })
-            continue
-        }
-
-        const manualOverrides = getAll(
-            'SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1',
-            [item.targetLang]
-        )
-        const overrideNote = manualOverrides.length > 0
-            ? '\n\nUse these approved translations as reference:\n' +
-            manualOverrides.slice(0, 8).map(o => `"${o.original_text}" → "${o.translated_text}"`).join('\n')
-            : ''
-
-        try {
-            const { results, errors } = await translateBatch(enhanced, items, item.targetLang, langRow.name, overrideNote)
-            const ok = results.length
-            const errs = errors.length
-
-            okTotal += ok
-            if (errs > 0 && ok === 0) {
-                errTotal += errs
-                newFailed.push(item)
-                const errMsg = errors[0]?.error || 'unknown error'
-                jobLog(jobId, 'error', `   ❌ [${item.targetLang}]「${item.itemName}」失败: ${errMsg.slice(0, 150)}`)
-            } else if (errs > 0) {
-                errTotal += errs
-                newFailed.push(item)
-                jobLog(jobId, 'warn', `   ⚠️ [${item.targetLang}]「${item.itemName}」部分成功: ${ok} 成功, ${errs} 错误`)
-            } else if (ok > 0) {
-                jobLog(jobId, 'ok', `   ✅ [${item.targetLang}]「${item.itemName}」翻译成功: ${ok} 个字段`)
-                run('UPDATE languages SET ai_translated=1 WHERE code=?', [item.targetLang])
-            } else {
-                jobLog(jobId, 'ok', `   ✔ [${item.targetLang}]「${item.itemName}」无需翻译`)
+            const langRow = getOne('SELECT name FROM languages WHERE code=?', [item.targetLang])
+            if (!langRow) {
+                processingItems.delete(item)
+                doneTotal++
+                continue
             }
-        } catch (e) {
-            errTotal++
-            newFailed.push(item)
-            jobLog(jobId, 'error', `   ❌ [${item.targetLang}]「${item.itemName}」异常: ${e.message.slice(0, 150)}`)
-        }
 
-        updateJobProgress(jobId, { done_items: i + 1, ok_items: okTotal, error_items: errTotal })
+            const pageKey = TYPE_TO_PAGE[item.type] || item.type
+            if (!PAGES[pageKey]) {
+                jobLog(jobId, 'warn', `⚠️ 未知内容类型: ${item.type}，跳过`)
+                processingItems.delete(item)
+                doneTotal++
+                updateJobProgress(jobId, { done_items: doneTotal, ok_items: okTotal, error_items: errTotal })
+                continue
+            }
+
+            const pageItems = PAGES[pageKey]()
+            const items = pageItems.filter(pi => String(pi.id) === String(item.id))
+
+            if (items.length === 0) {
+                processingItems.delete(item)
+                doneTotal++
+                updateJobProgress(jobId, { done_items: doneTotal, ok_items: okTotal, error_items: errTotal })
+                continue
+            }
+
+            const manualOverrides = getAll(
+                'SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1',
+                [item.targetLang]
+            )
+            const overrideNote = manualOverrides.length > 0
+                ? '\n\nUse these approved translations as reference:\n' +
+                manualOverrides.slice(0, 8).map(o => `"${o.original_text}" → "${o.translated_text}"`).join('\n')
+                : ''
+
+            try {
+                const { results, errors } = await translateBatch(enhanced, items, item.targetLang, langRow.name, overrideNote)
+                const ok = results.length
+                const errs = errors.length
+
+                okTotal += ok
+                if (errs > 0 && ok === 0) {
+                    errTotal += errs
+                    newFailed.push(item)
+                    const errMsg = errors[0]?.error || 'unknown error'
+                    jobLog(jobId, 'error', `   ❌ [${item.targetLang}]「${item.itemName}」失败: ${errMsg.slice(0, 150)}`)
+                } else if (errs > 0) {
+                    errTotal += errs
+                    newFailed.push(item)
+                    jobLog(jobId, 'warn', `   ⚠️ [${item.targetLang}]「${item.itemName}」部分成功: ${ok} 成功, ${errs} 错误`)
+                } else if (ok > 0) {
+                    jobLog(jobId, 'ok', `   ✅ [${item.targetLang}]「${item.itemName}」翻译成功: ${ok} 个字段`)
+                    run('UPDATE languages SET ai_translated=1 WHERE code=?', [item.targetLang])
+                } else {
+                    jobLog(jobId, 'ok', `   ✔ [${item.targetLang}]「${item.itemName}」无需翻译`)
+                }
+            } catch (e) {
+                errTotal++
+                newFailed.push(item)
+                jobLog(jobId, 'error', `   ❌ [${item.targetLang}]「${item.itemName}」异常: ${e.message.slice(0, 150)}`)
+            }
+
+            processingItems.delete(item)
+            doneTotal++
+            updateJobProgress(jobId, { done_items: doneTotal, ok_items: okTotal, error_items: errTotal, failed_items: JSON.stringify(newFailed) })
+        }
     }
 
-    const wasAborted = abortFlags.get(jobId)
+    const workers = Array.from({ length: Math.min(concurrencyLevel, pendingItems.length) }, () => worker())
+    await Promise.all(workers)
+
+    const abortReason = abortFlags.get(jobId)
     abortFlags.delete(jobId)
 
+    if (abortReason === 'pause') {
+        const remaining = [...processingItems, ...pendingItems]
+        updateJobProgress(jobId, { status: 'paused', pending_items: JSON.stringify(remaining) })
+        jobLog(jobId, 'warn', `⏸ 任务已暂停，剩余 ${remaining.length} 项等待翻译`)
+        return
+    }
+
+    if (abortReason === 'abort') {
+        jobLog(jobId, 'warn', `🛑 用户已中止任务，已处理 ${doneTotal}/${job.total_items}`)
+        updateJobProgress(jobId, { status: 'aborted', finished_at: new Date().toISOString() })
+        return
+    }
+
     // ── Auto-retry failed items once (only for non-retry jobs) ──
-    if (!isRetry && newFailed.length > 0 && !wasAborted) {
+    if (!isRetry && newFailed.length > 0) {
         jobLog(jobId, 'info', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
         jobLog(jobId, 'info', `🔄 自动重试 ${newFailed.length} 个失败项目（最后一次自动重试）...`)
         // Mark this job as having done auto-retry
@@ -228,7 +265,15 @@ async function runJobInBackground(jobId) {
 
         const stillFailed = []
         for (const item of newFailed) {
-            if (abortFlags.get(jobId)) break
+            const flag = abortFlags.get(jobId)
+            if (flag) {
+                stillFailed.push(item) // Keep it as failed if aborted/paused during retry
+                if (flag === 'pause') {
+                     // During retry, if paused, we just keep remaining in stillFailed and abort
+                     // Actually, pause during retry is an edge case, we'll just treat it as aborted/failed
+                }
+                continue
+            }
             const langRow = getOne('SELECT name FROM languages WHERE code=?', [item.targetLang])
             if (!langRow) continue
             const pageKey = TYPE_TO_PAGE[item.type] || item.type
@@ -253,6 +298,9 @@ async function runJobInBackground(jobId) {
                 stillFailed.push(item)
             }
         }
+        
+        const retryAbortReason = abortFlags.get(jobId)
+        abortFlags.delete(jobId)
 
         // Update final failed_items
         updateJobProgress(jobId, {
@@ -260,6 +308,12 @@ async function runJobInBackground(jobId) {
             ok_items: okTotal,
             error_items: stillFailed.length
         })
+        
+        if (retryAbortReason === 'pause') {
+            updateJobProgress(jobId, { status: 'paused' })
+            jobLog(jobId, 'warn', `⏸ 重试过程被暂停`)
+            return
+        }
 
         if (stillFailed.length > 0) {
             jobLog(jobId, 'warn', `⚠️ ${stillFailed.length} 个项目自动重试后仍失败，请手动点击重试`)
@@ -278,7 +332,7 @@ async function runJobInBackground(jobId) {
     )
 
     updateJobProgress(jobId, {
-        status: wasAborted ? 'aborted' : 'done',
+        status: 'done',
         finished_at: new Date().toISOString()
     })
 }
@@ -380,8 +434,8 @@ router.post('/', authMiddleware, async (req, res) => {
         }
 
         const result = run(
-            `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items) VALUES ('pending', ?, ?, '[]')`,
-            [lang, JSON.stringify(pages)]
+            `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items, concurrency) VALUES ('pending', ?, ?, '[]', ?)`,
+            [lang, JSON.stringify(pages), concurrency || 1]
         )
         const jobId = result.lastInsertRowid
 
@@ -404,10 +458,52 @@ router.post('/', authMiddleware, async (req, res) => {
 router.post('/:id/abort', authMiddleware, (req, res) => {
     try {
         const id = parseInt(req.params.id)
-        abortFlags.set(id, true)
-        updateJobProgress(id, { status: 'aborted', finished_at: new Date().toISOString() })
-        jobLog(id, 'warn', '🛑 用户手动中止了翻译任务')
+        abortFlags.set(id, 'abort')
         res.json({ success: true })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+// POST /translation-jobs/:id/pause — pause a running job
+router.post('/:id/pause', authMiddleware, (req, res) => {
+    try {
+        const id = parseInt(req.params.id)
+        abortFlags.set(id, 'pause')
+        res.json({ success: true })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+// POST /translation-jobs/:id/resume — resume a paused job
+router.post('/:id/resume', authMiddleware, async (req, res) => {
+    try {
+        const id = parseInt(req.params.id)
+        const job = getOne('SELECT * FROM translation_jobs WHERE id=?', [id])
+        if (!job) return res.status(404).json({ error: 'Job not found' })
+        if (job.status !== 'paused') return res.status(400).json({ error: '任务不是暂停状态' })
+
+        const running = getOne("SELECT id FROM translation_jobs WHERE status = 'running'")
+        if (running) {
+            return res.status(409).json({
+                error: `当前已有正在运行的翻译任务（ID: ${running.id}），请等待完成后再恢复`,
+                activeJobId: running.id
+            })
+        }
+
+        updateJobProgress(id, { status: 'pending' })
+        abortFlags.delete(id)
+        
+        setImmediate(() => runJobInBackground(id).catch(e => {
+            console.error(`[translation-jobs] Resume job ${id} fatal error:`, e)
+            try {
+                updateJobProgress(id, { status: 'error', finished_at: new Date().toISOString() })
+                jobLog(id, 'error', `💥 恢复任务异常终止: ${e.message}`)
+            } catch (err2) { /* non-fatal */ }
+        }))
+
+        res.json({ success: true, message: '任务已恢复' })
     } catch (e) {
         res.status(500).json({ error: e.message })
     }
