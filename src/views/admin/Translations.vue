@@ -160,17 +160,11 @@
             <button class="btn btn-primary" @click="startTranslate" :disabled="translating || !selectedLang">
               {{ translating ? '⏳ 翻译中...' : '🚀 开始翻译' }}
             </button>
-            <button v-if="translating" class="btn btn-outline" @click="abortTranslation">
-              ⏸ 暂停
-            </button>
-            <button v-if="!translating && progressTotal > 0 && progressDone < progressTotal" class="btn btn-primary" @click="resumeTranslation">
-              ▶ 继续
-            </button>
             <button v-if="failedItems.length" class="btn btn-warning" @click="retryFailed" :disabled="translating">
-              🔄 重新翻译失败项 ({{ progressErrors }})
+              🔄 重新翻译全部未完成 ({{ failedItems.length }})
             </button>
-            <button class="btn btn-outline btn-danger" @click="clearLogs">
-              🗑 清空日志
+            <button v-if="translating" class="btn btn-outline" @click="abortTranslation">
+              ⛔ 停止
             </button>
           </div>
 
@@ -908,10 +902,6 @@ function resumeTranslation() {
   actionBatch('resume');
 }
 
-function retryFailed() {
-  actionBatch('retry_failed');
-}
-
 function clearLogs() {
   actionBatch('clear_logs');
   logEntries.value = [];
@@ -920,17 +910,6 @@ function clearLogs() {
   progressOk.value = 0;
   progressErrors.value = 0;
   failedItems.value = [];
-}
-
-const failedItems = ref([])
-const channelCollapsed = ref(true)
-
-const startTranslate = async () => {
-  if (!selectedLang.value) return alert('请选择目标语言')
-  if (!selectedPages.value.length) return alert('请至少选择一个翻译范围')
-  aborted = false
-  const pages = [...selectedPages.value]
-  await runPages(pages)
 }
 
 // ── Search mode: untranslated or translated content ──
@@ -1125,88 +1104,13 @@ async function startGranularTranslation() {
 }
 
 function stopGranularTranslation() {
-  gtAborted = true
-  // Cancel ALL in-flight fetch requests immediately → frees browser connections
-  if (window._gtAbortController) {
-    window._gtAbortController.abort()
-    window._gtAbortController = null
-  }
-  gtTranslating.value = false
-  gtAddLog('warn', '⛔ 已停止翻译，所有进行中的请求已取消')
+  actionBatch('pause');
+  gtTranslating.value = false;
 }
 
 async function retryGranularFailed() {
-  if (!gtFailedIds.value.length) return
-  const failedPairs = [...gtFailedIds.value]  // [{id, lang, itemName}, ...]
-  const failedItemIds = [...new Set(failedPairs.map(f => f.id))]
-
-  // Cancel any previous session
-  if (window._gtAbortController) window._gtAbortController.abort()
-  window._gtAbortController = new AbortController()
-  const signal = window._gtAbortController.signal
-  gtAborted = false
-  gtTranslating.value = true
-  gtFailedIds.value = []
-  const type = granularTab.value
-  const CONCURRENCY = gtConcurrency.value || 3
-
-  gtProgressTotal.value = failedPairs.length
-  gtProgressDone.value = 0
-  gtProgressOk.value = 0
-  gtProgressErrors.value = 0
-
-  gtAddLog('info', '🔄 重试 ' + failedItemIds.length + ' 个项目的 ' + failedPairs.length + ' 个失败语言')
-
-  // For each failed item, only translate its failed languages
-  for (const itemId of failedItemIds) {
-    if (gtAborted) break
-    const itemFailedLangs = failedPairs.filter(f => f.id === itemId).map(f => f.lang)
-    const itemName = failedPairs.find(f => f.id === itemId)?.itemName || '#' + itemId
-    gtAddLog('info', '📦「' + itemName + '」重试 ' + itemFailedLangs.length + ' 种失败语言')
-
-    let langQueueIdx = 0
-    async function langWorker() {
-      while (langQueueIdx < itemFailedLangs.length) {
-        if (gtAborted) break
-        const idx = langQueueIdx++
-        if (idx >= itemFailedLangs.length) break
-        const langCode = itemFailedLangs[idx]
-        const langObj = gtLangs.value.find(l => l.code === langCode)
-        const langLabel = langObj ? (langObj.flag || '') + ' ' + langObj.name : langCode
-        gtAddLog('info', '  🔄「' + itemName + '」→ ' + langLabel + ' 重试中...')
-        try {
-          const res = await api.runTranslationOne(langCode, type, itemId, signal)
-          const ok = res.results?.length || 0
-          const errs = res.errors?.length || 0
-          gtProgressOk.value += ok
-          if (errs > 0) {
-            gtProgressErrors.value += errs
-            for (const e of (res.errors || []))
-              gtAddLog('warn', '  ⚠️「' + itemName + '」[' + langLabel + '] ' + (e.errorCode || '') + ' ' + (e.error || '').slice(0, 150))
-            if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode))
-              gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
-          }
-          if (ok > 0 && errs === 0) {
-            gtAddLog('ok', '  ✅「' + itemName + '」[' + langLabel + '] ' + ok + ' 个字段 (重试成功)')
-          }
-        } catch (e) {
-          gtProgressErrors.value++
-          if (!gtFailedIds.value.find(f => f.id === itemId && f.lang === langCode))
-            gtFailedIds.value.push({ id: itemId, lang: langCode, itemName })
-          gtAddLog('error', '  ❌「' + itemName + '」[' + langLabel + '] ' + e.message)
-        }
-        gtProgressDone.value++
-      }
-    }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, itemFailedLangs.length) }, () => langWorker()))
-  }
-
-  gtAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-  gtAddLog(gtFailedIds.value.length ? 'warn' : 'ok',
-    '🏁 重试完成: 成功 ' + gtProgressOk.value + ' 项, 仍失败 ' + gtFailedIds.value.length + ' 个语言')
-  gtAddLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-  gtTranslating.value = false
-  await loadGranularStatus()
+  actionBatch('retry_failed');
+  gtFailedIds.value = [];
 }
 
 // ── Translation Audit ──────────────────────────────────────────────────────
