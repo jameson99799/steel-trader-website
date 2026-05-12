@@ -371,7 +371,7 @@ router.get('/active', authMiddleware, (req, res) => {
         const job = getOne(
             `SELECT id, status, target_lang, pages, total_items, done_items, ok_items, error_items,
                     failed_items, is_retry, auto_retried, created_at, updated_at
-             FROM translation_jobs WHERE status = 'running' ORDER BY id DESC LIMIT 1`
+             FROM translation_jobs WHERE status IN ('running', 'pausing', 'aborting') ORDER BY id DESC LIMIT 1`
         )
         res.json(job ? {
             ...job,
@@ -433,7 +433,7 @@ router.post('/', authMiddleware, async (req, res) => {
         if (!pages || !pages.length) return res.status(400).json({ error: 'pages is required' })
 
         // Only allow one running job at a time
-        const running = getOne("SELECT id FROM translation_jobs WHERE status = 'running'")
+        const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('running', 'pausing', 'aborting')")
         if (running) {
             return res.status(409).json({
                 error: `当前已有正在运行的翻译任务（ID: ${running.id}），请等待完成或中止后再创建新任务`,
@@ -467,6 +467,8 @@ router.post('/:id/abort', authMiddleware, (req, res) => {
     try {
         const id = parseInt(req.params.id)
         abortFlags.set(id, 'abort')
+        updateJobProgress(id, { status: 'aborting' })
+        jobLog(id, 'warn', '🛑 已收到中止指令，正在等待当前翻译完成并退出...')
         res.json({ success: true })
     } catch (e) {
         res.status(500).json({ error: e.message })
@@ -478,6 +480,8 @@ router.post('/:id/pause', authMiddleware, (req, res) => {
     try {
         const id = parseInt(req.params.id)
         abortFlags.set(id, 'pause')
+        updateJobProgress(id, { status: 'pausing' })
+        jobLog(id, 'warn', '⏸ 正在暂停，等待当前项目完成翻译即可安全暂停...')
         res.json({ success: true })
     } catch (e) {
         res.status(500).json({ error: e.message })
@@ -492,7 +496,7 @@ router.post('/:id/resume', authMiddleware, async (req, res) => {
         if (!job) return res.status(404).json({ error: 'Job not found' })
         if (job.status !== 'paused') return res.status(400).json({ error: '任务不是暂停状态' })
 
-        const running = getOne("SELECT id FROM translation_jobs WHERE status = 'running'")
+        const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('running', 'pausing', 'aborting')")
         if (running) {
             return res.status(409).json({
                 error: `当前已有正在运行的翻译任务（ID: ${running.id}），请等待完成后再恢复`,
