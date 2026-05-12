@@ -473,10 +473,10 @@ async function translateNews(item, targetLangCode = null, targetLangName = null)
       langsToRun.push({ code: targetLangCode, name: targetLangName })
     } else {
       if (item._translationStatus) {
-        langsToRun = item._translationStatus.filter(l => !l.translated)
+        langsToRun = [...item._translationStatus]
       } else {
         const statusRes = await api.getItemTranslationStatus('news', item.id)
-        langsToRun = (statusRes.status || []).filter(l => !l.translated)
+        langsToRun = statusRes.status || []
         item._translationStatus = statusRes.status || []
       }
     }
@@ -489,7 +489,12 @@ async function translateNews(item, targetLangCode = null, targetLangName = null)
 
     logAppend(`📋 准备翻译 ${langsToRun.length} 种语言...`)
     
-    const CONCURRENCY = 3
+    let CONCURRENCY = 3
+    try {
+      const resC = await api.getTranslationConcurrency()
+      if (resC && resC.concurrency) CONCURRENCY = resC.concurrency
+    } catch(e) {}
+    
     let qIdx = 0
     let totalOk = 0
     let totalErrs = 0

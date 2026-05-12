@@ -112,6 +112,22 @@ router.get('/multilingual-status', (req, res) => {
     res.json({ enabled: s ? !!s.multilingual_enabled : true })
 })
 
+// ─── Concurrency Setting ────────────────────────────────────────────────────────
+
+router.get('/concurrency', authMiddleware, (req, res) => {
+    const s = getOne('SELECT concurrency FROM translation_settings WHERE id = 1')
+    res.json({ concurrency: s?.concurrency || 3 })
+})
+
+router.put('/concurrency', authMiddleware, (req, res) => {
+    const { concurrency } = req.body
+    const c = parseInt(concurrency) || 3
+    run('UPDATE translation_settings SET concurrency = ? WHERE id = 1', [c])
+    // Update memory variable for background worker if it exists
+    workerConcurrency = c
+    res.json({ success: true, concurrency: c })
+})
+
 // ─── HTTP helper (no external deps) ─────────────────────────────────────────
 
 function httpRequest(urlStr, options = {}, body = null) {
@@ -1940,6 +1956,10 @@ let workerRunning = false;
 let workerPaused = false;
 let activeWorkers = 0;
 let workerConcurrency = 3;
+try {
+    const s = getOne('SELECT concurrency FROM translation_settings WHERE id = 1')
+    if (s && s.concurrency) workerConcurrency = s.concurrency
+} catch(e) {}
 
 async function executeTranslationTask(targetLang, contentType, contentId) {
     const langRow = getOne('SELECT * FROM languages WHERE code=?', [targetLang])
@@ -2029,7 +2049,10 @@ router.post('/batch-start', authMiddleware, async (req, res) => {
     const { pages, lang, concurrency, explicitItems } = req.body;
     if (!pages || !lang) return res.status(400).json({ error: 'pages and lang are required' });
     
-    if (concurrency) workerConcurrency = parseInt(concurrency) || 3;
+    if (concurrency) {
+        workerConcurrency = parseInt(concurrency) || 3;
+        run('UPDATE translation_settings SET concurrency = ? WHERE id = 1', [workerConcurrency])
+    }
     workerPaused = false;
     
     // Auto clear >3 days old logs before starting new batch

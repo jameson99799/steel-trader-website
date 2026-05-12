@@ -850,10 +850,10 @@ async function translateProduct(product, targetLangCode = null, targetLangName =
       langsToRun.push({ code: targetLangCode, name: targetLangName })
     } else {
       if (product._translationStatus) {
-        langsToRun = product._translationStatus.filter(l => !l.translated)
+        langsToRun = [...product._translationStatus]
       } else {
         const statusRes = await api.getItemTranslationStatus('product', product.id)
-        langsToRun = (statusRes.status || []).filter(l => !l.translated)
+        langsToRun = statusRes.status || []
         product._translationStatus = statusRes.status || []
       }
     }
@@ -866,7 +866,12 @@ async function translateProduct(product, targetLangCode = null, targetLangName =
 
     logAppend(`📋 准备翻译 ${langsToRun.length} 种语言...`)
     
-    const CONCURRENCY = 3
+    let CONCURRENCY = 3
+    try {
+      const resC = await api.getTranslationConcurrency()
+      if (resC && resC.concurrency) CONCURRENCY = resC.concurrency
+    } catch(e) {}
+    
     let qIdx = 0
     let totalOk = 0
     let totalErrs = 0

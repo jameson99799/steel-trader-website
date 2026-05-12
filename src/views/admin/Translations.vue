@@ -1078,12 +1078,22 @@ onMounted(async () => {
     loadGranularStatus()
     // Load background job list
     await loadJobList()
+    // Load concurrency
+    try {
+      const resC = await api.getTranslationConcurrency()
+      if (resC && resC.concurrency) concurrency.value = resC.concurrency
+    } catch(e) {}
   } catch (e) {
     console.error('Failed to load settings:', e)
   }
 })
 
-
+import { watch } from 'vue'
+watch(concurrency, async (newVal) => {
+  try {
+    await api.setTranslationConcurrency(newVal)
+  } catch(e) {}
+})
 const saveSettings = async () => {
   saving.value = true; savedMsg.value = false
   try {
@@ -1508,7 +1518,7 @@ const gtCategoryId = ref('')
 const gtCategories = ref([])
 const gtLangs = ref([])
 const gtSelectedLang = ref('all')
-const gtConcurrency = ref(3)
+const gtConcurrency = concurrency
 const gtAllItems = ref([])
 const gtFilteredItems = ref([])
 const gtSelectedIds = ref([])
@@ -1592,8 +1602,8 @@ function filterGranularItems() {
   if (gtSearchQuery.value) {
     const q = gtSearchQuery.value.toLowerCase()
     items = items.filter(i => {
-      const nameMatch = i.name_en?.toLowerCase().includes(q) || i.name?.toLowerCase().includes(q)
-      const titleMatch = i.title_en?.toLowerCase().includes(q) || i.title?.toLowerCase().includes(q)
+      const nameMatch = (i.name_en || '').toLowerCase().includes(q) || (i.name || '').toLowerCase().includes(q)
+      const titleMatch = (i.title_en || '').toLowerCase().includes(q) || (i.title || '').toLowerCase().includes(q)
       return nameMatch || titleMatch
     })
   }
@@ -1837,7 +1847,7 @@ const auditReport = ref([])
 const auditRunning = ref(false)
 const auditTranslating = ref(false)
 let auditAborted = false   // plain boolean — same fix as gtAborted
-const auditConcurrency = ref(3)
+const auditConcurrency = concurrency
 const auditLogEntries = ref([])
 const auditLogPanelRef = ref(null)
 const auditProgressTotal = ref(0)

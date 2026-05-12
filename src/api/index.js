@@ -250,6 +250,8 @@ export const api = {
 
   getItemTranslationStatus: (type, id) => request(`/translation/status/${type}/${id}`),
   getTranslationContent: (lang) => request(`/translation/content/${lang}`),
+  getTranslationConcurrency: () => request('/translation/concurrency'),
+  setTranslationConcurrency: (c) => request('/translation/concurrency', { method: 'PUT', body: JSON.stringify({ concurrency: c }) }),
   getTranslationStatus: (type) => request(`/translation/translation-status?type=${type}`),
   runSelectiveTranslation: (type, ids, languages) => request('/translation/run-selective', { method: 'POST', body: JSON.stringify({ type, ids, languages }) }),
   auditTranslations: () => request('/translation/audit-translations'),
