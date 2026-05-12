@@ -317,8 +317,8 @@ function collectCompany() {
     if (!c) return []
     const items = []
     // Only translate description and advantages — name, address, contact info stay in original language
-    if (c.description_en) items.push({ type: 'company', id: 1, field: 'description', text: c.description_en, itemName: '公司简介' })
-    if (c.advantages_en) items.push({ type: 'company', id: 1, field: 'advantages', text: c.advantages_en, itemName: '公司优势' })
+    if (c.description_en) items.push({ type: 'company', id: 1, field: 'description', text: c.description_en, itemName: '公司简介', long_html: true })
+    if (c.advantages_en) items.push({ type: 'company', id: 1, field: 'advantages', text: c.advantages_en, itemName: '公司优势', long_html: true })
     return items
 }
 
