@@ -26,6 +26,9 @@
             <router-link :to="langPath('/ral-colors')" class="cat-btn ral-btn">
               <span class="ral-icon">🎨</span> {{ t('ralColorBtn') }}
             </router-link>
+            <router-link :to="langPath('/roofing-profiles')" class="cat-btn profile-btn">
+              <span class="ral-icon">📐</span> {{ t('roofingProfilesBtn') }}
+            </router-link>
           </div>
         </div>
       </div>
@@ -190,6 +193,22 @@ onMounted(() => { loadCategories(); loadNews() })
   box-shadow: 0 4px 16px rgba(100,100,200,.2);
 }
 .ral-icon { font-size: 15px; }
+
+/* Profile button */
+.profile-btn {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--white, #fff), var(--white, #fff)) padding-box,
+    linear-gradient(135deg, #3498db, #2c3e50) border-box;
+  color: #34495e;
+}
+.profile-btn:hover {
+  background:
+    linear-gradient(135deg, rgba(52,152,219,.06), rgba(44,62,80,.06)) padding-box,
+    linear-gradient(135deg, #3498db, #2c3e50) border-box;
+  color: #2c3e50; transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(52,152,219,.2);
+}
 
 /* ── News Grid ── */
 .page-content { padding: var(--spacing-2xl) 0; }

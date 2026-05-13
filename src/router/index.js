@@ -10,7 +10,8 @@ const publicRoutes = [
   { path: 'news/:slug', name: 'NewsDetail', component: () => import('../views/NewsDetail.vue') },
   { path: 'about', name: 'About', component: () => import('../views/About.vue') },
   { path: 'contact', name: 'Contact', component: () => import('../views/Contact.vue') },
-  { path: 'ral-colors', name: 'RalColors', component: () => import('../views/RalColors.vue') }
+  { path: 'ral-colors', name: 'RalColors', component: () => import('../views/RalColors.vue') },
+  { path: 'roofing-profiles', name: 'RoofingProfiles', component: () => import('../views/RoofingProfiles.vue') }
 ]
 
 const routes = [
@@ -35,6 +36,7 @@ const routes = [
   { path: '/about', redirect: '/en/about' },
   { path: '/contact', redirect: '/en/contact' },
   { path: '/ral-colors', redirect: '/en/ral-colors' },
+  { path: '/roofing-profiles', redirect: '/en/roofing-profiles' },
   {
     path: '/admin/login',
     name: 'AdminLogin',
