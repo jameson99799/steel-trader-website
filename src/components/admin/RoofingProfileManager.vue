@@ -83,6 +83,21 @@
               <input type="number" v-model="currentProfile.coil_width" class="form-control" placeholder="例: 1000" />
             </div>
             
+            <div class="form-group">
+              <label>表面处理 (Surface)</label>
+              <select v-model="currentProfile.surface" class="form-control">
+                <option value="ppgi">彩涂彩钢 (PPGI/RAL Color)</option>
+                <option value="gi">镀锌表面/锌花 (Galvanized)</option>
+                <option value="gl">镀铝锌表面 (Galvalume)</option>
+              </select>
+            </div>
+            <div class="form-group" v-if="currentProfile.surface === 'ppgi'">
+              <label>颜色 (RAL Color Hex)</label>
+              <div style="display:flex; gap: 10px;">
+                <input type="color" v-model="currentProfile.color" style="height:36px; padding:0; cursor:pointer;" />
+                <input type="text" v-model="currentProfile.color" class="form-control" placeholder="#3498db" />
+              </div>
+            </div>
 
             <div class="form-group">
               <label>优先级 Priority (1-100, 越大越前)</label>
@@ -256,6 +271,8 @@ const getEmptyProfile = () => ({
   coil_width: 1000,
   rib_height: 50,
   pitch: 410,
+  surface: 'ppgi',
+  color: '#3498db',
   sort_order: 0,
   category_id: 0,
   image_url: ''
@@ -447,7 +464,10 @@ const selectedAiImages = ref([])
 
 const generatePrompt = () => {
   const p = currentProfile.value
-  let surfaceStr = 'silver metallic finish, highly detailed smooth texture'
+  let surfaceStr = ''
+  if (p.surface === 'gi') surfaceStr = 'galvanized silver metallic finish with visible zinc spangle crystal texture'
+  else if (p.surface === 'gl') surfaceStr = 'galvalume silver metallic finish, smooth matte texture'
+  else surfaceStr = `${p.color || 'dark blue-gray'} PPGI coated metallic finish`
 
   let typeStr = p.profile_type || 'trapezoidal'
   if (typeStr === 'corrugated') typeStr = 'corrugated steel roofing sheet panel with sine-wave corrugations'

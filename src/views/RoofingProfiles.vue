@@ -77,8 +77,23 @@
                   <span class="spec-value">{{ profile.pitch }} mm</span>
                 </div>
               </div>
-
-
+              
+              <!-- Column 3: Surface Controls (Far Right) -->
+              <div class="spec-column surface-col" v-if="!profile.image_url">
+                <span class="spec-label">Surface</span>
+                <select v-model="profile.current_surface" class="surface-select" @change="updateProfileSurface(profile)">
+                  <option value="ppgi">PPGI / PPGL</option>
+                  <option value="gi">GI (Spangle)</option>
+                  <option value="gl">GL (Galvalume)</option>
+                </select>
+                <div class="color-input-wrapper" v-if="profile.current_surface === 'ppgi'" style="margin-top: 8px;">
+                  <input type="text" v-model="profile.ral_input" class="ral-input" placeholder="e.g. RAL 9016" @input="updateProfileColor(profile)" />
+                  <span class="color-preview" :style="{ backgroundColor: profile.current_color }"></span>
+                </div>
+              </div>
+              <div class="spec-column surface-col" v-else>
+                <!-- Empty placeholder for images -->
+              </div>
             </div>
           </div>
         </div>
@@ -104,6 +119,44 @@ const filteredProfiles = computed(() => {
   if (activeCategory.value === 0) return profiles.value
   return profiles.value.filter(p => p.category_id === activeCategory.value)
 })
+
+const updateProfileSurface = (profile) => {
+  profile.surface = profile.current_surface // Sync to generator prop
+  if (profile.current_surface !== 'ppgi') {
+    profile.color = '' // Clear color for GI/GL
+  } else {
+    updateProfileColor(profile) // Re-apply RAL color
+  }
+}
+
+const updateProfileColor = (profile) => {
+  const code = profile.ral_input?.trim() || ''
+  if (!code) {
+    profile.current_color = profile.default_color || '#1e40af'
+    profile.color = profile.current_color
+    return
+  }
+  if (code.startsWith('#') && (code.length === 4 || code.length === 7)) {
+    profile.current_color = code
+    profile.color = code
+    return
+  }
+  
+  // Normalize input: uppercase and remove spaces and 'RAL' prefix
+  const normalizedInput = code.toUpperCase().replace(/^RAL\s*/, '').replace(/\s+/g, '')
+
+  // Try to find the RAL code in our dictionary
+  const ralObj = ralColors.value.find(r => {
+    if (!r.code) return false
+    const rCode = r.code.toUpperCase().replace(/^RAL\s*/, '').replace(/\s+/g, '')
+    return rCode === normalizedInput
+  })
+  
+  if (ralObj) {
+    profile.current_color = ralObj.hex
+    profile.color = ralObj.hex
+  }
+}
 
 
 onMounted(async () => {
@@ -213,7 +266,7 @@ onMounted(async () => {
 
 .specs-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   padding: var(--spacing-sm) var(--spacing-md);
   gap: var(--spacing-sm);
   background: #f8fafc;
