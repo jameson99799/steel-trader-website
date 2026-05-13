@@ -47,9 +47,7 @@
               <span class="profile-type">{{ profile.profile_type }}</span>
             </div>
             <div class="profile-drawing">
-              <!-- If an image URL exists, show image. Otherwise show 3D Vector -->
-              <img v-if="profile.image_url" :src="profile.image_url" :alt="profile.model" style="width:100%; height:auto; max-height: 250px; object-fit:contain;" />
-              <RoofingProfileGenerator v-else :profile="profile" width="100%" height="auto" style="min-height:220px;" :showDimensions="true" />
+              <RoofingProfileGenerator :profile="profile" width="100%" height="auto" style="min-height:220px;" :showDimensions="true" />
             </div>
 
             <!-- Integrated Specs Grid -->

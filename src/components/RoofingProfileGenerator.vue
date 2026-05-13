@@ -1,7 +1,7 @@
 <template>
-  <div class="profile-3d-container" :style="{ width: width || '100%', height: height || '100%' }">
+  <div class="profile-3d-container" :style="{ width: width || '100%', height: height || '100%', flexDirection: 'column' }">
     <img v-if="profile.image_url" :src="profile.image_url" class="real-image" />
-    <svg v-else :viewBox="dynamicViewBox" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%;">
+    <svg :viewBox="dynamicViewBox" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%;">
       <defs>
         <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
           <feDropShadow dx="0" dy="25" stdDeviation="15" flood-color="#000000" flood-opacity="0.25" />
@@ -9,7 +9,7 @@
       </defs>
 
       <!-- 3D Shape with Shadow -->
-      <g filter="url(#shadow)">
+      <g filter="url(#shadow)" v-if="!profile.image_url">
         <polygon 
           v-for="(poly, i) in polygons" 
           :key="i" 
@@ -26,7 +26,7 @@
       <!-- Dimensions Layer -->
       <g v-if="showDimensions">
         <!-- Coil Width (Top, Above 3D) -->
-        <g>
+        <g v-if="!profile.image_url">
           <text :x="startX + (scaledPitch * periods)/2 + depthX/2" :y="baseY - scaledHeight + depthY - 60" text-anchor="middle" fill="#1e293b" font-size="36" font-weight="bold">{{ profile.coil_width }}mm</text>
           <text :x="startX + (scaledPitch * periods)/2 + depthX/2" :y="baseY - scaledHeight + depthY - 30" text-anchor="middle" fill="#64748b" font-size="20">Coil Width / 展开宽度</text>
           
@@ -109,7 +109,7 @@ const periods = computed(() => props.profile.profile_type === 'standing_seam' ? 
 
 const dynamicViewBox = computed(() => {
   const minX = startX - 100;
-  const minY = baseY - scaledHeight.value + depthY - (props.showDimensions ? 120 : 40); 
+  const minY = props.profile.image_url ? baseY + 20 : (baseY - scaledHeight.value + depthY - (props.showDimensions ? 120 : 40)); 
   const maxX = startX + (scaledPitch.value * periods.value) + depthX + 150;
   
   let maxY = baseY + 40;
