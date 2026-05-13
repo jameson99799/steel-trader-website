@@ -1,230 +1,300 @@
 <template>
-  <div class="profile-render-wrapper">
-    <!-- 3D Rendering Image or Uploaded Real Image -->
-    <div class="render-3d" :style="containerStyle">
-      <img v-if="profile.image_url" :src="profile.image_url" class="real-image" />
-      <canvas v-else ref="canvasRef" class="render-canvas"></canvas>
-    </div>
+  <div class="profile-3d-container" :style="{ width: width || '100%', height: height || '100%' }">
+    <img v-if="profile.image_url" :src="profile.image_url" class="real-image" />
+    <svg v-else :viewBox="dynamicViewBox" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%;">
+      <defs>
+        <!-- GI (Galvanized) Texture: Large crystalline spangles -->
+        <filter id="gi-texture" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" result="noise" />
+          <feColorMatrix type="saturate" values="0" in="noise" result="gray" />
+          <feComponentTransfer in="gray" result="softNoise">
+            <feFuncA type="linear" slope="0.3" />
+          </feComponentTransfer>
+          <feBlend mode="overlay" in="softNoise" in2="SourceGraphic" />
+        </filter>
+        <!-- GL (Galvalume) Texture: Fine, smooth metallic grain -->
+        <filter id="gl-texture" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.15" numOctaves="2" result="noise" />
+          <feColorMatrix type="saturate" values="0" in="noise" result="gray" />
+          <feComponentTransfer in="gray" result="softNoise">
+            <feFuncA type="linear" slope="0.15" />
+          </feComponentTransfer>
+          <feBlend mode="overlay" in="softNoise" in2="SourceGraphic" />
+        </filter>
+      </defs>
 
-    <!-- 2D Dimensions (SVG only for the technical drawing) -->
-    <div v-if="showDimensions" class="dimensions-section">
-      <div class="dim-title">PROFILE &amp; DIMENSIONS</div>
-      <svg :viewBox="dimViewBox" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" class="dim-svg">
-        <!-- 2D profile line -->
-        <polyline :points="profileLine" fill="none" stroke="#1e293b" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+      <g :filter="getTextureFilter()">
+        <!-- Surface Polygons -->
+        <polygon 
+          v-for="(poly, i) in polygons" 
+          :key="i" 
+          :points="poly.points" 
+          :fill="poly.fill" 
+          :stroke="poly.stroke || poly.fill" 
+          stroke-width="0.5" 
+          stroke-linejoin="round" 
+        />
+      </g>
+      
+      <!-- Front Edge Profile Line -->
+      <polyline :points="frontPath" fill="none" stroke="#222" stroke-width="2" stroke-linejoin="round" />
+      
+      <!-- 2D Cross Section & Dimensions (Separate from 3D) -->
+      <g v-if="showDimensions" transform="translate(0, 200)">
+        <!-- 2D Title -->
+        <text :x="startX" :y="baseY - scaledHeight - 90" fill="#1e293b" font-size="32" font-weight="bold" letter-spacing="1">PROFILE &amp; DIMENSIONS</text>
+        <path :d="`M ${startX},${baseY - scaledHeight - 75} L ${startX + (scaledPitch * 3)},${baseY - scaledHeight - 75}`" stroke="#cbd5e1" stroke-width="2" />
 
-        <!-- Rib Height (right side) -->
-        <line :x1="dX+dW+35" :y1="dBY" :x2="dX+dW+35" :y2="dBY-dH" stroke="#64748b" stroke-width="1.5"/>
-        <line :x1="dX+dW+15" :y1="dBY" :x2="dX+dW+50" :y2="dBY" stroke="#94a3b8"/>
-        <line :x1="dX+dW+15" :y1="dBY-dH" :x2="dX+dW+50" :y2="dBY-dH" stroke="#94a3b8"/>
-        <polygon :points="`${dX+dW+30},${dBY-8} ${dX+dW+40},${dBY-8} ${dX+dW+35},${dBY}`" fill="#64748b"/>
-        <polygon :points="`${dX+dW+30},${dBY-dH+8} ${dX+dW+40},${dBY-dH+8} ${dX+dW+35},${dBY-dH}`" fill="#64748b"/>
-        <text :x="dX+dW+58" :y="dBY-dH/2+7" fill="#334155" font-size="22" font-weight="600" font-family="Arial,sans-serif">{{ profile.rib_height }}mm</text>
-
-        <!-- Pitch (top) -->
+        <!-- The 2D Profile Line -->
+        <polyline :points="frontPath" fill="none" stroke="#0f172a" stroke-width="4" stroke-linejoin="round" />
+        
+        <!-- Rib Height (Left side) -->
+        <path :d="`M ${startX - 50},${baseY} L ${startX - 50},${baseY - scaledHeight}`" stroke="#64748b" stroke-width="2" />
+        <!-- Arrows for Rib Height -->
+        <polygon :points="`${startX - 55},${baseY - 10} ${startX - 45},${baseY - 10} ${startX - 50},${baseY}`" fill="#64748b" />
+        <polygon :points="`${startX - 55},${baseY - scaledHeight + 10} ${startX - 45},${baseY - scaledHeight + 10} ${startX - 50},${baseY - scaledHeight}`" fill="#64748b" />
+        <!-- Guide lines for Rib Height -->
+        <path :d="`M ${startX - 65},${baseY} L ${startX},${baseY}`" stroke="#94a3b8" stroke-dasharray="4" />
+        <path :d="`M ${startX - 65},${baseY - scaledHeight} L ${startX + 50},${baseY - scaledHeight}`" stroke="#94a3b8" stroke-dasharray="4" />
+        <text :x="startX - 75" :y="baseY - scaledHeight/2 + 10" text-anchor="end" fill="#334155" font-size="28" font-weight="600">{{ profile.rib_height }}mm</text>
+        
+        <!-- Pitch (Top) -->
         <g v-if="profile.pitch">
-          <line :x1="dX" :y1="dBY-dH-32" :x2="dX+dP" :y2="dBY-dH-32" stroke="#64748b" stroke-width="1.5"/>
-          <line :x1="dX" :y1="dBY-dH-10" :x2="dX" :y2="dBY-dH-42" stroke="#94a3b8"/>
-          <line :x1="dX+dP" :y1="dBY-dH-10" :x2="dX+dP" :y2="dBY-dH-42" stroke="#94a3b8"/>
-          <polygon :points="`${dX+8},${dBY-dH-37} ${dX+8},${dBY-dH-27} ${dX},${dBY-dH-32}`" fill="#64748b"/>
-          <polygon :points="`${dX+dP-8},${dBY-dH-37} ${dX+dP-8},${dBY-dH-27} ${dX+dP},${dBY-dH-32}`" fill="#64748b"/>
-          <text :x="dX+dP/2" :y="dBY-dH-48" text-anchor="middle" fill="#334155" font-size="22" font-weight="600" font-family="Arial,sans-serif">{{ profile.pitch }}mm</text>
+          <path :d="`M ${startX},${baseY - scaledHeight - 35} L ${startX + scaledPitch},${baseY - scaledHeight - 35}`" stroke="#64748b" stroke-width="2" />
+          <path :d="`M ${startX},${baseY - scaledHeight} L ${startX},${baseY - scaledHeight - 45}`" stroke="#94a3b8" />
+          <path :d="`M ${startX + scaledPitch},${baseY - scaledHeight} L ${startX + scaledPitch},${baseY - scaledHeight - 45}`" stroke="#94a3b8" />
+          <!-- Arrows for Pitch -->
+          <polygon :points="`${startX + 10},${baseY - scaledHeight - 40} ${startX + 10},${baseY - scaledHeight - 30} ${startX},${baseY - scaledHeight - 35}`" fill="#64748b" />
+          <polygon :points="`${startX + scaledPitch - 10},${baseY - scaledHeight - 40} ${startX + scaledPitch - 10},${baseY - scaledHeight - 30} ${startX + scaledPitch},${baseY - scaledHeight - 35}`" fill="#64748b" />
+          <text :x="startX + scaledPitch/2" :y="baseY - scaledHeight - 50" text-anchor="middle" fill="#334155" font-size="28" font-weight="600">{{ profile.pitch }}mm</text>
         </g>
 
-        <!-- Effective Coverage (bottom) -->
-        <line :x1="dX" :y1="dBY+42" :x2="dX+dW" :y2="dBY+42" stroke="#1e3a5f" stroke-width="1.5"/>
-        <line :x1="dX" :y1="dBY+8" :x2="dX" :y2="dBY+50" stroke="#94a3b8"/>
-        <line :x1="dX+dW" :y1="dBY+8" :x2="dX+dW" :y2="dBY+50" stroke="#94a3b8"/>
-        <polygon :points="`${dX+10},${dBY+37} ${dX+10},${dBY+47} ${dX},${dBY+42}`" fill="#1e3a5f"/>
-        <polygon :points="`${dX+dW-10},${dBY+37} ${dX+dW-10},${dBY+47} ${dX+dW},${dBY+42}`" fill="#1e3a5f"/>
-        <text :x="dX+dW/2" :y="dBY+72" text-anchor="middle" fill="#0f172a" font-size="26" font-weight="700" font-family="Arial,sans-serif">Effective Coverage {{ profile.effective_width }}mm</text>
-        <text :x="dX+dW/2" :y="dBY+100" text-anchor="middle" fill="#64748b" font-size="20" font-family="Arial,sans-serif">Overall Width (Coil) {{ profile.coil_width }}mm</text>
-      </svg>
-    </div>
+        <!-- Effective Width / Cover Width (Bottom) -->
+        <path :d="`M ${startX},${baseY + 60} L ${startX + (scaledPitch * 3)},${baseY + 60}`" stroke="#64748b" stroke-width="2" />
+        <path :d="`M ${startX},${baseY} L ${startX},${baseY + 70}`" stroke="#94a3b8" />
+        <path :d="`M ${startX + (scaledPitch * 3)},${baseY} L ${startX + (scaledPitch * 3)},${baseY + 70}`" stroke="#94a3b8" />
+        <!-- Arrows for Effective Width -->
+        <polygon :points="`${startX + 15},${baseY + 55} ${startX + 15},${baseY + 65} ${startX},${baseY + 60}`" fill="#64748b" />
+        <polygon :points="`${startX + (scaledPitch * 3) - 15},${baseY + 55} ${startX + (scaledPitch * 3) - 15},${baseY + 65} ${startX + (scaledPitch * 3)},${baseY + 60}`" fill="#64748b" />
+        <text :x="startX + (scaledPitch * 1.5)" :y="baseY + 110" text-anchor="middle" fill="#1e293b" font-size="36" font-weight="bold">Effective Coverage {{ profile.effective_width }}mm</text>
+      </g>
+    </svg>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted, nextTick } from 'vue'
+import { computed } from 'vue'
 
 const props = defineProps({
-  profile:        { type: Object,  required: true },
-  width:          String,
-  height:         String,
+  profile: {
+    type: Object,
+    required: true,
+    // Expected: profile_type, effective_width, coil_width, rib_height, pitch, color, surface
+  },
+  width: String,
+  height: String,
   showDimensions: { type: Boolean, default: false }
 })
 
-// ── 3D image mapping ──────────────────────────────────────────────────────
-const profileImageMap = {
-  trapezoidal:   '/textures/profile-trapezoidal.png',
-  wall_panel:    '/textures/profile-trapezoidal.png',
-  corrugated:    '/textures/profile-corrugated.png',
-  standing_seam: '/textures/profile-standing-seam.png',
-  glazed_tile:   '/textures/profile-glazed-tile.png',
+const viewWidth = 1000
+const viewHeight = 400
+
+const startX = 100
+const baseY = 320
+const depthX = 150
+const depthY = -120
+
+const dynamicViewBox = computed(() => {
+  const minX = 0;
+  const minY = baseY - scaledHeight.value + depthY - 50; 
+  const maxX = startX + (scaledPitch.value * 4) + depthX + 50;
+  
+  let maxY = baseY + 20;
+  if (props.showDimensions) {
+    maxY = baseY + 350; // extra space for translated 2D section
+  }
+  
+  const width = maxX - minX;
+  const height = maxY - minY;
+  return `${minX} ${minY} ${width} ${height}`;
+})
+
+// Scale the physical dimensions to the viewBox
+const scaledPitch = computed(() => {
+  const p = Number(props.profile.pitch) || 200
+  // Try to fit 3-4 periods in the viewWidth
+  return Math.min(250, Math.max(100, (viewWidth - 300) / 3)) 
+})
+
+const scaledHeight = computed(() => {
+  const h = Number(props.profile.rib_height) || 30
+  const p = Number(props.profile.pitch) || 200
+  // Maintain aspect ratio relative to pitch
+  return (h / p) * scaledPitch.value
+})
+
+const getTextureFilter = () => {
+  const s = props.profile.current_surface || props.profile.surface || 'ppgi'
+  if (s === 'gi') return 'url(#gi-texture)'
+  if (s === 'gl') return 'url(#gl-texture)'
+  return ''
 }
 
-const render3dSrc = computed(() => {
-  const type = props.profile.profile_type || 'trapezoidal'
-  return profileImageMap[type] || profileImageMap.trapezoidal
-})
-
-const isColorCoated = computed(() => {
-  const s = (props.profile.current_surface || props.profile.surface || '').toLowerCase()
-  return s === 'ppgi' || s === 'ppgl'
-})
-
-const profileColor = computed(() => {
+const baseColor = computed(() => {
+  const s = props.profile.current_surface || props.profile.surface || 'ppgi'
+  if (s === 'gi') return '#e0e5e9'
+  if (s === 'gl') return '#d1d8dd'
   return props.profile.current_color || props.profile.color || '#3498db'
 })
 
-const containerStyle = computed(() => {
-  return {
-    position: 'relative',
-    backgroundColor: '#fff'
-  }
-})
-
-// ── Canvas Background Removal ─────────────────────────────────────────────
-const canvasRef = ref(null)
-
-const processImage = () => {
-  const src = render3dSrc.value
-  if (!src || !canvasRef.value) return
-
-  const img = new Image()
-  img.crossOrigin = 'Anonymous'
-  img.onload = () => {
-    const canvas = canvasRef.value
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    canvas.width = img.width
-    canvas.height = img.height
-
-    ctx.drawImage(img, 0, 0)
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    const data = imgData.data
-
-    // Make near-white pixels transparent
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i], g = data[i+1], b = data[i+2]
-      if (r > 240 && g > 240 && b > 240) {
-        // Soft edge for anti-aliasing
-        const avg = (r + g + b) / 3
-        const alpha = Math.max(0, 255 - (avg - 240) * 17) // 240->255, 255->0
-        data[i+3] = alpha
-      }
-    }
-    ctx.putImageData(imgData, 0, 0)
-  }
-  img.src = src
+// Generate color variations for 3D lighting
+const shadeColor = (color, percent) => {
+  let R = parseInt(color.substring(1,3),16)
+  let G = parseInt(color.substring(3,5),16)
+  let B = parseInt(color.substring(5,7),16)
+  R = parseInt(R * (100 + percent) / 100)
+  G = parseInt(G * (100 + percent) / 100)
+  B = parseInt(B * (100 + percent) / 100)
+  R = (R<255)?R:255; G = (G<255)?G:255; B = (B<255)?B:255
+  R = (R>0)?R:0; G = (G>0)?G:0; B = (B>0)?B:0
+  let RR = ((R.toString(16).length==1)?"0"+R.toString(16):R.toString(16))
+  let GG = ((G.toString(16).length==1)?"0"+G.toString(16):G.toString(16))
+  let BB = ((B.toString(16).length==1)?"0"+B.toString(16):B.toString(16))
+  return "#"+RR+GG+BB
 }
 
-watch(render3dSrc, processImage)
-onMounted(() => {
-  nextTick(processImage)
+const colors = computed(() => {
+  const c = baseColor.value.startsWith('#') ? baseColor.value : '#3498db'
+  return {
+    crest: shadeColor(c, 20),      // Top faces get light
+    trough: shadeColor(c, -10),    // Bottom faces get slight shadow
+    leftSlope: shadeColor(c, 40),  // Light source from top-left
+    rightSlope: shadeColor(c, -30) // Shadow side
+  }
 })
 
-// ── 2D Dimension constants ────────────────────────────────────────────────
-const PERIODS = 5
-const dX   = 80       // start X
-const dBY  = 200      // base Y (bottom of profile)
-
-const dP = computed(() => {
-  // Scale pitch to fit nicely
-  return Math.min(160, Math.max(70, 700 / PERIODS))
-})
-
-const dH = computed(() => {
-  const h = Number(props.profile.rib_height) || 30
-  const p = Number(props.profile.pitch) || 200
-  return Math.max(18, (h / p) * dP.value * 1.4)
-})
-
-const dW = computed(() => dP.value * PERIODS)
-
-// ── Build 2D profile line ─────────────────────────────────────────────────
-const profileLine = computed(() => {
+// Generate the 2D front points
+const frontPoints = computed(() => {
   const pts = []
-  const p = dP.value, h = dH.value
+  const periods = 4
+  const p = scaledPitch.value
+  const h = scaledHeight.value
   const type = props.profile.profile_type || 'trapezoidal'
-
-  if (type === 'corrugated') {
-    const segs = 20
-    for (let i = 0; i <= PERIODS * segs; i++) {
-      const t = i / segs
-      const x = dX + t * p
-      const y = dBY - h/2 + Math.cos(t * Math.PI * 2) * (h/2)
-      pts.push(`${x},${y}`)
+  
+  if (type === 'trapezoidal' || type === 'wall_panel') {
+    // Standard box profile
+    const crestW = p * 0.25
+    const slopeW = p * 0.15
+    const troughW = p * 0.45
+    
+    let x = startX
+    pts.push({ x, y: baseY, type: 'trough' })
+    for (let i = 0; i < periods; i++) {
+      x += troughW
+      pts.push({ x, y: baseY, type: 'leftSlope' })
+      x += slopeW
+      pts.push({ x, y: baseY - h, type: 'crest' })
+      x += crestW
+      pts.push({ x, y: baseY - h, type: 'rightSlope' })
+      x += slopeW
+      pts.push({ x, y: baseY, type: 'trough' })
+    }
+  } else if (type === 'corrugated') {
+    // Sine wave approximation with multiple segments
+    const segmentsPerPeriod = 12
+    let x = startX
+    for (let i = 0; i <= periods * segmentsPerPeriod; i++) {
+      const t = i / segmentsPerPeriod
+      const currentX = startX + t * p
+      // Cosine from 0 to 1, mapped to 0 to h
+      const currentY = baseY - (h / 2) + (Math.cos(t * Math.PI * 2) * (h / 2))
+      // Determine slope direction for lighting
+      let faceType = 'crest' // top
+      const modT = t % 1
+      if (modT > 0.1 && modT < 0.4) faceType = 'rightSlope'
+      else if (modT >= 0.4 && modT < 0.6) faceType = 'trough'
+      else if (modT >= 0.6 && modT < 0.9) faceType = 'leftSlope'
+      
+      pts.push({ x: currentX, y: currentY, type: faceType })
     }
   } else if (type === 'standing_seam') {
-    const flatW = p * 0.78, seamW = p * 0.22
-    let x = dX
-    pts.push(`${x},${dBY}`)
-    for (let i = 0; i < PERIODS; i++) {
-      x += flatW; pts.push(`${x},${dBY}`)
-      pts.push(`${x},${dBY - h}`)
-      x += seamW; pts.push(`${x},${dBY - h}`)
-      pts.push(`${x},${dBY}`)
+    const flatW = p * 0.8
+    const seamW = p * 0.2
+    let x = startX
+    pts.push({ x, y: baseY, type: 'trough' })
+    for (let i = 0; i < periods; i++) {
+      x += flatW
+      pts.push({ x, y: baseY, type: 'leftSlope' })
+      pts.push({ x: x, y: baseY - h, type: 'crest' })
+      x += seamW
+      pts.push({ x: x, y: baseY - h, type: 'rightSlope' })
+      pts.push({ x: x, y: baseY, type: 'trough' })
     }
   } else if (type === 'glazed_tile') {
-    const stepW = p * 0.72, dropW = p * 0.28
-    let x = dX
-    for (let i = 0; i < PERIODS; i++) {
-      for (let j = 0; j <= 8; j++) {
-        const t = j/8
-        pts.push(`${x + t*stepW},${dBY - Math.sin(t*Math.PI)*h*0.35}`)
+    // Like corrugated but with a flat step
+    const stepW = p * 0.7
+    const dropW = p * 0.3
+    let x = startX
+    for (let i = 0; i < periods; i++) {
+      for(let j=0; j<=5; j++){
+        const t = j/5
+        pts.push({ x: x + t*stepW, y: baseY - Math.sin(t*Math.PI)*h*0.3, type: 'crest' })
       }
-      x += stepW; pts.push(`${x},${dBY}`); x += dropW
+      x += stepW
+      pts.push({ x, y: baseY, type: 'rightSlope' })
+      x += dropW
     }
   } else {
-    // trapezoidal / wall_panel / default
-    const tW = p * 0.44, slW = p * 0.14, cW = p * 0.28
-    let x = dX
-    pts.push(`${x},${dBY}`)
-    for (let i = 0; i < PERIODS; i++) {
-      x += tW;  pts.push(`${x},${dBY}`)
-      x += slW; pts.push(`${x},${dBY - h}`)
-      x += cW;  pts.push(`${x},${dBY - h}`)
-      x += slW; pts.push(`${x},${dBY}`)
-    }
+    // Fallback flat
+    pts.push({ x: startX, y: baseY, type: 'trough' })
+    pts.push({ x: startX + p * periods, y: baseY, type: 'trough' })
   }
-  return pts.join(' ')
+  
+  return pts
 })
 
-// ── SVG viewBox ───────────────────────────────────────────────────────────
-const dimViewBox = computed(() => {
-  const minX = 0
-  const minY = dBY - dH.value - 70
-  const maxX = dX + dW.value + 130
-  const maxY = dBY + 120
-  return `${minX} ${minY} ${maxX - minX} ${maxY - minY}`
+// Create 3D polygons by extruding adjacent points
+const polygons = computed(() => {
+  const polys = []
+  const pts = frontPoints.value
+  const c = colors.value
+  
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p1 = pts[i]
+    const p2 = pts[i+1]
+    
+    // Select color based on the face type
+    let fill = c[p1.type] || c.crest
+    
+    // Front face points
+    const x1 = p1.x, y1 = p1.y
+    const x2 = p2.x, y2 = p2.y
+    // Back face points
+    const bx1 = x1 + depthX, by1 = y1 + depthY
+    const bx2 = x2 + depthX, by2 = y2 + depthY
+    
+    polys.push({
+      points: `${x1},${y1} ${x2},${y2} ${bx2},${by2} ${bx1},${by1}`,
+      fill: fill,
+      stroke: fill
+    })
+  }
+  return polys
+})
+
+// The thick front line
+const frontPath = computed(() => {
+  return frontPoints.value.map(p => `${p.x},${p.y}`).join(' ')
 })
 </script>
 
 <style scoped>
-.profile-render-wrapper {
+.profile-3d-container {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  width: 100%;
-}
-
-.render-3d {
-  width: 100%;
-  display: flex;
   justify-content: center;
-  align-items: center;
-  padding: 12px 8px 0;
+  overflow: hidden;
 }
-
-.render-canvas {
-  width: 100%;
-  max-height: 220px;
-  object-fit: contain;
-  position: relative;
-  z-index: 2;
-}
-
 .real-image {
   width: 100%;
   height: auto;
@@ -232,26 +302,5 @@ const dimViewBox = computed(() => {
   object-fit: cover;
   border-radius: 8px;
   z-index: 2;
-}
-
-.dimensions-section {
-  width: 100%;
-  border-top: 1px solid #e8ecf0;
-  background: #fff;
-  padding: 8px 8px 4px;
-}
-
-.dim-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: #0f172a;
-  letter-spacing: 1px;
-  margin-bottom: 4px;
-  font-family: Arial, sans-serif;
-}
-
-.dim-svg {
-  width: 100%;
-  max-height: 180px;
 }
 </style>
