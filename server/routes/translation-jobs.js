@@ -105,12 +105,27 @@ async function runJobInBackground(jobId) {
         jobLog(jobId, 'info', `▶️ 任务已恢复，继续翻译剩余 ${pendingItems.length} 个项目...`)
     } else {
         let allItems = [] // { type, id, itemName, targetLang }
-        if (isRetry && explicitItems.length > 0) {
-            // Retry mode: use explicit items list from parent job
+        if (explicitItems && explicitItems.length > 0) {
+            // Explicit mode (either retry or user selected granular items)
             for (const ei of explicitItems) {
-                allItems.push(ei)
+                // If it's a retry item it might already have targetLang set, otherwise we generate for all langs
+                if (ei.targetLang) {
+                    allItems.push(ei)
+                } else {
+                    for (const lc of langCodes) {
+                        allItems.push({ ...ei, itemName: ei.itemName || `${ei.type}_${ei.id}`, targetLang: lc })
+                    }
+                }
             }
-            jobLog(jobId, 'info', `🔄 重试模式: ${allItems.length} 个指定失败项目`)
+            jobLog(jobId, 'info', `🎯 精确指定模式: ${explicitItems.length} 个项目, 共计 ${allItems.length} 个翻译项`)
+            // Deduplicate
+            const seen = new Set()
+            allItems = allItems.filter(item => {
+                const k = `${item.targetLang}_${item.type}_${item.id}`
+                if (seen.has(k)) return false
+                seen.add(k)
+                return true
+            })
         } else {
             // Normal mode: collect from pages
             jobLog(jobId, 'info', `📋 正在收集翻译内容 (${pages.join(', ')})...`)
@@ -428,9 +443,9 @@ router.get('/:id/logs-since/:logId', authMiddleware, (req, res) => {
 // POST /translation-jobs — create & start a new background job
 router.post('/', authMiddleware, async (req, res) => {
     try {
-        const { lang, pages, concurrency } = req.body
+        const { lang, pages, concurrency, explicitItems } = req.body
         if (!lang) return res.status(400).json({ error: 'lang is required' })
-        if (!pages || !pages.length) return res.status(400).json({ error: 'pages is required' })
+        if ((!pages || !pages.length) && (!explicitItems || !explicitItems.length)) return res.status(400).json({ error: 'pages or explicitItems is required' })
 
         // Only allow one running job at a time
         const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('running', 'pausing', 'aborting')")
@@ -442,8 +457,8 @@ router.post('/', authMiddleware, async (req, res) => {
         }
 
         const result = run(
-            `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items, concurrency) VALUES ('pending', ?, ?, '[]', ?)`,
-            [lang, JSON.stringify(pages), concurrency || 1]
+            `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items, concurrency) VALUES ('pending', ?, ?, ?, ?)`,
+            [lang, JSON.stringify(pages || []), JSON.stringify(explicitItems || []), concurrency || 1]
         )
         const jobId = result.lastInsertRowid
 
