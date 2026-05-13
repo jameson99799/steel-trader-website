@@ -1592,7 +1592,7 @@ function toggleExplicitItem(id) {
 function confirmExplicitSelection() {
   const selected = gtSelectedIds.value.map(id => {
     const item = gtAllItems.value.find(i => i.id === id) || {}
-    const itemName = item.name_en || item.title_en || item.name || item.title || `${explicitType.value}_${id}`
+    const itemName = item.name_en || item.title_en || `${explicitType.value}_${id}`
     return { type: explicitType.value, id, itemName }
   })
   explicitItems.value = explicitItems.value.filter(i => i.type !== explicitType.value)
