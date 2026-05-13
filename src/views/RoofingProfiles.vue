@@ -142,13 +142,13 @@ const updateProfileColor = (profile) => {
     return
   }
   
-  // Normalize input: uppercase and remove spaces and 'RAL' prefix
-  const normalizedInput = code.toUpperCase().replace(/^RAL\s*/, '').replace(/\s+/g, '')
+  // Normalize input: remove all non-alphanumeric chars and remove 'RAL'
+  const normalizedInput = String(code).toUpperCase().replace(/[^A-Z0-9]/g, '').replace('RAL', '')
 
   // Try to find the RAL code in our dictionary
   const ralObj = ralColors.value.find(r => {
     if (!r.code) return false
-    const rCode = r.code.toUpperCase().replace(/^RAL\s*/, '').replace(/\s+/g, '')
+    const rCode = String(r.code).toUpperCase().replace(/[^A-Z0-9]/g, '').replace('RAL', '')
     return rCode === normalizedInput
   })
   

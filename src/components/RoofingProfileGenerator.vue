@@ -105,13 +105,14 @@ const depthX = 150
 const depthY = -120
 
 const dynamicViewBox = computed(() => {
-  const minX = 0;
-  const minY = baseY - scaledHeight.value + depthY - 50; 
-  const maxX = startX + (scaledPitch.value * 4) + depthX + 50;
+  const periods = props.profile.profile_type === 'standing_seam' ? 3 : 4;
+  const minX = props.showDimensions ? startX - 90 : startX - 20;
+  const minY = baseY - scaledHeight.value + depthY - 20; 
+  const maxX = startX + (scaledPitch.value * periods) + depthX + 40;
   
-  let maxY = baseY + 20;
+  let maxY = baseY + 40;
   if (props.showDimensions) {
-    maxY = baseY + 350; // extra space for translated 2D section
+    maxY = baseY + 140; // extra space for translated 2D section
   }
   
   const width = maxX - minX;
