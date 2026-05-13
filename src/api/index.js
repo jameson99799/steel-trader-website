@@ -282,6 +282,8 @@ export const api = {
   deleteAIChannel: (id) => request(`/ai/channels/${id}`, { method: 'DELETE' }),
   getAIModels: (id) => request(`/ai/channels/${id}/models`),
   testAIChannel: (id) => request(`/ai/channels/${id}/test`, { method: 'POST' }),
+  setAIDefaultChannel: (id) => request(`/ai/channels/${id}/set-default`, { method: 'PUT' }),
+  setAIImageDefaultChannel: (id) => request(`/ai/channels/${id}/set-image-default`, { method: 'PUT' }),
   generateProduct: (data) => request('/ai/generate-product', { method: 'POST', body: JSON.stringify(data) }),
 
   // Roofing Profiles

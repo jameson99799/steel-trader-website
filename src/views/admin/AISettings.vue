@@ -22,20 +22,12 @@
           </thead>
           <tbody>
             <tr v-for="ch in channels" :key="ch.id">
-              <td><strong>{{ ch.name }}</strong></td>
-              <td style="font-size:13px;color:#64748b;">{{ ch.api_url }}</td>
-              <td style="font-size:13px;font-family:monospace;">{{ ch.api_key_display }}</td>
-              <td>
-                <span v-for="m in ch.models" :key="m" class="model-tag">{{ m }}</span>
-                <span v-if="!ch.models.length" style="color:#94a3b8;font-size:13px;">未添加</span>
-              </td>
-              <td>
-                <span v-if="ch.is_default" class="badge badge-success">默认文本</span>
-                <span v-if="ch.is_image_default" class="badge badge-info" style="margin-left: 4px;">默认生图</span>
-              </td>
-              <td>
+                            <td>
+                <button class="btn btn-sm btn-outline" style="color:#10b981;border-color:#10b981;" @click="testChannel(ch)">测试</button>
                 <button class="btn btn-sm btn-secondary" @click="editChannel(ch)">编辑</button>
                 <button class="btn btn-sm btn-outline" style="color:#0077b5;border-color:#0077b5;" @click="fetchModels(ch)">获取模型</button>
+                <button class="btn btn-sm btn-outline" style="color:#059669;border-color:#059669;" @click="setDefault(ch)" v-if="!ch.is_default">设为默认文本</button>
+                <button class="btn btn-sm btn-outline" style="color:#d97706;border-color:#f59e0b;" @click="setImageDefault(ch)" v-if="!ch.is_image_default">设为默认生图</button>
                 <button class="btn btn-sm btn-danger" @click="deleteChannel(ch)">删除</button>
               </td>
             </tr>
@@ -164,6 +156,30 @@ async function saveChannel() {
 async function deleteChannel(ch) {
   if (!confirm(`确定删除渠道 "${ch.name}"？`)) return
   try { await api.deleteAIChannel(ch.id); await loadChannels() } catch (e) { alert(e.message) }
+}
+
+async function testChannel(ch) {
+  try {
+    alert('正在测试渠道连通性，请稍候...')
+    const res = await api.testAIChannel(ch.id)
+    alert(`测试成功!\n模型: ${res.model}\n响应耗时: ${res.time_ms}ms\nAPI回复: ${res.reply}`)
+  } catch (e) {
+    alert(`测试失败:\n${e.message}`)
+  }
+}
+
+async function setDefault(ch) {
+  try {
+    await api.setAIDefaultChannel(ch.id)
+    await loadChannels()
+  } catch (e) { alert('设置失败: ' + e.message) }
+}
+
+async function setImageDefault(ch) {
+  try {
+    await api.setAIImageDefaultChannel(ch.id)
+    await loadChannels()
+  } catch (e) { alert('设置失败: ' + e.message) }
 }
 
 async function fetchModels(ch) {
