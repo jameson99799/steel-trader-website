@@ -27,14 +27,16 @@
             <div class="ch-header">
               <div class="ch-name" style="cursor:pointer" @click.stop="toggleChExpanded(ch.id)">
                 <span style="color:#94a3b8;font-size:12px;margin-right:4px">{{ chExpanded[ch.id] ? '▼' : '▶' }}</span>
-                <span class="ch-badge" v-if="ch.is_default">默认渠道</span>
+                <span class="ch-badge" v-if="ch.is_default" style="margin-right: 4px;">默认翻译</span>
+                <span class="ch-badge" v-if="ch.is_image_default" style="background:#e0f2fe;color:#0284c7;">默认生图</span>
                 {{ ch.name }}
                 <span v-if="ch.default_model && !chExpanded[ch.id]" class="model-tag" style="background:#dcfce7;color:#166534;margin-left:8px;font-size:11px">{{ ch.default_model }}</span>
               </div>
               <div class="ch-actions">
                 <button class="btn btn-outline btn-xs" @click="testChannel(ch)" :disabled="ch._testing">🔌 {{ ch._testing ? '测试中...' : '测试' }}</button>
                 <button class="btn btn-outline btn-xs" @click="openChannelDialog(ch)">✏️ 编辑</button>
-                <button class="btn btn-outline btn-xs" @click="setDefaultChannel(ch.id)" v-if="!ch.is_default">⭐ 设为默认</button>
+                <button class="btn btn-outline btn-xs" @click="setDefaultChannel(ch.id)" v-if="!ch.is_default">⭐ 默认翻译</button>
+                <button class="btn btn-outline btn-xs" style="color:#d97706;border-color:#fcd34d;" @click="setImageDefaultChannel(ch.id)" v-if="!ch.is_image_default">🖼️ 默认生图</button>
                 <button class="btn btn-outline btn-xs btn-danger" @click="deleteChannel(ch.id)">🗑️</button>
               </div>
             </div>
@@ -103,8 +105,11 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="checkbox-label">
-            <input type="checkbox" v-model="channelForm.is_default" /> 设为默认渠道（翻译时使用）
+          <label class="checkbox-label" style="display: block;">
+            <input type="checkbox" v-model="channelForm.is_default" /> 设为默认渠道（文本翻译使用）
+          </label>
+          <label class="checkbox-label" style="display: block; margin-top: 8px;">
+            <input type="checkbox" v-model="channelForm.is_image_default" /> 设为默认生图渠道（DALL-E等绘图API使用）
           </label>
         </div>
         <div class="btn-row" style="justify-content:flex-end">
@@ -1090,6 +1095,20 @@ const fetchModels = async () => {
   } finally { fetchingModels.value = false }
 }
 
+async function setDefaultChannel(id) {
+  try {
+    await fetch('/api/ai/channels/' + id + '/set-default', { method: 'PUT', headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') } })
+    await loadChannels()
+  } catch (e) { alert('设为默认失败: ' + e.message) }
+}
+
+async function setImageDefaultChannel(id) {
+  try {
+    await fetch('/api/ai/channels/' + id + '/set-image-default', { method: 'PUT', headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') } })
+    await loadChannels()
+  } catch (e) { alert('设为默认失败: ' + e.message) }
+}
+
 // Channel CRUD Methods
 async function loadChannels() {
   try {
@@ -1111,6 +1130,7 @@ function openChannelDialog(ch = null) {
     channelForm.api_key = ''
     channelForm.models = [...(ch.models || [])]
     channelForm.is_default = !!ch.is_default
+    channelForm.is_image_default = !!ch.is_image_default
     channelForm.default_model = ch.default_model || ''
   } else {
     channelForm.name = ''
@@ -1118,6 +1138,7 @@ function openChannelDialog(ch = null) {
     channelForm.api_key = ''
     channelForm.models = []
     channelForm.is_default = channels.value.length === 0
+    channelForm.is_image_default = channels.value.length === 0
     channelForm.default_model = ''
   }
   showChannelDialog.value = true
@@ -1167,7 +1188,7 @@ async function saveChannel() {
   if (!editingChannel.value && !channelForm.api_key) return alert('请填入 API 密钥')
   savingChannel.value = true
   try {
-    const body = { name: channelForm.name, api_url: channelForm.api_url, models: channelForm.models, is_default: channelForm.is_default, default_model: channelForm.default_model }
+    const body = { name: channelForm.name, api_url: channelForm.api_url, models: channelForm.models, is_default: channelForm.is_default, is_image_default: channelForm.is_image_default, default_model: channelForm.default_model }
     if (channelForm.api_key) body.api_key = channelForm.api_key
     const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') }
     if (editingChannel.value) {
@@ -1190,16 +1211,7 @@ async function deleteChannel(id) {
   } catch (e) { alert('删除失败: ' + e.message) }
 }
 
-async function setDefaultChannel(id) {
-  try {
-    await fetch('/api/ai/channels/' + id, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') },
-      body: JSON.stringify({ is_default: true })
-    })
-    await loadChannels()
-  } catch (e) { alert('设置失败: ' + e.message) }
-}
+
 
 function addLog(type, msg) {
   const now = new Date()

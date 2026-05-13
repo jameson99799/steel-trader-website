@@ -63,7 +63,6 @@ const routes = [
       { path: 'google-index', name: 'AdminGoogleIndex', component: () => import('../views/admin/GoogleIndex.vue') },
       { path: 'settings', name: 'AdminSettings', component: () => import('../views/admin/Settings.vue') },
       { path: 'products/ai/:id', name: 'ProductAI', component: () => import('../views/admin/ProductAI.vue') },
-      { path: 'ai-settings', name: 'AdminAISettings', component: () => import('../views/admin/AISettings.vue') },
       { path: 'mailer', name: 'AdminMailer', component: () => import('../views/admin/Mailer.vue') },
       { path: 'media', name: 'AdminMedia', component: () => import('../views/admin/MediaLibrary.vue') }
     ]
