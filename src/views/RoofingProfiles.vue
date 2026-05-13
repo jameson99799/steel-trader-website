@@ -54,24 +54,7 @@
 
             <!-- Integrated Specs Grid -->
             <div class="specs-grid">
-              <!-- Column 1: Surface Controls -->
-              <div class="spec-column surface-col" v-if="!profile.image_url">
-                <span class="spec-label">Surface</span>
-                <select v-model="profile.current_surface" class="surface-select" @change="updateProfileSurface(profile)">
-                  <option value="ppgi">PPGI / PPGL</option>
-                  <option value="gi">GI (Spangle)</option>
-                  <option value="gl">GL (Galvalume)</option>
-                </select>
-                <div class="color-input-wrapper" v-if="profile.current_surface === 'ppgi'" style="margin-top: 8px;">
-                  <input type="text" v-model="profile.ral_input" class="ral-input" placeholder="RAL (e.g. 9016)" @input="updateProfileColor(profile)" />
-                  <span class="color-preview" :style="{ backgroundColor: profile.current_color }"></span>
-                </div>
-              </div>
-              <div class="spec-column surface-col" v-else>
-                <!-- Empty placeholder for images -->
-              </div>
-
-              <!-- Column 2: Widths -->
+              <!-- Column 1: Widths -->
               <div class="spec-column">
                 <div class="spec-item">
                   <span class="spec-label" style="color: #2ecc71;">Effective Width</span>
@@ -83,7 +66,7 @@
                 </div>
               </div>
 
-              <!-- Column 3: Profile Dimensions -->
+              <!-- Column 2: Profile Dimensions -->
               <div class="spec-column">
                 <div class="spec-item">
                   <span class="spec-label" style="color: #e74c3c;">Rib Height</span>
@@ -93,6 +76,23 @@
                   <span class="spec-label" style="color: #3498db;">Pitch</span>
                   <span class="spec-value">{{ profile.pitch }} mm</span>
                 </div>
+              </div>
+
+              <!-- Column 3: Surface Controls (Far Right) -->
+              <div class="spec-column surface-col" v-if="!profile.image_url">
+                <span class="spec-label">Surface</span>
+                <select v-model="profile.current_surface" class="surface-select" @change="updateProfileSurface(profile)">
+                  <option value="ppgi">PPGI / PPGL</option>
+                  <option value="gi">GI (Spangle)</option>
+                  <option value="gl">GL (Galvalume)</option>
+                </select>
+                <div class="color-input-wrapper" v-if="profile.current_surface === 'ppgi'" style="margin-top: 8px;">
+                  <input type="text" v-model="profile.ral_input" class="ral-input" placeholder="e.g. RAL 9016" @input="updateProfileColor(profile)" />
+                  <span class="color-preview" :style="{ backgroundColor: profile.current_color }"></span>
+                </div>
+              </div>
+              <div class="spec-column surface-col" v-else>
+                <!-- Empty placeholder for images -->
               </div>
             </div>
           </div>
@@ -141,8 +141,17 @@ const updateProfileColor = (profile) => {
     profile.color = code
     return
   }
+  
+  // Normalize input: uppercase and remove spaces and 'RAL' prefix
+  const normalizedInput = code.toUpperCase().replace(/^RAL\s*/, '').replace(/\s+/g, '')
+
   // Try to find the RAL code in our dictionary
-  const ralObj = ralColors.value.find(r => r.code === 'RAL ' + code || r.code === code)
+  const ralObj = ralColors.value.find(r => {
+    if (!r.code) return false
+    const rCode = r.code.toUpperCase().replace(/^RAL\s*/, '').replace(/\s+/g, '')
+    return rCode === normalizedInput
+  })
+  
   if (ralObj) {
     profile.current_color = ralObj.hex
     profile.color = ralObj.hex
@@ -256,7 +265,7 @@ onMounted(async () => {
 
 .specs-grid {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   padding: var(--spacing-lg);
   gap: var(--spacing-md);
   background: #f8fafc;
@@ -269,8 +278,8 @@ onMounted(async () => {
 }
 
 .surface-col {
-  border-right: 1px solid var(--border);
-  padding-right: var(--spacing-md);
+  border-left: 1px solid var(--border);
+  padding-left: var(--spacing-md);
 }
 
 .spec-item {
