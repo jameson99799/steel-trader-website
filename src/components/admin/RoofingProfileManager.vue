@@ -642,4 +642,15 @@ onMounted(() => {
 .ai-img-card:hover .img-overlay {
   bottom: 0;
 }
+
+/* Import image picker grid */
+.import-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; max-height: 400px; overflow-y: auto; }
+.import-item { position: relative; aspect-ratio: 1; border: 2px solid #e2e8f0; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.15s; }
+.import-item img { width: 100%; height: 100%; object-fit: cover; }
+.import-item:hover { border-color: #93c5fd; }
+.import-item.selected { border-color: #7c3aed; }
+.import-item .import-check { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%;
+  background: #7c3aed; color: #fff; font-size: 14px; display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.15s; }
+.import-item.selected .import-check { opacity: 1; }
 </style>
