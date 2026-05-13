@@ -1,25 +1,8 @@
 import express from 'express'
 import { run, getAll, getOne } from '../db.js'
-import { authMiddleware } from './auth.js'
+import { authMiddleware } from '../middleware/auth.js'
 
 const router = express.Router()
-
-// Create table if not exists
-run(`
-CREATE TABLE IF NOT EXISTS roofing_profiles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    model TEXT,
-    profile_type TEXT,
-    effective_width REAL,
-    coil_width REAL,
-    rib_height REAL,
-    pitch REAL,
-    color TEXT,
-    surface TEXT,
-    sort_order INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-)
-`)
 
 // GET all profiles (public)
 router.get('/public', (req, res) => {

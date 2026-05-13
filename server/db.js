@@ -47,6 +47,22 @@ async function initDb() {
   `)
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS roofing_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      model TEXT,
+      profile_type TEXT,
+      effective_width REAL,
+      coil_width REAL,
+      rib_height REAL,
+      pitch REAL,
+      color TEXT,
+      surface TEXT,
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS products (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       category_id INTEGER,
