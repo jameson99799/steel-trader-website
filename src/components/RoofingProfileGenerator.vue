@@ -5,7 +5,7 @@
         <!-- GI (Galvanized) Texture: Large crystalline spangles -->
         <filter id="gi-texture" x="0" y="0" width="100%" height="100%">
           <feTurbulence type="fractalNoise" baseFrequency="0.015 0.02" numOctaves="3" result="noise" />
-          <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 4 -1" in="noise" result="coloredNoise" />
+          <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0 0 0 4 -1" in="noise" result="coloredNoise" />
           <feComponentTransfer in="coloredNoise" result="spangles">
             <feFuncA type="discrete" tableValues="0.4 0.6 0.8 1" />
           </feComponentTransfer>
@@ -14,7 +14,7 @@
         <!-- GL (Galvalume) Texture: Fine, smooth metallic grain -->
         <filter id="gl-texture" x="0" y="0" width="100%" height="100%">
           <feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" result="noise" />
-          <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1.2 0" in="noise" result="coloredNoise" />
+          <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0 0 0 1.2 0" in="noise" result="coloredNoise" />
           <feBlend mode="overlay" in="coloredNoise" in2="SourceGraphic" />
         </filter>
       </defs>
@@ -94,15 +94,17 @@ const scaledHeight = computed(() => {
 })
 
 const getTextureFilter = () => {
-  if (props.profile.surface === 'gi') return 'url(#gi-texture)'
-  if (props.profile.surface === 'gl') return 'url(#gl-texture)'
+  const s = props.profile.current_surface || props.profile.surface || 'ppgi'
+  if (s === 'gi') return 'url(#gi-texture)'
+  if (s === 'gl') return 'url(#gl-texture)'
   return ''
 }
 
 const baseColor = computed(() => {
-  if (props.profile.surface === 'gi') return '#e0e5e9'
-  if (props.profile.surface === 'gl') return '#d1d8dd'
-  return props.profile.color || '#3498db'
+  const s = props.profile.current_surface || props.profile.surface || 'ppgi'
+  if (s === 'gi') return '#e0e5e9'
+  if (s === 'gl') return '#d1d8dd'
+  return props.profile.current_color || props.profile.color || '#3498db'
 })
 
 // Generate color variations for 3D lighting

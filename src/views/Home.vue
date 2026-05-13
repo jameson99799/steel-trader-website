@@ -140,7 +140,7 @@
         
         <div class="home-video-wrapper" v-if="company?.company_video_embed && company?.home_show_video">
           <iframe 
-            :src="company.company_video_embed + (company.about_video_autoplay ? '?autoplay=1&mute=1' : '')" 
+            :src="getYoutubeEmbedUrl(company.company_video_embed, company.about_video_autoplay)" 
             width="100%" 
             height="500" 
             style="border:0; border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); margin-bottom:var(--spacing-2xl);" 
@@ -231,6 +231,27 @@ const featuredProducts = ref([])
 const categories = ref([])
 const pageTexts = ref({})
 const company = ref({})
+
+const getYoutubeEmbedUrl = (url, autoplay) => {
+  if (!url) return '';
+  let videoId = '';
+  if (url.includes('youtube.com/watch?v=')) {
+    videoId = url.split('v=')[1];
+    const ampersandPosition = videoId.indexOf('&');
+    if(ampersandPosition !== -1) videoId = videoId.substring(0, ampersandPosition);
+  } else if (url.includes('youtu.be/')) {
+    videoId = url.split('youtu.be/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
+  } else if (url.includes('youtube.com/embed/')) {
+    videoId = url.split('embed/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
+  } else {
+    return url + (autoplay ? '?autoplay=1&mute=1' : '');
+  }
+  return `https://www.youtube.com/embed/${videoId}${autoplay ? '?autoplay=1&mute=1' : ''}`;
+}
 
 onMounted(async () => {
   try {

@@ -286,7 +286,8 @@ export const api = {
 
   // Roofing Profiles
   getRoofingProfilesPublic: () => cachedGet('/roofing-profiles/public'),
-  getRoofingCategoriesPublic: () => cachedGet('/roofing-profiles/categories/public')
+  getRoofingCategoriesPublic: () => cachedGet('/roofing-profiles/categories/public'),
+  getRalColors: () => cachedGet('/ral-colors')
 }
 
 export default api
