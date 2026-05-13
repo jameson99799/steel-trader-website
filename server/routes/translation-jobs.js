@@ -107,7 +107,25 @@ async function runJobInBackground(jobId) {
         let allItems = [] // { type, id, itemName, targetLang }
         if (explicitItems && explicitItems.length > 0) {
             // Explicit mode (either retry or user selected granular items)
+            const TYPE_TO_PAGE_MAP = {
+                product: 'products', news: 'news', company: 'company',
+                page_text: 'page_texts', category: 'categories', news_category: 'news_categories',
+                hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors'
+            }
+            
             for (const ei of explicitItems) {
+                // Determine item name if missing
+                if (!ei.itemName || ei.itemName === `${ei.type}_${ei.id}`) {
+                    const pageKey = TYPE_TO_PAGE_MAP[ei.type] || ei.type
+                    if (PAGES[pageKey]) {
+                        const pageItems = PAGES[pageKey]()
+                        const match = pageItems.find(x => String(x.id) === String(ei.id))
+                        if (match && match.itemName) {
+                            ei.itemName = match.itemName
+                        }
+                    }
+                }
+
                 // If it's a retry item it might already have targetLang set, otherwise we generate for all langs
                 if (ei.targetLang) {
                     allItems.push(ei)
