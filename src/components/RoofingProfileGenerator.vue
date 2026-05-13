@@ -227,8 +227,10 @@ const dimViewBox = computed(() => {
 
 .real-image {
   width: 100%;
-  max-height: 220px;
-  object-fit: contain;
+  height: auto;
+  max-height: 400px;
+  object-fit: cover;
+  border-radius: 8px;
   z-index: 2;
 }
 
