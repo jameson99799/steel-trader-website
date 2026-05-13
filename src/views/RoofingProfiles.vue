@@ -266,8 +266,8 @@ onMounted(async () => {
 .specs-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  padding: var(--spacing-lg);
-  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  gap: var(--spacing-sm);
   background: #f8fafc;
 }
 
@@ -296,7 +296,7 @@ onMounted(async () => {
 }
 
 .spec-value {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -326,8 +326,8 @@ onMounted(async () => {
 .surface-select, .ral-input {
   border: 1px solid #cbd5e1;
   border-radius: 4px;
-  padding: 4px 8px;
-  font-size: 13px;
+  padding: 4px;
+  font-size: 12px;
   background: white;
   color: var(--text-primary);
   flex: 1;

@@ -4,25 +4,21 @@
       <defs>
         <!-- GI (Galvanized) Texture: Large crystalline spangles -->
         <filter id="gi-texture" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="1" result="noise" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" result="noise" />
           <feColorMatrix type="saturate" values="0" in="noise" result="gray" />
-          <feComponentTransfer in="gray" result="contrast">
-            <feFuncR type="linear" slope="3" intercept="-1" />
-            <feFuncG type="linear" slope="3" intercept="-1" />
-            <feFuncB type="linear" slope="3" intercept="-1" />
+          <feComponentTransfer in="gray" result="softNoise">
+            <feFuncA type="linear" slope="0.3" />
           </feComponentTransfer>
-          <feBlend mode="multiply" in="contrast" in2="SourceGraphic" />
+          <feBlend mode="overlay" in="softNoise" in2="SourceGraphic" />
         </filter>
         <!-- GL (Galvalume) Texture: Fine, smooth metallic grain -->
         <filter id="gl-texture" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.2" numOctaves="1" result="noise" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.15" numOctaves="2" result="noise" />
           <feColorMatrix type="saturate" values="0" in="noise" result="gray" />
-          <feComponentTransfer in="gray" result="contrast">
-            <feFuncR type="linear" slope="1.5" intercept="-0.2" />
-            <feFuncG type="linear" slope="1.5" intercept="-0.2" />
-            <feFuncB type="linear" slope="1.5" intercept="-0.2" />
+          <feComponentTransfer in="gray" result="softNoise">
+            <feFuncA type="linear" slope="0.15" />
           </feComponentTransfer>
-          <feBlend mode="multiply" in="contrast" in2="SourceGraphic" />
+          <feBlend mode="overlay" in="softNoise" in2="SourceGraphic" />
         </filter>
       </defs>
 
@@ -42,23 +38,44 @@
       <!-- Front Edge Profile Line -->
       <polyline :points="frontPath" fill="none" stroke="#222" stroke-width="2" stroke-linejoin="round" />
       
-      <!-- Dimensions (Optional) -->
-      <g v-if="showDimensions" class="dimensions">
-        <!-- Rib Height -->
-        <path :d="`M 30,${baseY} L 30,${baseY - scaledHeight}`" stroke="#e74c3c" stroke-width="3" stroke-dasharray="6" />
-        <text x="40" :y="baseY - scaledHeight/2 + 15" fill="#e74c3c" font-size="48" font-weight="bold">H: {{ profile.rib_height }}</text>
-        
-        <!-- Pitch -->
-        <path :d="`M ${startX},${baseY + 40} L ${startX + scaledPitch},${baseY + 40}`" stroke="#3498db" stroke-width="3" stroke-dasharray="6" />
-        <path :d="`M ${startX},${baseY} L ${startX},${baseY + 50}`" stroke="#3498db" stroke-width="2" />
-        <path :d="`M ${startX + scaledPitch},${baseY} L ${startX + scaledPitch},${baseY + 50}`" stroke="#3498db" stroke-width="2" />
-        <text :x="startX + scaledPitch/2" :y="baseY + 85" text-anchor="middle" fill="#3498db" font-size="48" font-weight="bold">Pitch: {{ profile.pitch }}</text>
+      <!-- 2D Cross Section & Dimensions (Separate from 3D) -->
+      <g v-if="showDimensions" transform="translate(0, 200)">
+        <!-- 2D Title -->
+        <text :x="startX" :y="baseY - scaledHeight - 90" fill="#1e293b" font-size="32" font-weight="bold" letter-spacing="1">PROFILE &amp; DIMENSIONS</text>
+        <path :d="`M ${startX},${baseY - scaledHeight - 75} L ${startX + (scaledPitch * 3)},${baseY - scaledHeight - 75}`" stroke="#cbd5e1" stroke-width="2" />
 
-        <!-- Effective Width (Total Width) -->
-        <path :d="`M ${startX},${baseY + 120} L ${startX + (scaledPitch * 3)},${baseY + 120}`" stroke="#2ecc71" stroke-width="3" />
-        <path :d="`M ${startX},${baseY + 80} L ${startX},${baseY + 130}`" stroke="#2ecc71" stroke-width="2" />
-        <path :d="`M ${startX + (scaledPitch * 3)},${baseY + 80} L ${startX + (scaledPitch * 3)},${baseY + 130}`" stroke="#2ecc71" stroke-width="2" />
-        <text :x="startX + (scaledPitch * 1.5)" :y="baseY + 165" text-anchor="middle" fill="#2ecc71" font-size="48" font-weight="bold">Effective Width: {{ profile.effective_width }}</text>
+        <!-- The 2D Profile Line -->
+        <polyline :points="frontPath" fill="none" stroke="#0f172a" stroke-width="4" stroke-linejoin="round" />
+        
+        <!-- Rib Height (Left side) -->
+        <path :d="`M ${startX - 50},${baseY} L ${startX - 50},${baseY - scaledHeight}`" stroke="#64748b" stroke-width="2" />
+        <!-- Arrows for Rib Height -->
+        <polygon :points="`${startX - 55},${baseY - 10} ${startX - 45},${baseY - 10} ${startX - 50},${baseY}`" fill="#64748b" />
+        <polygon :points="`${startX - 55},${baseY - scaledHeight + 10} ${startX - 45},${baseY - scaledHeight + 10} ${startX - 50},${baseY - scaledHeight}`" fill="#64748b" />
+        <!-- Guide lines for Rib Height -->
+        <path :d="`M ${startX - 65},${baseY} L ${startX},${baseY}`" stroke="#94a3b8" stroke-dasharray="4" />
+        <path :d="`M ${startX - 65},${baseY - scaledHeight} L ${startX + 50},${baseY - scaledHeight}`" stroke="#94a3b8" stroke-dasharray="4" />
+        <text :x="startX - 75" :y="baseY - scaledHeight/2 + 10" text-anchor="end" fill="#334155" font-size="28" font-weight="600">{{ profile.rib_height }}mm</text>
+        
+        <!-- Pitch (Top) -->
+        <g v-if="profile.pitch">
+          <path :d="`M ${startX},${baseY - scaledHeight - 35} L ${startX + scaledPitch},${baseY - scaledHeight - 35}`" stroke="#64748b" stroke-width="2" />
+          <path :d="`M ${startX},${baseY - scaledHeight} L ${startX},${baseY - scaledHeight - 45}`" stroke="#94a3b8" />
+          <path :d="`M ${startX + scaledPitch},${baseY - scaledHeight} L ${startX + scaledPitch},${baseY - scaledHeight - 45}`" stroke="#94a3b8" />
+          <!-- Arrows for Pitch -->
+          <polygon :points="`${startX + 10},${baseY - scaledHeight - 40} ${startX + 10},${baseY - scaledHeight - 30} ${startX},${baseY - scaledHeight - 35}`" fill="#64748b" />
+          <polygon :points="`${startX + scaledPitch - 10},${baseY - scaledHeight - 40} ${startX + scaledPitch - 10},${baseY - scaledHeight - 30} ${startX + scaledPitch},${baseY - scaledHeight - 35}`" fill="#64748b" />
+          <text :x="startX + scaledPitch/2" :y="baseY - scaledHeight - 50" text-anchor="middle" fill="#334155" font-size="28" font-weight="600">{{ profile.pitch }}mm</text>
+        </g>
+
+        <!-- Effective Width / Cover Width (Bottom) -->
+        <path :d="`M ${startX},${baseY + 60} L ${startX + (scaledPitch * 3)},${baseY + 60}`" stroke="#64748b" stroke-width="2" />
+        <path :d="`M ${startX},${baseY} L ${startX},${baseY + 70}`" stroke="#94a3b8" />
+        <path :d="`M ${startX + (scaledPitch * 3)},${baseY} L ${startX + (scaledPitch * 3)},${baseY + 70}`" stroke="#94a3b8" />
+        <!-- Arrows for Effective Width -->
+        <polygon :points="`${startX + 15},${baseY + 55} ${startX + 15},${baseY + 65} ${startX},${baseY + 60}`" fill="#64748b" />
+        <polygon :points="`${startX + (scaledPitch * 3) - 15},${baseY + 55} ${startX + (scaledPitch * 3) - 15},${baseY + 65} ${startX + (scaledPitch * 3)},${baseY + 60}`" fill="#64748b" />
+        <text :x="startX + (scaledPitch * 1.5)" :y="baseY + 110" text-anchor="middle" fill="#1e293b" font-size="36" font-weight="bold">Effective Coverage {{ profile.effective_width }}mm</text>
       </g>
     </svg>
   </div>
@@ -88,12 +105,14 @@ const depthY = -120
 
 const dynamicViewBox = computed(() => {
   const minX = 0;
-  // minY is determined by the highest point which is the back edge: baseY - scaledHeight + depthY
   const minY = baseY - scaledHeight.value + depthY - 50; 
-  // maxX is startX + 4 periods + depthX
   const maxX = startX + (scaledPitch.value * 4) + depthX + 50;
-  // maxY is determined by the lowest text element which is baseY + 180
-  const maxY = baseY + 200;
+  
+  let maxY = baseY + 20;
+  if (props.showDimensions) {
+    maxY = baseY + 350; // extra space for translated 2D section
+  }
+  
   const width = maxX - minX;
   const height = maxY - minY;
   return `${minX} ${minY} ${width} ${height}`;
