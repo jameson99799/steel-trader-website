@@ -394,29 +394,13 @@
       </div>
     </div>
     
-    
-
-    <!-- Roofing Profiles Modal -->
-    <Teleport to="body">
-      <div class="modal-overlay" v-if="showRoofingModal" @click.self="showRoofingModal = false">
-        <div class="modal-content large-modal">
-          <div class="modal-header">
-            <h3>📐 3D 瓦型图管理与生成器</h3>
-            <button class="btn-close" @click="showRoofingModal = false">×</button>
-          </div>
-          <div class="modal-body">
-            <RoofingProfileManager />
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import api from '../../api'
-import RoofingProfileManager from '../../components/admin/RoofingProfileManager.vue'
+import { useLang } from '../../composables/useLang'
 
 const newsList = ref([])
 const showModal = ref(false)
@@ -425,7 +409,6 @@ const saving = ref(false)
 const activeTab = ref('basic')
 const isFullscreen = ref(false)
 const translatingId = ref(null)
-const showRoofingModal = ref(false)
 
 // ─── Category state ──────────────────────────────────────────────────────────
 const categories = ref([])
