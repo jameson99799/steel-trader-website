@@ -1,9 +1,9 @@
 <template>
   <div class="profile-render-wrapper">
-    <!-- 3D Rendering Image -->
+    <!-- 3D Rendering Image or Uploaded Real Image -->
     <div class="render-3d" :style="containerStyle">
-      <canvas ref="canvasRef" class="render-canvas"></canvas>
-      <div v-if="isColorCoated && profileColor" class="color-tint" :style="{ backgroundColor: profileColor }"></div>
+      <img v-if="profile.image_url" :src="profile.image_url" class="real-image" />
+      <canvas v-else ref="canvasRef" class="render-canvas"></canvas>
     </div>
 
     <!-- 2D Dimensions (SVG only for the technical drawing) -->
@@ -225,16 +225,11 @@ const dimViewBox = computed(() => {
   z-index: 2;
 }
 
-.color-tint {
-  position: absolute;
-  top: 0;
-  left: 0;
+.real-image {
   width: 100%;
-  height: 100%;
-  mix-blend-mode: multiply;
-  opacity: 0.85;
-  z-index: 3;
-  pointer-events: none;
+  max-height: 220px;
+  object-fit: contain;
+  z-index: 2;
 }
 
 .dimensions-section {

@@ -91,12 +91,22 @@
             <div class="form-group" style="grid-column: span 2;">
               <label>上传真实图片替换 3D 渲染 (可选)</label>
               <div style="display:flex; gap:10px; align-items:center;">
-                <input type="file" @change="handleImageUpload" accept="image/*" class="form-control" style="padding:4px; height:auto;" />
-                <button type="button" class="btn btn-sm btn-outline" style="color:#d97706;border-color:#fcd34d;" @click="openAiModal">🤖 AI 生图</button>
+                <button type="button" class="btn btn-sm btn-outline" style="color:#7c3aed;border-color:#7c3aed;" @click="showMediaPicker=true">📷 从图库选择</button>
+                <button type="button" class="btn btn-sm btn-outline" style="color:#d97706;border-color:#fcd34d;" @click="openAiModal">🤖 AI 生图 (自动)</button>
                 <button type="button" class="btn btn-sm btn-outline" v-if="currentProfile.image_url" @click="currentProfile.image_url = ''">移除图片</button>
               </div>
+              
+              <div style="margin-top:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:12px;">
+                <label style="font-size:13px;color:#475569;margin-bottom:6px;display:block;font-weight:600;">🤖 AI 生图提示词 (供 Midjourney/DALL-E 手动生成使用)：</label>
+                <div style="position:relative;">
+                  <textarea readonly class="form-control" style="font-size:12px; background:#fff; color:#334155; min-height:80px; resize:none;">{{ aiCopyPrompt }}</textarea>
+                  <button type="button" class="btn btn-xs btn-outline" style="position:absolute; bottom:8px; right:8px;" @click="copyPrompt">复制</button>
+                </div>
+                <p style="font-size:12px;color:#94a3b8;margin-top:6px;">提示词已包含当前选择的瓦型、高度、波距等参数，你可以直接复制它到 AI 画图工具中生成对应的 2D 图片或材质。</p>
+              </div>
+
               <img v-if="currentProfile.image_url" :src="currentProfile.image_url" style="height: 100px; margin-top: 10px; border-radius: 4px; border: 1px solid #e2e8f0;"/>
-              <p class="form-hint" style="margin-top: 4px; color: #64748b; font-size: 12px;">如果上传了真实图片，前台将显示该图片，不再显示可切换颜色的 3D 渲染图。</p>
+              <p class="form-hint" style="margin-top: 4px; color: #64748b; font-size: 12px;">如果选择了真实图片，前台将显示该图片，不再显示可切换颜色的 3D 渲染图。</p>
             </div>
           </div>
           
@@ -194,11 +204,41 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Media Library Picker -->
+    <div v-if="showMediaPicker" class="modal-overlay" @click.self="showMediaPicker=false" style="z-index: 10000;">
+      <div class="modal" style="max-width:700px;">
+        <div class="modal-header" style="background:#f5f3ff;color:#7c3aed;">
+          <h3>📷 从图库选择</h3>
+          <button class="modal-close" @click="showMediaPicker=false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <input v-model="mediaPickerSearch" class="form-control" placeholder="搜索文件名..." @input="loadMediaPicker" style="max-width:200px;" />
+            <select v-model="mediaPickerGroup" class="form-control" @change="loadMediaPicker" style="max-width:140px;">
+              <option value="">全部分组</option>
+              <option v-for="g in mediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            </select>
+          </div>
+          <div v-if="mediaPickerItems.length" class="import-grid">
+            <div v-for="item in mediaPickerItems" :key="item.id" :class="['import-item', { selected: mediaPickerSelected === item.filepath }]" @click="mediaPickerSelected = item.filepath">
+              <img :src="item.filepath" />
+              <div class="import-check">✓</div>
+            </div>
+          </div>
+          <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="showMediaPicker=false">取消</button>
+          <button type="button" class="btn btn-primary" style="background:#7c3aed;" @click="doImportFromMedia" :disabled="!mediaPickerSelected">使用选中的图片</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import api from '../../api'
 import RoofingProfileGenerator from '../RoofingProfileGenerator.vue'
 
@@ -303,18 +343,69 @@ const copyProfile = async (p) => {
   }
 }
 
-const handleImageUpload = async (e) => {
-  const file = e.target.files[0]
-  if (!file) return
-  const formData = new FormData()
-  formData.append('file', file)
+// AI Prompt Generation
+const aiCopyPrompt = computed(() => {
+  const p = currentProfile.value
+  const tStr = getTypeLabel(p.profile_type)
+  return `A highly realistic, professional studio photograph of a single piece of ${tStr} roofing sheet. Material: Galvanized Steel (GI) / Prepainted (PPGI). Dimensions: Coil width ${p.coil_width}mm, Effective width ${p.effective_width}mm, Rib height ${p.rib_height}mm, Pitch ${p.pitch}mm. Clean white background, perfect studio lighting, metallic texture, 8k resolution, photorealistic. --ar 16:9`
+})
+
+const copyPrompt = () => {
+  navigator.clipboard.writeText(aiCopyPrompt.value)
+  alert('提示词已复制！')
+}
+
+// Media Picker
+const showMediaPicker = ref(false)
+const mediaPickerSearch = ref('')
+const mediaPickerGroup = ref('')
+const mediaPickerItems = ref([])
+const mediaPickerSelected = ref('')
+const mediaGroups = ref([])
+
+async function loadMediaPicker() {
+  const params = new URLSearchParams({ per_page: '50' })
+  if (mediaPickerSearch.value) params.set('search', mediaPickerSearch.value)
+  if (mediaPickerGroup.value) params.set('group_id', mediaPickerGroup.value)
   try {
-    const res = await api.request('/upload', 'POST', formData)
-    currentProfile.value.image_url = res.url
-  } catch (err) {
-    alert('图片上传失败: ' + err.message)
+    const res = await fetch(`/api/media?${params}`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
+    const data = await res.json()
+    mediaPickerItems.value = data.items || []
+  } catch (e) { console.error(e) }
+}
+
+async function loadMediaGroups() {
+  try {
+    const res = await fetch('/api/media/groups', { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
+    mediaGroups.value = await res.json()
+  } catch (e) { console.error(e) }
+}
+
+function doImportFromMedia() {
+  if (mediaPickerSelected.value) {
+    currentProfile.value.image_url = mediaPickerSelected.value
+  }
+  showMediaPicker.value = false
+  mediaPickerSelected.value = ''
+}
+
+function toggleMediaPickerSelect(fp) {
+  if (mediaPickerSelected.value === fp) {
+    mediaPickerSelected.value = ''
+  } else {
+    mediaPickerSelected.value = fp
   }
 }
+
+watch(showMediaPicker, (v) => {
+  if (v) {
+    loadMediaGroups()
+    mediaPickerGroup.value = localStorage.getItem('_lastMediaGroup') || ''
+    loadMediaPicker()
+    mediaPickerSelected.value = ''
+  }
+})
+watch(mediaPickerGroup, v => { if (v) localStorage.setItem('_lastMediaGroup', v) })
 
 // --- Category Management ---
 const createCategory = async () => {
