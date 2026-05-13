@@ -16,16 +16,59 @@
       </div>
     </div>
 
+    <!-- Category Filter Buttons -->
+    <div class="category-filters" v-if="categories.length > 0">
+      <div class="container">
+        <div class="filter-buttons">
+          <button 
+            :class="['filter-btn', activeCategory === 0 ? 'active' : '']" 
+            @click="activeCategory = 0"
+          >
+            All Profiles
+          </button>
+          <button 
+            v-for="cat in categories" 
+            :key="cat.id" 
+            :class="['filter-btn', activeCategory === cat.id ? 'active' : '']" 
+            @click="activeCategory = cat.id"
+          >
+            {{ localizedValue(cat, 'name') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="page-content">
       <div class="container">
         <div class="profiles-grid">
-          <div class="profile-card" v-for="profile in profiles" :key="profile.id">
+          <div class="profile-card" v-for="profile in filteredProfiles" :key="profile.id">
             <div class="profile-header">
               <h2 class="profile-name">{{ profile.model }}</h2>
               <span class="profile-type">{{ profile.profile_type }}</span>
             </div>
             <div class="profile-drawing">
-              <RoofingProfileGenerator :profile="profile" width="100%" height="200px" :showDimensions="true" />
+              <!-- If an image URL exists, show image. Otherwise show 3D Vector -->
+              <img v-if="profile.image_url" :src="profile.image_url" :alt="profile.model" style="width:100%; height:200px; object-fit:contain;" />
+              <RoofingProfileGenerator v-else :profile="profile" width="100%" height="200px" :showDimensions="true" />
+            </div>
+
+            <!-- Dynamic Surface Controls (only for 3D Vector) -->
+            <div class="surface-controls" v-if="!profile.image_url">
+              <div class="control-row">
+                <span class="control-label">Surface:</span>
+                <select v-model="profile.current_surface" class="surface-select" @change="updateProfileSurface(profile)">
+                  <option value="ppgi">PPGI / PPGL (Color Coated)</option>
+                  <option value="gi">GI (Galvanized / Spangle)</option>
+                  <option value="gl">GL (Galvalume)</option>
+                </select>
+              </div>
+              <div class="control-row" v-if="profile.current_surface === 'ppgi'">
+                <span class="control-label">RAL Color:</span>
+                <div class="color-input-wrapper">
+                  <input type="text" v-model="profile.ral_input" class="ral-input" placeholder="e.g. 9016" @input="updateProfileColor(profile)" />
+                  <span class="color-preview" :style="{ backgroundColor: profile.current_color }"></span>
+                </div>
+              </div>
             </div>
             <div class="profile-specs">
               <div class="spec-item">
@@ -53,21 +96,67 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 import RoofingProfileGenerator from '../components/RoofingProfileGenerator.vue'
 
-const { t, langPath } = useLang()
+const { t, localizedValue, langPath } = useLang()
 
 const profiles = ref([])
+const categories = ref([])
+const ralColors = ref([])
+const activeCategory = ref(0)
+
+const filteredProfiles = computed(() => {
+  if (activeCategory.value === 0) return profiles.value
+  return profiles.value.filter(p => p.category_id === activeCategory.value)
+})
+
+const updateProfileSurface = (profile) => {
+  profile.surface = profile.current_surface // Sync to generator prop
+  if (profile.current_surface !== 'ppgi') {
+    profile.color = '' // Clear color for GI/GL
+  } else {
+    updateProfileColor(profile) // Re-apply RAL color
+  }
+}
+
+const updateProfileColor = (profile) => {
+  const code = profile.ral_input?.trim() || ''
+  if (!code) {
+    profile.current_color = profile.default_color || '#1e40af'
+    profile.color = profile.current_color
+    return
+  }
+  // Try to find the RAL code in our dictionary
+  const ralObj = ralColors.value.find(r => r.ral_code === 'RAL ' + code || r.ral_code === code)
+  if (ralObj) {
+    profile.current_color = ralObj.hex
+    profile.color = ralObj.hex
+  }
+}
 
 onMounted(async () => {
   try {
-    const res = await api.getRoofingProfilesPublic()
-    profiles.value = res || []
+    const [profilesRes, categoriesRes, ralRes] = await Promise.all([
+      api.getRoofingProfilesPublic(),
+      api.getRoofingCategoriesPublic(),
+      api.getRalColors()
+    ])
+    categories.value = categoriesRes || []
+    ralColors.value = ralRes || []
+    
+    profiles.value = (profilesRes || []).map(p => ({
+      ...p,
+      // Initialize dynamic state
+      current_surface: p.surface || 'ppgi',
+      default_color: p.color || '#1e40af',
+      current_color: p.color || '#1e40af',
+      ral_input: '' // Start empty, uses default_color
+    }))
   } catch (e) {
-    console.error('Failed to load roofing profiles', e)
+    console.error('Failed to load roofing data', e)
   }
 })
 </script>
@@ -146,6 +235,94 @@ onMounted(async () => {
 .drawing-svg {
   width: 100%;
   max-height: 200px;
+}
+
+.drawing-svg {
+  width: 100%;
+  max-height: 200px;
+}
+
+.surface-controls {
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: #f8fafc;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing);
+}
+
+.control-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.surface-select, .ral-input {
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 13px;
+  background: white;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.color-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.color-preview {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid rgba(0,0,0,0.1);
+  flex-shrink: 0;
+}
+
+.category-filters {
+  background: var(--white);
+  padding: 0 0 var(--spacing-lg);
+  border-bottom: 1px solid var(--border);
+}
+
+.filter-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+.filter-btn {
+  background: #f1f5f9;
+  border: 1px solid transparent;
+  color: #475569;
+  padding: 8px 20px;
+  border-radius: 50px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-btn:hover {
+  background: #e2e8f0;
+}
+
+.filter-btn.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
 }
 
 .profile-path {

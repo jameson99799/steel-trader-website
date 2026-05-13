@@ -837,8 +837,8 @@ const saving = ref(false)
 const savedMsg = ref(false)
 
 const selectedLang = ref('')
-const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero', 'ui_texts_static', 'ral_colors']
-const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字', ral_colors: '🎨 RAL颜色' }
+const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero', 'ui_texts_static', 'ral_colors', 'roofing_categories']
+const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字', ral_colors: '🎨 RAL颜色', roofing_categories: '🏠 瓦型分组' }
 const selectedPages = ref([...allPages])
 const concurrency = ref(3)
 const translating = ref(false)

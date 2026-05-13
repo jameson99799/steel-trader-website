@@ -58,6 +58,32 @@ async function initDb() {
       color TEXT,
       surface TEXT,
       sort_order INTEGER DEFAULT 0,
+      category_id INTEGER DEFAULT 0,
+      image_url TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // Add category_id and image_url to roofing_profiles if they don't exist
+  try {
+    const columns = db.pragma("table_info(roofing_profiles)")
+    if (!columns.some(c => c.name === 'category_id')) {
+      db.exec("ALTER TABLE roofing_profiles ADD COLUMN category_id INTEGER DEFAULT 0")
+    }
+    if (!columns.some(c => c.name === 'image_url')) {
+      db.exec("ALTER TABLE roofing_profiles ADD COLUMN image_url TEXT")
+    }
+  } catch (e) {
+    console.warn('[db] Migration for roofing_profiles failed:', e)
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS roofing_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      name_en TEXT,
+      sort_order INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
@@ -79,11 +105,11 @@ async function initDb() {
         { model: 'YX18-76-836', type: 'corrugated', w: 836, cw: 1000, h: 18, p: 76, surface: 'gi', color: '', sort: 10 }
       ]
       const insertProfile = db.prepare(`
-        INSERT INTO roofing_profiles (model, profile_type, effective_width, coil_width, rib_height, pitch, surface, color, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO roofing_profiles (model, profile_type, effective_width, coil_width, rib_height, pitch, surface, color, sort_order, category_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       for (const p of defaultProfiles) {
-        insertProfile.run(p.model, p.type, p.w, p.cw, p.h, p.p, p.surface, p.color, p.sort)
+        insertProfile.run(p.model, p.type, p.w, p.cw, p.h, p.p, p.surface, p.color, p.sort, 0)
       }
     }
   } catch (e) {
@@ -136,6 +162,11 @@ async function initDb() {
   } catch (e) { }
   // Migration: add map_embed_url to company
   try { db.exec('ALTER TABLE company ADD COLUMN map_embed_url TEXT') } catch (e) { }
+  // Migration: add company video embed fields
+  try { db.exec('ALTER TABLE company ADD COLUMN company_video_embed TEXT') } catch (e) { }
+  try { db.exec('ALTER TABLE company ADD COLUMN about_show_video INTEGER DEFAULT 0') } catch (e) { }
+  try { db.exec('ALTER TABLE company ADD COLUMN about_video_autoplay INTEGER DEFAULT 0') } catch (e) { }
+  try { db.exec('ALTER TABLE company ADD COLUMN home_show_video INTEGER DEFAULT 0') } catch (e) { }
   // Migration: add show_contact_panel to page_texts
   try { db.exec('ALTER TABLE page_texts ADD COLUMN show_contact_panel INTEGER DEFAULT 0') } catch (e) { }
   // Migration: add GEO SEO fields to seo_settings

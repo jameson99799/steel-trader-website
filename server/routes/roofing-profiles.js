@@ -4,6 +4,78 @@ import { authMiddleware } from '../middleware/auth.js'
 
 const router = express.Router()
 
+// ==========================================
+// CATEGORIES
+// ==========================================
+
+// GET all categories (public)
+router.get('/categories/public', (req, res) => {
+    try {
+        const categories = getAll('SELECT * FROM roofing_categories WHERE is_active = 1 ORDER BY sort_order DESC, id ASC')
+        res.json(categories)
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+// GET all categories (admin)
+router.get('/categories', authMiddleware, (req, res) => {
+    try {
+        const categories = getAll('SELECT * FROM roofing_categories ORDER BY sort_order DESC, id ASC')
+        res.json(categories)
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+// POST create category
+router.post('/categories', authMiddleware, (req, res) => {
+    const { name, name_en, sort_order, is_active } = req.body
+    try {
+        const result = run(
+            `INSERT INTO roofing_categories (name, name_en, sort_order, is_active) VALUES (?, ?, ?, ?)`,
+            [name, name_en, sort_order || 0, is_active !== undefined ? is_active : 1]
+        )
+        const newCat = getOne('SELECT * FROM roofing_categories WHERE id = ?', [result.lastInsertRowid])
+        res.json(newCat)
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+// PUT update category
+router.put('/categories/:id', authMiddleware, (req, res) => {
+    const { id } = req.params
+    const { name, name_en, sort_order, is_active } = req.body
+    try {
+        run(
+            `UPDATE roofing_categories SET name=?, name_en=?, sort_order=?, is_active=? WHERE id=?`,
+            [name, name_en, sort_order || 0, is_active !== undefined ? is_active : 1, id]
+        )
+        const updated = getOne('SELECT * FROM roofing_categories WHERE id = ?', [id])
+        res.json(updated)
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+// DELETE category
+router.delete('/categories/:id', authMiddleware, (req, res) => {
+    const { id } = req.params
+    try {
+        run('DELETE FROM roofing_categories WHERE id = ?', [id])
+        // Also unassign profiles from this category
+        run('UPDATE roofing_profiles SET category_id = 0 WHERE category_id = ?', [id])
+        res.json({ success: true })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+// ==========================================
+// PROFILES
+// ==========================================
+
 // GET all profiles (public)
 router.get('/public', (req, res) => {
     try {
@@ -26,12 +98,12 @@ router.get('/', authMiddleware, (req, res) => {
 
 // POST create
 router.post('/', authMiddleware, (req, res) => {
-    const { model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order } = req.body
+    const { model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order, category_id, image_url } = req.body
     try {
         const result = run(
-            `INSERT INTO roofing_profiles (model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order || 0]
+            `INSERT INTO roofing_profiles (model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order, category_id, image_url) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order || 0, category_id || 0, image_url || '']
         )
         const newProfile = getOne('SELECT * FROM roofing_profiles WHERE id = ?', [result.lastInsertRowid])
         res.json(newProfile)
@@ -43,11 +115,11 @@ router.post('/', authMiddleware, (req, res) => {
 // PUT update
 router.put('/:id', authMiddleware, (req, res) => {
     const { id } = req.params
-    const { model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order } = req.body
+    const { model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order, category_id, image_url } = req.body
     try {
         run(
-            `UPDATE roofing_profiles SET model=?, profile_type=?, effective_width=?, coil_width=?, rib_height=?, pitch=?, color=?, surface=?, sort_order=? WHERE id=?`,
-            [model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order || 0, id]
+            `UPDATE roofing_profiles SET model=?, profile_type=?, effective_width=?, coil_width=?, rib_height=?, pitch=?, color=?, surface=?, sort_order=?, category_id=?, image_url=? WHERE id=?`,
+            [model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order || 0, category_id || 0, image_url || '', id]
         )
         const updated = getOne('SELECT * FROM roofing_profiles WHERE id = ?', [id])
         res.json(updated)

@@ -285,11 +285,8 @@ export const api = {
   generateProduct: (data) => request('/ai/generate-product', { method: 'POST', body: JSON.stringify(data) }),
 
   // Roofing Profiles
-  getRoofingProfilesPublic: () => {
-    const cached = readCache('/roofing-profiles/public')
-    if (cached) return Promise.resolve(cached)
-    return request('/roofing-profiles/public').then(res => { writeCache('/roofing-profiles/public', res); return res })
-  }
+  getRoofingProfilesPublic: () => cachedGet('/roofing-profiles/public'),
+  getRoofingCategoriesPublic: () => cachedGet('/roofing-profiles/categories/public')
 }
 
 export default api

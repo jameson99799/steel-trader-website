@@ -2,14 +2,19 @@
   <div class="profile-3d-container" :style="{ width: width || '100%', height: height || '100%' }">
     <svg :viewBox="`0 0 ${viewWidth} ${viewHeight}`" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%;">
       <defs>
+        <!-- GI (Galvanized) Texture: Large crystalline spangles -->
         <filter id="gi-texture" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" result="noise" />
-          <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 2 0" in="noise" result="coloredNoise" />
-          <feBlend mode="overlay" in="coloredNoise" in2="SourceGraphic" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.015 0.02" numOctaves="3" result="noise" />
+          <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 4 -1" in="noise" result="coloredNoise" />
+          <feComponentTransfer in="coloredNoise" result="spangles">
+            <feFuncA type="discrete" tableValues="0.4 0.6 0.8 1" />
+          </feComponentTransfer>
+          <feBlend mode="overlay" in="spangles" in2="SourceGraphic" />
         </filter>
+        <!-- GL (Galvalume) Texture: Fine, smooth metallic grain -->
         <filter id="gl-texture" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.15" numOctaves="2" result="noise" />
-          <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1.5 0" in="noise" result="coloredNoise" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" result="noise" />
+          <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1.2 0" in="noise" result="coloredNoise" />
           <feBlend mode="overlay" in="coloredNoise" in2="SourceGraphic" />
         </filter>
       </defs>
@@ -32,10 +37,21 @@
       
       <!-- Dimensions (Optional) -->
       <g v-if="showDimensions" class="dimensions">
-        <path :d="`M 20,${baseY} L 20,${baseY - scaledHeight}`" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="4" />
-        <text x="25" :y="baseY - scaledHeight/2" fill="#e74c3c" font-size="14" font-weight="bold">H: {{ profile.rib_height }}</text>
-        <path :d="`M ${startX},${baseY + 20} L ${startX + scaledPitch},${baseY + 20}`" stroke="#3498db" stroke-width="1.5" stroke-dasharray="4" />
-        <text :x="startX + scaledPitch/2" :y="baseY + 35" text-anchor="middle" fill="#3498db" font-size="14" font-weight="bold">P: {{ profile.pitch }}</text>
+        <!-- Rib Height -->
+        <path :d="`M 30,${baseY} L 30,${baseY - scaledHeight}`" stroke="#e74c3c" stroke-width="2" stroke-dasharray="6" />
+        <text x="40" :y="baseY - scaledHeight/2 + 8" fill="#e74c3c" font-size="24" font-weight="bold">H: {{ profile.rib_height }}</text>
+        
+        <!-- Pitch -->
+        <path :d="`M ${startX},${baseY + 25} L ${startX + scaledPitch},${baseY + 25}`" stroke="#3498db" stroke-width="2" stroke-dasharray="6" />
+        <path :d="`M ${startX},${baseY} L ${startX},${baseY + 30}`" stroke="#3498db" stroke-width="1" />
+        <path :d="`M ${startX + scaledPitch},${baseY} L ${startX + scaledPitch},${baseY + 30}`" stroke="#3498db" stroke-width="1" />
+        <text :x="startX + scaledPitch/2" :y="baseY + 50" text-anchor="middle" fill="#3498db" font-size="24" font-weight="bold">Pitch: {{ profile.pitch }}</text>
+
+        <!-- Effective Width (Total Width) -->
+        <path :d="`M ${startX},${baseY + 70} L ${startX + (scaledPitch * 3)},${baseY + 70}`" stroke="#2ecc71" stroke-width="2" />
+        <path :d="`M ${startX},${baseY + 40} L ${startX},${baseY + 80}`" stroke="#2ecc71" stroke-width="1" />
+        <path :d="`M ${startX + (scaledPitch * 3)},${baseY + 40} L ${startX + (scaledPitch * 3)},${baseY + 80}`" stroke="#2ecc71" stroke-width="1" />
+        <text :x="startX + (scaledPitch * 1.5)" :y="baseY + 95" text-anchor="middle" fill="#2ecc71" font-size="24" font-weight="bold">Effective Width: {{ profile.effective_width }}</text>
       </g>
     </svg>
   </div>

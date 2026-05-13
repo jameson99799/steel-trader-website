@@ -138,6 +138,17 @@
           <p class="section-subtitle">{{ localizedValue(pageTexts, 'advantages_subtitle') || t('ourAdvantages') }}</p>
         </div>
         
+        <div class="home-video-wrapper" v-if="company?.company_video_embed && company?.home_show_video">
+          <iframe 
+            :src="company.company_video_embed + (company.about_video_autoplay ? '?autoplay=1&mute=1' : '')" 
+            width="100%" 
+            height="500" 
+            style="border:0; border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); margin-bottom:var(--spacing-2xl);" 
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+            allowfullscreen>
+          </iframe>
+        </div>
+
         <div class="advantages-grid">
           <div class="advantage-card">
             <div class="advantage-icon">
@@ -219,6 +230,7 @@ const hero = ref(window.__INITIAL_STATE__?.hero || {})
 const featuredProducts = ref([])
 const categories = ref([])
 const pageTexts = ref({})
+const company = ref({})
 
 onMounted(async () => {
   try {
@@ -229,7 +241,12 @@ onMounted(async () => {
     featuredProducts.value = productsRes.data
     const tree = await api.getCategoryTree()
     categories.value = tree.slice(0, 6)
-    pageTexts.value = await api.getPageTexts()
+    const [textsRes, companyRes] = await Promise.all([
+      api.getPageTexts(),
+      api.getCompany()
+    ])
+    pageTexts.value = textsRes
+    company.value = companyRes
   } catch (e) {
     console.error(e)
   }

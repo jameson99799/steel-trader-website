@@ -157,13 +157,38 @@
             </div>
           </div>
 
-          <h3 class="section-title">📍 Google 地图嵌入</h3>
+          <h3 class="section-title">📍 Google 地图与 YouTube 视频嵌入</h3>
+          
           <div class="form-group">
             <label>Google Maps 嵌入链接 <span class="form-hint-inline">（从 Google Maps → 分享 → 嵌入地图 → 复制 src="" 里的链接）</span></label>
             <input v-model="form.map_embed_url" type="url" class="form-control" placeholder="https://www.google.com/maps/embed?pb=..." />
             <p class="form-hint">填写后，联系我们页面会显示一个嵌入式 Google 地图，方便客户定位。如果不填，则不显示地图。</p>
             <div v-if="form.map_embed_url" class="map-preview">
               <iframe :src="form.map_embed_url" width="100%" height="200" style="border:0;border-radius:8px;" allowfullscreen="" loading="lazy"></iframe>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 20px; border-top: 1px dashed #e2e8f0; padding-top: 20px;">
+            <label>YouTube 视频嵌入链接 (Embed URL) <span class="form-hint-inline">（从 YouTube → Share → Embed → 复制 src="" 里的链接）</span></label>
+            <input v-model="form.company_video_embed" type="url" class="form-control" placeholder="https://www.youtube.com/embed/XXXXXX" />
+            <p class="form-hint">填写后，系统可以使用该视频替换图片进行展示。如果不填，则不会显示视频选项。</p>
+            
+            <div v-if="form.company_video_embed" style="margin-top: 15px; padding: 15px; background: #f8fafc; border-radius: 8px;">
+              <h4 style="margin: 0 0 10px 0; font-size: 14px;">视频展示控制 (Video Display Controls)</h4>
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <label style="display:flex; align-items:center; gap:8px; font-weight:normal;">
+                  <input type="checkbox" v-model="form.about_show_video" :true-value="1" :false-value="0" />
+                  在 About Us 页面的图片位置显示此视频 (替代原来的关于我们图片)
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; font-weight:normal;">
+                  <input type="checkbox" v-model="form.home_show_video" :true-value="1" :false-value="0" />
+                  在首页 (Home) 的 "Our Advantages" 下方独立展示此视频
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; font-weight:normal;">
+                  <input type="checkbox" v-model="form.about_video_autoplay" :true-value="1" :false-value="0" />
+                  自动静音播放 (开启后，视频将在背景自动静音播放；关闭则需用户手动点击)
+                </label>
+              </div>
             </div>
           </div>
 
@@ -197,7 +222,11 @@ const form = reactive({
   logo: '', favicon: '', about_image: '',
   whatsapp_qr: '', wechat_qr: '',
   advantages: '', advantages_en: '',
-  map_embed_url: ''
+  map_embed_url: '',
+  company_video_embed: '',
+  about_show_video: 0,
+  about_video_autoplay: 0,
+  home_show_video: 0
 })
 
 const getPreviewUrl = (file) => {

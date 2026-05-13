@@ -552,7 +552,12 @@ const UI_TEXTS_EN = {
     "ralColorChart": "RAL Color",
     "ralColorBtn": "RAL Color",
     "ralSearchPlaceholder": "Search for your desired color.",
-    "ralNoResult": "No colors found"
+    "ralNoResult": "No colors found",
+    "roofingTitle": "Roofing Sheet Profiles",
+    "roofingSubtitle": "Common technical drawings and specifications for our steel roofing panels.",
+    "allProfiles": "All Profiles",
+    "surfaceControls": "Surface:",
+    "ralColorControl": "RAL Color:"
 };
 
 function collectUITexts() {
@@ -583,6 +588,21 @@ function collectRalColors() {
     }))
 }
 
+function collectRoofingCategories() {
+    try {
+        const categories = getAll('SELECT id, name FROM roofing_categories WHERE name IS NOT NULL AND name != ""')
+        return categories.map(c => ({
+            type: 'roofing_category',
+            id: c.id,
+            field: 'name',
+            text: c.name,
+            itemName: `Roofing Category: ${c.name}`
+        }))
+    } catch (e) {
+        return []
+    }
+}
+
 const PAGES = {
         ui_texts_static: () => collectUITexts(),
     products: collectProducts,
@@ -592,7 +612,8 @@ const PAGES = {
     categories: collectCategories,
     news_categories: collectNewsCategories,
     hero: collectHero,
-    ral_colors: collectRalColors
+    ral_colors: collectRalColors,
+    roofing_categories: collectRoofingCategories
 }
 
 

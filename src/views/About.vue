@@ -23,7 +23,17 @@
         <!-- Company Introduction -->
         <div class="intro-section">
           <div class="intro-layout">
-            <div class="intro-image" v-if="company?.about_image">
+            <div class="intro-image" v-if="company?.company_video_embed && company?.about_show_video">
+              <iframe 
+                :src="company.company_video_embed + (company.about_video_autoplay ? '?autoplay=1&mute=1' : '')" 
+                width="100%" 
+                height="500" 
+                style="border:0; border-radius:var(--radius-lg); box-shadow:var(--shadow-lg);" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                allowfullscreen>
+              </iframe>
+            </div>
+            <div class="intro-image" v-else-if="company?.about_image">
               <img :src="company.about_image" :alt="localizedValue(company, 'name')" />
               <div class="image-overlay">
                 <div class="overlay-content">
