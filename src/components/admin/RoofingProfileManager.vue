@@ -305,9 +305,9 @@ const saveProfile = async () => {
   try {
     const p = currentProfile.value
     if (p.id) {
-      await api.request(`/roofing-profiles/${p.id}`, 'PUT', p)
+      await api.request(`/roofing-profiles/${p.id}`, { method: 'PUT', body: JSON.stringify(p) })
     } else {
-      const res = await api.request('/roofing-profiles', 'POST', p)
+      const res = await api.request('/roofing-profiles', { method: 'POST', body: JSON.stringify(p) })
       currentProfile.value.id = res.id
     }
     await loadProfiles()
@@ -322,7 +322,7 @@ const saveProfile = async () => {
 const deleteProfile = async (id) => {
   if (!confirm('确定要删除这个瓦型吗？')) return
   try {
-    await api.request(`/roofing-profiles/${id}`, 'DELETE')
+    await api.request(`/roofing-profiles/${id}`, { method: 'DELETE' })
     if (currentProfile.value.id === id) createNew()
     await loadProfiles()
   } catch (e) {
@@ -335,7 +335,7 @@ const copyProfile = async (p) => {
     const copy = JSON.parse(JSON.stringify(p))
     delete copy.id
     copy.model = copy.model + ' (Copy)'
-    const res = await api.request('/roofing-profiles', 'POST', copy)
+    const res = await api.request('/roofing-profiles', { method: 'POST', body: JSON.stringify(copy) })
     currentProfile.value = { ...copy, id: res.id }
     await loadProfiles()
   } catch (e) {
@@ -411,7 +411,7 @@ watch(mediaPickerGroup, v => { if (v) localStorage.setItem('_lastMediaGroup', v)
 const createCategory = async () => {
   if (!newCatName.value) return
   try {
-    await api.request('/roofing-profiles/categories', 'POST', { name: newCatName.value, sort_order: 0, is_active: 1 })
+    await api.request('/roofing-profiles/categories', { method: 'POST', body: JSON.stringify({ name: newCatName.value, sort_order: 0, is_active: 1 }) })
     newCatName.value = ''
     await loadCategories()
   } catch (e) {
@@ -421,7 +421,7 @@ const createCategory = async () => {
 
 const updateCategory = async (c) => {
   try {
-    await api.request(`/roofing-profiles/categories/${c.id}`, 'PUT', { name: c.name, sort_order: c.sort_order, is_active: c.is_active })
+    await api.request(`/roofing-profiles/categories/${c.id}`, { method: 'PUT', body: JSON.stringify({ name: c.name, sort_order: c.sort_order, is_active: c.is_active }) })
   } catch (e) {
     alert('分组更新失败: ' + e.message)
   }
@@ -430,7 +430,7 @@ const updateCategory = async (c) => {
 const deleteCategory = async (id) => {
   if (!confirm('确定删除这个分组吗？相关瓦型将变为无分组状态。')) return
   try {
-    await api.request(`/roofing-profiles/categories/${id}`, 'DELETE')
+    await api.request(`/roofing-profiles/categories/${id}`, { method: 'DELETE' })
     await loadCategories()
     await loadProfiles() // Reload profiles because category assignment changed
   } catch (e) {
@@ -480,11 +480,14 @@ const loadAiHistory = async () => {
 const generateAiImage = async () => {
   aiGenerating.value = true
   try {
-    const res = await api.request('/ai/generate-image', 'POST', {
-      target_type: 'roofing_profile',
-      target_id: currentProfile.value.id,
-      prompt: aiPrompt.value,
-      size: '1024x1024'
+    const res = await api.request('/ai/generate-image', {
+      method: 'POST',
+      body: JSON.stringify({
+        target_type: 'roofing_profile',
+        target_id: currentProfile.value.id,
+        prompt: aiPrompt.value,
+        size: '1024x1024'
+      })
     })
     if (res.success) {
       await loadAiHistory()
@@ -499,7 +502,7 @@ const generateAiImage = async () => {
 const deleteSelectedAiImages = async () => {
   if (!confirm(`确定删除选中的 ${selectedAiImages.value.length} 张图片？`)) return
   try {
-    await api.request('/ai/images/delete', 'POST', { ids: selectedAiImages.value })
+    await api.request('/ai/images/delete', { method: 'POST', body: JSON.stringify({ ids: selectedAiImages.value }) })
     selectedAiImages.value = []
     await loadAiHistory()
   } catch (e) {
