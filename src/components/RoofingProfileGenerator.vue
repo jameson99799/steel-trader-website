@@ -3,6 +3,9 @@
     <img v-if="profile.image_url" :src="profile.image_url" class="real-image" />
     <svg v-else :viewBox="dynamicViewBox" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%;">
       <defs>
+        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="25" stdDeviation="15" flood-color="#000000" flood-opacity="0.3" />
+        </filter>
         <!-- GI (Galvanized) Texture: Real Spangle -->
         <filter id="gi-texture" x="-10%" y="-10%" width="120%" height="120%">
           <feImage href="/textures/gi-spangle.png" result="image" width="1600" height="1000" preserveAspectRatio="xMidYMid slice" />
@@ -15,7 +18,8 @@
         </filter>
       </defs>
 
-      <g :filter="getTextureFilter()">
+      <g filter="url(#shadow)">
+        <g :filter="getTextureFilter()">
         <!-- Surface Polygons -->
         <polygon 
           v-for="(poly, i) in polygons" 
@@ -27,48 +31,54 @@
           stroke-linejoin="round" 
         />
       </g>
+      </g>
       
       <!-- Front Edge Profile Line -->
       <polyline :points="frontPath" fill="none" stroke="#222" stroke-width="2" stroke-linejoin="round" />
       
+      <!-- Coil Width (Top, Above 3D) -->
+      <g v-if="showDimensions">
+        <text :x="startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4))/2 + depthX/2" :y="baseY - scaledHeight + depthY - 60" text-anchor="middle" fill="#1e293b" font-size="36" font-weight="bold">{{ profile.coil_width }}mm</text>
+        <text :x="startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4))/2 + depthX/2" :y="baseY - scaledHeight + depthY - 30" text-anchor="middle" fill="#64748b" font-size="20">Coil Width / 展开宽度</text>
+        <path :d="`M ${startX + depthX - 40},${baseY - scaledHeight + depthY - 45} L ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + depthX + 40},${baseY - scaledHeight + depthY - 45}`" stroke="#94a3b8" stroke-width="2" />
+        <path :d="`M ${startX + depthX - 40},${baseY - scaledHeight + depthY - 65} L ${startX + depthX - 40},${baseY - scaledHeight + depthY - 25}`" stroke="#94a3b8" stroke-width="2" />
+        <path :d="`M ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + depthX + 40},${baseY - scaledHeight + depthY - 65} L ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + depthX + 40},${baseY - scaledHeight + depthY - 25}`" stroke="#94a3b8" stroke-width="2" />
+        <polygon :points="`${startX + depthX - 35},${baseY - scaledHeight + depthY - 50} ${startX + depthX - 35},${baseY - scaledHeight + depthY - 40} ${startX + depthX - 40},${baseY - scaledHeight + depthY - 45}`" fill="#94a3b8" />
+        <polygon :points="`${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + depthX + 35},${baseY - scaledHeight + depthY - 50} ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + depthX + 35},${baseY - scaledHeight + depthY - 40} ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + depthX + 40},${baseY - scaledHeight + depthY - 45}`" fill="#94a3b8" />
+      </g>
+
       <!-- 2D Cross Section & Dimensions (Separate from 3D) -->
       <g v-if="showDimensions" transform="translate(0, 100)">
-        <!-- 2D Title -->
-        <text :x="startX" :y="baseY - scaledHeight - 90" fill="#1e293b" font-size="32" font-weight="bold" letter-spacing="1">PROFILE &amp; DIMENSIONS</text>
-        <path :d="`M ${startX},${baseY - scaledHeight - 75} L ${startX + (scaledPitch * 3)},${baseY - scaledHeight - 75}`" stroke="#cbd5e1" stroke-width="2" />
+        
+        <!-- Effective Width (Above 2D line) -->
+        <text :x="startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4))/2" :y="baseY - scaledHeight - 45" text-anchor="middle" fill="#1e293b" font-size="36" font-weight="bold">{{ profile.effective_width }}mm</text>
+        <text :x="startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4))/2" :y="baseY - scaledHeight - 15" text-anchor="middle" fill="#64748b" font-size="20">Effective Coverage / 有效宽度</text>
+        <path :d="`M ${startX},${baseY - scaledHeight - 30} L ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4))},${baseY - scaledHeight - 30}`" stroke="#94a3b8" stroke-width="2" />
+        <path :d="`M ${startX},${baseY - scaledHeight - 50} L ${startX},${baseY}`" stroke="#94a3b8" stroke-dasharray="4" />
+        <path :d="`M ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4))},${baseY - scaledHeight - 50} L ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4))},${baseY}`" stroke="#94a3b8" stroke-dasharray="4" />
+        <polygon :points="`${startX + 15},${baseY - scaledHeight - 35} ${startX + 15},${baseY - scaledHeight - 25} ${startX},${baseY - scaledHeight - 30}`" fill="#94a3b8" />
+        <polygon :points="`${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) - 15},${baseY - scaledHeight - 35} ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) - 15},${baseY - scaledHeight - 25} ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4))},${baseY - scaledHeight - 30}`" fill="#94a3b8" />
 
         <!-- The 2D Profile Line -->
         <polyline :points="frontPath" fill="none" stroke="#0f172a" stroke-width="4" stroke-linejoin="round" />
         
-        <!-- Rib Height (Left side) -->
-        <path :d="`M ${startX - 50},${baseY} L ${startX - 50},${baseY - scaledHeight}`" stroke="#64748b" stroke-width="2" />
-        <!-- Arrows for Rib Height -->
-        <polygon :points="`${startX - 55},${baseY - 10} ${startX - 45},${baseY - 10} ${startX - 50},${baseY}`" fill="#64748b" />
-        <polygon :points="`${startX - 55},${baseY - scaledHeight + 10} ${startX - 45},${baseY - scaledHeight + 10} ${startX - 50},${baseY - scaledHeight}`" fill="#64748b" />
-        <!-- Guide lines for Rib Height -->
-        <path :d="`M ${startX - 65},${baseY} L ${startX},${baseY}`" stroke="#94a3b8" stroke-dasharray="4" />
-        <path :d="`M ${startX - 65},${baseY - scaledHeight} L ${startX + 50},${baseY - scaledHeight}`" stroke="#94a3b8" stroke-dasharray="4" />
-        <text :x="startX - 75" :y="baseY - scaledHeight/2 + 10" text-anchor="end" fill="#334155" font-size="28" font-weight="600">{{ profile.rib_height }}mm</text>
+        <!-- Rib Height (Right Side) -->
+        <path :d="`M ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + 30},${baseY} L ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + 80},${baseY}`" stroke="#94a3b8" stroke-dasharray="4" />
+        <path :d="`M ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + 30},${baseY - scaledHeight} L ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + 80},${baseY - scaledHeight}`" stroke="#94a3b8" stroke-dasharray="4" />
+        <path :d="`M ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + 60},${baseY} L ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + 60},${baseY - scaledHeight}`" stroke="#94a3b8" stroke-width="2" />
+        <polygon :points="`${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + 55},${baseY - 10} ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + 65},${baseY - 10} ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + 60},${baseY}`" fill="#94a3b8" />
+        <polygon :points="`${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + 55},${baseY - scaledHeight + 10} ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + 65},${baseY - scaledHeight + 10} ${startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + 60},${baseY - scaledHeight}`" fill="#94a3b8" />
+        <text :x="startX + (scaledPitch * (profile.profile_type === 'standing_seam' ? 3 : 4)) + 90" :y="baseY - scaledHeight/2 + 8" fill="#334155" font-size="24" font-weight="600">Rib Height / 波高 {{ profile.rib_height }}mm</text>
         
-        <!-- Pitch (Top) -->
+        <!-- Pitch (Bottom Side) -->
         <g v-if="profile.pitch">
-          <path :d="`M ${startX},${baseY - scaledHeight - 35} L ${startX + scaledPitch},${baseY - scaledHeight - 35}`" stroke="#64748b" stroke-width="2" />
-          <path :d="`M ${startX},${baseY - scaledHeight} L ${startX},${baseY - scaledHeight - 45}`" stroke="#94a3b8" />
-          <path :d="`M ${startX + scaledPitch},${baseY - scaledHeight} L ${startX + scaledPitch},${baseY - scaledHeight - 45}`" stroke="#94a3b8" />
-          <!-- Arrows for Pitch -->
-          <polygon :points="`${startX + 10},${baseY - scaledHeight - 40} ${startX + 10},${baseY - scaledHeight - 30} ${startX},${baseY - scaledHeight - 35}`" fill="#64748b" />
-          <polygon :points="`${startX + scaledPitch - 10},${baseY - scaledHeight - 40} ${startX + scaledPitch - 10},${baseY - scaledHeight - 30} ${startX + scaledPitch},${baseY - scaledHeight - 35}`" fill="#64748b" />
-          <text :x="startX + scaledPitch/2" :y="baseY - scaledHeight - 50" text-anchor="middle" fill="#334155" font-size="28" font-weight="600">{{ profile.pitch }}mm</text>
+          <path :d="`M ${startX + scaledPitch},${baseY} L ${startX + scaledPitch},${baseY + 45}`" stroke="#94a3b8" stroke-dasharray="4" />
+          <path :d="`M ${startX + scaledPitch * 2},${baseY} L ${startX + scaledPitch * 2},${baseY + 45}`" stroke="#94a3b8" stroke-dasharray="4" />
+          <path :d="`M ${startX + scaledPitch},${baseY + 30} L ${startX + scaledPitch * 2},${baseY + 30}`" stroke="#94a3b8" stroke-width="2" />
+          <polygon :points="`${startX + scaledPitch + 10},${baseY + 25} ${startX + scaledPitch + 10},${baseY + 35} ${startX + scaledPitch},${baseY + 30}`" fill="#94a3b8" />
+          <polygon :points="`${startX + scaledPitch * 2 - 10},${baseY + 25} ${startX + scaledPitch * 2 - 10},${baseY + 35} ${startX + scaledPitch * 2},${baseY + 30}`" fill="#94a3b8" />
+          <text :x="startX + scaledPitch * 1.5" :y="baseY + 65" text-anchor="middle" fill="#334155" font-size="24" font-weight="600">Pitch / 波距 {{ profile.pitch }}mm</text>
         </g>
-
-        <!-- Effective Width / Cover Width (Bottom) -->
-        <path :d="`M ${startX},${baseY + 60} L ${startX + (scaledPitch * 3)},${baseY + 60}`" stroke="#64748b" stroke-width="2" />
-        <path :d="`M ${startX},${baseY} L ${startX},${baseY + 70}`" stroke="#94a3b8" />
-        <path :d="`M ${startX + (scaledPitch * 3)},${baseY} L ${startX + (scaledPitch * 3)},${baseY + 70}`" stroke="#94a3b8" />
-        <!-- Arrows for Effective Width -->
-        <polygon :points="`${startX + 15},${baseY + 55} ${startX + 15},${baseY + 65} ${startX},${baseY + 60}`" fill="#64748b" />
-        <polygon :points="`${startX + (scaledPitch * 3) - 15},${baseY + 55} ${startX + (scaledPitch * 3) - 15},${baseY + 65} ${startX + (scaledPitch * 3)},${baseY + 60}`" fill="#64748b" />
-        <text :x="startX + (scaledPitch * 1.5)" :y="baseY + 110" text-anchor="middle" fill="#1e293b" font-size="36" font-weight="bold">Effective Coverage {{ profile.effective_width }}mm</text>
       </g>
     </svg>
   </div>
@@ -99,7 +109,7 @@ const depthY = -120
 const dynamicViewBox = computed(() => {
   const periods = props.profile.profile_type === 'standing_seam' ? 3 : 4;
   const minX = props.showDimensions ? startX - 90 : startX - 20;
-  const minY = baseY - scaledHeight.value + depthY - 20; 
+  const minY = baseY - scaledHeight.value + depthY - (props.showDimensions ? 120 : 40); 
   const maxX = startX + (scaledPitch.value * periods) + depthX + 40;
   
   let maxY = baseY + 40;
