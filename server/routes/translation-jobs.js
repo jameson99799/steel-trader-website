@@ -19,8 +19,8 @@ function cleanupOldLogs() {
                SELECT id FROM translation_jobs WHERE created_at < datetime('now', '-3 days')
              )`
         )
-        // Delete old completed/aborted job records (keep 7 days for history)
-        run(`DELETE FROM translation_jobs WHERE created_at < datetime('now', '-7 days') AND status IN ('done','aborted','error')`)
+        // Delete old completed/aborted job records (keep 3 days for history)
+        run(`DELETE FROM translation_jobs WHERE created_at < datetime('now', '-3 days') AND status IN ('done','aborted','error')`)
         if (deleted?.changes > 0) {
             console.log(`[translation-jobs] Cleaned up ${deleted.changes} old log entries`)
         }
@@ -576,11 +576,12 @@ router.post('/:id/retry-failed', authMiddleware, async (req, res) => {
     }
 })
 
-// DELETE /translation-jobs/logs — manually clear all logs (keeps job records)
+// DELETE /translation-jobs/logs — manually clear all logs and job records
 router.delete('/logs', authMiddleware, (req, res) => {
     try {
-        const result = run('DELETE FROM translation_job_logs')
-        res.json({ success: true, deleted: result.changes })
+        const resultLogs = run('DELETE FROM translation_job_logs')
+        const resultJobs = run(`DELETE FROM translation_jobs WHERE status NOT IN ('running', 'pausing', 'aborting')`)
+        res.json({ success: true, deletedLogs: resultLogs.changes, deletedJobs: resultJobs.changes })
     } catch (e) {
         res.status(500).json({ error: e.message })
     }
