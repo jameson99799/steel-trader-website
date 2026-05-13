@@ -30,7 +30,8 @@
                 <span v-if="!ch.models.length" style="color:#94a3b8;font-size:13px;">未添加</span>
               </td>
               <td>
-                <span v-if="ch.is_default" class="badge badge-success">默认</span>
+                <span v-if="ch.is_default" class="badge badge-success">默认文本</span>
+                <span v-if="ch.is_image_default" class="badge badge-info" style="margin-left: 4px;">默认生图</span>
               </td>
               <td>
                 <button class="btn btn-sm btn-secondary" @click="editChannel(ch)">编辑</button>
@@ -97,7 +98,10 @@
             </div>
             <div class="form-group">
               <label>
-                <input type="checkbox" v-model="form.is_default" /> 设为默认渠道
+                <input type="checkbox" v-model="form.is_default" /> 设为默认文本聊天渠道
+              </label>
+              <label style="display: block; margin-top:8px;">
+                <input type="checkbox" v-model="form.is_image_default" /> 设为默认生图渠道 (用于 DALL-E / 绘画)
               </label>
             </div>
           </div>
@@ -124,7 +128,7 @@ const availableModels = ref([])
 const selectedModels = ref([])
 const manualModel = ref('')
 
-const form = ref({ name: '', api_url: 'https://api.openai.com/v1', api_key: '', models: [], is_default: false })
+const form = ref({ name: '', api_url: 'https://api.openai.com/v1', api_key: '', models: [], is_default: false, is_image_default: false })
 
 async function loadChannels() {
   try { channels.value = await api.getAIChannels() } catch (e) { console.error(e) }
@@ -132,14 +136,14 @@ async function loadChannels() {
 
 function editChannel(ch) {
   editingChannel.value = ch
-  form.value = { name: ch.name, api_url: ch.api_url, api_key: ch.api_key_display, models: [...ch.models], is_default: !!ch.is_default }
+  form.value = { name: ch.name, api_url: ch.api_url, api_key: ch.api_key_display, models: [...ch.models], is_default: !!ch.is_default, is_image_default: !!ch.is_image_default }
   availableModels.value = []
 }
 
 function closeModal() {
   showAdd.value = false
   editingChannel.value = null
-  form.value = { name: '', api_url: 'https://api.openai.com/v1', api_key: '', models: [], is_default: false }
+  form.value = { name: '', api_url: 'https://api.openai.com/v1', api_key: '', models: [], is_default: false, is_image_default: false }
   availableModels.value = []
 }
 
@@ -232,4 +236,5 @@ onMounted(loadChannels)
 .model-option { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
 .model-option:hover { background: #e2e8f0; }
 .model-option input { margin: 0; }
+.badge-info { background: #e0f2fe; color: #0284c7; }
 </style>

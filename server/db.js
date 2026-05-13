@@ -230,8 +230,21 @@ async function initDb() {
   `)
 
 
-  // Migration: add default_model to ai_channels
+  // Migration: add default_model and is_image_default to ai_channels
   try { db.exec("ALTER TABLE ai_channels ADD COLUMN default_model TEXT DEFAULT ''") } catch (e) { }
+  try { db.exec("ALTER TABLE ai_channels ADD COLUMN is_image_default INTEGER DEFAULT 0") } catch (e) { }
+
+  // AI Generated Images table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_generated_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      target_type TEXT NOT NULL,
+      target_id INTEGER NOT NULL,
+      prompt TEXT,
+      image_url TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
 
   // Translation Prompts table for custom translation business rules
   db.exec(`

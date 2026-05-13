@@ -1,8 +1,9 @@
 <template>
   <div class="profile-render-wrapper">
     <!-- 3D Rendering Image -->
-    <div class="render-3d">
-      <img :src="render3dSrc" :alt="profile.model || 'Roofing Profile'" class="render-img" />
+    <div class="render-3d" :style="containerStyle">
+      <canvas ref="canvasRef" class="render-canvas"></canvas>
+      <div v-if="isColorCoated && profileColor" class="color-tint" :style="{ backgroundColor: profileColor }"></div>
     </div>
 
     <!-- 2D Dimensions (SVG only for the technical drawing) -->
@@ -44,7 +45,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch, onMounted, nextTick } from 'vue'
 
 const props = defineProps({
   profile:        { type: Object,  required: true },
@@ -65,6 +66,62 @@ const profileImageMap = {
 const render3dSrc = computed(() => {
   const type = props.profile.profile_type || 'trapezoidal'
   return profileImageMap[type] || profileImageMap.trapezoidal
+})
+
+const isColorCoated = computed(() => {
+  const s = (props.profile.current_surface || props.profile.surface || '').toLowerCase()
+  return s === 'ppgi' || s === 'ppgl'
+})
+
+const profileColor = computed(() => {
+  return props.profile.current_color || props.profile.color || '#3498db'
+})
+
+const containerStyle = computed(() => {
+  return {
+    position: 'relative',
+    backgroundColor: '#fff'
+  }
+})
+
+// ── Canvas Background Removal ─────────────────────────────────────────────
+const canvasRef = ref(null)
+
+const processImage = () => {
+  const src = render3dSrc.value
+  if (!src || !canvasRef.value) return
+
+  const img = new Image()
+  img.crossOrigin = 'Anonymous'
+  img.onload = () => {
+    const canvas = canvasRef.value
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    canvas.width = img.width
+    canvas.height = img.height
+
+    ctx.drawImage(img, 0, 0)
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imgData.data
+
+    // Make near-white pixels transparent
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i], g = data[i+1], b = data[i+2]
+      if (r > 240 && g > 240 && b > 240) {
+        // Soft edge for anti-aliasing
+        const avg = (r + g + b) / 3
+        const alpha = Math.max(0, 255 - (avg - 240) * 17) // 240->255, 255->0
+        data[i+3] = alpha
+      }
+    }
+    ctx.putImageData(imgData, 0, 0)
+  }
+  img.src = src
+}
+
+watch(render3dSrc, processImage)
+onMounted(() => {
+  nextTick(processImage)
 })
 
 // ── 2D Dimension constants ────────────────────────────────────────────────
@@ -154,17 +211,30 @@ const dimViewBox = computed(() => {
 
 .render-3d {
   width: 100%;
-  background: #f8fafb;
   display: flex;
   justify-content: center;
   align-items: center;
   padding: 12px 8px 0;
 }
 
-.render-img {
+.render-canvas {
   width: 100%;
   max-height: 220px;
   object-fit: contain;
+  position: relative;
+  z-index: 2;
+}
+
+.color-tint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  mix-blend-mode: multiply;
+  opacity: 0.85;
+  z-index: 3;
+  pointer-events: none;
 }
 
 .dimensions-section {

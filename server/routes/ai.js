@@ -3,6 +3,13 @@ import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import https from 'https'
 import http from 'http'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { dirname } from 'path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 const router = Router()
 
@@ -72,26 +79,28 @@ router.get('/channels', authMiddleware, (req, res) => {
 })
 
 router.post('/channels', authMiddleware, (req, res) => {
-    const { name, api_url, api_key, models, is_default, default_model } = req.body
+    const { name, api_url, api_key, models, is_default, default_model, is_image_default } = req.body
     if (!name || !api_url || !api_key) return res.status(400).json({ error: '名称、API URL 和 API Key 不能为空' })
     if (is_default) run('UPDATE ai_channels SET is_default = 0')
+    if (is_image_default) run('UPDATE ai_channels SET is_image_default = 0')
     const result = run(
-        'INSERT INTO ai_channels (name, api_url, api_key, models, is_default, default_model) VALUES (?, ?, ?, ?, ?, ?)',
-        [name, api_url, api_key, JSON.stringify(models || []), is_default ? 1 : 0, default_model || '']
+        'INSERT INTO ai_channels (name, api_url, api_key, models, is_default, default_model, is_image_default) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [name, api_url, api_key, JSON.stringify(models || []), is_default ? 1 : 0, default_model || '', is_image_default ? 1 : 0]
     )
     res.json({ id: result.lastInsertRowid, message: '创建成功' })
 })
 
 router.put('/channels/:id', authMiddleware, (req, res) => {
     const { id } = req.params
-    const { name, api_url, api_key, models, is_default, default_model } = req.body
+    const { name, api_url, api_key, models, is_default, default_model, is_image_default } = req.body
     const channel = getOne('SELECT * FROM ai_channels WHERE id = ?', [id])
     if (!channel) return res.status(404).json({ error: '渠道不存在' })
     const finalKey = (api_key && !api_key.includes('****')) ? api_key : channel.api_key
     if (is_default) run('UPDATE ai_channels SET is_default = 0')
+    if (is_image_default) run('UPDATE ai_channels SET is_image_default = 0')
     run(
-        'UPDATE ai_channels SET name=?, api_url=?, api_key=?, models=?, is_default=?, default_model=? WHERE id=?',
-        [name || channel.name, api_url || channel.api_url, finalKey, JSON.stringify(models || JSON.parse(channel.models || '[]')), is_default ? 1 : 0, default_model || channel.default_model || '', id]
+        'UPDATE ai_channels SET name=?, api_url=?, api_key=?, models=?, is_default=?, default_model=?, is_image_default=? WHERE id=?',
+        [name || channel.name, api_url || channel.api_url, finalKey, JSON.stringify(models || JSON.parse(channel.models || '[]')), is_default ? 1 : 0, default_model || channel.default_model || '', is_image_default ? 1 : 0, id]
     )
     res.json({ message: '更新成功' })
 })
@@ -500,4 +509,115 @@ ALL content must be 100% about "${product_name}". NO markdown, ONLY JSON.`
     }
 })
 
+// ─── AI Image Generation ──────────────────────────────────────────────────────
+
+async function downloadImage(urlStr, destPath) {
+    return new Promise((resolve, reject) => {
+        const url = new URL(urlStr)
+        const lib = url.protocol === 'https:' ? https : http
+        const file = fs.createWriteStream(destPath)
+        lib.get(urlStr, (response) => {
+            if (response.statusCode !== 200) {
+                reject(new Error(`Failed to download image, status code: ${response.statusCode}`))
+                return
+            }
+            response.pipe(file)
+            file.on('finish', () => {
+                file.close(resolve)
+            })
+        }).on('error', (err) => {
+            fs.unlink(destPath, () => reject(err))
+        })
+    })
+}
+
+router.post('/generate-image', authMiddleware, async (req, res) => {
+    const { target_type, target_id, prompt, model, size } = req.body
+    if (!prompt) return res.status(400).json({ error: 'Prompt is required' })
+
+    const channel = getOne('SELECT * FROM ai_channels WHERE is_image_default = 1') ||
+                    getOne('SELECT * FROM ai_channels WHERE is_default = 1') ||
+                    getOne('SELECT * FROM ai_channels ORDER BY id ASC LIMIT 1')
+
+    if (!channel) return res.status(400).json({ error: 'No AI channel configured' })
+
+    const apiUrl = channel.api_url.replace(/\/$/, '') + '/images/generations'
+    const modelName = model || 'dall-e-3'
+
+    try {
+        const result = await httpRequest(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${channel.api_key}`,
+                'Content-Type': 'application/json'
+            }
+        }, {
+            model: modelName,
+            prompt: prompt,
+            n: 1,
+            size: size || '1024x1024'
+        }, 120000)
+
+        if (result.status !== 200) {
+            const errMsg = result.body?.error?.message || JSON.stringify(result.body)
+            return res.status(502).json({ error: `AI Image API ${result.status}: ${errMsg}` })
+        }
+
+        const generatedUrl = result.body?.data?.[0]?.url
+        if (!generatedUrl) {
+            return res.status(500).json({ error: 'API returned success but no image URL found', raw: result.body })
+        }
+
+        // Download the image
+        const uploadsDir = path.join(__dirname, '..', '..', 'public', 'uploads', 'ai-images')
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true })
+        }
+
+        const filename = `ai-${Date.now()}-${Math.floor(Math.random()*1000)}.png`
+        const filepath = path.join(uploadsDir, filename)
+        
+        await downloadImage(generatedUrl, filepath)
+
+        const publicUrl = `/uploads/ai-images/${filename}`
+
+        // Save to database
+        const insertResult = run(
+            'INSERT INTO ai_generated_images (target_type, target_id, prompt, image_url) VALUES (?, ?, ?, ?)',
+            [target_type || '', target_id || 0, prompt, publicUrl]
+        )
+
+        const savedImage = getOne('SELECT * FROM ai_generated_images WHERE id = ?', [insertResult.lastInsertRowid])
+
+        res.json({ success: true, image: savedImage })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+router.get('/images/:type/:id', authMiddleware, (req, res) => {
+    try {
+        const images = getAll(
+            'SELECT * FROM ai_generated_images WHERE target_type = ? AND target_id = ? ORDER BY id DESC',
+            [req.params.type, req.params.id]
+        )
+        res.json(images)
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+router.post('/images/delete', authMiddleware, (req, res) => {
+    const { ids } = req.body
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'No IDs provided' })
+    try {
+        const placeholders = ids.map(() => '?').join(',')
+        run(`DELETE FROM ai_generated_images WHERE id IN (${placeholders})`, ids)
+        res.json({ success: true })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
 export default router
+

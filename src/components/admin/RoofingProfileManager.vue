@@ -106,6 +106,7 @@
               <label>上传真实图片替换 3D 渲染 (可选)</label>
               <div style="display:flex; gap:10px; align-items:center;">
                 <input type="file" @change="handleImageUpload" accept="image/*" class="form-control" style="padding:4px; height:auto;" />
+                <button type="button" class="btn btn-sm btn-outline" style="color:#d97706;border-color:#fcd34d;" @click="openAiModal">🤖 AI 生图</button>
                 <button type="button" class="btn btn-sm btn-outline" v-if="currentProfile.image_url" @click="currentProfile.image_url = ''">移除图片</button>
               </div>
               <img v-if="currentProfile.image_url" :src="currentProfile.image_url" style="height: 100px; margin-top: 10px; border-radius: 4px; border: 1px solid #e2e8f0;"/>
@@ -119,6 +120,49 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- AI Generation Modal -->
+    <div v-if="showAiModal" class="modal-overlay" @click.self="showAiModal = false" style="z-index: 10000;">
+      <div class="modal" style="max-width: 800px; width: 90vw;">
+        <div class="modal-header">
+          <h3>🤖 AI 瓦型图生成</h3>
+          <button class="modal-close" @click="showAiModal = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>AI 提示词 (可修改)</label>
+            <textarea v-model="aiPrompt" class="form-control" style="height: 80px; resize: vertical;"></textarea>
+          </div>
+          <div style="margin-top: 10px; text-align: right;">
+            <button class="btn btn-primary" @click="generateAiImage" :disabled="aiGenerating">
+              {{ aiGenerating ? '✨ 生成中...' : '✨ 开始生成' }}
+            </button>
+          </div>
+
+          <div style="margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 10px;">
+              <h4 style="margin:0;">历史生成记录</h4>
+              <button class="btn btn-sm btn-outline" style="color:#ef4444;" @click="deleteSelectedAiImages" v-if="selectedAiImages.length">
+                删除选中 ({{ selectedAiImages.length }})
+              </button>
+            </div>
+            
+            <div class="ai-gallery" v-if="aiHistory.length">
+              <div v-for="img in aiHistory" :key="img.id" class="ai-img-card">
+                <input type="checkbox" :value="img.id" v-model="selectedAiImages" class="img-check" />
+                <img :src="img.image_url" class="img-thumb" />
+                <div class="img-overlay">
+                  <button class="btn btn-sm btn-primary" @click="useAiImage(img.image_url)">使用此图</button>
+                </div>
+              </div>
+            </div>
+            <div v-else style="text-align:center; color:#94a3b8; padding: 30px;">
+              暂无生图记录，快去生成第一张吧！
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -319,6 +363,83 @@ const deleteCategory = async (id) => {
   }
 }
 
+// ─── AI Image Generation ──────────────────────────────────────────────────
+const showAiModal = ref(false)
+const aiPrompt = ref('')
+const aiGenerating = ref(false)
+const aiHistory = ref([])
+const selectedAiImages = ref([])
+
+const generatePrompt = () => {
+  const p = currentProfile.value
+  let surfaceStr = ''
+  if (p.surface === 'gi') surfaceStr = 'galvanized silver metallic finish with visible zinc spangle crystal texture'
+  else if (p.surface === 'gl') surfaceStr = 'galvalume silver metallic finish, smooth matte texture'
+  else surfaceStr = `${p.color || 'dark blue-gray'} PPGI coated metallic finish`
+
+  let typeStr = p.profile_type || 'trapezoidal'
+  if (typeStr === 'corrugated') typeStr = 'corrugated steel roofing sheet panel with sine-wave corrugations'
+  else if (typeStr === 'standing_seam') typeStr = 'standing seam steel roofing sheet panel'
+  else if (typeStr === 'glazed_tile') typeStr = 'glazed tile effect steel roofing sheet panel'
+  else typeStr = 'trapezoidal steel roofing sheet panel'
+
+  return `Professional 3D isometric rendering of a ${typeStr}, ${surfaceStr}. The panel shows 4-5 repeating profiles, viewed from a 30-degree isometric angle showing the top surface and front edge. Clean white background. Photorealistic product rendering style like a manufacturer datasheet. No text, no labels, no dimensions. Sharp crisp edges.`
+}
+
+const openAiModal = async () => {
+  if (!currentProfile.value.id) {
+    alert('请先保存瓦型再进行生图！')
+    return
+  }
+  aiPrompt.value = generatePrompt()
+  selectedAiImages.value = []
+  showAiModal.value = true
+  await loadAiHistory()
+}
+
+const loadAiHistory = async () => {
+  try {
+    aiHistory.value = await api.request(`/ai/images/roofing_profile/${currentProfile.value.id}`)
+  } catch (e) {
+    console.error('Failed to load AI history', e)
+  }
+}
+
+const generateAiImage = async () => {
+  aiGenerating.value = true
+  try {
+    const res = await api.request('/ai/generate-image', 'POST', {
+      target_type: 'roofing_profile',
+      target_id: currentProfile.value.id,
+      prompt: aiPrompt.value,
+      size: '1024x1024'
+    })
+    if (res.success) {
+      await loadAiHistory()
+    }
+  } catch (e) {
+    alert('生图失败: ' + e.message)
+  } finally {
+    aiGenerating.value = false
+  }
+}
+
+const deleteSelectedAiImages = async () => {
+  if (!confirm(`确定删除选中的 ${selectedAiImages.value.length} 张图片？`)) return
+  try {
+    await api.request('/ai/images/delete', 'POST', { ids: selectedAiImages.value })
+    selectedAiImages.value = []
+    await loadAiHistory()
+  } catch (e) {
+    alert('删除失败: ' + e.message)
+  }
+}
+
+const useAiImage = (url) => {
+  currentProfile.value.image_url = url
+  showAiModal.value = false
+}
+
 onMounted(() => {
   loadCategories()
   loadProfiles()
@@ -405,5 +526,48 @@ onMounted(() => {
   outline: none;
   border-color: #3b82f6;
   background: #fff;
+}
+
+.ai-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 15px;
+}
+.ai-img-card {
+  position: relative;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f8fafc;
+  aspect-ratio: 1/1;
+}
+.ai-img-card .img-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ai-img-card .img-check {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+.ai-img-card .img-overlay {
+  position: absolute;
+  bottom: -40px;
+  left: 0;
+  width: 100%;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 0;
+  transition: bottom 0.2s;
+}
+.ai-img-card:hover .img-overlay {
+  bottom: 0;
 }
 </style>
