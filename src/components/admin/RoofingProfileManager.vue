@@ -97,8 +97,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import api from '../../../api'
-import RoofingProfileGenerator from '../../components/RoofingProfileGenerator.vue'
+import api from '../../api'
+import RoofingProfileGenerator from '../RoofingProfileGenerator.vue'
 
 const profiles = ref([])
 const saving = ref(false)
