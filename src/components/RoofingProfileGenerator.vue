@@ -3,23 +3,15 @@
     <img v-if="profile.image_url" :src="profile.image_url" class="real-image" />
     <svg v-else :viewBox="dynamicViewBox" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%;">
       <defs>
-        <!-- GI (Galvanized) Texture: Large crystalline spangles -->
-        <filter id="gi-texture" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" result="noise" />
-          <feColorMatrix type="saturate" values="0" in="noise" result="gray" />
-          <feComponentTransfer in="gray" result="softNoise">
-            <feFuncA type="linear" slope="0.3" />
-          </feComponentTransfer>
-          <feBlend mode="overlay" in="softNoise" in2="SourceGraphic" />
+        <!-- GI (Galvanized) Texture: Real Spangle -->
+        <filter id="gi-texture" x="-10%" y="-10%" width="120%" height="120%">
+          <feImage href="/textures/gi-spangle.png" result="image" width="1600" height="1000" preserveAspectRatio="xMidYMid slice" />
+          <feBlend mode="overlay" in="image" in2="SourceGraphic" />
         </filter>
-        <!-- GL (Galvalume) Texture: Fine, smooth metallic grain -->
-        <filter id="gl-texture" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.15" numOctaves="2" result="noise" />
-          <feColorMatrix type="saturate" values="0" in="noise" result="gray" />
-          <feComponentTransfer in="gray" result="softNoise">
-            <feFuncA type="linear" slope="0.15" />
-          </feComponentTransfer>
-          <feBlend mode="overlay" in="softNoise" in2="SourceGraphic" />
+        <!-- GL (Galvalume) Texture: Real Surface -->
+        <filter id="gl-texture" x="-10%" y="-10%" width="120%" height="120%">
+          <feImage href="/textures/gl-galvalume.png" result="image" width="1600" height="1000" preserveAspectRatio="xMidYMid slice" />
+          <feBlend mode="overlay" in="image" in2="SourceGraphic" />
         </filter>
       </defs>
 
@@ -40,7 +32,7 @@
       <polyline :points="frontPath" fill="none" stroke="#222" stroke-width="2" stroke-linejoin="round" />
       
       <!-- 2D Cross Section & Dimensions (Separate from 3D) -->
-      <g v-if="showDimensions" transform="translate(0, 200)">
+      <g v-if="showDimensions" transform="translate(0, 100)">
         <!-- 2D Title -->
         <text :x="startX" :y="baseY - scaledHeight - 90" fill="#1e293b" font-size="32" font-weight="bold" letter-spacing="1">PROFILE &amp; DIMENSIONS</text>
         <path :d="`M ${startX},${baseY - scaledHeight - 75} L ${startX + (scaledPitch * 3)},${baseY - scaledHeight - 75}`" stroke="#cbd5e1" stroke-width="2" />
@@ -112,7 +104,7 @@ const dynamicViewBox = computed(() => {
   
   let maxY = baseY + 40;
   if (props.showDimensions) {
-    maxY = baseY + 140; // extra space for translated 2D section
+    maxY = baseY + 240; // extra space for translated 2D section
   }
   
   const width = maxX - minX;

@@ -48,8 +48,8 @@
             </div>
             <div class="profile-drawing">
               <!-- If an image URL exists, show image. Otherwise show 3D Vector -->
-              <img v-if="profile.image_url" :src="profile.image_url" :alt="profile.model" style="width:100%; height:200px; object-fit:contain;" />
-              <RoofingProfileGenerator v-else :profile="profile" width="100%" height="200px" :showDimensions="true" />
+              <img v-if="profile.image_url" :src="profile.image_url" :alt="profile.model" style="width:100%; height:auto; max-height: 250px; object-fit:contain;" />
+              <RoofingProfileGenerator v-else :profile="profile" width="100%" height="auto" style="min-height:220px;" :showDimensions="true" />
             </div>
 
             <!-- Integrated Specs Grid -->
@@ -60,7 +60,7 @@
                   <span class="spec-label" style="color: #2ecc71;">Effective Width</span>
                   <span class="spec-value">{{ profile.effective_width }} mm</span>
                 </div>
-                <div class="spec-item" style="margin-top: 12px;">
+                <div class="spec-item" style="margin-top: 6px;">
                   <span class="spec-label">Coil Width</span>
                   <span class="spec-value">{{ profile.coil_width }} mm</span>
                 </div>
@@ -72,7 +72,7 @@
                   <span class="spec-label" style="color: #e74c3c;">Rib Height</span>
                   <span class="spec-value">{{ profile.rib_height }} mm</span>
                 </div>
-                <div class="spec-item" v-if="profile.pitch" style="margin-top: 12px;">
+                <div class="spec-item" v-if="profile.pitch" style="margin-top: 6px;">
                   <span class="spec-label" style="color: #3498db;">Pitch</span>
                   <span class="spec-value">{{ profile.pitch }} mm</span>
                 </div>
