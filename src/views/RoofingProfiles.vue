@@ -52,40 +52,47 @@
               <RoofingProfileGenerator v-else :profile="profile" width="100%" height="200px" :showDimensions="true" />
             </div>
 
-            <!-- Dynamic Surface Controls (only for 3D Vector) -->
-            <div class="surface-controls" v-if="!profile.image_url">
-              <div class="control-row">
-                <span class="control-label">Surface:</span>
+            <!-- Integrated Specs Grid -->
+            <div class="specs-grid">
+              <!-- Column 1: Surface Controls -->
+              <div class="spec-column surface-col" v-if="!profile.image_url">
+                <span class="spec-label">Surface</span>
                 <select v-model="profile.current_surface" class="surface-select" @change="updateProfileSurface(profile)">
-                  <option value="ppgi">PPGI / PPGL (Color Coated)</option>
-                  <option value="gi">GI (Galvanized / Spangle)</option>
+                  <option value="ppgi">PPGI / PPGL</option>
+                  <option value="gi">GI (Spangle)</option>
                   <option value="gl">GL (Galvalume)</option>
                 </select>
-              </div>
-              <div class="control-row" v-if="profile.current_surface === 'ppgi'">
-                <span class="control-label">RAL Color:</span>
-                <div class="color-input-wrapper">
-                  <input type="text" v-model="profile.ral_input" class="ral-input" placeholder="e.g. 9016" @input="updateProfileColor(profile)" />
+                <div class="color-input-wrapper" v-if="profile.current_surface === 'ppgi'" style="margin-top: 8px;">
+                  <input type="text" v-model="profile.ral_input" class="ral-input" placeholder="RAL (e.g. 9016)" @input="updateProfileColor(profile)" />
                   <span class="color-preview" :style="{ backgroundColor: profile.current_color }"></span>
                 </div>
               </div>
-            </div>
-            <div class="profile-specs">
-              <div class="spec-item">
-                <span class="spec-label">Effective Width</span>
-                <span class="spec-value">{{ profile.effective_width }} mm</span>
+              <div class="spec-column surface-col" v-else>
+                <!-- Empty placeholder for images -->
               </div>
-              <div class="spec-item">
-                <span class="spec-label">Coil Width</span>
-                <span class="spec-value">{{ profile.coil_width }} mm</span>
+
+              <!-- Column 2: Widths -->
+              <div class="spec-column">
+                <div class="spec-item">
+                  <span class="spec-label" style="color: #2ecc71;">Effective Width</span>
+                  <span class="spec-value">{{ profile.effective_width }} mm</span>
+                </div>
+                <div class="spec-item" style="margin-top: 12px;">
+                  <span class="spec-label">Coil Width</span>
+                  <span class="spec-value">{{ profile.coil_width }} mm</span>
+                </div>
               </div>
-              <div class="spec-item">
-                <span class="spec-label">Rib Height</span>
-                <span class="spec-value">{{ profile.rib_height }} mm</span>
-              </div>
-              <div class="spec-item" v-if="profile.pitch">
-                <span class="spec-label">Pitch</span>
-                <span class="spec-value">{{ profile.pitch }} mm</span>
+
+              <!-- Column 3: Profile Dimensions -->
+              <div class="spec-column">
+                <div class="spec-item">
+                  <span class="spec-label" style="color: #e74c3c;">Rib Height</span>
+                  <span class="spec-value">{{ profile.rib_height }} mm</span>
+                </div>
+                <div class="spec-item" v-if="profile.pitch" style="margin-top: 12px;">
+                  <span class="spec-label" style="color: #3498db;">Pitch</span>
+                  <span class="spec-value">{{ profile.pitch }} mm</span>
+                </div>
               </div>
             </div>
           </div>
@@ -129,8 +136,13 @@ const updateProfileColor = (profile) => {
     profile.color = profile.current_color
     return
   }
+  if (code.startsWith('#') && (code.length === 4 || code.length === 7)) {
+    profile.current_color = code
+    profile.color = code
+    return
+  }
   // Try to find the RAL code in our dictionary
-  const ralObj = ralColors.value.find(r => r.ral_code === 'RAL ' + code || r.ral_code === code)
+  const ralObj = ralColors.value.find(r => r.code === 'RAL ' + code || r.code === code)
   if (ralObj) {
     profile.current_color = ralObj.hex
     profile.color = ralObj.hex
@@ -242,15 +254,53 @@ onMounted(async () => {
   max-height: 200px;
 }
 
-.surface-controls {
-  padding: var(--spacing-md) var(--spacing-lg);
+.specs-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  padding: var(--spacing-lg);
+  gap: var(--spacing-md);
   background: #f8fafc;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
 }
 
+.spec-column {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.surface-col {
+  border-right: 1px solid var(--border);
+  padding-right: var(--spacing-md);
+}
+
+.spec-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.spec-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.spec-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.surface-select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font-size: 13px;
+  margin-top: 4px;
+}
 .control-row {
   display: flex;
   align-items: center;

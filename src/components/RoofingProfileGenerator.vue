@@ -4,18 +4,25 @@
       <defs>
         <!-- GI (Galvanized) Texture: Large crystalline spangles -->
         <filter id="gi-texture" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.015 0.02" numOctaves="3" result="noise" />
-          <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0 0 0 4 -1" in="noise" result="coloredNoise" />
-          <feComponentTransfer in="coloredNoise" result="spangles">
-            <feFuncA type="discrete" tableValues="0.4 0.6 0.8 1" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="1" result="noise" />
+          <feColorMatrix type="saturate" values="0" in="noise" result="gray" />
+          <feComponentTransfer in="gray" result="contrast">
+            <feFuncR type="linear" slope="3" intercept="-1" />
+            <feFuncG type="linear" slope="3" intercept="-1" />
+            <feFuncB type="linear" slope="3" intercept="-1" />
           </feComponentTransfer>
-          <feBlend mode="overlay" in="spangles" in2="SourceGraphic" />
+          <feBlend mode="multiply" in="contrast" in2="SourceGraphic" />
         </filter>
         <!-- GL (Galvalume) Texture: Fine, smooth metallic grain -->
         <filter id="gl-texture" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" result="noise" />
-          <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0 0 0 1.2 0" in="noise" result="coloredNoise" />
-          <feBlend mode="overlay" in="coloredNoise" in2="SourceGraphic" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.2" numOctaves="1" result="noise" />
+          <feColorMatrix type="saturate" values="0" in="noise" result="gray" />
+          <feComponentTransfer in="gray" result="contrast">
+            <feFuncR type="linear" slope="1.5" intercept="-0.2" />
+            <feFuncG type="linear" slope="1.5" intercept="-0.2" />
+            <feFuncB type="linear" slope="1.5" intercept="-0.2" />
+          </feComponentTransfer>
+          <feBlend mode="multiply" in="contrast" in2="SourceGraphic" />
         </filter>
       </defs>
 
