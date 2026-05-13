@@ -62,6 +62,34 @@ async function initDb() {
     )
   `)
 
+  // Populate default 3D roofing profiles if empty
+  try {
+    const hasRoofingProfiles = db.prepare("SELECT id FROM roofing_profiles LIMIT 1").get()
+    if (!hasRoofingProfiles) {
+      const defaultProfiles = [
+        { model: 'YX50-410-820', type: 'trapezoidal', w: 820, cw: 1000, h: 50, p: 410, surface: 'ppgi', color: '#1e40af', sort: 100 },
+        { model: 'YX35-125-750', type: 'corrugated', w: 750, cw: 1000, h: 35, p: 125, surface: 'gi', color: '', sort: 90 },
+        { model: 'YX76-380-760', type: 'trapezoidal', w: 760, cw: 1000, h: 76, p: 380, surface: 'gl', color: '', sort: 80 },
+        { model: 'YX62-475', type: 'standing_seam', w: 475, cw: 600, h: 62, p: 475, surface: 'ppgi', color: '#b91c1c', sort: 70 },
+        { model: 'YX25-210-840', type: 'glazed_tile', w: 840, cw: 1000, h: 25, p: 210, surface: 'ppgi', color: '#166534', sort: 60 },
+        { model: 'YX15-225-900', type: 'wall_panel', w: 900, cw: 1000, h: 15, p: 225, surface: 'ppgi', color: '#eab308', sort: 50 },
+        { model: 'YX25-205-820', type: 'trapezoidal', w: 820, cw: 1000, h: 25, p: 205, surface: 'ppgi', color: '#374151', sort: 40 },
+        { model: 'YX28-207-828', type: 'glazed_tile', w: 828, cw: 1000, h: 28, p: 207, surface: 'ppgi', color: '#854d0e', sort: 30 },
+        { model: 'YX51-240-720', type: 'trapezoidal', w: 720, cw: 1000, h: 51, p: 240, surface: 'gl', color: '', sort: 20 },
+        { model: 'YX18-76-836', type: 'corrugated', w: 836, cw: 1000, h: 18, p: 76, surface: 'gi', color: '', sort: 10 }
+      ]
+      const insertProfile = db.prepare(`
+        INSERT INTO roofing_profiles (model, profile_type, effective_width, coil_width, rib_height, pitch, surface, color, sort_order)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      for (const p of defaultProfiles) {
+        insertProfile.run(p.model, p.type, p.w, p.cw, p.h, p.p, p.surface, p.color, p.sort)
+      }
+    }
+  } catch (e) {
+    console.error('[db] Error populating default roofing profiles:', e)
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS products (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

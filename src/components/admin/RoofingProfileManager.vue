@@ -17,7 +17,10 @@
             <div style="font-weight: 600;">{{ p.model || '未命名' }}</div>
             <div style="font-size: 12px; color: #64748b;">{{ getTypeLabel(p.profile_type) }}</div>
             <div style="font-size: 12px; color: #94a3b8;">{{ p.rib_height }} / {{ p.pitch }} / {{ p.effective_width }}</div>
-            <button class="btn-delete" @click.stop="deleteProfile(p.id)">×</button>
+            <div style="position: absolute; top: 8px; right: 8px; display: flex; gap: 4px;" class="action-btns">
+              <button class="btn-action" @click.stop="copyProfile(p)" title="复制">📋</button>
+              <button class="btn-action btn-delete" @click.stop="deleteProfile(p.id)" title="删除">×</button>
+            </div>
           </div>
           <div v-if="!profiles.length" style="color:#94a3b8; font-size:13px; text-align:center; padding: 20px;">暂无瓦型数据</div>
         </div>
@@ -82,6 +85,10 @@
                 <input type="text" v-model="currentProfile.color" class="form-control" placeholder="#3498db" />
               </div>
             </div>
+            <div class="form-group">
+              <label>优先级 Priority (1-100, 越大越前)</label>
+              <input type="number" v-model="currentProfile.sort_order" class="form-control" placeholder="例: 100" />
+            </div>
           </div>
           
           <div style="margin-top: 20px; display:flex; justify-content: flex-end;">
@@ -112,7 +119,8 @@ const getEmptyProfile = () => ({
   rib_height: 50,
   pitch: 410,
   surface: 'ppgi',
-  color: '#3498db'
+  color: '#3498db',
+  sort_order: 0
 })
 
 const currentProfile = ref(getEmptyProfile())
@@ -175,6 +183,19 @@ const deleteProfile = async (id) => {
   }
 }
 
+const copyProfile = async (p) => {
+  try {
+    const copy = JSON.parse(JSON.stringify(p))
+    delete copy.id
+    copy.model = copy.model + ' (Copy)'
+    const res = await api.request('/roofing-profiles', 'POST', copy)
+    currentProfile.value = { ...copy, id: res.id }
+    await loadProfiles()
+  } catch (e) {
+    alert('复制失败: ' + e.message)
+  }
+}
+
 onMounted(() => {
   loadProfiles()
 })
@@ -197,19 +218,26 @@ onMounted(() => {
   border-color: #3b82f6;
   background: #eff6ff;
 }
-.btn-delete {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  background: none;
-  border: none;
-  color: #ef4444;
-  font-size: 18px;
-  cursor: pointer;
+.action-btns {
   display: none;
 }
-.profile-item:hover .btn-delete {
-  display: block;
+.profile-item:hover .action-btns {
+  display: flex;
+}
+.btn-action {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.btn-action:hover {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+.btn-delete {
+  color: #ef4444;
+  font-size: 18px;
 }
 .form-grid {
   display: grid;

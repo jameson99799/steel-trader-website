@@ -7,7 +7,7 @@ const router = express.Router()
 // GET all profiles (public)
 router.get('/public', (req, res) => {
     try {
-        const profiles = getAll('SELECT * FROM roofing_profiles ORDER BY sort_order ASC, id DESC')
+        const profiles = getAll('SELECT * FROM roofing_profiles ORDER BY sort_order DESC, id DESC')
         res.json(profiles)
     } catch (e) {
         res.status(500).json({ error: e.message })
@@ -17,7 +17,7 @@ router.get('/public', (req, res) => {
 // GET all profiles (admin)
 router.get('/', authMiddleware, (req, res) => {
     try {
-        const profiles = getAll('SELECT * FROM roofing_profiles ORDER BY sort_order ASC, id DESC')
+        const profiles = getAll('SELECT * FROM roofing_profiles ORDER BY sort_order DESC, id DESC')
         res.json(profiles)
     } catch (e) {
         res.status(500).json({ error: e.message })
