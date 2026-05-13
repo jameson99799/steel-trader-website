@@ -128,7 +128,10 @@ router.post('/channels/:id/test', authMiddleware, async (req, res) => {
     const channel = getOne('SELECT * FROM ai_channels WHERE id = ?', [req.params.id])
     if (!channel) return res.status(404).json({ error: '渠道不存在' })
 
-    const apiUrl = channel.api_url.replace(/\/$/, '') + '/chat/completions'
+    let apiUrl = channel.api_url.replace(/\/$/, '')
+    if (!apiUrl.endsWith('/chat/completions')) {
+        apiUrl += '/chat/completions'
+    }
     const models = JSON.parse(channel.models || '[]')
     const modelName = channel.default_model || models[0] || 'gpt-3.5-turbo'
 
@@ -553,29 +556,50 @@ router.post('/generate-image', authMiddleware, async (req, res) => {
 
     if (!channel) return res.status(400).json({ error: 'No AI channel configured' })
 
-    const apiUrl = channel.api_url.replace(/\/$/, '') + '/images/generations'
+    const baseApiUrl = channel.api_url.replace(/\/$/, '')
+    const isChatEndpoint = baseApiUrl.endsWith('/chat/completions')
+    const apiUrl = isChatEndpoint ? baseApiUrl : (baseApiUrl + '/images/generations')
     const modelName = model || 'dall-e-3'
 
     try {
+        const payload = isChatEndpoint ? {
+            model: modelName,
+            messages: [{ role: 'user', content: prompt }]
+        } : {
+            model: modelName,
+            prompt: prompt,
+            n: 1,
+            size: size || '1024x1024'
+        }
+
         const result = await httpRequest(apiUrl, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${channel.api_key}`,
                 'Content-Type': 'application/json'
             }
-        }, {
-            model: modelName,
-            prompt: prompt,
-            n: 1,
-            size: size || '1024x1024'
-        }, 120000)
+        }, payload, 120000)
 
         if (result.status !== 200) {
             const errMsg = result.body?.error?.message || JSON.stringify(result.body)
             return res.status(502).json({ error: `AI Image API ${result.status}: ${errMsg}` })
         }
 
-        const generatedUrl = result.body?.data?.[0]?.url
+        let generatedUrl = ''
+        if (isChatEndpoint) {
+            const reply = result.body?.choices?.[0]?.message?.content || ''
+            // Extract URL from markdown format ![img](url) or just http...
+            const mdMatch = reply.match(/!\[.*?\]\((https?:\/\/[^\)]+)\)/)
+            if (mdMatch) {
+                generatedUrl = mdMatch[1]
+            } else {
+                const urlMatch = reply.match(/(https?:\/\/[^\s]+)/)
+                if (urlMatch) generatedUrl = urlMatch[1]
+            }
+        } else {
+            generatedUrl = result.body?.data?.[0]?.url
+        }
+
         if (!generatedUrl) {
             return res.status(500).json({ error: 'API returned success but no image URL found', raw: result.body })
         }
