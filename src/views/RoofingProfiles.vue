@@ -64,20 +64,8 @@ const profiles = ref([])
 
 onMounted(async () => {
   try {
-    const res = await api.getNews({ category_slug: 'roofing-sheet-profiles', limit: 100, status: '1' })
-    const parsedProfiles = []
-    for (const item of (res.data || [])) {
-      try {
-        const config = JSON.parse(item.content)
-        if (config._is_roofing_profile) {
-          // Merge sort_order so it can be managed by CMS priority
-          parsedProfiles.push({ ...config, id: item.id })
-        }
-      } catch (e) {
-        // Not a JSON config or failed to parse, skip
-      }
-    }
-    profiles.value = parsedProfiles
+    const res = await api.getRoofingProfilesPublic()
+    profiles.value = res || []
   } catch (e) {
     console.error('Failed to load roofing profiles', e)
   }

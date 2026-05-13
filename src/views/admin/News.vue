@@ -18,7 +18,7 @@
       <span v-for="c in categories" :key="c.id" :class="['cat-tab', filterCatId === c.id ? 'active' : '']" @click="filterCatId = c.id; loadNews()">
         {{ c.name }} ({{ c.count || 0 }})
       </span>
-      <button class="btn btn-outline" @click="openCreateRoofing" style="margin-left:auto;color:#d97706;border-color:#fcd34d;">📐 3D瓦型图生成器</button>
+      <button class="btn btn-outline" @click="showRoofingModal = true" style="margin-left:auto;color:#d97706;border-color:#fcd34d;">📐 3D瓦型图生成器</button>
     </div>
 
     <!-- Batch action bar -->
@@ -173,105 +173,41 @@
 
           <!-- Content Tab -->
           <div v-show="activeTab === 'content'" class="tab-content">
-            
-            <!-- Roofing Profile Form -->
-            <div v-if="isRoofingProfile" class="roofing-form">
-              <div style="display:flex; gap:20px;">
-                <div style="flex: 1;">
-                  <div class="form-group">
-                    <label>瓦型型号 Model</label>
-                    <input v-model="roofingConfig.model" class="form-control" placeholder="如 YX50-410-820" />
-                  </div>
-                  <div class="form-group">
-                    <label>有效宽度 Effective Width (mm)</label>
-                    <input v-model.number="roofingConfig.effective_width" type="number" class="form-control" />
-                  </div>
-                  <div class="form-group">
-                    <label>进料宽度 Coil Width (mm)</label>
-                    <input v-model.number="roofingConfig.coil_width" type="number" class="form-control" />
-                  </div>
-                  <div class="form-group">
-                    <label>波高 Rib Height (mm)</label>
-                    <input v-model.number="roofingConfig.rib_height" type="number" class="form-control" />
-                  </div>
-                  <div class="form-group">
-                    <label>波距 Pitch (mm)</label>
-                    <input v-model.number="roofingConfig.pitch" type="number" class="form-control" />
-                  </div>
-                  <div class="form-group">
-                    <label>瓦型种类 Profile Type</label>
-                    <select v-model="roofingConfig.profile_type" class="form-control">
-                      <option value="trapezoidal">梯形/角驰 (Trapezoidal)</option>
-                      <option value="corrugated">波纹型 (Corrugated)</option>
-                      <option value="standing_seam">直立锁边 (Standing Seam)</option>
-                      <option value="glazed_tile">琉璃瓦 (Glazed Tile)</option>
-                      <option value="wall_panel">墙面板 (Wall Panel)</option>
-                    </select>
-                  </div>
-                  <div class="form-group">
-                    <label>表面材质 Surface</label>
-                    <select v-model="roofingConfig.surface" class="form-control">
-                      <option value="ppgi">彩涂 (PPGI/PPGL)</option>
-                      <option value="gi">镀锌 (GI) - 自带锌花纹理</option>
-                      <option value="gl">镀铝锌 (GL) - 自带细密锌花</option>
-                    </select>
-                  </div>
-                  <div class="form-group" v-if="roofingConfig.surface === 'ppgi'">
-                    <label>颜色 Color (Hex / RAL近似)</label>
-                    <div style="display:flex;gap:10px;">
-                      <input type="color" v-model="roofingConfig.color" style="height:38px;padding:0;width:50px;" />
-                      <input v-model="roofingConfig.color" class="form-control" placeholder="#3498db" />
-                    </div>
-                  </div>
-                </div>
-                
-                <div style="flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; display:flex; flex-direction: column;">
-                  <div style="padding: 12px; border-bottom: 1px solid #e2e8f0; background: #fff; border-radius: 8px 8px 0 0; font-weight: 600;">3D 预览 Preview</div>
-                  <div style="flex: 1; min-height: 250px; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 20px;">
-                    <RoofingProfileGenerator :profile="roofingConfig" width="100%" height="240px" :showDimensions="true" />
-                  </div>
-                </div>
+            <p class="form-hint">支持粘贴 HTML 代码、可视化编辑、点击图片替换、上传图片</p>
+            <div class="editor-mode-bar">
+              <div class="mode-tabs">
+                <span :class="['mode-tab', newsEditorMode === 'visual' ? 'active' : '']" @click="switchNewsMode('visual')">✏️ 可视化编辑</span>
+                <span :class="['mode-tab', newsEditorMode === 'html' ? 'active' : '']" @click="switchNewsMode('html')">📝 HTML代码</span>
+                <span :class="['mode-tab', newsEditorMode === 'preview' ? 'active' : '']" @click="switchNewsMode('preview')">👁 预览</span>
+              </div>
+              <div class="editor-actions">
+                <button type="button" class="editor-btn" @click="insertNewsImage">📷 插入图片</button>
+                <button type="button" class="fullscreen-btn" @click="isFullscreen = !isFullscreen">
+                  {{ isFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
+                </button>
               </div>
             </div>
 
-            <!-- Standard HTML Editor -->
-            <div v-else>
-              <p class="form-hint">支持粘贴 HTML 代码、可视化编辑、点击图片替换、上传图片</p>
-              <div class="editor-mode-bar">
-                <div class="mode-tabs">
-                  <span :class="['mode-tab', newsEditorMode === 'visual' ? 'active' : '']" @click="switchNewsMode('visual')">✏️ 可视化编辑</span>
-                  <span :class="['mode-tab', newsEditorMode === 'html' ? 'active' : '']" @click="switchNewsMode('html')">📝 HTML代码</span>
-                  <span :class="['mode-tab', newsEditorMode === 'preview' ? 'active' : '']" @click="switchNewsMode('preview')">👁 预览</span>
-                </div>
-                <div class="editor-actions">
-                  <button type="button" class="editor-btn" @click="insertNewsImage">📷 插入图片</button>
-                  <button type="button" class="fullscreen-btn" @click="isFullscreen = !isFullscreen">
-                    {{ isFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
-                  </button>
-                </div>
-              </div>
-
-              <div :class="['editor-wrap', isFullscreen ? 'is-fullscreen' : '']">
-                <textarea
-                  v-if="newsEditorMode === 'html'"
-                  v-model="form.content"
-                  class="html-editor"
-                  placeholder="<div>&#10;  <h2>文章内容</h2>&#10;  <p>在此处粘贴 HTML 内容...</p>&#10;</div>"
-                  spellcheck="false"
-                ></textarea>
-                <div
-                  v-else-if="newsEditorMode === 'visual'"
-                  ref="newsVisualEl"
-                  class="visual-editor"
-                  contenteditable="true"
-                  @input="onNewsVisualInput"
-                  @click="onNewsVisualClick"
-                  @paste="onNewsVisualPaste"
-                ></div>
-                <div v-else class="html-preview" v-html="form.content"></div>
-              </div>
-              <input type="file" ref="newsImgInput" accept="image/*" style="display:none" @change="handleNewsImgUpload" />
+            <div :class="['editor-wrap', isFullscreen ? 'is-fullscreen' : '']">
+              <textarea
+                v-if="newsEditorMode === 'html'"
+                v-model="form.content"
+                class="html-editor"
+                placeholder="<div>&#10;  <h2>文章内容</h2>&#10;  <p>在此处粘贴 HTML 内容...</p>&#10;</div>"
+                spellcheck="false"
+              ></textarea>
+              <div
+                v-else-if="newsEditorMode === 'visual'"
+                ref="newsVisualEl"
+                class="visual-editor"
+                contenteditable="true"
+                @input="onNewsVisualInput"
+                @click="onNewsVisualClick"
+                @paste="onNewsVisualPaste"
+              ></div>
+              <div v-else class="html-preview" v-html="form.content"></div>
             </div>
+            <input type="file" ref="newsImgInput" accept="image/*" style="display:none" @change="handleNewsImgUpload" />
           </div>
 
           <!-- SEO Tab -->
@@ -662,42 +598,6 @@ const form = ref({
   render_mode: 'direct',
   category_id: null
 })
-
-// Roofing Profiles Integration
-import RoofingProfileGenerator from '../../components/RoofingProfileGenerator.vue'
-
-const isRoofingProfile = computed(() => {
-  const cat = categories.value.find(c => c.id === form.value.category_id)
-  if (cat && (cat.name_en === 'Roofing Sheet Profiles' || cat.name === '3D 瓦型图')) return true
-  
-  try {
-    if (form.value.content && form.value.content.includes('_is_roofing_profile')) {
-      return JSON.parse(form.value.content)._is_roofing_profile === true
-    }
-  } catch (e) {}
-  return false
-})
-
-const roofingConfig = ref({
-  _is_roofing_profile: true,
-  model: 'YX50-410-820',
-  profile_type: 'trapezoidal',
-  effective_width: 820,
-  coil_width: 1000,
-  rib_height: 50,
-  pitch: 410,
-  surface: 'ppgi',
-  color: '#3498db'
-})
-
-// Sync roofingConfig to form.content when it changes
-watch(roofingConfig, (val) => {
-  if (isRoofingProfile.value) {
-    form.value.content = JSON.stringify(val)
-    form.value.title = val.model
-    form.value.title_en = val.model
-  }
-}, { deep: true })
 
 async function loadNews() {
   try {

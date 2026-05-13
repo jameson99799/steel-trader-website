@@ -198,59 +198,6 @@ async function initDb() {
   } catch (e) { }
 
   // ═══════════════════════════════════════════════════════════════════════════════
-  // 3D Roofing Profiles Migration
-  // ═══════════════════════════════════════════════════════════════════════════════
-  try {
-    // 1. Ensure "Roofing Sheet Profiles" category exists in news_categories
-    let roofingCat = db.prepare("SELECT id FROM news_categories WHERE name_en = 'Roofing Sheet Profiles' OR name = 'Roofing Sheet Profiles' LIMIT 1").get()
-    if (!roofingCat) {
-      const res = db.prepare("INSERT INTO news_categories (name, name_en, slug) VALUES (?, ?, ?)").run('3D 瓦型图', 'Roofing Sheet Profiles', 'roofing-sheet-profiles')
-      roofingCat = { id: res.lastInsertRowid }
-    }
-
-    // 2. Check if we already have roofing profiles in the news table for this category
-    const hasRoofingNews = db.prepare("SELECT id FROM news WHERE category_id = ? LIMIT 1").get(roofingCat.id)
-    if (!hasRoofingNews) {
-      // 3. Insert 10 default profiles
-      const defaultProfiles = [
-        { model: 'YX50-410-820', type: 'trapezoidal', w: 820, cw: 1000, h: 50, p: 410, surface: 'ppgi', color: '#1e40af', sort: 100 },
-        { model: 'YX35-125-750', type: 'corrugated', w: 750, cw: 1000, h: 35, p: 125, surface: 'gi', color: '', sort: 90 },
-        { model: 'YX76-380-760', type: 'trapezoidal', w: 760, cw: 1000, h: 76, p: 380, surface: 'gl', color: '', sort: 80 },
-        { model: 'YX62-475', type: 'standing_seam', w: 475, cw: 600, h: 62, p: 475, surface: 'ppgi', color: '#b91c1c', sort: 70 },
-        { model: 'YX25-210-840', type: 'glazed_tile', w: 840, cw: 1000, h: 25, p: 210, surface: 'ppgi', color: '#166534', sort: 60 },
-        { model: 'YX15-225-900', type: 'wall_panel', w: 900, cw: 1000, h: 15, p: 225, surface: 'ppgi', color: '#eab308', sort: 50 },
-        { model: 'YX25-205-820', type: 'trapezoidal', w: 820, cw: 1000, h: 25, p: 205, surface: 'ppgi', color: '#374151', sort: 40 },
-        { model: 'YX28-207-828', type: 'glazed_tile', w: 828, cw: 1000, h: 28, p: 207, surface: 'ppgi', color: '#854d0e', sort: 30 },
-        { model: 'YX51-240-720', type: 'trapezoidal', w: 720, cw: 1000, h: 51, p: 240, surface: 'gl', color: '', sort: 20 },
-        { model: 'YX18-76-836', type: 'corrugated', w: 836, cw: 1000, h: 18, p: 76, surface: 'gi', color: '', sort: 10 }
-      ]
-
-      const insertNews = db.prepare(`
-        INSERT INTO news (title, title_en, category_id, slug, content, sort_order, summary, summary_en, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
-      `)
-
-      for (const p of defaultProfiles) {
-        const configJson = JSON.stringify({
-          _is_roofing_profile: true,
-          model: p.model,
-          profile_type: p.type,
-          effective_width: p.w,
-          coil_width: p.cw,
-          rib_height: p.h,
-          pitch: p.p,
-          surface: p.surface,
-          color: p.color
-        })
-        const slug = p.model.toLowerCase() + '-' + Date.now() + Math.floor(Math.random() * 1000)
-        insertNews.run(p.model, p.model, roofingCat.id, slug, configJson, p.sort, p.type + ' profile', p.type + ' profile')
-      }
-    }
-  } catch (e) {
-    console.error('[db] Error initializing roofing profiles:', e)
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════════
   // CRM Tables
   // ═══════════════════════════════════════════════════════════════════════════════
 
