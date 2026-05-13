@@ -283,13 +283,6 @@ export const api = {
   getAIModels: (id) => request(`/ai/channels/${id}/models`),
   testAIChannel: (id) => request(`/ai/channels/${id}/test`, { method: 'POST' }),
   generateProduct: (data) => request('/ai/generate-product', { method: 'POST', body: JSON.stringify(data) }),
-
-  // Roofing Profiles
-  getRoofingProfilesPublic: () => {
-    const cached = readCache('/roofing-profiles/public')
-    if (cached) return Promise.resolve(cached)
-    return request('/roofing-profiles/public').then(res => { writeCache('/roofing-profiles/public', res); return res })
-  }
 }
 
 export default api
