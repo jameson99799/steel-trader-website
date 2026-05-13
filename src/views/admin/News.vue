@@ -330,14 +330,7 @@
       </div>
     </div>
     
-    <Teleport to="body">
-      <TranslationStatusModal
-        v-if="showTranslationStatus"
-        :articleId="viewingTranslationId"
-        itemType="news"
-        @close="showTranslationStatus = false"
-      />
-    </Teleport>
+    
 
     <!-- Roofing Profiles Modal -->
     <Teleport to="body">
@@ -358,10 +351,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import api from '../../api'
-import Editor from '../../components/admin/Editor.vue'
-import TranslationStatusModal from '../../components/admin/TranslationStatusModal.vue'
 import RoofingProfileManager from '../../components/admin/RoofingProfileManager.vue'
 
 const newsList = ref([])
@@ -371,8 +361,6 @@ const saving = ref(false)
 const activeTab = ref('basic')
 const isFullscreen = ref(false)
 const translatingId = ref(null)
-const showTranslationStatus = ref(false)
-const viewingTranslationId = ref(null)
 const showRoofingModal = ref(false)
 
 // ─── Category state ──────────────────────────────────────────────────────────
