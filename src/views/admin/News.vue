@@ -18,6 +18,7 @@
       <span v-for="c in categories" :key="c.id" :class="['cat-tab', filterCatId === c.id ? 'active' : '']" @click="filterCatId = c.id; loadNews()">
         {{ c.name }} ({{ c.count || 0 }})
       </span>
+      <button class="btn btn-outline" @click="showRoofingModal = true" style="margin-left:auto;color:#d97706;border-color:#fcd34d;">📐 3D瓦型图生成器</button>
     </div>
 
     <!-- Batch action bar -->
@@ -328,12 +329,40 @@
         </div>
       </div>
     </div>
+    
+    <Teleport to="body">
+      <TranslationStatusModal
+        v-if="showTranslationStatus"
+        :articleId="viewingTranslationId"
+        itemType="news"
+        @close="showTranslationStatus = false"
+      />
+    </Teleport>
+
+    <!-- Roofing Profiles Modal -->
+    <Teleport to="body">
+      <div class="modal-overlay" v-if="showRoofingModal" @click.self="showRoofingModal = false">
+        <div class="modal-content large-modal">
+          <div class="modal-header">
+            <h3>📐 3D 瓦型图管理与生成器</h3>
+            <button class="btn-close" @click="showRoofingModal = false">×</button>
+          </div>
+          <div class="modal-body">
+            <RoofingProfileManager />
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import api from '../../api'
+import Editor from '../../components/admin/Editor.vue'
+import TranslationStatusModal from '../../components/admin/TranslationStatusModal.vue'
+import RoofingProfileManager from '../../components/admin/RoofingProfileManager.vue'
 
 const newsList = ref([])
 const showModal = ref(false)
@@ -342,6 +371,9 @@ const saving = ref(false)
 const activeTab = ref('basic')
 const isFullscreen = ref(false)
 const translatingId = ref(null)
+const showTranslationStatus = ref(false)
+const viewingTranslationId = ref(null)
+const showRoofingModal = ref(false)
 
 // ─── Category state ──────────────────────────────────────────────────────────
 const categories = ref([])
