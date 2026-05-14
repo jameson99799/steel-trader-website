@@ -118,7 +118,7 @@
           <h3>{{ editingProfile.id ? 'Edit Profile' : 'Add New Profile' }}</h3>
           <button class="close-btn" @click="showProfileModal = false">✕</button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body modal-body-split">
           <form @submit.prevent="saveProfile" class="form-grid">
             
             <div class="form-section-title">Basic Information</div>
@@ -225,6 +225,22 @@
               <button type="submit" class="btn btn-primary">Save Profile</button>
             </div>
           </form>
+
+          <!-- Live Preview Side -->
+          <div class="preview-panel">
+            <div class="form-section-title">Live Preview</div>
+            
+            <div class="preview-3d">
+              <div class="preview-label">3D RENDERING</div>
+              <img v-if="editingProfile.image_url" :src="editingProfile.image_url" alt="3D Preview" class="preview-img" />
+              <img v-else :src="getDefaultImage(editingProfile)" alt="3D Preview" class="preview-img" />
+            </div>
+
+            <div class="preview-2d">
+              <div class="preview-label">2D ENGINEERING DRAWING</div>
+              <RoofingProfileGenerator :profile="editingProfile" :showDimensions="true" class="admin-generator" />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -270,6 +286,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import RoofingProfileGenerator from '../../components/RoofingProfileGenerator.vue'
 
 const profiles = ref([])
 const categories = ref([])
@@ -312,6 +329,22 @@ const getCategoryName = (id) => {
 const formatType = (type) => {
   const m = { trapezoidal: 'Trapezoidal', corrugated: 'Corrugated', standing_seam: 'Standing Seam', glazed_tile: 'Glazed Tile', wall_panel: 'Wall Panel' }
   return m[type] || type
+}
+
+const getDefaultImage = (profile) => {
+  const type = profile.profile_type || 'trapezoidal'
+  const surface = profile.surface || 'ppgi'
+  
+  if (type === 'corrugated') {
+    if (surface === 'ppgi') return '/images/roofing/corrugated-ppgi.png'
+    return surface === 'gl' ? '/images/roofing/corrugated-gl.png' : '/images/roofing/corrugated-gi.png'
+  }
+  if (type === 'standing_seam') return '/images/roofing/standing-seam.png'
+  if (type === 'glazed_tile') return '/images/roofing/glazed-tile.png'
+  
+  if (surface === 'gi') return '/images/roofing/trapezoidal-gi.png'
+  if (surface === 'gl') return '/images/roofing/trapezoidal-gl.png'
+  return '/images/roofing/trapezoidal-ppgi.png'
 }
 
 // -- Profiles --
@@ -473,12 +506,20 @@ onMounted(() => {
 /* Modals */
 .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
 .modal-container { background: #fff; width: 100%; max-width: 500px; border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); max-height: 90vh; display: flex; flex-direction: column; }
-.modal-large { max-width: 800px; }
+.modal-large { max-width: 1000px; }
 .modal-header { padding: 20px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
 .modal-header h3 { margin: 0; font-size: 18px; color: #0f172a; }
 .close-btn { background: none; border: none; font-size: 20px; color: #64748b; cursor: pointer; }
 .modal-body { padding: 24px; overflow-y: auto; flex: 1; }
-.modal-footer { margin-top: 24px; display: flex; justify-content: flex-end; gap: 12px; }
+.modal-body-split { display: grid; grid-template-columns: 1.2fr 1fr; gap: 30px; }
+.modal-footer { margin-top: 24px; display: flex; justify-content: flex-end; gap: 12px; grid-column: 1 / -1; }
+
+.preview-panel { background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 20px; }
+.preview-label { font-size: 11px; font-weight: 800; color: #64748b; letter-spacing: 1px; margin-bottom: 8px; }
+.preview-3d { display: flex; flex-direction: column; align-items: center; background: #fff; padding: 12px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.preview-img { width: 100%; max-height: 200px; object-fit: contain; }
+.preview-2d { background: #fff; padding: 12px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.admin-generator { max-height: 200px; }
 
 .form-grid { display: flex; flex-direction: column; gap: 16px; }
 .form-section-title { font-size: 15px; font-weight: 700; color: #334155; margin: 24px 0 8px; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; }

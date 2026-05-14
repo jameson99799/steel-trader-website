@@ -104,10 +104,47 @@
             <router-link :to="langPath('/')" @click="menuOpen = false" class="nav-link">
               {{ t('home') }}
             </router-link>
-            <router-link :to="langPath('/products')" @click="menuOpen = false" class="nav-link">
-              {{ t('products') }}
-            </router-link>
-            <router-link :to="langPath('/news')" @click="menuOpen = false" class="nav-link">{{ t('news') }}</router-link>
+
+            <div class="nav-dropdown-wrapper">
+              <router-link :to="langPath('/products')" @click="menuOpen = false" class="nav-link">
+                {{ t('products') }}
+                <svg class="dropdown-arrow" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+              </router-link>
+              <div class="nav-dropdown" v-if="productCategories.length">
+                <router-link 
+                  v-for="cat in productCategories" :key="cat.id" 
+                  :to="langPath(`/products?category=${cat.slug || cat.id}`)" 
+                  @click="menuOpen = false"
+                  class="nav-dropdown-item"
+                >
+                  {{ localizedValue(cat, 'name') }}
+                </router-link>
+              </div>
+            </div>
+
+            <div class="nav-dropdown-wrapper">
+              <router-link :to="langPath('/news')" @click="menuOpen = false" class="nav-link">
+                {{ t('news') }}
+                <svg class="dropdown-arrow" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+              </router-link>
+              <div class="nav-dropdown" v-if="newsCategories.length || true">
+                <router-link 
+                  v-for="cat in newsCategories" :key="cat.id" 
+                  :to="langPath(`/news/category/${cat.slug || cat.id}`)" 
+                  @click="menuOpen = false"
+                  class="nav-dropdown-item"
+                >
+                  {{ localizedValue(cat, 'name') }}
+                </router-link>
+                <router-link :to="langPath('/ral-colors')" @click="menuOpen = false" class="nav-dropdown-item">
+                  RAL Color
+                </router-link>
+                <router-link :to="langPath('/roofing-profiles')" @click="menuOpen = false" class="nav-dropdown-item">
+                  Roofing Profiles
+                </router-link>
+              </div>
+            </div>
+
             <router-link :to="langPath('/about')" @click="menuOpen = false" class="nav-link">
               {{ t('about') }}
             </router-link>
@@ -176,6 +213,9 @@ const mobileLangRef = ref(null)
 const tabletLangOpen = ref(false)
 const tabletLangRef = ref(null)
 
+const productCategories = ref([])
+const newsCategories = ref([])
+
 const selectLang = (code) => {
   if (typeof setLang === 'function') setLang(code)
   else if (typeof toggleLang === 'function') toggleLang() // fallback
@@ -204,12 +244,16 @@ onMounted(async () => {
     }
   } catch (e) {}
   try {
-    const [status, langs] = await Promise.all([
+    const [status, langs, pcats, ncats] = await Promise.all([
       api.getMultilingualStatus(),
-      api.getActiveLanguages()
+      api.getActiveLanguages(),
+      api.getCategoryTree().catch(() => []),
+      api.getNewsCategories().catch(() => [])
     ])
     multilingualEnabled.value = !!status?.enabled
     activeLanguages.value = langs || []
+    productCategories.value = pcats
+    newsCategories.value = ncats
   } catch (e) {}
   document.addEventListener('click', handleClickOutside)
 })
@@ -496,6 +540,57 @@ onUnmounted(() => {
   width: 100%;
 }
 
+/* Nav Dropdown */
+.nav-dropdown-wrapper {
+  position: relative;
+}
+.dropdown-arrow {
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  display: inline-block;
+  vertical-align: middle;
+  transition: transform 0.2s;
+}
+.nav-dropdown-wrapper:hover .dropdown-arrow {
+  transform: rotate(180deg);
+}
+.nav-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 220px;
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+  padding: 8px 0;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  transition: all 0.3s ease;
+  z-index: 200;
+  border: 1px solid var(--border);
+}
+.nav-dropdown-wrapper:hover .nav-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.nav-dropdown-item {
+  display: block;
+  padding: 10px 20px;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+  transition: var(--transition);
+}
+.nav-dropdown-item:hover {
+  background: var(--gray-50);
+  color: var(--primary);
+  padding-left: 24px;
+}
+
 .header-cta {
   display: flex;
   align-items: center;
@@ -629,17 +724,47 @@ onUnmounted(() => {
   }
 
   .main-nav.active {
-    max-height: 400px;
+    max-height: 800px;
     opacity: 1;
+    overflow-y: auto;
   }
 
   .nav-link {
     width: 100%;
     padding: var(--spacing);
     border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
 
   .nav-link:last-child {
+    border-bottom: none;
+  }
+  
+  .nav-dropdown-wrapper {
+    width: 100%;
+  }
+  
+  .nav-dropdown {
+    position: static;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+    border: none;
+    border-top: 1px solid var(--border);
+    background: var(--gray-50);
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    width: 100%;
+    border-radius: 0;
+  }
+  
+  .nav-dropdown-item {
+    padding-left: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  
+  .nav-dropdown-item:last-child {
     border-bottom: none;
   }
 

@@ -152,13 +152,25 @@
       </div>
     </div>
   </div>
-  <RalColorModal v-model:show="showColorModal" @select="onColorSelected" />
+
+  <!-- Color Detail Lightbox -->
+  <transition name="fade">
+    <div v-if="activeColorLightbox" class="lightbox" @click.self="activeColorLightbox = null">
+      <div class="lightbox-card">
+        <button class="lb-close" @click="activeColorLightbox = null">✕</button>
+        <div class="lb-swatch" :style="{ background: activeColorLightbox.hex }"></div>
+        <div class="lb-body">
+          <p class="lb-code">{{ activeColorLightbox.code }}</p>
+          <p class="lb-name">{{ activeColorLightbox.name }}</p>
+        </div>
+      </div>
+    </div>
+  </transition>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import RoofingProfileGenerator from '../components/RoofingProfileGenerator.vue'
-import RalColorModal from '../components/RalColorModal.vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
@@ -171,7 +183,7 @@ const activeCategory = ref(0)
 
 const filteredProfiles = computed(() => {
   if (activeCategory.value === 0) return profiles.value
-  return profiles.value.filter(p => p.category_id === activeCategory.value)
+  return profiles.value.filter(p => p.category_id == activeCategory.value)
 })
 
 const getDefaultImage = (profile) => {
@@ -263,19 +275,18 @@ const updateProfileColor = (profile) => {
   }
 }
 
-const showColorModal = ref(false)
-const activeProfileForColor = ref(null)
+const activeColorLightbox = ref(null)
 
 const openColorModal = (profile) => {
-  activeProfileForColor.value = profile
-  showColorModal.value = true
-}
-
-const onColorSelected = (color) => {
-  if (activeProfileForColor.value) {
-    activeProfileForColor.value.ral_input = 'RAL ' + color.code
-    activeProfileForColor.value.current_color = color.hex
-    updateProfileSurface(activeProfileForColor.value)
+  if (!profile.ral_input) return
+  // try to find RAL info
+  const code = profile.ral_input.replace(/[^0-9]/g, '')
+  const ralObj = ralColors.value.find(r => r.code === code)
+  
+  activeColorLightbox.value = {
+    hex: profile.current_color,
+    code: profile.ral_input,
+    name: ralObj ? (ralObj.name_en || ralObj.name) : 'Custom Color'
   }
 }
 
@@ -336,11 +347,11 @@ onMounted(async () => {
 }
 .filter-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 .filter-btn {
-  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
-  color: rgba(255,255,255,0.7); padding: 8px 22px; border-radius: 50px;
+  background: #f1f5f9; border: 1px solid #e2e8f0;
+  color: #475569; padding: 8px 22px; border-radius: 50px;
   font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
 }
-.filter-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+.filter-btn:hover { background: #e2e8f0; color: #0f172a; }
 .filter-btn.active { background: #2563eb; color: #fff; border-color: #2563eb; }
 
 .page-content { padding: 40px 0 60px; }
