@@ -20,7 +20,7 @@ function fixRoofingProfiles() {
             const enName = (c.name_en || '').toLowerCase();
             catMap[c.id] = c;
             if (enName.includes('corrugated') || c.name.includes('波')) catByType['corrugated'] = c.id;
-            else if (enName.includes('trapezoidal') || enName.includes('t-type') || c.name.includes('梯') || c.name.includes('T')) catByType['trapezoidal'] = c.id;
+            else if (enName.includes('trapezoidal') || enName.includes('t-type') || c.name.includes('梯') || c.name.includes('T型')) catByType['trapezoidal'] = c.id;
             else if (enName.includes('standing') || enName.includes('seam') || c.name.includes('直立') || c.name.includes('锁')) catByType['standing_seam'] = c.id;
             else if (enName.includes('glazed') || enName.includes('tile') || c.name.includes('琉璃') || c.name.includes('仿古')) catByType['glazed_tile'] = c.id;
             else if (enName.includes('wall') || enName.includes('panel') || c.name.includes('墙')) catByType['wall_panel'] = c.id;
@@ -36,12 +36,10 @@ function fixRoofingProfiles() {
         profiles.forEach(p => {
             let updates = {};
             
-            // Assign category
-            if (!p.category_id || p.category_id === 0) {
-                const targetCat = catByType[p.profile_type];
-                if (targetCat) {
-                    updates.category_id = targetCat;
-                }
+            // Assign category based on profile_type
+            const targetCat = catByType[p.profile_type];
+            if (targetCat && p.category_id !== targetCat) {
+                updates.category_id = targetCat;
             }
 
             // Fill missing standard data
