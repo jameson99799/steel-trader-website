@@ -590,13 +590,13 @@ function collectRalColors() {
 
 function collectRoofingCategories() {
     try {
-        const categories = getAll('SELECT id, name FROM roofing_categories WHERE name IS NOT NULL AND name != ""')
+        const categories = getAll('SELECT id, name_en FROM roofing_categories WHERE name_en IS NOT NULL AND name_en != ""')
         return categories.map(c => ({
             type: 'roofing_category',
             id: c.id,
-            field: 'name',
-            text: c.name,
-            itemName: `Roofing Category: ${c.name}`
+            field: `name_RC_${c.id}`,
+            text: c.name_en,
+            itemName: `Roofing Category: ${c.name_en}`
         }))
     } catch (e) {
         return []
@@ -707,7 +707,7 @@ Rules:
                             // Map JSON response back to items
                             let anySuccess = false
                             for (const item of shortItems) {
-                                const realField = item.field.startsWith('name_NC_') ? 'name' : item.field
+                                const realField = item.field.startsWith('name_NC_') || item.field.startsWith('name_RC_') ? 'name' : item.field
                                 if (item.combined) {
                                     try {
                                         const subObj = JSON.parse(item.text)
@@ -741,7 +741,7 @@ Rules:
                 // Map numbered translations back to items
                 let transIdx = 0
                 for (const item of shortItems) {
-                    const realField = item.field.startsWith('name_NC_') ? 'name' : item.field
+                    const realField = item.field.startsWith('name_NC_') || item.field.startsWith('name_RC_') ? 'name' : item.field
                     if (item.combined) {
                         try {
                             const subObj = JSON.parse(item.text)
@@ -991,7 +991,7 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'AI API key not configured' })
     }
 
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories' }
     const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
     let overrideNote = manualOverrides.length > 0
         ? '\n\nUse these approved translations as reference:\n' +
@@ -1160,7 +1160,7 @@ router.post('/run-one', authMiddleware, async (req, res) => {
     if (!s?.api_key && !getOne('SELECT api_key FROM ai_channels WHERE is_default = 1')?.api_key) return res.status(400).json({ error: 'AI API key not configured. Please add an AI channel in AI Translation settings.' })
 
     // Map singular type names to PAGES keys (product -> products, category -> categories, etc.)
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories' }
     const pageKey = TYPE_TO_PAGE[content_type] || content_type
     if (!PAGES[pageKey]) return res.status(400).json({ error: `Unknown content type: ${content_type}` })
     const allItems = PAGES[pageKey]()

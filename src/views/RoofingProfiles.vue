@@ -276,15 +276,20 @@ const updateProfileColor = (profile) => {
 const activeColorLightbox = ref(null)
 
 const openColorModal = (profile) => {
-  if (!profile.ral_input) return
-  // try to find RAL info
-  const code = profile.ral_input.replace(/[^0-9]/g, '')
-  const ralObj = ralColors.value.find(r => r.code === code)
+  let code = profile.ral_input ? profile.ral_input.replace(/[^0-9]/g, '') : ''
+  let ralObj = null
+  
+  if (code) {
+    ralObj = ralColors.value.find(r => r.code === code)
+  } else {
+    // If no RAL input, try matching the hex color to a RAL color
+    ralObj = ralColors.value.find(r => r.hex.toLowerCase() === String(profile.current_color || '').toLowerCase())
+  }
   
   activeColorLightbox.value = {
-    hex: profile.current_color,
-    code: profile.ral_input,
-    name: ralObj ? (ralObj.name_en || ralObj.name) : 'Custom Color'
+    hex: profile.current_color || '#1e40af',
+    code: ralObj ? `RAL ${ralObj.code}` : (profile.ral_input || 'Standard Color'),
+    name: ralObj ? ralObj.name : 'Custom / Preset Color'
   }
 }
 
@@ -299,20 +304,38 @@ const isLightColor = (hex) => {
 
 onMounted(async () => {
   try {
-    const [profilesRes, categoriesRes, ralRes] = await Promise.all([
+    const [profRes, catRes, ralRes] = await Promise.all([
       api.getRoofingProfilesPublic(),
       api.getRoofingCategoriesPublic(),
       api.getRalColors()
     ])
-    categories.value = categoriesRes || []
+    categories.value = catRes || []
     ralColors.value = ralRes || []
-    profiles.value = (profilesRes || []).map(p => ({
-      ...p,
-      current_surface: p.surface || 'ppgi',
-      default_color: p.color || '#1e40af',
-      current_color: p.color || '#1e40af',
-      ral_input: ''
-    }))
+    
+    profiles.value = (profRes || []).map(p => {
+      let initCode = ''
+      let initHex = ''
+      if (p.color) {
+        const match = p.color.match(/\d{4}/)
+        if (match) {
+          initCode = match[0]
+          const rObj = ralColors.value.find(r => r.code === initCode)
+          if (rObj) initHex = rObj.hex
+        } else if (p.color.startsWith('#')) {
+          initHex = p.color
+          const rObj = ralColors.value.find(r => r.hex.toLowerCase() === p.color.toLowerCase())
+          if (rObj) initCode = rObj.code
+        }
+      }
+      
+      return {
+        ...p,
+        current_surface: p.surface || 'ppgi',
+        current_color: initHex || p.color || '#1e40af',
+        default_color: initHex || p.color || '#1e40af',
+        ral_input: initCode ? `RAL ${initCode}` : (p.color || '')
+      }
+    })
   } catch (e) {
     console.error('Failed to load roofing data', e)
   }
@@ -325,7 +348,7 @@ onMounted(async () => {
 .page-header {
   background: var(--white);
   border-bottom: 1px solid var(--border);
-  padding: var(--spacing-xl) 0 var(--spacing-xl);
+  padding: var(--spacing-xl) 0 16px 0;
 }
 .header-content { text-align: center; }
 .breadcrumb {
@@ -337,10 +360,11 @@ onMounted(async () => {
 .breadcrumb-separator { width: 16px; height: 16px; color: var(--text-muted); }
 .breadcrumb-current { color: var(--text-primary); font-weight: 600; }
 .page-title { font-size: var(--text-5xl); font-weight: 800; color: var(--text-primary); margin-bottom: var(--spacing-sm); line-height: var(--leading-tight); }
-.page-subtitle { color: var(--text-secondary); font-size: var(--text-lg); margin: 0 0 var(--spacing-sm) 0; }
+.page-subtitle { color: var(--text-secondary); font-size: var(--text-lg); margin: 0; }
 
 .category-filters {
   background: transparent;
+  margin-top: 64px;
   padding: 0;
 }
 .filter-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
