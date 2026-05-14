@@ -93,9 +93,11 @@
                 </div>
                 <div class="control-group" v-if="profile.current_surface === 'ppgi'">
                   <label class="ctrl-label">Color</label>
-                  <div class="color-row">
-                    <input type="text" v-model="profile.ral_input" class="ctrl-input" placeholder="e.g. RAL 9016" @input="updateProfileColor(profile)" />
-                    <span class="color-swatch" :style="{ backgroundColor: profile.current_color }"></span>
+                  <input type="text" v-model="profile.ral_input" class="ctrl-input" placeholder="e.g. RAL 9016" @input="updateProfileColor(profile)" />
+                  <div class="color-swatch-large" :style="{ backgroundColor: profile.current_color }" @click="openColorModal(profile)" title="Click to select RAL color">
+                    <span class="swatch-text" :class="{'dark-text': isLightColor(profile.current_color)}">
+                      {{ profile.current_color ? profile.ral_input : 'Select RAL Color' }}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -136,11 +138,11 @@
                   </tr>
                   <tr>
                     <td class="spec-key">Length</td>
-                    <td class="spec-val">Customizable (Max. 12m)</td>
+                    <td class="spec-val">{{ profile.length || 'Customizable (Max. 12m)' }}</td>
                   </tr>
                   <tr>
                     <td class="spec-key">Applications</td>
-                    <td class="spec-val">Roofing, Wall Cladding, Siding</td>
+                    <td class="spec-val">{{ profile.applications || 'Roofing, Wall Cladding, Siding' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -150,13 +152,15 @@
       </div>
     </div>
   </div>
+  <RalColorModal v-model:show="showColorModal" @select="onColorSelected" />
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import RoofingProfileGenerator from '../components/RoofingProfileGenerator.vue'
+import RalColorModal from '../components/RalColorModal.vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
-import RoofingProfileGenerator from '../components/RoofingProfileGenerator.vue'
 
 const { t, localizedValue, langPath } = useLang()
 
@@ -204,6 +208,7 @@ const formatSurface = (s) => {
 }
 
 const formatMaterial = (p) => {
+  if (p.material) return p.material;
   const s = p.current_surface || p.surface || 'ppgi'
   if (s === 'gi') return 'Galvanized Steel (GI)'
   if (s === 'gl') return 'Aluminum-Zinc Coated Steel (GL)'
@@ -211,12 +216,14 @@ const formatMaterial = (p) => {
 }
 
 const formatThickness = (p) => {
+  if (p.thickness) return p.thickness;
   const s = p.current_surface || p.surface || 'ppgi'
   if (s === 'gi' || s === 'gl') return '0.12 – 0.80 mm'
   return '0.25 – 0.80 mm'
 }
 
 const formatCoating = (p) => {
+  if (p.coating) return p.coating;
   const s = p.current_surface || p.surface || 'ppgi'
   if (s === 'gi') return 'Z60 – Z275 (Galvanized)'
   if (s === 'gl') return 'AZ50 – AZ150 (Galvalume)'
@@ -254,6 +261,31 @@ const updateProfileColor = (profile) => {
     profile.current_color = ralObj.hex
     profile.color = ralObj.hex
   }
+}
+
+const showColorModal = ref(false)
+const activeProfileForColor = ref(null)
+
+const openColorModal = (profile) => {
+  activeProfileForColor.value = profile
+  showColorModal.value = true
+}
+
+const onColorSelected = (color) => {
+  if (activeProfileForColor.value) {
+    activeProfileForColor.value.ral_input = 'RAL ' + color.code
+    activeProfileForColor.value.current_color = color.hex
+    updateProfileSurface(activeProfileForColor.value)
+  }
+}
+
+const isLightColor = (hex) => {
+  if (!hex) return false
+  const r = parseInt(hex.slice(1,3), 16)
+  const g = parseInt(hex.slice(3,5), 16)
+  const b = parseInt(hex.slice(5,7), 16)
+  const yiq = ((r*299)+(g*587)+(b*114))/1000
+  return yiq >= 128
 }
 
 onMounted(async () => {
@@ -417,14 +449,23 @@ onMounted(async () => {
   padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
   font-size: 13px; background: #fff; color: #334155;
 }
-.color-row { display: flex; gap: 8px; align-items: center; }
 .ctrl-input {
-  flex: 1; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
-  font-size: 13px; color: #334155;
+  width: 100%; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
+  font-size: 13px; color: #334155; margin-bottom: 8px; box-sizing: border-box;
 }
-.color-swatch {
-  width: 28px; height: 28px; border-radius: 6px;
-  border: 2px solid rgba(0,0,0,0.1); flex-shrink: 0;
+.color-swatch-large {
+  width: 100%; height: 48px; border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: transform 0.1s, box-shadow 0.1s;
+  background-color: #f1f5f9;
+}
+.color-swatch-large:hover { transform: scale(1.02); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+.swatch-text {
+  font-size: 12px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+.swatch-text.dark-text {
+  color: #1e293b; text-shadow: 0 1px 2px rgba(255,255,255,0.8);
 }
 
 .bottom-right { padding: 20px 24px; }

@@ -64,15 +64,23 @@ async function initDb() {
     )
   `)
 
-  // Add category_id and image_url to roofing_profiles if they don't exist
+  // Add custom specifications to roofing_profiles if they don't exist
   try {
     const columns = db.pragma("table_info(roofing_profiles)")
-    if (!columns.some(c => c.name === 'category_id')) {
-      db.exec("ALTER TABLE roofing_profiles ADD COLUMN category_id INTEGER DEFAULT 0")
-    }
-    if (!columns.some(c => c.name === 'image_url')) {
-      db.exec("ALTER TABLE roofing_profiles ADD COLUMN image_url TEXT")
-    }
+    const colsToAdd = [
+      { name: 'category_id', def: 'INTEGER DEFAULT 0' },
+      { name: 'image_url', def: 'TEXT' },
+      { name: 'material', def: 'TEXT' },
+      { name: 'thickness', def: 'TEXT' },
+      { name: 'coating', def: 'TEXT' },
+      { name: 'length', def: 'TEXT' },
+      { name: 'applications', def: 'TEXT' }
+    ]
+    colsToAdd.forEach(col => {
+      if (!columns.some(c => c.name === col.name)) {
+        db.exec(`ALTER TABLE roofing_profiles ADD COLUMN ${col.name} ${col.def}`)
+      }
+    })
   } catch (e) {
     console.warn('[db] Migration for roofing_profiles failed:', e)
   }

@@ -55,6 +55,7 @@ const routes = [
       { path: 'inquiries', name: 'AdminInquiries', component: () => import('../views/admin/Inquiries.vue') },
       { path: 'company', name: 'AdminCompany', component: () => import('../views/admin/Company.vue') },
       { path: 'pagetexts', name: 'AdminPageTexts', component: () => import('../views/admin/PageTexts.vue') },
+      { path: 'roofing-profiles', name: 'AdminRoofingProfiles', component: () => import('../views/admin/RoofingProfiles.vue') },
       { path: 'news', name: 'AdminNews', component: () => import('../views/admin/News.vue') },
       { path: 'seo', name: 'AdminSeo', component: () => import('../views/admin/Seo.vue') },
       { path: 'languages', name: 'AdminLanguages', component: () => import('../views/admin/Languages.vue') },

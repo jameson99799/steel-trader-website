@@ -98,12 +98,12 @@ router.get('/', authMiddleware, (req, res) => {
 
 // POST create
 router.post('/', authMiddleware, (req, res) => {
-    const { model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order, category_id, image_url } = req.body
+    const { model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order, category_id, image_url, material, thickness, coating, length, applications } = req.body
     try {
         const result = run(
-            `INSERT INTO roofing_profiles (model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order, category_id, image_url) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order || 0, category_id || 0, image_url || '']
+            `INSERT INTO roofing_profiles (model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order, category_id, image_url, material, thickness, coating, length, applications) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order || 0, category_id || 0, image_url || '', material || '', thickness || '', coating || '', length || '', applications || '']
         )
         const newProfile = getOne('SELECT * FROM roofing_profiles WHERE id = ?', [result.lastInsertRowid])
         res.json(newProfile)
@@ -115,11 +115,11 @@ router.post('/', authMiddleware, (req, res) => {
 // PUT update
 router.put('/:id', authMiddleware, (req, res) => {
     const { id } = req.params
-    const { model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order, category_id, image_url } = req.body
+    const { model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order, category_id, image_url, material, thickness, coating, length, applications } = req.body
     try {
         run(
-            `UPDATE roofing_profiles SET model=?, profile_type=?, effective_width=?, coil_width=?, rib_height=?, pitch=?, color=?, surface=?, sort_order=?, category_id=?, image_url=? WHERE id=?`,
-            [model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order || 0, category_id || 0, image_url || '', id]
+            `UPDATE roofing_profiles SET model=?, profile_type=?, effective_width=?, coil_width=?, rib_height=?, pitch=?, color=?, surface=?, sort_order=?, category_id=?, image_url=?, material=?, thickness=?, coating=?, length=?, applications=? WHERE id=?`,
+            [model, profile_type, effective_width, coil_width, rib_height, pitch, color, surface, sort_order || 0, category_id || 0, image_url || '', material || '', thickness || '', coating || '', length || '', applications || '', id]
         )
         const updated = getOne('SELECT * FROM roofing_profiles WHERE id = ?', [id])
         res.json(updated)
