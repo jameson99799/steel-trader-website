@@ -622,7 +622,7 @@ function collectRalColors() {
 
 function collectRoofingCategories() {
     try {
-        const categories = getAll('SELECT id, name, name_en FROM roofing_categories WHERE name IS NOT NULL AND name != ""')
+        const categories = getAll('SELECT id, name, name_en FROM roofing_categories WHERE (name IS NOT NULL AND name != "") OR (name_en IS NOT NULL AND name_en != "")')
         return categories.map(c => {
             const textToTranslate = c.name_en || c.name;
             return {

@@ -749,7 +749,7 @@ async function startServer() {
         
         // Inject state for instant LCP rendering
         const initialState = {
-          hero: getOne('SELECT * FROM hero_slides WHERE status=1 ORDER BY sort_order LIMIT 1') || {},
+          hero: getOne('SELECT * FROM hero_content WHERE id = 1') || {},
           company: company,
           pageTexts: getOne('SELECT * FROM page_texts WHERE id = 1') || {}
         }
