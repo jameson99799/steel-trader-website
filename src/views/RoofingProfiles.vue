@@ -11,7 +11,7 @@
             <span class="breadcrumb-current">Roofing Sheet Profiles</span>
           </nav>
           <h1 class="page-title">Roofing Sheet Profiles</h1>
-          <p class="page-subtitle">Common technical drawings and specifications for our steel roofing panels.</p>
+          <p class="page-subtitle">Professional technical drawings and specifications for our steel roofing panels.</p>
         </div>
       </div>
     </div>
@@ -40,59 +40,115 @@
 
     <div class="page-content">
       <div class="container">
-        <div class="profiles-grid">
-          <div class="profile-card" v-for="profile in filteredProfiles" :key="profile.id">
-            <div class="profile-header">
-              <h2 class="profile-name">{{ profile.model }}</h2>
-              <span class="profile-type">{{ profile.profile_type }}</span>
+        <!-- Each profile is a full-width product datasheet -->
+        <div class="product-sheet" v-for="profile in filteredProfiles" :key="profile.id">
+          
+          <!-- Title Bar -->
+          <div class="sheet-title-bar">
+            <div class="sheet-title-left">
+              <h2 class="sheet-model">{{ profile.model }}</h2>
+              <span class="sheet-type-badge">{{ formatType(profile.profile_type) }}</span>
             </div>
-            <div class="profile-drawing">
-              <RoofingProfileGenerator :profile="profile" :showDimensions="true" />
+            <div class="sheet-title-right">
+              <span class="sheet-surface-tag">{{ formatSurface(profile.current_surface || profile.surface) }}</span>
+            </div>
+          </div>
+
+          <!-- 3D Rendering Section -->
+          <div class="sheet-3d-section">
+            <div class="section-label">3D RENDERING</div>
+            <div class="rendering-area">
+              <img v-if="profile.image_url" :src="profile.image_url" :alt="profile.model" class="rendering-img" />
+              <div v-else class="rendering-placeholder">
+                <RoofingProfileGenerator :profile="profile" :showDimensions="false" :mode="'3d'" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Profile & Dimensions Section -->
+          <div class="sheet-dimensions-section">
+            <div class="section-label section-label-primary">PROFILE &amp; DIMENSIONS</div>
+            <div class="dimensions-drawing">
+              <RoofingProfileGenerator :profile="profile" :showDimensions="true" :mode="'2d'" />
+            </div>
+          </div>
+
+          <!-- Bottom Section: Isometric View + Specifications Table -->
+          <div class="sheet-bottom">
+            <!-- Left: Small isometric / surface controls -->
+            <div class="bottom-left">
+              <div class="iso-preview">
+                <RoofingProfileGenerator :profile="profile" :showDimensions="false" :mode="'iso'" />
+              </div>
+              <!-- Surface controls -->
+              <div class="surface-controls" v-if="!profile.image_url">
+                <div class="control-group">
+                  <label class="ctrl-label">Surface</label>
+                  <select v-model="profile.current_surface" class="ctrl-select" @change="updateProfileSurface(profile)">
+                    <option value="ppgi">PPGI / PPGL</option>
+                    <option value="gi">GI (Galvanized)</option>
+                    <option value="gl">GL (Galvalume)</option>
+                  </select>
+                </div>
+                <div class="control-group" v-if="profile.current_surface === 'ppgi'">
+                  <label class="ctrl-label">Color</label>
+                  <div class="color-row">
+                    <input type="text" v-model="profile.ral_input" class="ctrl-input" placeholder="e.g. RAL 9016" @input="updateProfileColor(profile)" />
+                    <span class="color-swatch" :style="{ backgroundColor: profile.current_color }"></span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <!-- Integrated Specs Grid -->
-            <div class="specs-grid">
-              <!-- Column 1: Widths -->
-              <div class="spec-column">
-                <div class="spec-item">
-                  <span class="spec-label" style="color: #2ecc71;">Effective Width</span>
-                  <span class="spec-value">{{ profile.effective_width }} mm</span>
-                </div>
-                <div class="spec-item" style="margin-top: 6px;">
-                  <span class="spec-label">Coil Width</span>
-                  <span class="spec-value">{{ profile.coil_width }} mm</span>
-                </div>
-              </div>
-
-              <!-- Column 2: Profile Dimensions -->
-              <div class="spec-column">
-                <div class="spec-item">
-                  <span class="spec-label" style="color: #e74c3c;">Rib Height</span>
-                  <span class="spec-value">{{ profile.rib_height }} mm</span>
-                </div>
-                <div class="spec-item" v-if="profile.pitch" style="margin-top: 6px;">
-                  <span class="spec-label" style="color: #3498db;">Pitch</span>
-                  <span class="spec-value">{{ profile.pitch }} mm</span>
-                </div>
-              </div>
-              
-              <!-- Column 3: Surface Controls (Far Right) -->
-              <div class="spec-column surface-col" v-if="!profile.image_url">
-                <span class="spec-label">Surface</span>
-                <select v-model="profile.current_surface" class="surface-select" @change="updateProfileSurface(profile)">
-                  <option value="ppgi">PPGI / PPGL</option>
-                  <option value="gi">GI (Spangle)</option>
-                  <option value="gl">GL (Galvalume)</option>
-                </select>
-                <div class="color-input-wrapper" v-if="profile.current_surface === 'ppgi'" style="margin-top: 8px;">
-                  <input type="text" v-model="profile.ral_input" class="ral-input" placeholder="e.g. RAL 9016" @input="updateProfileColor(profile)" />
-                  <span class="color-preview" :style="{ backgroundColor: profile.current_color }"></span>
-                </div>
-              </div>
-              <div class="spec-column surface-col" v-else>
-                <!-- Empty placeholder for images -->
-              </div>
+            <!-- Right: Specifications Table -->
+            <div class="bottom-right">
+              <div class="specs-table-header">SPECIFICATIONS</div>
+              <table class="specs-table">
+                <tbody>
+                  <tr>
+                    <td class="spec-key">Material</td>
+                    <td class="spec-val">{{ formatMaterial(profile) }}</td>
+                  </tr>
+                  <tr>
+                    <td class="spec-key">Thickness (TCT)</td>
+                    <td class="spec-val">{{ formatThickness(profile) }}</td>
+                  </tr>
+                  <tr>
+                    <td class="spec-key">Effective Width</td>
+                    <td class="spec-val">{{ profile.effective_width }} mm</td>
+                  </tr>
+                  <tr>
+                    <td class="spec-key">Overall Width</td>
+                    <td class="spec-val">{{ profile.coil_width }} mm</td>
+                  </tr>
+                  <tr v-if="profile.pitch">
+                    <td class="spec-key">Pitch</td>
+                    <td class="spec-val">{{ profile.pitch }} mm</td>
+                  </tr>
+                  <tr>
+                    <td class="spec-key">Rib Height</td>
+                    <td class="spec-val">{{ profile.rib_height }} mm</td>
+                  </tr>
+                  <tr>
+                    <td class="spec-key">Coating</td>
+                    <td class="spec-val">{{ formatCoating(profile) }}</td>
+                  </tr>
+                  <tr>
+                    <td class="spec-key">Length</td>
+                    <td class="spec-val">Customizable (Max. 12m)</td>
+                  </tr>
+                  <tr>
+                    <td class="spec-key">Applications</td>
+                    <td class="spec-val">Roofing, Wall Cladding, Siding</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
+          </div>
+
+          <!-- Footer note -->
+          <div class="sheet-footer">
+            <p>Note: All dimensions are nominal and subject to ±3mm tolerance.</p>
           </div>
         </div>
       </div>
@@ -118,12 +174,48 @@ const filteredProfiles = computed(() => {
   return profiles.value.filter(p => p.category_id === activeCategory.value)
 })
 
+const formatType = (type) => {
+  const map = {
+    trapezoidal: 'Trapezoidal',
+    corrugated: 'Corrugated',
+    standing_seam: 'Standing Seam',
+    glazed_tile: 'Glazed Tile',
+    wall_panel: 'Wall Panel'
+  }
+  return map[type] || type
+}
+
+const formatSurface = (s) => {
+  const map = { ppgi: 'PPGI / PPGL', gi: 'Galvanized (GI)', gl: 'Galvalume (GL)' }
+  return map[s] || s
+}
+
+const formatMaterial = (p) => {
+  const s = p.current_surface || p.surface || 'ppgi'
+  if (s === 'gi') return 'Galvanized Steel (GI)'
+  if (s === 'gl') return 'Aluminum-Zinc Coated Steel (GL)'
+  return 'Pre-Painted Steel (PPGI/PPGL)'
+}
+
+const formatThickness = (p) => {
+  const s = p.current_surface || p.surface || 'ppgi'
+  if (s === 'gi' || s === 'gl') return '0.12 – 0.80 mm'
+  return '0.25 – 0.80 mm'
+}
+
+const formatCoating = (p) => {
+  const s = p.current_surface || p.surface || 'ppgi'
+  if (s === 'gi') return 'Z60 – Z275 (Galvanized)'
+  if (s === 'gl') return 'AZ50 – AZ150 (Galvalume)'
+  return 'PE / SMP / HDP / PVDF'
+}
+
 const updateProfileSurface = (profile) => {
-  profile.surface = profile.current_surface // Sync to generator prop
+  profile.surface = profile.current_surface
   if (profile.current_surface !== 'ppgi') {
-    profile.color = '' // Clear color for GI/GL
+    profile.color = ''
   } else {
-    updateProfileColor(profile) // Re-apply RAL color
+    updateProfileColor(profile)
   }
 }
 
@@ -139,23 +231,17 @@ const updateProfileColor = (profile) => {
     profile.color = code
     return
   }
-  
-  // Normalize input: remove all non-alphanumeric chars and remove 'RAL'
   const normalizedInput = String(code).toUpperCase().replace(/[^A-Z0-9]/g, '').replace('RAL', '')
-
-  // Try to find the RAL code in our dictionary
   const ralObj = ralColors.value.find(r => {
     if (!r.code) return false
     const rCode = String(r.code).toUpperCase().replace(/[^A-Z0-9]/g, '').replace('RAL', '')
     return rCode === normalizedInput
   })
-  
   if (ralObj) {
     profile.current_color = ralObj.hex
     profile.color = ralObj.hex
   }
 }
-
 
 onMounted(async () => {
   try {
@@ -166,14 +252,12 @@ onMounted(async () => {
     ])
     categories.value = categoriesRes || []
     ralColors.value = ralRes || []
-    
     profiles.value = (profilesRes || []).map(p => ({
       ...p,
-      // Initialize dynamic state
       current_surface: p.surface || 'ppgi',
       default_color: p.color || '#1e40af',
       current_color: p.color || '#1e40af',
-      ral_input: '' // Start empty, uses default_color
+      ral_input: ''
     }))
   } catch (e) {
     console.error('Failed to load roofing data', e)
@@ -182,241 +266,171 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.profiles-page { min-height: 100vh; background: var(--gray-50); }
+.profiles-page { min-height: 100vh; background: #f0f2f5; }
 
 .page-header {
-  background: var(--white);
-  border-bottom: 1px solid var(--border);
-  padding: var(--spacing-xl) 0 var(--spacing-lg);
+  background: #1a1a2e;
+  padding: 48px 0 36px;
+  border-bottom: 3px solid #2563eb;
 }
-
 .header-content { text-align: center; }
-
 .breadcrumb {
   display: flex; align-items: center; justify-content: center;
-  gap: var(--spacing-sm); margin-bottom: var(--spacing); font-size: var(--text-sm);
+  gap: 8px; margin-bottom: 12px; font-size: 13px;
 }
-.breadcrumb-link { color: var(--text-secondary); transition: var(--transition); text-decoration: none; }
-.breadcrumb-link:hover { color: var(--primary); }
-.breadcrumb-separator { width: 16px; height: 16px; color: var(--text-muted); }
-.breadcrumb-current { color: var(--text-primary); font-weight: 600; }
-
-.page-title { font-size: var(--text-5xl); font-weight: 800; color: var(--text-primary); margin-bottom: var(--spacing-sm); }
-.page-subtitle { color: var(--text-secondary); font-size: var(--text-lg); margin-bottom: var(--spacing-lg); }
-
-.page-content { padding: var(--spacing-2xl) 0; }
-
-.profiles-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--spacing-xl);
-}
-
-.profile-card {
-  background: var(--white);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.profile-header {
-  padding: var(--spacing-lg) var(--spacing-lg) 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
-.profile-name {
-  font-size: var(--text-2xl);
-  font-weight: 800;
-  color: var(--primary-dark);
-  margin: 0;
-}
-
-.profile-type {
-  font-size: var(--text-sm);
-  color: var(--white);
-  background: var(--primary);
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-weight: 600;
-}
-
-.profile-drawing {
-  padding: 12px 16px 8px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border-bottom: 1px solid var(--border);
-}
-
-.specs-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  padding: var(--spacing-sm) var(--spacing-md);
-  gap: var(--spacing-sm);
-  background: #f8fafc;
-}
-
-.spec-column {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.surface-col {
-  border-left: 1px solid var(--border);
-  padding-left: var(--spacing-md);
-}
-
-.spec-item {
-  display: flex;
-  flex-direction: column;
-}
-
-.spec-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 700;
-  margin-bottom: 2px;
-}
-
-.spec-value {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.surface-select {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--white);
-  font-size: 13px;
-  margin-top: 4px;
-}
-.control-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing);
-}
-
-.control-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.surface-select, .ral-input {
-  border: 1px solid #cbd5e1;
-  border-radius: 4px;
-  padding: 4px;
-  font-size: 12px;
-  background: white;
-  color: var(--text-primary);
-  flex: 1;
-}
-
-.color-input-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-}
-
-.color-preview {
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  border: 1px solid rgba(0,0,0,0.1);
-  flex-shrink: 0;
-}
+.breadcrumb-link { color: rgba(255,255,255,0.6); text-decoration: none; transition: color 0.2s; }
+.breadcrumb-link:hover { color: #93c5fd; }
+.breadcrumb-separator { width: 14px; height: 14px; color: rgba(255,255,255,0.3); }
+.breadcrumb-current { color: #93c5fd; font-weight: 600; }
+.page-title { font-size: 36px; font-weight: 900; color: #fff; margin: 0 0 8px; letter-spacing: -0.5px; }
+.page-subtitle { color: rgba(255,255,255,0.6); font-size: 16px; margin: 0; }
 
 .category-filters {
-  background: var(--white);
-  padding: 0 0 var(--spacing-lg);
-  border-bottom: 1px solid var(--border);
+  background: #1a1a2e;
+  padding: 0 0 20px;
 }
-
-.filter-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: center;
-}
-
+.filter-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 .filter-btn {
-  background: #f1f5f9;
-  border: 1px solid transparent;
-  color: #475569;
-  padding: 8px 20px;
-  border-radius: 50px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.7); padding: 8px 22px; border-radius: 50px;
+  font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.filter-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+.filter-btn.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+.page-content { padding: 40px 0 60px; }
+
+/* ── Product Sheet ── */
+.product-sheet {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+  overflow: hidden;
+  margin-bottom: 40px;
 }
 
-.filter-btn:hover {
-  background: #e2e8f0;
+/* Title Bar */
+.sheet-title-bar {
+  background: #1e293b;
+  padding: 20px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sheet-title-left { display: flex; align-items: center; gap: 16px; }
+.sheet-model {
+  font-size: 28px; font-weight: 900; color: #fff; margin: 0;
+  letter-spacing: -0.3px;
+}
+.sheet-type-badge {
+  font-size: 12px; font-weight: 700; color: #fff; text-transform: uppercase;
+  background: #2563eb; padding: 4px 14px; border-radius: 20px; letter-spacing: 0.5px;
+}
+.sheet-surface-tag {
+  font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.7);
+  border: 1px solid rgba(255,255,255,0.2); padding: 4px 14px; border-radius: 20px;
 }
 
-.filter-btn.active {
-  background: var(--primary);
-  color: white;
-  border-color: var(--primary);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+/* 3D Section */
+.sheet-3d-section { padding: 0 32px 24px; }
+.section-label {
+  font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase;
+  letter-spacing: 1.5px; padding: 20px 0 8px;
+}
+.section-label-primary { color: #2563eb; font-size: 13px; }
+.rendering-area {
+  display: flex; justify-content: center; align-items: center;
+  min-height: 180px; background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  border-radius: 8px; overflow: hidden;
+}
+.rendering-img {
+  width: 100%; max-height: 320px; object-fit: contain;
+}
+.rendering-placeholder { width: 100%; padding: 16px; }
+
+/* Dimensions Section */
+.sheet-dimensions-section {
+  padding: 0 32px 24px;
+  border-top: 1px solid #e2e8f0;
+}
+.dimensions-drawing {
+  background: #fff;
+  padding: 8px 0;
 }
 
-.profile-path {
-  fill: none;
-  stroke: var(--text-primary);
-  stroke-width: 6;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-  filter: drop-shadow(0px 8px 4px rgba(0,0,0,0.1));
-}
-
-.dim-text {
-  font-size: 14px;
-  font-weight: 600;
-  font-family: monospace;
-}
-
-.profile-specs {
+/* Bottom Section */
+.sheet-bottom {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1px;
-  background: var(--border);
-  padding-top: 1px;
+  grid-template-columns: 280px 1fr;
+  border-top: 1px solid #e2e8f0;
 }
 
-.spec-item {
-  background: var(--white);
-  padding: var(--spacing-md);
+.bottom-left {
+  padding: 20px 24px;
+  border-right: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 16px;
 }
 
-.spec-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 600;
+.iso-preview {
+  background: #f8fafc;
+  border-radius: 6px;
+  padding: 8px;
+  min-height: 100px;
 }
 
-.spec-value {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
+.surface-controls { display: flex; flex-direction: column; gap: 10px; }
+.control-group { display: flex; flex-direction: column; gap: 4px; }
+.ctrl-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+.ctrl-select {
+  padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
+  font-size: 13px; background: #fff; color: #334155;
+}
+.color-row { display: flex; gap: 8px; align-items: center; }
+.ctrl-input {
+  flex: 1; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
+  font-size: 13px; color: #334155;
+}
+.color-swatch {
+  width: 28px; height: 28px; border-radius: 6px;
+  border: 2px solid rgba(0,0,0,0.1); flex-shrink: 0;
 }
 
-@media (max-width: 1024px) {
-  .profiles-grid { grid-template-columns: 1fr; }
+.bottom-right { padding: 20px 24px; }
+
+.specs-table-header {
+  font-size: 13px; font-weight: 800; color: #1e293b; text-transform: uppercase;
+  letter-spacing: 1px; margin-bottom: 12px;
+}
+
+.specs-table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.specs-table td {
+  padding: 8px 12px; border: 1px solid #e2e8f0;
+}
+.spec-key {
+  font-weight: 700; color: #475569; background: #f8fafc; width: 40%;
+  white-space: nowrap;
+}
+.spec-val {
+  color: #1e293b; font-weight: 500;
+}
+
+/* Footer */
+.sheet-footer {
+  padding: 12px 32px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+.sheet-footer p {
+  margin: 0; font-size: 11px; color: #94a3b8; font-style: italic;
+}
+
+@media (max-width: 900px) {
+  .sheet-bottom { grid-template-columns: 1fr; }
+  .bottom-left { border-right: none; border-bottom: 1px solid #e2e8f0; }
+  .sheet-title-bar { flex-direction: column; gap: 12px; align-items: flex-start; }
 }
 </style>
