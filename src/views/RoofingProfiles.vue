@@ -146,11 +146,6 @@
               </table>
             </div>
           </div>
-
-          <!-- Footer note -->
-          <div class="sheet-footer">
-            <p>Note: All dimensions are nominal and subject to ±3mm tolerance.</p>
-          </div>
         </div>
       </div>
     </div>
@@ -287,21 +282,21 @@ onMounted(async () => {
 .profiles-page { min-height: 100vh; background: #f0f2f5; }
 
 .page-header {
-  background: #1a1a2e;
-  padding: 48px 0 36px;
-  border-bottom: 3px solid #2563eb;
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  padding: var(--spacing-xl) 0;
 }
 .header-content { text-align: center; }
 .breadcrumb {
   display: flex; align-items: center; justify-content: center;
-  gap: 8px; margin-bottom: 12px; font-size: 13px;
+  gap: var(--spacing-sm); margin-bottom: var(--spacing); font-size: var(--text-sm);
 }
-.breadcrumb-link { color: rgba(255,255,255,0.6); text-decoration: none; transition: color 0.2s; }
-.breadcrumb-link:hover { color: #93c5fd; }
-.breadcrumb-separator { width: 14px; height: 14px; color: rgba(255,255,255,0.3); }
-.breadcrumb-current { color: #93c5fd; font-weight: 600; }
-.page-title { font-size: 36px; font-weight: 900; color: #fff; margin: 0 0 8px; letter-spacing: -0.5px; }
-.page-subtitle { color: rgba(255,255,255,0.6); font-size: 16px; margin: 0; }
+.breadcrumb-link { color: var(--text-secondary); text-decoration: none; transition: var(--transition); }
+.breadcrumb-link:hover { color: var(--primary); }
+.breadcrumb-separator { width: 16px; height: 16px; color: var(--text-muted); }
+.breadcrumb-current { color: var(--text-primary); font-weight: 600; }
+.page-title { font-size: var(--text-5xl); font-weight: 800; color: var(--text-primary); margin-bottom: var(--spacing-sm); line-height: var(--leading-tight); }
+.page-subtitle { color: var(--text-secondary); font-size: var(--text-lg); margin: 0; }
 
 .category-filters {
   background: #1a1a2e;
@@ -453,15 +448,7 @@ onMounted(async () => {
   color: #1e293b; font-weight: 500;
 }
 
-/* Footer */
-.sheet-footer {
-  padding: 12px 32px;
-  background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
-}
-.sheet-footer p {
-  margin: 0; font-size: 11px; color: #94a3b8; font-style: italic;
-}
+
 
 @media (max-width: 900px) {
   .sheet-middle { grid-template-columns: 1fr; gap: 16px; }
