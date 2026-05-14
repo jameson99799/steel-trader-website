@@ -137,10 +137,10 @@
                   {{ localizedValue(cat, 'name') }}
                 </router-link>
                 <router-link :to="langPath('/ral-colors')" @click="menuOpen = false" class="nav-dropdown-item">
-                  RAL Color
+                  {{ t('ralColorBtn') }}
                 </router-link>
                 <router-link :to="langPath('/roofing-profiles')" @click="menuOpen = false" class="nav-dropdown-item">
-                  Roofing Profiles
+                  {{ t('roofingProfilesBtn') }}
                 </router-link>
               </div>
             </div>
