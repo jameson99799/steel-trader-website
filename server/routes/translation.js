@@ -1115,7 +1115,7 @@ Keep unchanged: codes, HTML, ASTM/JIS/EN/GB/T.${overrideNote}`
                     const plainText = content.trim().replace(/^["']|["']$/g, '')
                     if (batch.length === 1 && plainText && plainText.length < 300 && !plainText.includes('{')) {
                         const item = batch[0]
-                        const realField = item.field.startsWith('name_NC_') ? 'name' : item.field
+                        const realField = item.field.match(/^name_(NC|RC)_/) ? 'name' : item.field
                         upsertTranslation(targetLang, item.type, item.id, realField, item.text, plainText)
                         results.push({ original: item.text.slice(0, 80), translated: plainText.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
                         success = true
@@ -1130,7 +1130,7 @@ Keep unchanged: codes, HTML, ASTM/JIS/EN/GB/T.${overrideNote}`
                 const translations = JSON.parse(jsonMatch[0])
                 for (let j = 0; j < batch.length; j++) {
                     const item = batch[j]
-                    const realField = item.field.startsWith('name_NC_') ? 'name' : item.field
+                    const realField = item.field.match(/^name_(NC|RC)_/) ? 'name' : item.field
                     const translated = translations[String(j + 1)]
                     if (!translated) {
                         errors.push({ item: item.text.slice(0, 60), error: 'No translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
