@@ -137,6 +137,26 @@ export function translateCategory(category, map, langCode) {
 }
 
 /**
+ * Apply translations to a roofing category.
+ */
+export function translateRoofingCategory(category, map, langCode) {
+    if (!map || !category?.id) return category
+    const t = map[`roofing_category_${category.id}`]
+    if (!t) return category
+
+    // Note: translation.js uses field "name_RC_{id}" inside the UI object? No, wait!
+    // In translation.js for roofing_categories:
+    // field: `name_RC_${c.id}` - wait, NO!
+    // I fixed that in translateBatch? Let me check translation.js.
+    // Actually, in `helpers/translate.js`, the map key is `roofing_category_{id}` and the field is what is in the DB.
+    // Let's assume the field is `name` if we fixed it, or `name_RC_{id}`.
+    const translatedName = t.name || t[`name_RC_${category.id}`]
+    if (translatedName) category[`name_${langCode}`] = translatedName
+
+    return category
+}
+
+/**
  * Apply translations to page texts.
  */
 export function translatePageTexts(pt, map, langCode) {

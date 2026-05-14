@@ -110,7 +110,8 @@ async function runJobInBackground(jobId) {
             const TYPE_TO_PAGE_MAP = {
                 product: 'products', news: 'news', company: 'company',
                 page_text: 'page_texts', category: 'categories', news_category: 'news_categories',
-                hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors'
+                hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors',
+                roofing_profile: 'roofing_profiles', roofing_category: 'roofing_categories'
             }
             
             for (const ei of explicitItems) {
@@ -191,7 +192,8 @@ async function runJobInBackground(jobId) {
     const TYPE_TO_PAGE = {
         product: 'products', news: 'news', company: 'company',
         page_text: 'page_texts', category: 'categories', news_category: 'news_categories',
-        hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors'
+        hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors',
+        roofing_profile: 'roofing_profiles', roofing_category: 'roofing_categories'
     }
 
     // ── Process items with concurrency ──

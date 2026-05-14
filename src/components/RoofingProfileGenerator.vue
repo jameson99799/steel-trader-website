@@ -15,7 +15,7 @@
         <line :x1="profileWidth + dimPad" :y1="dimTopY + 5" :x2="profileWidth + dimPad" :y2="profileTopY - 2" stroke="#94a3b8" stroke-width="0.6" stroke-dasharray="3,2" />
         <polygon :points="arrowRight(profileWidth + dimPad, dimTopY)" fill="#1e3a5f" />
         <polygon :points="arrowLeft(dimPad, dimTopY)" fill="#1e3a5f" />
-        <text :x="(profileWidth)/2 + dimPad" :y="dimTopY - 6" text-anchor="middle" class="dim-value">Effective Width  {{ profile.effective_width }}mm</text>
+        <text :x="(profileWidth)/2 + dimPad" :y="dimTopY - 6" text-anchor="middle" class="dim-value">{{ t('specEffectiveWidth') }}  {{ profile.effective_width }}mm</text>
       </g>
 
       <!-- Dimension: Rib Height (right) -->
@@ -39,7 +39,7 @@
         <line :x1="pitchEndX" :y1="profileBaseY + 2" :x2="pitchEndX" :y2="dimBottomY - 5" stroke="#94a3b8" stroke-width="0.6" stroke-dasharray="3,2" />
         <polygon :points="arrowRight(pitchEndX, dimBottomY)" fill="#2563eb" />
         <polygon :points="arrowLeft(pitchStartX, dimBottomY)" fill="#2563eb" />
-        <text :x="(pitchStartX + pitchEndX) / 2" :y="dimBottomY + 16" text-anchor="middle" class="dim-value" fill="#2563eb">Pitch  {{ profile.pitch }}mm</text>
+        <text :x="(pitchStartX + pitchEndX) / 2" :y="dimBottomY + 16" text-anchor="middle" class="dim-value" fill="#2563eb">{{ t('specPitch') }}  {{ profile.pitch }}mm</text>
       </g>
     </svg>
   </div>
@@ -47,6 +47,9 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useLang } from '../composables/useLang'
+
+const { t } = useLang()
 
 const props = defineProps({
   profile: { type: Object, required: true },

@@ -1,7 +1,7 @@
 import express from 'express'
 import { run, getAll, getOne } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
-import { loadTranslationsForLang, translateRoofingProfile } from '../helpers/translate.js'
+import { loadTranslationsForLang, translateRoofingProfile, translateRoofingCategory } from '../helpers/translate.js'
 
 const router = express.Router()
 
@@ -13,6 +13,14 @@ const router = express.Router()
 router.get('/categories/public', (req, res) => {
     try {
         const categories = getAll('SELECT * FROM roofing_categories WHERE is_active = 1 ORDER BY sort_order DESC, id ASC')
+        
+        // Inject translations if lang param is provided
+        const lang = req.query.lang
+        if (lang && lang !== 'en') {
+            const tMap = loadTranslationsForLang(lang)
+            if (tMap) categories.forEach(c => translateRoofingCategory(c, tMap, lang))
+        }
+
         res.json(categories)
     } catch (e) {
         res.status(500).json({ error: e.message })
