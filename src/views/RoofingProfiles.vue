@@ -59,9 +59,7 @@
             <div class="section-label">3D RENDERING</div>
             <div class="rendering-area">
               <img v-if="profile.image_url" :src="profile.image_url" :alt="profile.model" class="rendering-img" />
-              <div v-else class="rendering-placeholder">
-                <RoofingProfileGenerator :profile="profile" :showDimensions="false" :mode="'3d'" />
-              </div>
+              <img v-else :src="getDefaultImage(profile)" :alt="profile.model" class="rendering-img" />
             </div>
           </div>
 
@@ -69,16 +67,16 @@
           <div class="sheet-dimensions-section">
             <div class="section-label section-label-primary">PROFILE &amp; DIMENSIONS</div>
             <div class="dimensions-drawing">
-              <RoofingProfileGenerator :profile="profile" :showDimensions="true" :mode="'2d'" />
+              <RoofingProfileGenerator :profile="profile" :showDimensions="true" />
             </div>
           </div>
 
           <!-- Bottom Section: Isometric View + Specifications Table -->
           <div class="sheet-bottom">
-            <!-- Left: Small isometric / surface controls -->
+            <!-- Left: Small isometric thumbnail + surface controls -->
             <div class="bottom-left">
               <div class="iso-preview">
-                <RoofingProfileGenerator :profile="profile" :showDimensions="false" :mode="'iso'" />
+                <img :src="getDefaultImage(profile)" :alt="profile.model" class="iso-img" />
               </div>
               <!-- Surface controls -->
               <div class="surface-controls" v-if="!profile.image_url">
@@ -173,6 +171,18 @@ const filteredProfiles = computed(() => {
   if (activeCategory.value === 0) return profiles.value
   return profiles.value.filter(p => p.category_id === activeCategory.value)
 })
+
+const getDefaultImage = (profile) => {
+  const type = profile.profile_type || 'trapezoidal'
+  const surface = profile.current_surface || profile.surface || 'ppgi'
+  
+  if (type === 'corrugated') {
+    return surface === 'gl' ? '/images/roofing/corrugated-gl.png' : '/images/roofing/corrugated-gi.png'
+  }
+  if (type === 'standing_seam') return '/images/roofing/standing-seam.png'
+  if (type === 'glazed_tile') return '/images/roofing/glazed-tile.png'
+  return '/images/roofing/trapezoidal-ppgi.png' // trapezoidal / wall_panel
+}
 
 const formatType = (type) => {
   const map = {
@@ -377,7 +387,16 @@ onMounted(async () => {
   background: #f8fafc;
   border-radius: 6px;
   padding: 8px;
-  min-height: 100px;
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.iso-img {
+  width: 100%;
+  max-height: 140px;
+  object-fit: contain;
+  border-radius: 4px;
 }
 
 .surface-controls { display: flex; flex-direction: column; gap: 10px; }
