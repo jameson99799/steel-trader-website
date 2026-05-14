@@ -56,7 +56,7 @@
           <div class="sheet-middle">
             <!-- 3D Rendering Section -->
             <div class="sheet-3d-section">
-              <div class="section-label">3D RENDERING</div>
+              <div class="section-label">{{ t('roofing3dRendering') }}</div>
               <div class="rendering-area">
                 <img v-if="profile.image_url" :src="profile.image_url" :alt="profile.model" class="rendering-img" />
                 <img v-else :src="getDefaultImage(profile)" :alt="profile.model" class="rendering-img" />
@@ -65,7 +65,7 @@
 
             <!-- Profile & Dimensions Section -->
             <div class="sheet-dimensions-section">
-              <div class="section-label section-label-primary">PROFILE &amp; DIMENSIONS</div>
+              <div class="section-label section-label-primary">{{ t('roofingProfileDimensions') }}</div>
               <div class="dimensions-drawing">
                 <RoofingProfileGenerator :profile="profile" :showDimensions="true" />
               </div>
@@ -82,19 +82,19 @@
               <!-- Surface controls -->
               <div class="surface-controls" v-if="!profile.image_url">
                 <div class="control-group">
-                  <label class="ctrl-label">Surface</label>
+                  <label class="ctrl-label">{{ t('surfaceControls') }}</label>
                   <select v-model="profile.current_surface" class="ctrl-select" @change="updateProfileSurface(profile)">
-                    <option value="ppgi">PPGI / PPGL</option>
-                    <option value="gi">GI (Galvanized)</option>
-                    <option value="gl">GL (Galvalume)</option>
+                    <option value="ppgi">{{ t('surfacePpgi') }}</option>
+                    <option value="gi">{{ t('surfaceGi') }}</option>
+                    <option value="gl">{{ t('surfaceGl') }}</option>
                   </select>
                 </div>
                 <div class="control-group" v-if="profile.current_surface === 'ppgi'">
-                  <label class="ctrl-label">Color</label>
+                  <label class="ctrl-label">{{ t('ralColorControl') }}</label>
                   <input type="text" v-model="profile.ral_input" class="ctrl-input" placeholder="e.g. RAL 9016" @input="updateProfileColor(profile)" />
                   <div class="color-swatch-large" :style="{ backgroundColor: profile.current_color }" @click="openColorModal(profile)" title="Click to select RAL color">
                     <span class="swatch-text" :class="{'dark-text': isLightColor(profile.current_color)}">
-                      {{ profile.current_color ? profile.ral_input : 'Select RAL Color' }}
+                      {{ profile.current_color ? profile.ral_input : t('colorSelectRal') }}
                     </span>
                   </div>
                 </div>
@@ -103,44 +103,44 @@
 
             <!-- Right: Specifications Table -->
             <div class="bottom-right">
-              <div class="specs-table-header">SPECIFICATIONS</div>
+              <div class="specs-table-header">{{ t('roofingSpecsTitle') }}</div>
               <table class="specs-table">
                 <tbody>
                   <tr>
-                    <td class="spec-key">Material</td>
+                    <td class="spec-key">{{ t('specMaterial') }}</td>
                     <td class="spec-val">{{ formatMaterial(profile) }}</td>
                   </tr>
                   <tr>
-                    <td class="spec-key">Thickness (TCT)</td>
+                    <td class="spec-key">{{ t('specThickness') }}</td>
                     <td class="spec-val">{{ formatThickness(profile) }}</td>
                   </tr>
                   <tr>
-                    <td class="spec-key">Effective Width</td>
+                    <td class="spec-key">{{ t('specEffectiveWidth') }}</td>
                     <td class="spec-val">{{ profile.effective_width }} mm</td>
                   </tr>
                   <tr>
-                    <td class="spec-key">Overall Width</td>
+                    <td class="spec-key">{{ t('specOverallWidth') }}</td>
                     <td class="spec-val">{{ profile.coil_width }} mm</td>
                   </tr>
                   <tr v-if="profile.pitch">
-                    <td class="spec-key">Pitch</td>
+                    <td class="spec-key">{{ t('specPitch') }}</td>
                     <td class="spec-val">{{ profile.pitch }} mm</td>
                   </tr>
                   <tr>
-                    <td class="spec-key">Rib Height</td>
+                    <td class="spec-key">{{ t('specRibHeight') }}</td>
                     <td class="spec-val">{{ profile.rib_height }} mm</td>
                   </tr>
                   <tr>
-                    <td class="spec-key">Coating</td>
+                    <td class="spec-key">{{ t('specCoating') }}</td>
                     <td class="spec-val">{{ formatCoating(profile) }}</td>
                   </tr>
                   <tr>
-                    <td class="spec-key">Length</td>
-                    <td class="spec-val">{{ profile.length || 'Customizable (Max. 12m)' }}</td>
+                    <td class="spec-key">{{ t('specLength') }}</td>
+                    <td class="spec-val">{{ profile.length || t('defaultLength') }}</td>
                   </tr>
                   <tr>
-                    <td class="spec-key">Applications</td>
-                    <td class="spec-val">{{ profile.applications || 'Roofing, Wall Cladding, Siding' }}</td>
+                    <td class="spec-key">{{ t('specApplications') }}</td>
+                    <td class="spec-val">{{ profile.applications || t('defaultApplications') }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -203,26 +203,26 @@ const getDefaultImage = (profile) => {
 
 const formatType = (type) => {
   const map = {
-    trapezoidal: 'Trapezoidal',
-    corrugated: 'Corrugated',
-    standing_seam: 'Standing Seam',
-    glazed_tile: 'Glazed Tile',
-    wall_panel: 'Wall Panel'
+    trapezoidal: t('roofingTypeTrapezoidal'),
+    corrugated: t('roofingTypeCorrugated'),
+    standing_seam: t('roofingTypeStandingSeam'),
+    glazed_tile: t('roofingTypeGlazedTile'),
+    wall_panel: t('roofingTypeWallPanel')
   }
   return map[type] || type
 }
 
 const formatSurface = (s) => {
-  const map = { ppgi: 'PPGI / PPGL', gi: 'Galvanized (GI)', gl: 'Galvalume (GL)' }
+  const map = { ppgi: t('surfacePpgi'), gi: t('surfaceGi'), gl: t('surfaceGl') }
   return map[s] || s
 }
 
 const formatMaterial = (p) => {
   if (p.material) return p.material;
   const s = p.current_surface || p.surface || 'ppgi'
-  if (s === 'gi') return 'Galvanized Steel (GI)'
-  if (s === 'gl') return 'Aluminum-Zinc Coated Steel (GL)'
-  return 'Pre-Painted Steel (PPGI/PPGL)'
+  if (s === 'gi') return t('defaultGiMaterial')
+  if (s === 'gl') return t('defaultGlMaterial')
+  return t('defaultPpgiMaterial')
 }
 
 const formatThickness = (p) => {
@@ -235,9 +235,9 @@ const formatThickness = (p) => {
 const formatCoating = (p) => {
   if (p.coating) return p.coating;
   const s = p.current_surface || p.surface || 'ppgi'
-  if (s === 'gi') return 'Z60 – Z275 (Galvanized)'
-  if (s === 'gl') return 'AZ50 – AZ150 (Galvalume)'
-  return 'PE / SMP / HDP / PVDF'
+  if (s === 'gi') return t('defaultGiCoating')
+  if (s === 'gl') return t('defaultGlCoating')
+  return t('defaultPpgiCoating')
 }
 
 const updateProfileSurface = (profile) => {
@@ -288,8 +288,8 @@ const openColorModal = (profile) => {
   
   activeColorLightbox.value = {
     hex: profile.current_color || '#1e40af',
-    code: ralObj ? `RAL ${ralObj.code}` : (profile.ral_input || 'Standard Color'),
-    name: ralObj ? ralObj.name : 'Custom / Preset Color'
+    code: ralObj ? `RAL ${ralObj.code}` : (profile.ral_input || t('colorStandard')),
+    name: ralObj ? ralObj.name : t('colorCustom')
   }
 }
 

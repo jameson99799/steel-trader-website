@@ -150,3 +150,21 @@ export function translatePageTexts(pt, map, langCode) {
 
     return pt
 }
+
+/**
+ * Apply translations to a roofing profile.
+ */
+export function translateRoofingProfile(profile, map, langCode) {
+    if (!map || !profile?.id) return profile
+    const t = map[`roofing_profile_${profile.id}`]
+    if (!t) return profile
+
+    if (t.model) profile.model = t.model
+    if (t.material) profile.material = t.material
+    if (t.thickness) profile.thickness = t.thickness
+    if (t.coating) profile.coating = t.coating
+    if (t.length) profile.length = t.length
+    if (t.applications) profile.applications = t.applications
+
+    return profile
+}

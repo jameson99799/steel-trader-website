@@ -557,7 +557,38 @@ const UI_TEXTS_EN = {
     "roofingSubtitle": "Common technical drawings and specifications for our steel roofing panels.",
     "allProfiles": "All Profiles",
     "surfaceControls": "Surface:",
-    "ralColorControl": "RAL Color:"
+    "ralColorControl": "RAL Color:",
+    "roofing3dRendering": "3D RENDERING",
+    "roofingProfileDimensions": "PROFILE & DIMENSIONS",
+    "roofingSpecsTitle": "SPECIFICATIONS",
+    "specMaterial": "Material",
+    "specThickness": "Thickness (TCT)",
+    "specEffectiveWidth": "Effective Width",
+    "specOverallWidth": "Overall Width",
+    "specPitch": "Pitch",
+    "specRibHeight": "Rib Height",
+    "specCoating": "Coating",
+    "specLength": "Length",
+    "specApplications": "Applications",
+    "roofingTypeCorrugated": "Corrugated",
+    "roofingTypeTrapezoidal": "Trapezoidal",
+    "roofingTypeStandingSeam": "Standing Seam",
+    "roofingTypeGlazedTile": "Glazed Tile",
+    "roofingTypeWallPanel": "Wall Panel",
+    "surfacePpgi": "PPGI / PPGL",
+    "surfaceGi": "GI (Galvanized)",
+    "surfaceGl": "GL (Galvalume)",
+    "colorSelectRal": "Select RAL Color",
+    "colorStandard": "Standard Color",
+    "colorCustom": "Custom / Preset Color",
+    "defaultLength": "Customizable (Max. 12m)",
+    "defaultApplications": "Roofing, Wall Cladding, Siding",
+    "defaultGiMaterial": "Galvanized Steel (GI)",
+    "defaultGlMaterial": "Aluminum-Zinc Coated Steel (GL)",
+    "defaultPpgiMaterial": "Pre-Painted Steel (PPGI/PPGL)",
+    "defaultGiCoating": "Z60 – Z275 (Galvanized)",
+    "defaultGlCoating": "AZ50 – AZ150 (Galvalume)",
+    "defaultPpgiCoating": "PE / SMP / HDP / PVDF"
 };
 
 function collectUITexts() {
@@ -603,8 +634,26 @@ function collectRoofingCategories() {
     }
 }
 
+function collectRoofingProfiles() {
+    try {
+        const profiles = getAll('SELECT id, model, material, thickness, coating, length, applications FROM roofing_profiles')
+        const items = []
+        for (const p of profiles) {
+            if (p.model) items.push({ type: 'roofing_profile', id: p.id, field: 'model', text: p.model, itemName: `Profile ${p.id}: Model` })
+            if (p.material) items.push({ type: 'roofing_profile', id: p.id, field: 'material', text: p.material, itemName: `Profile ${p.id}: Material` })
+            if (p.thickness) items.push({ type: 'roofing_profile', id: p.id, field: 'thickness', text: p.thickness, itemName: `Profile ${p.id}: Thickness` })
+            if (p.coating) items.push({ type: 'roofing_profile', id: p.id, field: 'coating', text: p.coating, itemName: `Profile ${p.id}: Coating` })
+            if (p.length) items.push({ type: 'roofing_profile', id: p.id, field: 'length', text: p.length, itemName: `Profile ${p.id}: Length` })
+            if (p.applications) items.push({ type: 'roofing_profile', id: p.id, field: 'applications', text: p.applications, itemName: `Profile ${p.id}: Applications` })
+        }
+        return items
+    } catch (e) {
+        return []
+    }
+}
+
 const PAGES = {
-        ui_texts_static: () => collectUITexts(),
+    ui_texts_static: () => collectUITexts(),
     products: collectProducts,
     news: collectNews,
     company: collectCompany,
@@ -613,8 +662,9 @@ const PAGES = {
     news_categories: collectNewsCategories,
     hero: collectHero,
     ral_colors: collectRalColors,
-    roofing_categories: collectRoofingCategories
-}
+    roofing_categories: collectRoofingCategories,
+    roofing_profiles: collectRoofingProfiles
+};
 
 
     // Clean up garbled characters (replacement chars from truncated UTF-8)
@@ -991,7 +1041,7 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'AI API key not configured' })
     }
 
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles' }
     const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
     let overrideNote = manualOverrides.length > 0
         ? '\n\nUse these approved translations as reference:\n' +
@@ -1160,7 +1210,7 @@ router.post('/run-one', authMiddleware, async (req, res) => {
     if (!s?.api_key && !getOne('SELECT api_key FROM ai_channels WHERE is_default = 1')?.api_key) return res.status(400).json({ error: 'AI API key not configured. Please add an AI channel in AI Translation settings.' })
 
     // Map singular type names to PAGES keys (product -> products, category -> categories, etc.)
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles' }
     const pageKey = TYPE_TO_PAGE[content_type] || content_type
     if (!PAGES[pageKey]) return res.status(400).json({ error: `Unknown content type: ${content_type}` })
     const allItems = PAGES[pageKey]()
@@ -1991,7 +2041,7 @@ async function executeTranslationTask(targetLang, contentType, contentId) {
         throw new Error('AI API key not configured.')
     }
 
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles' }
     const pageKey = TYPE_TO_PAGE[contentType] || contentType
     if (!PAGES[pageKey]) throw new Error(`Unknown content type: ${contentType}`)
     
