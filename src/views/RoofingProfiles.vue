@@ -12,28 +12,26 @@
           </nav>
           <h1 class="page-title">Roofing Sheet Profiles</h1>
           <p class="page-subtitle">Professional technical drawings and specifications for our steel roofing panels.</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Category Filter Buttons -->
-    <div class="category-filters" v-if="categories.length > 0">
-      <div class="container">
-        <div class="filter-buttons">
-          <button 
-            :class="['filter-btn', activeCategory === 0 ? 'active' : '']" 
-            @click="activeCategory = 0"
-          >
-            All Profiles
-          </button>
-          <button 
-            v-for="cat in categories" 
-            :key="cat.id" 
-            :class="['filter-btn', activeCategory === cat.id ? 'active' : '']" 
-            @click="activeCategory = cat.id"
-          >
-            {{ localizedValue(cat, 'name') }}
-          </button>
+          
+          <!-- Category Filter Buttons -->
+          <div class="category-filters" v-if="categories.length > 0">
+            <div class="filter-buttons">
+              <button 
+                :class="['filter-btn', activeCategory === 0 ? 'active' : '']" 
+                @click="activeCategory = 0"
+              >
+                All Profiles
+              </button>
+              <button 
+                v-for="cat in categories" 
+                :key="cat.id" 
+                :class="['filter-btn', activeCategory === cat.id ? 'active' : '']" 
+                @click="activeCategory = cat.id"
+              >
+                {{ localizedValue(cat, 'name') }}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -327,7 +325,7 @@ onMounted(async () => {
 .page-header {
   background: var(--white);
   border-bottom: 1px solid var(--border);
-  padding: var(--spacing-xl) 0;
+  padding: var(--spacing-xl) 0 var(--spacing-xl);
 }
 .header-content { text-align: center; }
 .breadcrumb {
@@ -339,11 +337,11 @@ onMounted(async () => {
 .breadcrumb-separator { width: 16px; height: 16px; color: var(--text-muted); }
 .breadcrumb-current { color: var(--text-primary); font-weight: 600; }
 .page-title { font-size: var(--text-5xl); font-weight: 800; color: var(--text-primary); margin-bottom: var(--spacing-sm); line-height: var(--leading-tight); }
-.page-subtitle { color: var(--text-secondary); font-size: var(--text-lg); margin: 0; }
+.page-subtitle { color: var(--text-secondary); font-size: var(--text-lg); margin: 0 0 var(--spacing-sm) 0; }
 
 .category-filters {
   background: transparent;
-  padding: 0 0 20px;
+  padding: 0;
 }
 .filter-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 .filter-btn {
@@ -507,5 +505,62 @@ onMounted(async () => {
   .sheet-bottom { grid-template-columns: 1fr; }
   .bottom-left { border-right: none; border-bottom: 1px solid #e2e8f0; }
   .sheet-title-bar { flex-direction: column; gap: 12px; align-items: flex-start; }
+}
+
+/* ── Lightbox (RAL Color) ── */
+.fade-enter-active, .fade-leave-active { transition: opacity .2s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+.lightbox {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(0,0,0,.65); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+
+.lightbox-card {
+  background: #fff; border-radius: 20px;
+  width: 100%; max-width: 640px;
+  overflow: hidden; position: relative;
+  box-shadow: 0 40px 100px rgba(0,0,0,.45);
+  animation: slideUp .2s ease;
+  display: flex; flex-direction: column;
+}
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.lb-close {
+  position: absolute; top: 14px; right: 14px; z-index: 10;
+  width: 36px; height: 36px; border-radius: 50%;
+  border: none; background: rgba(0,0,0,.35);
+  color: #fff; font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.lb-close:hover { background: rgba(0,0,0,.55); }
+
+.lb-swatch {
+  flex: 4; min-height: 320px;
+}
+
+.lb-body {
+  flex: 1; min-height: 80px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 14px 24px;
+  background: #fff; border-top: 1px solid #f0f0f0; gap: 4px;
+}
+.lb-code {
+  font-size: 15px; font-weight: 700; color: #374151; margin: 0; letter-spacing: .5px;
+}
+.lb-name {
+  font-size: 18px; font-weight: 700; color: #111827; margin: 0;
+}
+
+@media (max-width: 640px) {
+  .lightbox-card { max-width: 100%; border-radius: 14px; }
+  .lb-swatch { min-height: 220px; }
 }
 </style>

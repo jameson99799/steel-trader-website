@@ -191,26 +191,26 @@
             <div class="form-row">
               <div class="form-group">
                 <label>材质 (Material)</label>
-                <input type="text" v-model="editingProfile.material" placeholder="例如: Galvanized Steel" />
+                <input type="text" v-model="editingProfile.material" :placeholder="'默认: ' + defaultMaterial" />
               </div>
               <div class="form-group">
                 <label>厚度 (Thickness TCT)</label>
-                <input type="text" v-model="editingProfile.thickness" placeholder="例如: 0.12 - 0.80 mm" />
+                <input type="text" v-model="editingProfile.thickness" :placeholder="'默认: ' + defaultThickness" />
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label>涂层 (Coating)</label>
-                <input type="text" v-model="editingProfile.coating" placeholder="例如: Z60-Z275" />
+                <input type="text" v-model="editingProfile.coating" :placeholder="'默认: ' + defaultCoating" />
               </div>
               <div class="form-group">
                 <label>长度 (Length)</label>
-                <input type="text" v-model="editingProfile.length" placeholder="例如: Customizable (Max. 12m)" />
+                <input type="text" v-model="editingProfile.length" placeholder="默认: Customizable (Max. 12m)" />
               </div>
             </div>
             <div class="form-group">
               <label>应用场景 (Applications)</label>
-              <input type="text" v-model="editingProfile.applications" placeholder="例如: Roofing, Wall Cladding" />
+              <input type="text" v-model="editingProfile.applications" placeholder="默认: Roofing, Wall Cladding, Siding" />
             </div>
 
             <div class="form-section-title">其他设置</div>
@@ -302,6 +302,26 @@ const editingProfile = ref({})
 
 const showCategoryModal = ref(false)
 const editingCategory = ref({})
+
+const defaultMaterial = computed(() => {
+  const s = editingProfile.value?.surface || 'ppgi'
+  if (s === 'gi') return 'Galvanized Steel (GI)'
+  if (s === 'gl') return 'Aluminum-Zinc Coated Steel (GL)'
+  return 'Pre-Painted Steel (PPGI/PPGL)'
+})
+
+const defaultThickness = computed(() => {
+  const s = editingProfile.value?.surface || 'ppgi'
+  if (s === 'gi' || s === 'gl') return '0.12 – 0.80 mm'
+  return '0.25 – 0.80 mm'
+})
+
+const defaultCoating = computed(() => {
+  const s = editingProfile.value?.surface || 'ppgi'
+  if (s === 'gi') return 'Z60 – Z275 (Galvanized)'
+  if (s === 'gl') return 'AZ50 – AZ150 (Galvalume)'
+  return 'PE / SMP / HDP / PVDF'
+})
 
 const fetchProfiles = async () => {
   try {
