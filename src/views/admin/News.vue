@@ -8,7 +8,6 @@
           <input v-model="defaultAuthor" @blur="saveAuthor" class="form-control" style="width:180px;height:28px;padding:2px 8px;font-size:13px;" placeholder="全局作者名称" />
         </div>
         <button class="btn btn-outline" @click="showCatModal = true" style="color:#7c3aed;border-color:#c4b5fd;">📂 分组管理</button>
-        <button class="btn btn-outline" @click="showRoofingModal = true" style="color:#d97706;border-color:#fcd34d;">📐 3D瓦型图管理</button>
         <button class="btn btn-primary" @click="openCreate">+ 新建文章</button>
       </div>
     </div>
@@ -332,27 +331,12 @@
     
     
 
-    <!-- Roofing Profiles Modal -->
-    <Teleport to="body">
-      <div class="modal-overlay" v-if="showRoofingModal" @click.self="showRoofingModal = false" style="z-index: 10050">
-        <div class="modal-wrap" style="max-width:1200px; width: 95%; height: 85vh; display: flex; flex-direction: column; padding: 0;">
-          <div class="modal-header" style="padding: 15px 20px;">
-            <h3 style="margin:0;">📐 3D 瓦型图管理与生成器</h3>
-            <button class="modal-close" @click="showRoofingModal = false">✕</button>
-          </div>
-          <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 20px;">
-            <RoofingProfileManager />
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import api from '../../api'
-import RoofingProfileManager from '../../components/admin/RoofingProfileManager.vue'
 
 const newsList = ref([])
 const showModal = ref(false)
@@ -361,7 +345,6 @@ const saving = ref(false)
 const activeTab = ref('basic')
 const isFullscreen = ref(false)
 const translatingId = ref(null)
-const showRoofingModal = ref(false)
 
 // ─── Category state ──────────────────────────────────────────────────────────
 const categories = ref([])

@@ -558,7 +558,8 @@ onUnmounted(() => {
 .nav-dropdown {
   position: absolute;
   top: 100%;
-  left: 0;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
   min-width: 220px;
   background: var(--white);
   border-radius: var(--radius-lg);
@@ -566,7 +567,6 @@ onUnmounted(() => {
   padding: 8px 0;
   opacity: 0;
   visibility: hidden;
-  transform: translateY(10px);
   transition: all 0.3s ease;
   z-index: 200;
   border: 1px solid var(--border);
@@ -574,7 +574,7 @@ onUnmounted(() => {
 .nav-dropdown-wrapper:hover .nav-dropdown {
   opacity: 1;
   visibility: visible;
-  transform: translateY(0);
+  transform: translateX(-50%) translateY(0);
 }
 .nav-dropdown-item {
   display: block;

@@ -342,7 +342,7 @@ onMounted(async () => {
 .page-subtitle { color: var(--text-secondary); font-size: var(--text-lg); margin: 0; }
 
 .category-filters {
-  background: #1a1a2e;
+  background: transparent;
   padding: 0 0 20px;
 }
 .filter-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }

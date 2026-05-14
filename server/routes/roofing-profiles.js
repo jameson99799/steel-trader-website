@@ -22,7 +22,22 @@ router.get('/categories/public', (req, res) => {
 router.get('/categories', authMiddleware, (req, res) => {
     try {
         const categories = getAll('SELECT * FROM roofing_categories ORDER BY sort_order DESC, id ASC')
-        res.json(categories)
+        // Load translations for roofing_category type
+        const allTranslations = getAll(
+          `SELECT content_id, language_code FROM translations
+           WHERE content_type = 'roofing_category' AND content_field = 'name'`
+        )
+        const transMap = {}
+        for (const tr of allTranslations) {
+          if (!transMap[tr.content_id]) transMap[tr.content_id] = []
+          transMap[tr.content_id].push(tr.language_code)
+        }
+        
+        const withTrans = categories.map(c => ({
+          ...c,
+          translatedLangs: transMap[c.id] || []
+        }))
+        res.json(withTrans)
     } catch (e) {
         res.status(500).json({ error: e.message })
     }

@@ -1,16 +1,16 @@
 <template>
   <div class="admin-page">
     <div class="page-header">
-      <h1 class="page-title">3D Roofing Profiles Generator & Manager</h1>
-      <p class="page-subtitle">Manage 3D roofing profiles, 2D engineering specs, categories, and AI image mapping.</p>
+      <h1 class="page-title">3D 瓦型图管理与生成器</h1>
+      <p class="page-subtitle">管理 3D 瓦型图、2D 工程截面图参数、瓦型分组及生成设置。</p>
     </div>
 
     <div class="admin-tabs">
       <button :class="['tab-btn', { active: activeTab === 'profiles' }]" @click="activeTab = 'profiles'">
-        Profiles
+        瓦型管理
       </button>
       <button :class="['tab-btn', { active: activeTab === 'categories' }]" @click="activeTab = 'categories'">
-        Categories
+        瓦型分组
       </button>
     </div>
 
@@ -18,7 +18,7 @@
     <div v-if="activeTab === 'profiles'" class="tab-content">
       <div class="toolbar">
         <button class="btn btn-primary" @click="openProfileModal(null)">
-          <span class="icon">+</span> Add New Profile
+          <span class="icon">+</span> 添加新瓦型
         </button>
       </div>
 
@@ -27,13 +27,13 @@
           <thead>
             <tr>
               <th>ID</th>
-              <th>Model</th>
-              <th>Type</th>
-              <th>Surface / Color</th>
-              <th>Dimensions</th>
-              <th>Category</th>
-              <th>Sort</th>
-              <th>Actions</th>
+              <th>型号</th>
+              <th>类型</th>
+              <th>表面材质 / 颜色</th>
+              <th>尺寸参数</th>
+              <th>所属分组</th>
+              <th>排序</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -46,22 +46,22 @@
                 <span class="color-dot" v-if="item.color" :style="{ background: item.color }" :title="item.color"></span>
               </td>
               <td class="text-xs">
-                W: {{ item.effective_width }}<br>
-                H: {{ item.rib_height }}<br>
-                P: {{ item.pitch }}
+                宽: {{ item.effective_width }}<br>
+                高: {{ item.rib_height }}<br>
+                距: {{ item.pitch }}
               </td>
               <td>{{ getCategoryName(item.category_id) }}</td>
               <td>{{ item.sort_order }}</td>
               <td>
                 <div class="actions">
-                  <button class="btn-icon text-blue" title="Edit" @click="openProfileModal(item)">✏️</button>
-                  <button class="btn-icon text-green" title="Duplicate" @click="duplicateProfile(item)">📄</button>
-                  <button class="btn-icon text-red" title="Delete" @click="deleteProfile(item.id)">🗑️</button>
+                  <button class="btn-icon text-blue" title="编辑" @click="openProfileModal(item)">✏️</button>
+                  <button class="btn-icon text-green" title="复制" @click="duplicateProfile(item)">📄</button>
+                  <button class="btn-icon text-red" title="删除" @click="deleteProfile(item.id)">🗑️</button>
                 </div>
               </td>
             </tr>
             <tr v-if="profiles.length === 0">
-              <td colspan="8" class="text-center text-gray">No profiles found</td>
+              <td colspan="8" class="text-center text-gray">暂无瓦型数据</td>
             </tr>
           </tbody>
         </table>
@@ -72,7 +72,7 @@
     <div v-if="activeTab === 'categories'" class="tab-content">
       <div class="toolbar">
         <button class="btn btn-primary" @click="openCategoryModal(null)">
-          <span class="icon">+</span> Add Category
+          <span class="icon">+</span> 添加分组
         </button>
       </div>
 
@@ -81,28 +81,33 @@
           <thead>
             <tr>
               <th>ID</th>
-              <th>Name</th>
-              <th>Name (EN)</th>
-              <th>Sort Order</th>
-              <th>Active</th>
-              <th>Actions</th>
+              <th>名称</th>
+              <th>名称 (英文)</th>
+              <th>排序</th>
+              <th>前台显示</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="item in categories" :key="item.id">
               <td>{{ item.id }}</td>
-              <td><strong>{{ item.name }}</strong></td>
+              <td>
+                <strong>{{ item.name }}</strong>
+                <div v-if="item.translatedLangs && item.translatedLangs.length" style="margin-top: 4px; display: flex; gap: 4px; flex-wrap: wrap;">
+                  <span v-for="l in item.translatedLangs" :key="l" style="font-size: 10px; padding: 2px 4px; border-radius: 3px; background: #e0f2fe; color: #0284c7;">{{ l.toUpperCase() }}</span>
+                </div>
+              </td>
               <td>{{ item.name_en }}</td>
               <td>{{ item.sort_order }}</td>
               <td>
                 <span :class="['status-badge', item.is_active ? 'active' : 'inactive']">
-                  {{ item.is_active ? 'Yes' : 'No' }}
+                  {{ item.is_active ? '是' : '否' }}
                 </span>
               </td>
               <td>
                 <div class="actions">
-                  <button class="btn-icon text-blue" title="Edit" @click="openCategoryModal(item)">✏️</button>
-                  <button class="btn-icon text-red" title="Delete" @click="deleteCategory(item.id)">🗑️</button>
+                  <button class="btn-icon text-blue" title="编辑" @click="openCategoryModal(item)">✏️</button>
+                  <button class="btn-icon text-red" title="删除" @click="deleteCategory(item.id)">🗑️</button>
                 </div>
               </td>
             </tr>
@@ -115,22 +120,22 @@
     <div v-if="showProfileModal" class="modal-overlay" @click.self="showProfileModal = false">
       <div class="modal-container modal-large">
         <div class="modal-header">
-          <h3>{{ editingProfile.id ? 'Edit Profile' : 'Add New Profile' }}</h3>
+          <h3>{{ editingProfile.id ? '编辑瓦型' : '添加新瓦型' }}</h3>
           <button class="close-btn" @click="showProfileModal = false">✕</button>
         </div>
         <div class="modal-body modal-body-split">
           <form @submit.prevent="saveProfile" class="form-grid">
             
-            <div class="form-section-title">Basic Information</div>
+            <div class="form-section-title">基本信息</div>
             <div class="form-row">
               <div class="form-group">
-                <label>Model Name <span class="req">*</span></label>
-                <input type="text" v-model="editingProfile.model" required placeholder="e.g. YX50-410-820" />
+                <label>瓦型型号 <span class="req">*</span></label>
+                <input type="text" v-model="editingProfile.model" required placeholder="例如: YX50-410-820" />
               </div>
               <div class="form-group">
-                <label>Category</label>
+                <label>所属分组</label>
                 <select v-model.number="editingProfile.category_id">
-                  <option value="0">Uncategorized</option>
+                  <option value="0">未分组</option>
                   <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
                 </select>
               </div>
@@ -138,106 +143,106 @@
 
             <div class="form-row">
               <div class="form-group">
-                <label>Profile Type <span class="req">*</span></label>
+                <label>截面类型 <span class="req">*</span></label>
                 <select v-model="editingProfile.profile_type" required>
-                  <option value="trapezoidal">Trapezoidal</option>
-                  <option value="corrugated">Corrugated</option>
-                  <option value="standing_seam">Standing Seam</option>
-                  <option value="glazed_tile">Glazed Tile</option>
-                  <option value="wall_panel">Wall Panel</option>
+                  <option value="trapezoidal">角驰/梯形 (Trapezoidal)</option>
+                  <option value="corrugated">波纹型 (Corrugated)</option>
+                  <option value="standing_seam">直立锁边 (Standing Seam)</option>
+                  <option value="glazed_tile">琉璃瓦 (Glazed Tile)</option>
+                  <option value="wall_panel">墙面板 (Wall Panel)</option>
                 </select>
               </div>
               <div class="form-group">
-                <label>Default Surface</label>
+                <label>默认表面材质</label>
                 <select v-model="editingProfile.surface">
-                  <option value="ppgi">PPGI / PPGL</option>
-                  <option value="gi">Galvanized (GI)</option>
-                  <option value="gl">Galvalume (GL)</option>
+                  <option value="ppgi">彩涂 (PPGI / PPGL)</option>
+                  <option value="gi">镀锌 (Galvanized GI)</option>
+                  <option value="gl">镀铝锌 (Galvalume GL)</option>
                 </select>
               </div>
               <div class="form-group" v-if="editingProfile.surface === 'ppgi'">
-                <label>Default Color (HEX/RAL)</label>
-                <input type="text" v-model="editingProfile.color" placeholder="#1e40af or RAL 5010" />
+                <label>默认颜色 (HEX或RAL代码)</label>
+                <input type="text" v-model="editingProfile.color" placeholder="例如: #1e40af 或 RAL 5010" />
               </div>
             </div>
 
-            <div class="form-section-title">2D Dimensions (For Engineering Drawing)</div>
+            <div class="form-section-title">2D 尺寸参数 (用于生成截面图)</div>
             <div class="form-row">
               <div class="form-group">
-                <label>Effective Width (mm)</label>
+                <label>有效宽度 (mm)</label>
                 <input type="number" step="0.1" v-model.number="editingProfile.effective_width" />
               </div>
               <div class="form-group">
-                <label>Coil Width (mm)</label>
+                <label>进料宽度 (mm)</label>
                 <input type="number" step="0.1" v-model.number="editingProfile.coil_width" />
               </div>
               <div class="form-group">
-                <label>Rib Height (mm)</label>
+                <label>波高/肋高 (mm)</label>
                 <input type="number" step="0.1" v-model.number="editingProfile.rib_height" />
               </div>
               <div class="form-group">
-                <label>Pitch (mm)</label>
+                <label>波距 (mm)</label>
                 <input type="number" step="0.1" v-model.number="editingProfile.pitch" />
               </div>
             </div>
 
-            <div class="form-section-title">Custom Specifications (Optional Overrides)</div>
-            <p class="text-xs text-gray mb-15">Leave blank to use dynamic auto-generated values based on surface type.</p>
+            <div class="form-section-title">自定义参数 (选填)</div>
+            <p class="text-xs text-gray mb-15">如果留空，系统将根据表面材质自动生成对应的默认参数。</p>
             <div class="form-row">
               <div class="form-group">
-                <label>Material</label>
-                <input type="text" v-model="editingProfile.material" placeholder="e.g. Galvanized Steel" />
+                <label>材质 (Material)</label>
+                <input type="text" v-model="editingProfile.material" placeholder="例如: Galvanized Steel" />
               </div>
               <div class="form-group">
-                <label>Thickness (TCT)</label>
-                <input type="text" v-model="editingProfile.thickness" placeholder="e.g. 0.12 - 0.80 mm" />
+                <label>厚度 (Thickness TCT)</label>
+                <input type="text" v-model="editingProfile.thickness" placeholder="例如: 0.12 - 0.80 mm" />
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label>Coating</label>
-                <input type="text" v-model="editingProfile.coating" placeholder="e.g. Z60-Z275" />
+                <label>涂层 (Coating)</label>
+                <input type="text" v-model="editingProfile.coating" placeholder="例如: Z60-Z275" />
               </div>
               <div class="form-group">
-                <label>Length</label>
-                <input type="text" v-model="editingProfile.length" placeholder="e.g. Customizable (Max. 12m)" />
+                <label>长度 (Length)</label>
+                <input type="text" v-model="editingProfile.length" placeholder="例如: Customizable (Max. 12m)" />
               </div>
             </div>
             <div class="form-group">
-              <label>Applications</label>
-              <input type="text" v-model="editingProfile.applications" placeholder="e.g. Roofing, Wall Cladding" />
+              <label>应用场景 (Applications)</label>
+              <input type="text" v-model="editingProfile.applications" placeholder="例如: Roofing, Wall Cladding" />
             </div>
 
-            <div class="form-section-title">Others</div>
+            <div class="form-section-title">其他设置</div>
             <div class="form-row">
               <div class="form-group">
-                <label>Sort Order</label>
+                <label>排序 (Sort Order)</label>
                 <input type="number" v-model.number="editingProfile.sort_order" />
               </div>
               <div class="form-group">
-                <label>Custom Image URL (Overrides AI 3D Image)</label>
+                <label>自定义图片 URL (覆盖3D渲染图)</label>
                 <input type="text" v-model="editingProfile.image_url" placeholder="/images/roofing/..." />
               </div>
             </div>
 
             <div class="modal-footer">
-              <button type="button" class="btn btn-outline" @click="showProfileModal = false">Cancel</button>
-              <button type="submit" class="btn btn-primary">Save Profile</button>
+              <button type="button" class="btn btn-outline" @click="showProfileModal = false">取消</button>
+              <button type="submit" class="btn btn-primary">保存瓦型</button>
             </div>
           </form>
 
           <!-- Live Preview Side -->
           <div class="preview-panel">
-            <div class="form-section-title">Live Preview</div>
+            <div class="form-section-title">实时预览</div>
             
             <div class="preview-3d">
-              <div class="preview-label">3D RENDERING</div>
+              <div class="preview-label">3D 渲染预览</div>
               <img v-if="editingProfile.image_url" :src="editingProfile.image_url" alt="3D Preview" class="preview-img" />
               <img v-else :src="getDefaultImage(editingProfile)" alt="3D Preview" class="preview-img" />
             </div>
 
             <div class="preview-2d">
-              <div class="preview-label">2D ENGINEERING DRAWING</div>
+              <div class="preview-label">2D 工程截面图预览</div>
               <RoofingProfileGenerator :profile="editingProfile" :showDimensions="true" class="admin-generator" />
             </div>
           </div>
@@ -249,32 +254,32 @@
     <div v-if="showCategoryModal" class="modal-overlay" @click.self="showCategoryModal = false">
       <div class="modal-container">
         <div class="modal-header">
-          <h3>{{ editingCategory.id ? 'Edit Category' : 'Add Category' }}</h3>
+          <h3>{{ editingCategory.id ? '编辑分组' : '添加分组' }}</h3>
           <button class="close-btn" @click="showCategoryModal = false">✕</button>
         </div>
         <div class="modal-body">
           <form @submit.prevent="saveCategory">
             <div class="form-group">
-              <label>Name (Local) <span class="req">*</span></label>
+              <label>名称 (中文/本地语言) <span class="req">*</span></label>
               <input type="text" v-model="editingCategory.name" required />
             </div>
             <div class="form-group">
-              <label>Name (English)</label>
+              <label>名称 (英文)</label>
               <input type="text" v-model="editingCategory.name_en" />
             </div>
             <div class="form-group">
-              <label>Sort Order</label>
+              <label>排序</label>
               <input type="number" v-model.number="editingCategory.sort_order" />
             </div>
             <div class="form-group checkbox-group">
               <label>
                 <input type="checkbox" v-model="editingCategory.is_active" :true-value="1" :false-value="0" />
-                Active / Visible
+                在前台展示此分组
               </label>
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-outline" @click="showCategoryModal = false">Cancel</button>
-              <button type="submit" class="btn btn-primary">Save Category</button>
+              <button type="button" class="btn btn-outline" @click="showCategoryModal = false">取消</button>
+              <button type="submit" class="btn btn-primary">保存分组</button>
             </div>
           </form>
         </div>
