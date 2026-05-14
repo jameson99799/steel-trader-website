@@ -54,20 +54,23 @@
             </div>
           </div>
 
-          <!-- 3D Rendering Section -->
-          <div class="sheet-3d-section">
-            <div class="section-label">3D RENDERING</div>
-            <div class="rendering-area">
-              <img v-if="profile.image_url" :src="profile.image_url" :alt="profile.model" class="rendering-img" />
-              <img v-else :src="getDefaultImage(profile)" :alt="profile.model" class="rendering-img" />
+          <!-- Middle Section: 3D Rendering + 2D Dimensions -->
+          <div class="sheet-middle">
+            <!-- 3D Rendering Section -->
+            <div class="sheet-3d-section">
+              <div class="section-label">3D RENDERING</div>
+              <div class="rendering-area">
+                <img v-if="profile.image_url" :src="profile.image_url" :alt="profile.model" class="rendering-img" />
+                <img v-else :src="getDefaultImage(profile)" :alt="profile.model" class="rendering-img" />
+              </div>
             </div>
-          </div>
 
-          <!-- Profile & Dimensions Section -->
-          <div class="sheet-dimensions-section">
-            <div class="section-label section-label-primary">PROFILE &amp; DIMENSIONS</div>
-            <div class="dimensions-drawing">
-              <RoofingProfileGenerator :profile="profile" :showDimensions="true" />
+            <!-- Profile & Dimensions Section -->
+            <div class="sheet-dimensions-section">
+              <div class="section-label section-label-primary">PROFILE &amp; DIMENSIONS</div>
+              <div class="dimensions-drawing">
+                <RoofingProfileGenerator :profile="profile" :showDimensions="true" />
+              </div>
             </div>
           </div>
 
@@ -177,11 +180,16 @@ const getDefaultImage = (profile) => {
   const surface = profile.current_surface || profile.surface || 'ppgi'
   
   if (type === 'corrugated') {
+    if (surface === 'ppgi') return '/images/roofing/corrugated-ppgi.png'
     return surface === 'gl' ? '/images/roofing/corrugated-gl.png' : '/images/roofing/corrugated-gi.png'
   }
   if (type === 'standing_seam') return '/images/roofing/standing-seam.png'
   if (type === 'glazed_tile') return '/images/roofing/glazed-tile.png'
-  return '/images/roofing/trapezoidal-ppgi.png' // trapezoidal / wall_panel
+  
+  // trapezoidal / wall_panel
+  if (surface === 'gi') return '/images/roofing/trapezoidal-gi.png'
+  if (surface === 'gl') return '/images/roofing/trapezoidal-gl.png'
+  return '/images/roofing/trapezoidal-ppgi.png'
 }
 
 const formatType = (type) => {
@@ -341,8 +349,16 @@ onMounted(async () => {
   border: 1px solid rgba(255,255,255,0.2); padding: 4px 14px; border-radius: 20px;
 }
 
+/* Middle Section (Side-by-side) */
+.sheet-middle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  padding: 0 32px 24px;
+  align-items: center;
+}
+
 /* 3D Section */
-.sheet-3d-section { padding: 0 32px 24px; }
 .section-label {
   font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase;
   letter-spacing: 1.5px; padding: 20px 0 8px;
@@ -350,8 +366,9 @@ onMounted(async () => {
 .section-label-primary { color: #2563eb; font-size: 13px; }
 .rendering-area {
   display: flex; justify-content: center; align-items: center;
-  min-height: 180px; background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  min-height: 250px; background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
   border-radius: 8px; overflow: hidden;
+  padding: 16px;
 }
 .rendering-img {
   width: 100%; max-height: 320px; object-fit: contain;
@@ -360,8 +377,7 @@ onMounted(async () => {
 
 /* Dimensions Section */
 .sheet-dimensions-section {
-  padding: 0 32px 24px;
-  border-top: 1px solid #e2e8f0;
+  display: flex; flex-direction: column; justify-content: center;
 }
 .dimensions-drawing {
   background: #fff;
@@ -448,6 +464,7 @@ onMounted(async () => {
 }
 
 @media (max-width: 900px) {
+  .sheet-middle { grid-template-columns: 1fr; gap: 16px; }
   .sheet-bottom { grid-template-columns: 1fr; }
   .bottom-left { border-right: none; border-bottom: 1px solid #e2e8f0; }
   .sheet-title-bar { flex-direction: column; gap: 12px; align-items: flex-start; }
