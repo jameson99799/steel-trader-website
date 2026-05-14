@@ -553,6 +553,7 @@ const UI_TEXTS_EN = {
     "ralColorBtn": "RAL Color",
     "ralSearchPlaceholder": "Search for your desired color.",
     "ralNoResult": "No colors found",
+    "roofingProfilesBtn": "Roofing Profiles",
     "roofingTitle": "Roofing Sheet Profiles",
     "roofingSubtitle": "Common technical drawings and specifications for our steel roofing panels.",
     "allProfiles": "All Profiles",
@@ -621,14 +622,17 @@ function collectRalColors() {
 
 function collectRoofingCategories() {
     try {
-        const categories = getAll('SELECT id, name_en FROM roofing_categories WHERE name_en IS NOT NULL AND name_en != ""')
-        return categories.map(c => ({
-            type: 'roofing_category',
-            id: c.id,
-            field: `name_RC_${c.id}`,
-            text: c.name_en,
-            itemName: `Roofing Category: ${c.name_en}`
-        }))
+        const categories = getAll('SELECT id, name, name_en FROM roofing_categories WHERE name IS NOT NULL AND name != ""')
+        return categories.map(c => {
+            const textToTranslate = c.name_en || c.name;
+            return {
+                type: 'roofing_category',
+                id: c.id,
+                field: `name_RC_${c.id}`,
+                text: textToTranslate,
+                itemName: `Roofing Category: ${textToTranslate}`
+            };
+        })
     } catch (e) {
         return []
     }
