@@ -47,7 +47,7 @@
               <span class="profile-type">{{ profile.profile_type }}</span>
             </div>
             <div class="profile-drawing">
-              <RoofingProfileGenerator :profile="profile" width="100%" height="auto" style="min-height:220px;" :showDimensions="true" />
+              <RoofingProfileGenerator :profile="profile" :showDimensions="true" />
             </div>
 
             <!-- Integrated Specs Grid -->
@@ -245,21 +245,9 @@ onMounted(async () => {
 }
 
 .profile-drawing {
-  padding: var(--spacing-lg);
-  background: #fdfdfd;
+  padding: 12px 16px 8px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   border-bottom: 1px solid var(--border);
-  display: flex;
-  justify-content: center;
-}
-
-.drawing-svg {
-  width: 100%;
-  max-height: 200px;
-}
-
-.drawing-svg {
-  width: 100%;
-  max-height: 200px;
 }
 
 .specs-grid {
