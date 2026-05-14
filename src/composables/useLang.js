@@ -60,7 +60,7 @@ const builtInTranslations = {
     ralColorBtn: 'RAL 色卡',
     ralSearchPlaceholder: '搜索您想要的颜色',
     ralNoResult: '未找到颜色',
-    roofingProfilesBtn: 'Roofing Profiles',
+    roofingProfilesBtn: '瓦型图库',
     roofingTitle: '屋面瓦型',
     roofingSubtitle: '专业提供钢制屋面板的图纸与技术规格参数',
     allProfiles: '所有瓦型',

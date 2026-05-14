@@ -287,8 +287,8 @@ export const api = {
   generateProduct: (data) => request('/ai/generate-product', { method: 'POST', body: JSON.stringify(data) }),
 
   // Roofing Profiles
-  getRoofingProfilesPublic: () => cachedGet('/roofing-profiles/public'),
-  getRoofingCategoriesPublic: () => cachedGet('/roofing-profiles/categories/public'),
+  getRoofingProfilesPublic: () => request(appendLang('/roofing-profiles/public')),
+  getRoofingCategoriesPublic: () => request(appendLang('/roofing-profiles/categories/public')),
   getRalColors: () => cachedGet('/ral-colors')
 }
 
