@@ -154,7 +154,7 @@
               </div>
               <div class="form-group">
                 <label>默认表面材质</label>
-                <select v-model="editingProfile.surface">
+                <select v-model="editingProfile.surface" @change="handleSurfaceChange">
                   <option value="ppgi">彩涂 (PPGI / PPGL)</option>
                   <option value="gi">镀锌 (Galvanized GI)</option>
                   <option value="gl">镀铝锌 (Galvalume GL)</option>
@@ -186,31 +186,30 @@
               </div>
             </div>
 
-            <div class="form-section-title">自定义参数 (选填)</div>
-            <p class="text-xs text-gray mb-15">如果留空，系统将根据表面材质自动生成对应的默认参数。</p>
+            <div class="form-section-title">规格参数</div>
             <div class="form-row">
               <div class="form-group">
                 <label>材质 (Material)</label>
-                <input type="text" v-model="editingProfile.material" :placeholder="'默认: ' + defaultMaterial" />
+                <input type="text" v-model="editingProfile.material" />
               </div>
               <div class="form-group">
                 <label>厚度 (Thickness TCT)</label>
-                <input type="text" v-model="editingProfile.thickness" :placeholder="'默认: ' + defaultThickness" />
+                <input type="text" v-model="editingProfile.thickness" />
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label>涂层 (Coating)</label>
-                <input type="text" v-model="editingProfile.coating" :placeholder="'默认: ' + defaultCoating" />
+                <input type="text" v-model="editingProfile.coating" />
               </div>
               <div class="form-group">
                 <label>长度 (Length)</label>
-                <input type="text" v-model="editingProfile.length" placeholder="默认: Customizable (Max. 12m)" />
+                <input type="text" v-model="editingProfile.length" />
               </div>
             </div>
             <div class="form-group">
               <label>应用场景 (Applications)</label>
-              <input type="text" v-model="editingProfile.applications" placeholder="默认: Roofing, Wall Cladding, Siding" />
+              <input type="text" v-model="editingProfile.applications" />
             </div>
 
             <div class="form-section-title">其他设置</div>
@@ -373,14 +372,30 @@ const getDefaultImage = (profile) => {
 }
 
 // -- Profiles --
+const handleSurfaceChange = () => {
+  editingProfile.value.material = defaultMaterial.value
+  editingProfile.value.thickness = defaultThickness.value
+  editingProfile.value.coating = defaultCoating.value
+}
+
 const openProfileModal = (item) => {
   if (item) {
     editingProfile.value = { ...item }
+    if (!editingProfile.value.material) editingProfile.value.material = defaultMaterial.value
+    if (!editingProfile.value.thickness) editingProfile.value.thickness = defaultThickness.value
+    if (!editingProfile.value.coating) editingProfile.value.coating = defaultCoating.value
+    if (!editingProfile.value.length) editingProfile.value.length = 'Customizable (Max. 12m)'
+    if (!editingProfile.value.applications) editingProfile.value.applications = 'Roofing, Wall Cladding, Siding'
   } else {
     editingProfile.value = {
       model: '', profile_type: 'trapezoidal', effective_width: 800, coil_width: 1000, 
       rib_height: 25, pitch: 200, color: '', surface: 'ppgi', sort_order: 0, 
-      category_id: 0, image_url: '', material: '', thickness: '', coating: '', length: '', applications: ''
+      category_id: 0, image_url: '', 
+      material: 'Pre-Painted Steel (PPGI/PPGL)', 
+      thickness: '0.25 – 0.80 mm', 
+      coating: 'PE / SMP / HDP / PVDF', 
+      length: 'Customizable (Max. 12m)', 
+      applications: 'Roofing, Wall Cladding, Siding'
     }
   }
   showProfileModal.value = true
