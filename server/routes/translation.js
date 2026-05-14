@@ -662,7 +662,7 @@ const PAGES = {
     news_categories: collectNewsCategories,
     hero: collectHero,
     ral_colors: collectRalColors,
-    roofing_categories: collectRoofingCategories,
+    roofing_categories: () => [...collectRoofingCategories(), ...collectRoofingProfiles()],
     roofing_profiles: collectRoofingProfiles
 };
 
