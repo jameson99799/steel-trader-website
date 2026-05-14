@@ -28,7 +28,7 @@
                 :class="['filter-btn', activeCategory === cat.id ? 'active' : '']" 
                 @click="activeCategory = cat.id"
               >
-                {{ localizedValue(cat, 'name') }}
+                {{ getCategoryLabel(cat) }}
               </button>
             </div>
           </div>
@@ -178,6 +178,22 @@ const profiles = ref([])
 const categories = ref([])
 const ralColors = ref([])
 const activeCategory = ref(0)
+
+const getCategoryLabel = (cat) => {
+  if (!cat) return ''
+  // 1. Try to match built-in UI text translations via the English name
+  const enName = cat.name_en || ''
+  if (enName) {
+    const key = `roofingType${enName.replace(/\s+/g, '')}`
+    const translated = t(key)
+    // If translation exists and is different from the raw key, use it
+    if (translated && translated !== key) {
+      return translated
+    }
+  }
+  // 2. Fall back to the backend DB localized translation logic
+  return localizedValue(cat, 'name')
+}
 
 const filteredProfiles = computed(() => {
   if (activeCategory.value === 0) return profiles.value

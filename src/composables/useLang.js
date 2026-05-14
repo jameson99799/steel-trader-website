@@ -266,11 +266,15 @@ export function useLang() {
 
   const localizedValue = (obj, field) => {
     if (!obj) return ''
+    const enField = `${field}_en`
     if (lang.value !== 'en') {
       const translatedField = `${field}_${lang.value}`
       if (obj[translatedField]) return obj[translatedField]
+      // Fallback for non-English if AI translation is missing:
+      // Prefer the base field (usually native Chinese) over English
+      return obj[field] || obj[enField] || ''
     }
-    const enField = `${field}_en`
+    // For English: prefer the English field over the base field
     return obj[enField] || obj[field] || ''
   }
 
