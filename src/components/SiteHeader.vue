@@ -106,11 +106,11 @@
             </router-link>
 
             <div class="nav-dropdown-wrapper">
-              <router-link :to="langPath('/products')" @click="menuOpen = false" class="nav-link">
+              <router-link :to="langPath('/products')" @click="handleNavClick($event, 'products')" class="nav-link">
                 {{ t('products') }}
                 <svg class="dropdown-arrow" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
               </router-link>
-              <div class="nav-dropdown" v-if="productCategories.length">
+              <div class="nav-dropdown" v-if="productCategories.length" :class="{ 'mobile-show': mobileProductsExpanded }">
                 <router-link 
                   v-for="cat in productCategories" :key="cat.id" 
                   :to="langPath(`/products?category=${cat.slug || cat.id}`)" 
@@ -123,11 +123,11 @@
             </div>
 
             <div class="nav-dropdown-wrapper">
-              <router-link :to="langPath('/news')" @click="menuOpen = false" class="nav-link">
+              <router-link :to="langPath('/news')" @click="handleNavClick($event, 'news')" class="nav-link">
                 {{ t('news') }}
                 <svg class="dropdown-arrow" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
               </router-link>
-              <div class="nav-dropdown" v-if="newsCategories.length || true">
+              <div class="nav-dropdown" v-if="newsCategories.length || true" :class="{ 'mobile-show': mobileNewsExpanded }">
                 <router-link 
                   v-for="cat in newsCategories" :key="cat.id" 
                   :to="langPath(`/news/category/${cat.slug || cat.id}`)" 
@@ -199,7 +199,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
@@ -218,6 +218,42 @@ const tabletLangRef = ref(null)
 
 const productCategories = ref([])
 const newsCategories = ref([])
+
+const mobileProductsExpanded = ref(false)
+const mobileNewsExpanded = ref(false)
+
+watch(menuOpen, (newVal) => {
+  if (!newVal) {
+    mobileProductsExpanded.value = false
+    mobileNewsExpanded.value = false
+  }
+})
+
+const handleNavClick = (e, menuName) => {
+  if (window.innerWidth <= 1024) {
+    if (menuName === 'products') {
+      if (!mobileProductsExpanded.value) {
+        e.preventDefault()
+        mobileProductsExpanded.value = true
+        mobileNewsExpanded.value = false
+      } else {
+        menuOpen.value = false
+        mobileProductsExpanded.value = false
+      }
+    } else if (menuName === 'news') {
+      if (!mobileNewsExpanded.value) {
+        e.preventDefault()
+        mobileNewsExpanded.value = true
+        mobileProductsExpanded.value = false
+      } else {
+        menuOpen.value = false
+        mobileNewsExpanded.value = false
+      }
+    }
+  } else {
+    menuOpen.value = false
+  }
+}
 
 const selectLang = (code) => {
   if (typeof setLang === 'function') setLang(code)
@@ -750,6 +786,7 @@ onUnmounted(() => {
   }
   
   .nav-dropdown {
+    display: none;
     position: static;
     box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
     border: none;
@@ -760,6 +797,10 @@ onUnmounted(() => {
     transform: none;
     width: 100%;
     border-radius: 0;
+  }
+  
+  .nav-dropdown.mobile-show {
+    display: block;
   }
   
   .nav-dropdown-item {
