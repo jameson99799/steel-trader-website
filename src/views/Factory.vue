@@ -110,7 +110,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
@@ -175,9 +175,9 @@ const getYoutubeEmbedUrl = (url, autoplay) => {
     if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
   } else {
     // Basic fallback, might not have enablejsapi
-    return url + (url.includes('?') ? '&' : '?') + (autoplay ? 'autoplay=1&mute=1&' : '') + 'enablejsapi=1';
+    return url + (url.includes('?') ? '&' : '?') + (autoplay ? 'autoplay=1&mute=1&' : '') + 'enablejsapi=1&playsinline=1';
   }
-  return `https://www.youtube.com/embed/${videoId}?enablejsapi=1${autoplay ? '&autoplay=1&mute=1' : ''}`;
+  return `https://www.youtube.com/embed/${videoId}?enablejsapi=1&playsinline=1${autoplay ? '&autoplay=1&mute=1' : ''}`;
 }
 
 const openLightbox = (group, index) => {
@@ -258,6 +258,7 @@ const scrollCarousel = (id, direction) => {
 const ytPlayers = []
 
 const initYouTubePlayers = () => {
+  ytPlayers.length = 0 // Clear existing references
   const iframes = document.querySelectorAll('.yt-video-iframe')
   iframes.forEach(iframe => {
     try {
@@ -283,20 +284,23 @@ const initYouTubePlayers = () => {
 }
 
 onMounted(() => {
-  loadData().then(() => {
-    // Load YouTube API script if not loaded
-    if (!window.YT) {
-      const tag = document.createElement('script')
-      tag.src = "https://www.youtube.com/iframe_api"
-      const firstScriptTag = document.getElementsByTagName('script')[0]
-      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag)
-      
-      window.onYouTubeIframeAPIReady = () => {
-        setTimeout(initYouTubePlayers, 500)
+  loadData().then(async () => {
+    await nextTick()
+    setTimeout(() => {
+      // Load YouTube API script if not loaded
+      if (!window.YT) {
+        const tag = document.createElement('script')
+        tag.src = "https://www.youtube.com/iframe_api"
+        const firstScriptTag = document.getElementsByTagName('script')[0]
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag)
+        
+        window.onYouTubeIframeAPIReady = () => {
+          initYouTubePlayers()
+        }
+      } else {
+        initYouTubePlayers()
       }
-    } else {
-      setTimeout(initYouTubePlayers, 500)
-    }
+    }, 1000)
   })
   window.addEventListener('keydown', handleKeydown)
 })
@@ -649,23 +653,26 @@ onUnmounted(() => {
 .lightbox-center-controls {
   display: flex;
   align-items: center;
-  gap: 15ch;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 800px;
 }
 
 .lightbox-title {
   text-align: center;
-  font-size: 16px;
+  font-size: 32px;
   font-weight: 500;
   letter-spacing: 1px;
+  flex: 1;
 }
 
 .lightbox-top-nav {
   background: none;
   border: none;
   color: white;
-  font-size: 28px;
+  font-size: 56px;
   cursor: pointer;
-  padding: 10px 20px;
+  padding: 10px 40px;
   opacity: 0.8;
   transition: opacity 0.2s;
   display: flex;
@@ -710,10 +717,10 @@ onUnmounted(() => {
 
 @media (max-width: 768px) {
   .lightbox-top-bar { padding: 0 10px; height: 50px; }
-  .lightbox-center-controls { gap: 10px; }
-  .lightbox-title { font-size: 14px; }
-  .lightbox-top-nav { padding: 5px 10px; font-size: 24px; }
-  .lightbox-close { right: 5px; font-size: 28px; }
+  .lightbox-center-controls { padding: 0 10px; }
+  .lightbox-title { font-size: 24px; }
+  .lightbox-top-nav { padding: 5px 10px; font-size: 40px; }
+  .lightbox-close { right: 5px; font-size: 36px; }
   
   .page-title {
     font-size: var(--text-4xl);
