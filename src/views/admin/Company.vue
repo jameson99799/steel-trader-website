@@ -416,4 +416,29 @@ onMounted(async () => {
   max-height: 100%;
   object-fit: contain;
 }
+
+.media-grid { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); 
+  gap: 10px; 
+  max-height: 400px; 
+  overflow-y: auto; 
+  padding-right: 8px; 
+}
+.media-item { 
+  aspect-ratio: 1; 
+  border-radius: 8px; 
+  overflow: hidden; 
+  border: 2px solid transparent; 
+  cursor: pointer; 
+  position: relative; 
+}
+.media-item img { 
+  width: 100%; 
+  height: 100%; 
+  object-fit: cover; 
+}
+.media-item.selected { 
+  border-color: #7c3aed; 
+}
 </style>

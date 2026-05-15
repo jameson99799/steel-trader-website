@@ -78,6 +78,47 @@
       </div>
     </div>
 
+    <!-- Watermark Settings Section -->
+    <div class="card ssl-card">
+      <div class="card-header">💦 媒体库水印配置</div>
+      <div class="card-body">
+        <div class="ssl-info">
+          <h4>📋 说明：</h4>
+          <p>配置全局默认的图片水印。在工厂展示等模块选择图片时，您可以勾选是否叠加此水印生成新图。</p>
+        </div>
+        <form @submit.prevent="saveWatermarkSettings" style="max-width: 500px; margin-top:16px;">
+          <div class="form-group">
+            <label>水印 Logo 图片</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input v-model="wmForm.watermark_url" type="text" class="form-control" placeholder="/uploads/wangzhanlogo.png" />
+              <button type="button" class="btn btn-sm btn-outline" @click="openMediaPicker('watermark')" style="color:#7c3aed;border-color:#7c3aed;">📷 选择</button>
+            </div>
+            <div class="preview-box preview-small" v-if="wmForm.watermark_url" style="margin-top:8px;">
+              <img :src="wmForm.watermark_url" style="max-height:64px; border:1px solid #e2e8f0; border-radius:4px; padding:4px; background:#f8fafc;" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>水印位置 (Position)</label>
+            <select v-model="wmForm.position" class="form-control">
+              <option value="bottom-right">右下角 (Bottom Right)</option>
+              <option value="bottom-left">左下角 (Bottom Left)</option>
+              <option value="top-right">右上角 (Top Right)</option>
+              <option value="top-left">左上角 (Top Left)</option>
+              <option value="center">居中 (Center)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>水印比例缩放 (Scale)</label>
+            <input type="number" v-model.number="wmForm.scale" step="0.01" min="0.05" max="1" class="form-control" />
+            <p class="hint">0.15 表示占原图宽度的 15%</p>
+          </div>
+          <button type="submit" class="btn btn-primary" :disabled="wmLoading">
+            {{ wmLoading ? '保存中...' : '保存水印配置' }}
+          </button>
+        </form>
+      </div>
+    </div>
+
     <!-- External API Key Section -->
     <div class="card ssl-card">
       <div class="card-header">🔑 外部 API 密钥</div>
@@ -98,6 +139,37 @@
         </div>
       </div>
     </div>
+    </div>
+
+    <!-- Media Library Picker -->
+    <div v-if="showMediaPicker" class="modal-overlay" @click.self="showMediaPicker=false">
+      <div class="modal" style="max-width:700px;">
+        <div class="modal-header" style="background:#f5f3ff;color:#7c3aed;">
+          <h3>📷 从图库选择水印</h3>
+          <button class="modal-close" @click="showMediaPicker=false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <input v-model="mediaPickerSearch" class="form-control" placeholder="搜索文件名..." @input="loadMediaPicker" style="max-width:200px;" />
+            <select v-model="mediaPickerGroup" class="form-control" @change="loadMediaPicker" style="max-width:140px;">
+              <option value="">全部分组</option>
+              <option v-for="g in mediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            </select>
+          </div>
+          <div v-if="mediaPickerItems.length" class="media-grid">
+            <div v-for="item in mediaPickerItems" :key="item.id" :class="['media-item', { selected: mediaPickerSelected === item.filepath }]" @click="mediaPickerSelected = item.filepath">
+              <img :src="item.filepath" />
+            </div>
+          </div>
+          <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="showMediaPicker=false">取消</button>
+          <button type="button" class="btn btn-primary" style="background:#7c3aed;" @click="doSelectMedia" :disabled="!mediaPickerSelected">确认选择</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -192,7 +264,79 @@ const deleteSsl = async () => {
 onMounted(() => {
   loadSslStatus()
   loadApiKey()
+  loadWatermarkSettings()
 })
+
+// Watermark Settings
+const wmLoading = ref(false)
+const wmForm = reactive({
+  enabled: 0,
+  watermark_url: '',
+  position: 'bottom-right',
+  opacity: 0.8,
+  scale: 0.15
+})
+
+const loadWatermarkSettings = async () => {
+  try {
+    const data = await api.request('/media/watermark-settings')
+    if (data) {
+      Object.assign(wmForm, data)
+    }
+  } catch (e) {
+    console.error('Failed to load watermark settings', e)
+  }
+}
+
+const saveWatermarkSettings = async () => {
+  wmLoading.value = true
+  try {
+    await api.request('/media/watermark-settings', {
+      method: 'POST',
+      body: JSON.stringify(wmForm)
+    })
+    alert('水印配置已保存')
+  } catch (e) {
+    alert(e.message)
+  } finally {
+    wmLoading.value = false
+  }
+}
+
+// Media Picker
+const showMediaPicker = ref(false)
+const mediaGroups = ref([])
+const mediaPickerItems = ref([])
+const mediaPickerSearch = ref('')
+const mediaPickerGroup = ref('')
+const mediaPickerSelected = ref('')
+
+const openMediaPicker = async () => {
+  showMediaPicker.value = true
+  mediaPickerSelected.value = ''
+  try {
+    const groups = await api.request('/media/groups')
+    mediaGroups.value = groups
+    await loadMediaPicker()
+  } catch (e) { console.error(e) }
+}
+
+const loadMediaPicker = async () => {
+  try {
+    let url = '/media?page=1&per_page=50'
+    if (mediaPickerGroup.value) url += `&group_id=${mediaPickerGroup.value}`
+    if (mediaPickerSearch.value) url += `&search=${encodeURIComponent(mediaPickerSearch.value)}`
+    const data = await api.request(url)
+    mediaPickerItems.value = data.items.map(m => ({ id: m.id, filepath: m.media_url }))
+  } catch (e) { console.error(e) }
+}
+
+const doSelectMedia = () => {
+  if (mediaPickerSelected.value) {
+    wmForm.watermark_url = mediaPickerSelected.value
+    showMediaPicker.value = false
+  }
+}
 
 // External API Key
 const externalApiKey = ref('')
@@ -303,4 +447,29 @@ const copyApiKey = () => {
 }
 .result-success { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
 .result-error { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+
+.media-grid { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); 
+  gap: 10px; 
+  max-height: 400px; 
+  overflow-y: auto; 
+  padding-right: 8px; 
+}
+.media-item { 
+  aspect-ratio: 1; 
+  border-radius: 8px; 
+  overflow: hidden; 
+  border: 2px solid transparent; 
+  cursor: pointer; 
+  position: relative; 
+}
+.media-item img { 
+  width: 100%; 
+  height: 100%; 
+  object-fit: cover; 
+}
+.media-item.selected { 
+  border-color: #7c3aed; 
+}
 </style>

@@ -166,6 +166,26 @@ async function initDb() {
     )
   `)
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS watermark_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      enabled INTEGER DEFAULT 0,
+      watermark_url TEXT,
+      position TEXT DEFAULT 'bottom-right',
+      opacity REAL DEFAULT 0.8,
+      scale REAL DEFAULT 0.15
+    )
+  `)
+
+  try {
+    const hasWatermark = db.prepare("SELECT count(*) as c FROM watermark_settings").get().c
+    if (hasWatermark === 0) {
+      db.prepare('INSERT INTO watermark_settings (enabled, position) VALUES (0, "bottom-right")').run()
+    }
+  } catch (e) {
+    console.error('[db] Error populating default watermark settings:', e)
+  }
+
   try {
     const hasFactoryGroups = db.prepare("SELECT count(*) as c FROM factory_groups").get().c
     if (hasFactoryGroups === 0) {

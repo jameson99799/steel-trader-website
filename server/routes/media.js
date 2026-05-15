@@ -71,6 +71,25 @@ router.get('/', authMiddleware, (req, res) => {
   res.json({ items, total: total.c, page: parseInt(page), per_page: parseInt(per_page) })
 })
 
+// ─── Watermark Settings ───────────────────────────────────────────────────────
+router.get('/watermark-settings', authMiddleware, (req, res) => {
+  const settings = getOne('SELECT * FROM watermark_settings LIMIT 1')
+  res.json(settings || { enabled: 0, position: 'bottom-right', scale: 0.15 })
+})
+
+router.post('/watermark-settings', authMiddleware, (req, res) => {
+  const { enabled, watermark_url, position, opacity, scale } = req.body
+  const current = getOne('SELECT id FROM watermark_settings LIMIT 1')
+  if (current) {
+    run('UPDATE watermark_settings SET enabled=?, watermark_url=?, position=?, opacity=?, scale=? WHERE id=?',
+      [enabled ? 1 : 0, watermark_url, position, opacity, scale, current.id])
+  } else {
+    run('INSERT INTO watermark_settings (enabled, watermark_url, position, opacity, scale) VALUES (?, ?, ?, ?, ?)',
+      [enabled ? 1 : 0, watermark_url, position, opacity, scale])
+  }
+  res.json({ message: '水印设置已保存' })
+})
+
 // ─── Media Detail ───────────────────────────────────────────────────────────
 router.get('/:id', authMiddleware, (req, res) => {
   const item = getOne(`SELECT m.*, mg.name as group_name FROM media m

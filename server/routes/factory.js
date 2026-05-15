@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 import { getAll, getOne, run } from '../db.js'
+import { applyWatermark } from '../utils/watermark.js'
 
 const router = Router()
 const JWT_SECRET = process.env.JWT_SECRET || 'led-trade-secret-key-2024'
@@ -107,17 +108,22 @@ router.delete('/groups/:id', authMiddleware, (req, res) => {
 })
 
 // Add media to group
-router.post('/media', authMiddleware, (req, res) => {
-  const { group_id, type, media_url, sort_order, autoplay } = req.body
+router.post('/media', authMiddleware, async (req, res) => {
+  const { group_id, type, media_url, sort_order, autoplay, apply_watermark } = req.body
   if (!group_id || !type || !media_url) return res.status(400).json({ error: '参数不完整' })
   
   try {
+    let finalUrl = media_url
+    if (type === 'image' && apply_watermark) {
+      finalUrl = await applyWatermark(media_url)
+    }
+
     const r = run(`
       INSERT INTO factory_media (group_id, type, media_url, sort_order, autoplay)
       VALUES (?, ?, ?, ?, ?)
-    `, [group_id, type, media_url, sort_order || 0, autoplay ? 1 : 0])
+    `, [group_id, type, finalUrl, sort_order || 0, autoplay ? 1 : 0])
     
-    res.json({ id: r.lastInsertRowid, message: '媒体已添加' })
+    res.json({ id: r.lastInsertRowid, message: '媒体已添加', media_url: finalUrl })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }

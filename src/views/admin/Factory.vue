@@ -108,9 +108,18 @@
           </div>
           <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="showMediaPicker=false">取消</button>
-          <button type="button" class="btn btn-primary" style="background:#7c3aed;" @click="doAddSelectedMedia" :disabled="!mediaPickerSelected.length">确认添加 ({{ mediaPickerSelected.length }})</button>
+        <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <label class="checkbox-label" style="margin:0;">
+              <input type="checkbox" v-model="applyWatermark" />
+              💦 添加水印
+            </label>
+            <span class="form-hint" style="margin:0; font-size:12px;">(可在系统设置中配置水印)</span>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="btn btn-secondary" @click="showMediaPicker=false">取消</button>
+            <button type="button" class="btn btn-primary" style="background:#7c3aed;" @click="doAddSelectedMedia" :disabled="!mediaPickerSelected.length">确认添加 ({{ mediaPickerSelected.length }})</button>
+          </div>
         </div>
       </div>
     </div>
@@ -158,6 +167,7 @@ const mediaPickerGroup = ref('')
 const mediaPickerItems = ref([])
 const mediaGroups = ref([])
 const mediaPickerSelected = ref([])
+const applyWatermark = ref(false)
 const currentGroupIdForMedia = ref(null)
 
 // Video Modal State
@@ -281,7 +291,8 @@ const doAddSelectedMedia = async () => {
       body: JSON.stringify({
         group_id: currentGroupIdForMedia.value,
         type: 'image',
-        media_url: url
+        media_url: url,
+        apply_watermark: applyWatermark.value
       })
     })
   }

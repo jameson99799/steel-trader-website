@@ -12,6 +12,11 @@
           </nav>
           <h1 class="page-title">{{ t('factoryTour') || 'Factory Tour' }}</h1>
           <p class="page-subtitle">{{ t('factoryDesc') || 'Explore our modern manufacturing facilities and advanced production lines.' }}</p>
+          <div class="group-nav-buttons" v-if="groups.length > 0">
+            <button v-for="group in groups" :key="'nav-'+group.id" class="group-nav-btn" @click="scrollToGroup(group.id)">
+              {{ localizedValue(group, 'name') }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -27,7 +32,7 @@
         </div>
 
         <div v-else class="factory-groups">
-          <div v-for="(group, idx) in groups" :key="group.id" class="group-section" :class="{ 'alt-bg': idx % 2 !== 0 }">
+          <div v-for="(group, idx) in groups" :key="group.id" :id="'factory-group-' + group.id" class="group-section" :class="{ 'alt-bg': idx % 2 !== 0 }">
             <div class="section-header">
               <h2>{{ localizedValue(group, 'name') }}</h2>
               <div class="header-line"></div>
@@ -114,6 +119,21 @@ const loadData = async () => {
     console.error('Failed to load factory data', e)
   } finally {
     loading.value = false
+  }
+}
+
+const scrollToGroup = (id) => {
+  const el = document.getElementById('factory-group-' + id)
+  if (el) {
+    const offset = 80 // Header offset
+    const bodyRect = document.body.getBoundingClientRect().top
+    const elementRect = el.getBoundingClientRect().top
+    const elementPosition = elementRect - bodyRect
+    const offsetPosition = elementPosition - offset
+    window.scrollTo({
+      top: offsetPosition,
+      behavior: 'smooth'
+    })
   }
 }
 
@@ -234,6 +254,35 @@ onUnmounted(() => {
 .page-subtitle {
   color: var(--text-secondary);
   font-size: var(--text-lg);
+}
+
+.group-nav-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.group-nav-btn {
+  padding: 10px 24px;
+  border-radius: 30px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+}
+
+.group-nav-btn:hover {
+  background: var(--primary);
+  color: var(--white);
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
 .page-content {
