@@ -763,7 +763,7 @@ onUnmounted(() => {
   }
 
   .main-nav.active {
-    max-height: 800px;
+    max-height: calc(100vh - 60px);
     opacity: 1;
     overflow-y: auto;
   }
@@ -786,21 +786,21 @@ onUnmounted(() => {
   }
   
   .nav-dropdown {
-    display: none;
-    position: static;
+    display: none !important;
+    position: static !important;
     box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
     border: none;
     border-top: 1px solid var(--border);
     background: var(--gray-50);
-    opacity: 1;
-    visibility: visible;
-    transform: none;
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: none !important;
     width: 100%;
     border-radius: 0;
   }
   
   .nav-dropdown.mobile-show {
-    display: block;
+    display: block !important;
   }
   
   .nav-dropdown-item {
