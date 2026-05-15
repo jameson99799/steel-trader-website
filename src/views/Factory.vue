@@ -91,9 +91,11 @@
     <!-- Lightbox -->
     <div class="lightbox" :class="{ 'active': lightboxActive }" @click="closeLightbox">
       <div class="lightbox-top-bar" @click.stop v-if="lightboxGroup && lightboxImages.length > 0">
-        <button class="lightbox-top-nav prev" @click="lightboxPrev" :disabled="lightboxIndex === 0">❮</button>
-        <div class="lightbox-title">{{ localizedValue(lightboxGroup, 'name') }} &nbsp;&nbsp; {{ lightboxIndex + 1 }} / {{ lightboxImages.length }}</div>
-        <button class="lightbox-top-nav next" @click="lightboxNext" :disabled="lightboxIndex === lightboxImages.length - 1">❯</button>
+        <div class="lightbox-center-controls">
+          <button class="lightbox-top-nav prev" @click="lightboxPrev" :disabled="lightboxIndex === 0">❮</button>
+          <div class="lightbox-title">{{ localizedValue(lightboxGroup, 'name') }} &nbsp;&nbsp; {{ lightboxIndex + 1 }} / {{ lightboxImages.length }}</div>
+          <button class="lightbox-top-nav next" @click="lightboxNext" :disabled="lightboxIndex === lightboxImages.length - 1">❯</button>
+        </div>
         <button class="lightbox-close" @click="closeLightbox">&times;</button>
       </div>
 
@@ -591,15 +593,20 @@ onUnmounted(() => {
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(8px);
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   padding: 0 20px;
   color: white;
   z-index: 10;
 }
 
+.lightbox-center-controls {
+  display: flex;
+  align-items: center;
+  gap: 15ch;
+}
+
 .lightbox-title {
-  flex: 1;
   text-align: center;
   font-size: 16px;
   font-weight: 500;
@@ -631,6 +638,8 @@ onUnmounted(() => {
 }
 
 .lightbox-close {
+  position: absolute;
+  right: 20px;
   background: none;
   border: none;
   color: white;
@@ -655,8 +664,10 @@ onUnmounted(() => {
 
 @media (max-width: 768px) {
   .lightbox-top-bar { padding: 0 10px; height: 50px; }
+  .lightbox-center-controls { gap: 10px; }
   .lightbox-title { font-size: 14px; }
   .lightbox-top-nav { padding: 5px 10px; font-size: 24px; }
+  .lightbox-close { right: 5px; font-size: 28px; }
   
   .page-title {
     font-size: var(--text-4xl);
