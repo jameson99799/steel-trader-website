@@ -76,12 +76,20 @@
           </div>
           <p class="hint">可直接在右侧预览区拖动调整</p>
         </div>
+        <div class="form-group" style="margin-top:20px; padding-top:20px; border-top:1px solid #e2e8f0;">
+          <label>预览区背景图</label>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm btn-outline" @click="$emit('pick-media-bg')">🖼️ 更换背景</button>
+            <button class="btn btn-sm btn-outline" @click="bgImage = 'https://images.unsplash.com/photo-1565153997401-2292f75db265?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'">恢复默认</button>
+          </div>
+          <p class="hint">更换背景图可帮助您在真实照片上预览水印效果（仅用于预览，不保存）。</p>
+        </div>
       </div>
 
       <!-- Preview Canvas -->
       <div class="editor-canvas-wrapper" ref="canvasWrapper">
         <div class="editor-canvas">
-          <img src="https://images.unsplash.com/photo-1565153997401-2292f75db265?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Preview Background" class="bg-img" />
+          <img :src="bgImage" alt="Preview Background" class="bg-img" />
           
           <div class="draggable-watermark" 
                :style="watermarkStyle"
@@ -117,7 +125,9 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'save', 'pick-media'])
+const emit = defineEmits(['close', 'save', 'pick-media', 'pick-media-bg'])
+
+const bgImage = ref('https://images.unsplash.com/photo-1565153997401-2292f75db265?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80')
 
 const form = ref({
   name: '',
@@ -142,7 +152,10 @@ if (props.template) {
 const setMediaUrl = (url) => {
   form.value.watermark_url = url
 }
-defineExpose({ setMediaUrl })
+const setBgMediaUrl = (url) => {
+  bgImage.value = url
+}
+defineExpose({ setMediaUrl, setBgMediaUrl })
 
 const canvasWrapper = ref(null)
 

@@ -181,6 +181,7 @@
         @close="showWatermarkEditor=false" 
         @save="saveWatermarkTemplate"
         @pick-media="openMediaPicker('watermark')"
+        @pick-media-bg="openMediaPicker('watermark-bg')"
         ref="watermarkEditorRef"
         style="width: 90vw; max-width: 1200px;"
       />
@@ -341,7 +342,10 @@ const mediaPickerSearch = ref('')
 const mediaPickerGroup = ref('')
 const mediaPickerSelected = ref('')
 
-const openMediaPicker = async () => {
+const mediaPickerTarget = ref('')
+
+const openMediaPicker = async (target = '') => {
+  mediaPickerTarget.value = target
   showMediaPicker.value = true
   mediaPickerSelected.value = ''
   try {
@@ -364,7 +368,11 @@ const loadMediaPicker = async () => {
 const doSelectMedia = () => {
   if (mediaPickerSelected.value) {
     if (watermarkEditorRef.value) {
-      watermarkEditorRef.value.setMediaUrl(mediaPickerSelected.value)
+      if (mediaPickerTarget.value === 'watermark-bg') {
+        watermarkEditorRef.value.setBgMediaUrl(mediaPickerSelected.value)
+      } else {
+        watermarkEditorRef.value.setMediaUrl(mediaPickerSelected.value)
+      }
     }
     showMediaPicker.value = false
   }
