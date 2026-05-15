@@ -214,7 +214,7 @@ const getYoutubeEmbedUrl = (url, autoplay) => {
     // Basic fallback, might not have enablejsapi
     return url + (url.includes('?') ? '&' : '?') + (autoplay ? 'autoplay=1&mute=1&' : '') + 'enablejsapi=1&playsinline=1';
   }
-  return `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&playsinline=1${autoplay ? '&autoplay=1&mute=1' : ''}`;
+  return `https://www.youtube.com/embed/${videoId}?enablejsapi=1&playsinline=1${autoplay ? '&autoplay=1&mute=1' : ''}`;
 }
 
 const openLightbox = (group, index) => {
@@ -714,32 +714,32 @@ onUnmounted(() => {
 
 .lightbox-bottom-bar {
   position: absolute;
-  bottom: 0;
+  bottom: 20px;
   left: 0;
   width: 100%;
-  height: 80px;
+  height: auto;
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 60px;
-  z-index: 10;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(8px);
+  gap: 80px;
+  z-index: 1000;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .lightbox-bottom-nav {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.7);
+  border: 2px solid rgba(255, 255, 255, 0.6);
   color: white;
   font-size: 32px;
-  width: 50px;
-  height: 50px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
 }
 
 .lightbox-bottom-nav:hover:not(:disabled) {
@@ -781,7 +781,8 @@ onUnmounted(() => {
   .lightbox-top-bar { padding: 0; height: 60px; }
   .lightbox-center-controls { padding: 0 60px; }
   .lightbox-title { font-size: 24px; }
-  .lightbox-bottom-nav { width: 44px; height: 44px; font-size: 28px; }
+  .lightbox-bottom-nav { width: 50px; height: 50px; font-size: 24px; }
+  .lightbox-bottom-bar { gap: 40px; bottom: 30px; }
   .lightbox-close { right: 10px; font-size: 36px; z-index: 20; }
   
   .page-title {
