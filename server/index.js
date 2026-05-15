@@ -35,6 +35,7 @@ import crmCustomersRoutes from './routes/crm-customers.js'
 import crmMailerRoutes from './routes/crm-mailer.js'
 import ralColorsRoutes from './routes/ral-colors.js'
 import roofingProfilesRoutes from './routes/roofing-profiles.js'
+import factoryRoutes from './routes/factory.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -209,6 +210,7 @@ async function startServer() {
     app.use('/sitemap-products.xml', (req, res, next) => { req.url = '/products'; sitemapRoutes(req, res, next) })
     app.use('/api/ral-colors', ralColorsRoutes)
     app.use('/api/roofing-profiles', roofingProfilesRoutes)
+    app.use('/api/factory', factoryRoutes)
     app.use('/sitemap-news.xml', (req, res, next) => { req.url = '/news'; sitemapRoutes(req, res, next) })
     app.use('/api/languages', languagesRoutes)
     app.use('/api/translation', translationRoutes)
