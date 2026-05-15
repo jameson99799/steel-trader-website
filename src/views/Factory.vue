@@ -785,6 +785,9 @@ onUnmounted(() => {
   .carousel-slide {
     flex: 0 0 calc(50% - 8px);
   }
+  .lightbox-bottom-bar {
+    bottom: 80px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -792,7 +795,8 @@ onUnmounted(() => {
   .lightbox-center-controls { padding: 0 60px; }
   .lightbox-title { font-size: 24px; }
   .lightbox-bottom-nav { width: 50px; height: 50px; font-size: 24px; }
-  .lightbox-bottom-bar { gap: 40px; bottom: 30px; }
+  /* Avoid overlapping with FloatingContact on mobile */
+  .lightbox-bottom-bar { gap: 40px; bottom: 80px; }
   .lightbox-close { right: 10px; font-size: 36px; z-index: 20; }
   
   .page-title {
