@@ -16,6 +16,7 @@
           <span v-if="unreadCount" class="badge badge-danger">{{ unreadCount }}</span>
         </router-link>
         <router-link to="/admin/company">🏢 公司信息</router-link>
+        <router-link to="/admin/factory">🏭 工厂展示</router-link>
         <router-link to="/admin/pagetexts">📝 页面文字</router-link>
         <router-link to="/admin/news">📰 新闻管理</router-link>
         <router-link to="/admin/seo">🔍 SEO设置</router-link>

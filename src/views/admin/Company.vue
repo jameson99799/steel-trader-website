@@ -142,7 +142,10 @@
             <div class="form-group">
               <label>WhatsApp 二维码</label>
               <p class="form-hint">上传 WhatsApp 二维码图片，显示在产品详情页联系面板中</p>
-              <input type="file" @change="e => whatsappQrFile = e.target.files[0]" accept="image/*" />
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="file" @change="e => whatsappQrFile = e.target.files[0]" accept="image/*" />
+                <button type="button" class="btn btn-sm btn-outline" @click="openMediaPicker('whatsapp_qr')" style="color:#7c3aed;border-color:#7c3aed;">📷 从图库选择</button>
+              </div>
               <div class="preview-box" v-if="form.whatsapp_qr || whatsappQrFile">
                 <img :src="whatsappQrFile ? getPreviewUrl(whatsappQrFile) : form.whatsapp_qr" />
               </div>
@@ -150,7 +153,10 @@
             <div class="form-group">
               <label>微信 二维码</label>
               <p class="form-hint">上传微信二维码图片，显示在产品详情页联系面板中</p>
-              <input type="file" @change="e => wechatQrFile = e.target.files[0]" accept="image/*" />
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="file" @change="e => wechatQrFile = e.target.files[0]" accept="image/*" />
+                <button type="button" class="btn btn-sm btn-outline" @click="openMediaPicker('wechat_qr')" style="color:#7c3aed;border-color:#7c3aed;">📷 从图库选择</button>
+              </div>
               <div class="preview-box" v-if="form.wechat_qr || wechatQrFile">
                 <img :src="wechatQrFile ? getPreviewUrl(wechatQrFile) : form.wechat_qr" />
               </div>
@@ -198,6 +204,36 @@
         </form>
       </div>
     </div>
+
+    <!-- Media Library Picker -->
+    <div v-if="showMediaPicker" class="modal-overlay" @click.self="showMediaPicker=false">
+      <div class="modal" style="max-width:700px;">
+        <div class="modal-header" style="background:#f5f3ff;color:#7c3aed;">
+          <h3>📷 从图库选择</h3>
+          <button class="modal-close" @click="showMediaPicker=false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <input v-model="mediaPickerSearch" class="form-control" placeholder="搜索文件名..." @input="loadMediaPicker" style="max-width:200px;" />
+            <select v-model="mediaPickerGroup" class="form-control" @change="loadMediaPicker" style="max-width:140px;">
+              <option value="">全部分组</option>
+              <option v-for="g in mediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            </select>
+          </div>
+          <div v-if="mediaPickerItems.length" class="media-grid">
+            <div v-for="item in mediaPickerItems" :key="item.id" :class="['media-item', { selected: mediaPickerSelected === item.filepath }]" @click="mediaPickerSelected = item.filepath">
+              <img :src="item.filepath" />
+            </div>
+          </div>
+          <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="showMediaPicker=false">取消</button>
+          <button type="button" class="btn btn-primary" style="background:#7c3aed;" @click="doSelectMedia" :disabled="!mediaPickerSelected">确认选择</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -211,6 +247,58 @@ const faviconFile = ref(null)
 const aboutImageFile = ref(null)
 const whatsappQrFile = ref(null)
 const wechatQrFile = ref(null)
+
+// Media Picker State
+const showMediaPicker = ref(false)
+const mediaPickerSearch = ref('')
+const mediaPickerGroup = ref('')
+const mediaPickerItems = ref([])
+const mediaGroups = ref([])
+const mediaPickerSelected = ref(null)
+const mediaPickerTarget = ref('')
+
+const openMediaPicker = (target) => {
+  mediaPickerTarget.value = target
+  mediaPickerSelected.value = null
+  showMediaPicker.value = true
+  loadMediaGroups()
+  loadMediaPicker()
+}
+
+const loadMediaPicker = async () => {
+  const params = new URLSearchParams({ per_page: '50' })
+  if (mediaPickerSearch.value) params.set('search', mediaPickerSearch.value)
+  if (mediaPickerGroup.value) params.set('group_id', mediaPickerGroup.value)
+  try {
+    const res = await fetch(`/api/media?${params}`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    })
+    const data = await res.json()
+    mediaPickerItems.value = data.items || []
+  } catch (e) { console.error(e) }
+}
+
+const loadMediaGroups = async () => {
+  try {
+    const res = await fetch('/api/media/groups', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    })
+    mediaGroups.value = await res.json()
+  } catch (e) { console.error(e) }
+}
+
+const doSelectMedia = () => {
+  if (mediaPickerSelected.value) {
+    if (mediaPickerTarget.value === 'whatsapp_qr') {
+      form.whatsapp_qr = mediaPickerSelected.value
+      whatsappQrFile.value = null
+    } else if (mediaPickerTarget.value === 'wechat_qr') {
+      form.wechat_qr = mediaPickerSelected.value
+      wechatQrFile.value = null
+    }
+  }
+  showMediaPicker.value = false
+}
 
 const form = reactive({
   name: '', name_en: '',
@@ -245,8 +333,16 @@ const handleSubmit = async () => {
     if (logoFile.value) formData.append('logo', logoFile.value)
     if (faviconFile.value) formData.append('favicon', faviconFile.value)
     if (aboutImageFile.value) formData.append('about_image', aboutImageFile.value)
-    if (whatsappQrFile.value) formData.append('whatsapp_qr', whatsappQrFile.value)
-    if (wechatQrFile.value) formData.append('wechat_qr', wechatQrFile.value)
+    if (wechatQrFile.value) {
+      formData.append('wechat_qr', wechatQrFile.value)
+    } else if (form.wechat_qr) {
+      formData.append('wechat_qr_url', form.wechat_qr)
+    }
+    if (whatsappQrFile.value) {
+      formData.append('whatsapp_qr', whatsappQrFile.value)
+    } else if (form.whatsapp_qr) {
+      formData.append('whatsapp_qr_url', form.whatsapp_qr)
+    }
 
     await api.updateCompany(formData)
     alert('保存成功')

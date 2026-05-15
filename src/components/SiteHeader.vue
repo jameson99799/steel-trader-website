@@ -148,6 +148,9 @@
             <router-link :to="langPath('/about')" @click="menuOpen = false" class="nav-link">
               {{ t('about') }}
             </router-link>
+            <router-link :to="langPath('/factory')" @click="menuOpen = false" class="nav-link">
+              {{ t('factory') || 'Factory' }}
+            </router-link>
             <router-link :to="langPath('/contact')" @click="menuOpen = false" class="nav-link">
               {{ t('contact') }}
             </router-link>

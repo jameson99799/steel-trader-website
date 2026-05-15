@@ -1,0 +1,387 @@
+<template>
+  <div class="factory-admin-page">
+    <div class="page-header">
+      <h1>🏭 工厂展示管理</h1>
+      <button class="btn btn-primary" @click="addGroup">➕ 添加分组</button>
+    </div>
+    
+    <p class="intro-text">
+      在这里你可以自定义工厂展示页面的内容，例如：工厂生产，包装，运输，质检等。
+      可以添加图片或 YouTube 视频，并支持开启图片轮播功能。
+    </p>
+
+    <div v-if="loading" class="loading-state">加载中...</div>
+
+    <div v-else class="groups-container">
+      <div v-for="group in groups" :key="group.id" class="group-card">
+        <div class="group-header">
+          <div class="group-title">
+            <input v-model="group.name" class="form-control" placeholder="分组名称（如：生产车间）" @blur="updateGroup(group)" />
+            <input v-model="group.name_en" class="form-control" placeholder="英文名称（如：Production）" @blur="updateGroup(group)" />
+          </div>
+          <div class="group-settings">
+            <label class="setting-item">
+              排序优先级(1-99):
+              <input type="number" v-model="group.sort_order" class="form-control short-input" @blur="updateGroup(group)" />
+            </label>
+            <label class="setting-item checkbox-label">
+              <input type="checkbox" v-model="group.carousel_enabled" :true-value="1" :false-value="0" @change="updateGroup(group)" />
+              开启图片轮播
+            </label>
+            <label class="setting-item" v-if="group.carousel_enabled">
+              轮播速度(秒):
+              <input type="number" v-model="group.carousel_speed" class="form-control short-input" min="1" max="10" @blur="updateGroup(group)" />
+            </label>
+            <button class="btn btn-danger btn-sm" @click="deleteGroup(group.id)">删除分组</button>
+          </div>
+        </div>
+
+        <div class="media-container">
+          <div class="media-header">
+            <h4>展示内容 ({{ group.items.length }})</h4>
+            <div class="media-actions">
+              <button class="btn btn-outline btn-sm" @click="openMediaPicker(group.id)">📷 从图库添加图片</button>
+              <button class="btn btn-outline btn-sm" @click="openVideoModal(group.id)">🎥 添加 YouTube 视频</button>
+            </div>
+          </div>
+
+          <div class="media-grid">
+            <div v-for="item in group.items" :key="item.id" class="media-card">
+              <div class="media-preview" v-if="item.type === 'image'">
+                <img :src="item.media_url" />
+                <span class="media-badge image-badge">图片</span>
+              </div>
+              <div class="media-preview video-preview" v-else>
+                <div class="video-icon">▶</div>
+                <span class="media-badge video-badge">视频</span>
+              </div>
+              
+              <div class="media-info">
+                <div class="media-url" :title="item.media_url">{{ item.media_url }}</div>
+                
+                <div class="media-settings">
+                  <label class="setting-item">
+                    排序:
+                    <input type="number" v-model="item.sort_order" class="form-control very-short-input" @blur="updateMedia(item)" />
+                  </label>
+                  
+                  <label class="setting-item checkbox-label" v-if="item.type === 'video'">
+                    <input type="checkbox" v-model="item.autoplay" :true-value="1" :false-value="0" @change="updateMedia(item)" />
+                    自动播放
+                  </label>
+                </div>
+              </div>
+              
+              <button class="btn-delete-media" @click="deleteMedia(item.id)">✕</button>
+            </div>
+            <div v-if="group.items.length === 0" class="empty-media">该分组暂无内容</div>
+          </div>
+        </div>
+      </div>
+      <div v-if="groups.length === 0" class="empty-state">
+        暂无分组，请点击上方按钮添加。
+      </div>
+    </div>
+
+    <!-- Media Library Picker -->
+    <div v-if="showMediaPicker" class="modal-overlay" @click.self="showMediaPicker=false">
+      <div class="modal" style="max-width:700px;">
+        <div class="modal-header" style="background:#f5f3ff;color:#7c3aed;">
+          <h3>📷 从图库选择 (可多选)</h3>
+          <button class="modal-close" @click="showMediaPicker=false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <input v-model="mediaPickerSearch" class="form-control" placeholder="搜索文件名..." @input="loadMediaPicker" style="max-width:200px;" />
+            <select v-model="mediaPickerGroup" class="form-control" @change="loadMediaPicker" style="max-width:140px;">
+              <option value="">全部分组</option>
+              <option v-for="g in mediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            </select>
+          </div>
+          <div v-if="mediaPickerItems.length" class="lib-grid">
+            <div v-for="item in mediaPickerItems" :key="item.id" 
+                 :class="['lib-item', { selected: mediaPickerSelected.includes(item.filepath) }]" 
+                 @click="toggleMediaSelect(item.filepath)">
+              <img :src="item.filepath" />
+              <div class="check-icon">✓</div>
+            </div>
+          </div>
+          <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="showMediaPicker=false">取消</button>
+          <button type="button" class="btn btn-primary" style="background:#7c3aed;" @click="doAddSelectedMedia" :disabled="!mediaPickerSelected.length">确认添加 ({{ mediaPickerSelected.length }})</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Video Modal -->
+    <div v-if="showVideoModal" class="modal-overlay" @click.self="showVideoModal=false">
+      <div class="modal" style="max-width:500px;">
+        <div class="modal-header" style="background:#fef2f2;color:#dc2626;">
+          <h3>🎥 添加 YouTube 视频</h3>
+          <button class="modal-close" @click="showVideoModal=false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>YouTube 嵌入链接或视频地址</label>
+            <input v-model="videoUrlInput" class="form-control" placeholder="https://www.youtube.com/embed/..." />
+            <p class="form-hint" style="margin-top:4px;">请使用 Embed 链接以确保最佳显示效果</p>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="videoAutoplayInput" />
+              进入页面后自动静音播放
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="showVideoModal=false">取消</button>
+          <button type="button" class="btn btn-primary" style="background:#dc2626;border-color:#dc2626;" @click="doAddVideo" :disabled="!videoUrlInput">确认添加</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+
+const loading = ref(true)
+const groups = ref([])
+
+// Media Library Picker State
+const showMediaPicker = ref(false)
+const mediaPickerSearch = ref('')
+const mediaPickerGroup = ref('')
+const mediaPickerItems = ref([])
+const mediaGroups = ref([])
+const mediaPickerSelected = ref([])
+const currentGroupIdForMedia = ref(null)
+
+// Video Modal State
+const showVideoModal = ref(false)
+const videoUrlInput = ref('')
+const videoAutoplayInput = ref(false)
+const currentGroupIdForVideo = ref(null)
+
+const token = () => localStorage.getItem('token')
+
+const loadData = async () => {
+  try {
+    const res = await fetch('/api/factory', {
+      headers: { 'Authorization': `Bearer ${token()}` }
+    })
+    groups.value = await res.json()
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loading.value = false
+  }
+}
+
+const addGroup = async () => {
+  try {
+    const res = await fetch('/api/factory/groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
+      body: JSON.stringify({ name: '新分组', sort_order: groups.value.length + 1 })
+    })
+    if (res.ok) loadData()
+  } catch (e) { console.error(e) }
+}
+
+const updateGroup = async (group) => {
+  try {
+    await fetch(`/api/factory/groups/${group.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
+      body: JSON.stringify(group)
+    })
+  } catch (e) { console.error(e) }
+}
+
+const deleteGroup = async (id) => {
+  if (!confirm('确定删除此分组及其所有内容吗？')) return
+  try {
+    await fetch(`/api/factory/groups/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token()}` }
+    })
+    loadData()
+  } catch (e) { console.error(e) }
+}
+
+const updateMedia = async (item) => {
+  try {
+    await fetch(`/api/factory/media/${item.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
+      body: JSON.stringify(item)
+    })
+  } catch (e) { console.error(e) }
+}
+
+const deleteMedia = async (id) => {
+  if (!confirm('确定删除此内容吗？')) return
+  try {
+    await fetch(`/api/factory/media/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token()}` }
+    })
+    loadData()
+  } catch (e) { console.error(e) }
+}
+
+// Media Picker Logic
+const openMediaPicker = (groupId) => {
+  currentGroupIdForMedia.value = groupId
+  mediaPickerSelected.value = []
+  showMediaPicker.value = true
+  loadMediaGroups()
+  loadMediaPicker()
+}
+
+const loadMediaPicker = async () => {
+  const params = new URLSearchParams({ per_page: '50' })
+  if (mediaPickerSearch.value) params.set('search', mediaPickerSearch.value)
+  if (mediaPickerGroup.value) params.set('group_id', mediaPickerGroup.value)
+  try {
+    const res = await fetch(`/api/media?${params}`, {
+      headers: { 'Authorization': `Bearer ${token()}` }
+    })
+    const data = await res.json()
+    mediaPickerItems.value = data.items || []
+  } catch (e) { console.error(e) }
+}
+
+const loadMediaGroups = async () => {
+  try {
+    const res = await fetch('/api/media/groups', {
+      headers: { 'Authorization': `Bearer ${token()}` }
+    })
+    mediaGroups.value = await res.json()
+  } catch (e) { console.error(e) }
+}
+
+const toggleMediaSelect = (url) => {
+  const idx = mediaPickerSelected.value.indexOf(url)
+  if (idx >= 0) mediaPickerSelected.value.splice(idx, 1)
+  else mediaPickerSelected.value.push(url)
+}
+
+const doAddSelectedMedia = async () => {
+  if (!mediaPickerSelected.value.length || !currentGroupIdForMedia.value) return
+  
+  for (const url of mediaPickerSelected.value) {
+    await fetch('/api/factory/media', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
+      body: JSON.stringify({
+        group_id: currentGroupIdForMedia.value,
+        type: 'image',
+        media_url: url
+      })
+    })
+  }
+  showMediaPicker.value = false
+  loadData()
+}
+
+// Video Modal Logic
+const openVideoModal = (groupId) => {
+  currentGroupIdForVideo.value = groupId
+  videoUrlInput.value = ''
+  videoAutoplayInput.value = false
+  showVideoModal.value = true
+}
+
+const doAddVideo = async () => {
+  if (!videoUrlInput.value || !currentGroupIdForVideo.value) return
+  await fetch('/api/factory/media', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
+    body: JSON.stringify({
+      group_id: currentGroupIdForVideo.value,
+      type: 'video',
+      media_url: videoUrlInput.value,
+      autoplay: videoAutoplayInput.value ? 1 : 0
+    })
+  })
+  showVideoModal.value = false
+  loadData()
+}
+
+onMounted(() => {
+  loadData()
+})
+</script>
+
+<style scoped>
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.page-header h1 { margin: 0; font-size: 24px; }
+.intro-text { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+
+.group-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); overflow: hidden; }
+.group-header { background: #f8fafc; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+.group-title { display: flex; gap: 12px; flex: 1; min-width: 300px; }
+.group-title .form-control { flex: 1; font-weight: 600; }
+.group-settings { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.setting-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #475569; }
+.short-input { width: 70px; text-align: center; }
+
+.media-container { padding: 20px; }
+.media-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.media-header h4 { margin: 0; font-size: 15px; color: #1e293b; }
+.media-actions { display: flex; gap: 8px; }
+
+.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+.media-card { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; position: relative; display: flex; flex-direction: column; background: #fff; }
+.media-preview { height: 140px; background: #f1f5f9; position: relative; }
+.media-preview img { width: 100%; height: 100%; object-fit: cover; }
+.video-preview { display: flex; align-items: center; justify-content: center; background: #0f172a; }
+.video-icon { font-size: 40px; color: #dc2626; text-shadow: 0 0 10px rgba(0,0,0,0.5); }
+
+.media-badge { position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; color: #fff; }
+.image-badge { background: rgba(5, 150, 105, 0.9); }
+.video-badge { background: rgba(220, 38, 38, 0.9); }
+
+.media-info { padding: 12px; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.media-url { font-size: 12px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.media-settings { display: flex; justify-content: space-between; align-items: center; }
+.very-short-input { width: 60px; padding: 4px 8px; height: 28px; }
+
+.btn-delete-media { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; background: rgba(0,0,0,0.5); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; opacity: 0; transition: opacity 0.2s; }
+.media-card:hover .btn-delete-media { opacity: 1; }
+.btn-delete-media:hover { background: #ef4444; }
+
+.empty-media { grid-column: 1 / -1; padding: 30px; text-align: center; color: #94a3b8; font-size: 14px; background: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1; }
+.empty-state { padding: 60px; text-align: center; color: #64748b; background: #fff; border-radius: 12px; border: 1px dashed #cbd5e1; }
+
+.lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; max-height: 400px; overflow-y: auto; padding-right: 8px; }
+.lib-item { aspect-ratio: 1; border-radius: 8px; overflow: hidden; border: 2px solid transparent; cursor: pointer; position: relative; }
+.lib-item img { width: 100%; height: 100%; object-fit: cover; }
+.lib-item.selected { border-color: #7c3aed; }
+.check-icon { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; background: #7c3aed; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; opacity: 0; }
+.lib-item.selected .check-icon { opacity: 1; }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+.modal { background: #fff; border-radius: 12px; width: 100%; margin: 20px; overflow: hidden; }
+.modal-header { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { margin: 0; font-size: 16px; }
+.modal-close { background: none; border: none; font-size: 20px; cursor: pointer; opacity: 0.7; }
+.modal-body { padding: 20px; max-height: 60vh; overflow-y: auto; }
+.modal-footer { padding: 16px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px; }
+
+.btn { padding: 8px 16px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; font-size: 14px; font-weight: 500; }
+.btn-primary { background: #2563eb; color: #fff; }
+.btn-secondary { background: #f1f5f9; color: #475569; }
+.btn-danger { background: #fef2f2; color: #ef4444; border-color: #fecaca; }
+.btn-outline { background: transparent; border-color: #cbd5e1; color: #475569; }
+.btn-sm { padding: 6px 12px; font-size: 13px; }
+.form-control { width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+.form-control:focus { outline: none; border-color: #2563eb; }
+.form-hint { font-size: 12px; color: #64748b; margin: 0; }
+.checkbox-label { cursor: pointer; }
+</style>

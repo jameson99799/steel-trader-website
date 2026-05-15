@@ -142,6 +142,30 @@ async function initDb() {
     )
   `)
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS factory_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      name_en TEXT,
+      sort_order INTEGER DEFAULT 0,
+      carousel_enabled INTEGER DEFAULT 0,
+      carousel_speed INTEGER DEFAULT 3,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS factory_media (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      media_url TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      autoplay INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
   // Migrations: add product columns if not exist
   try { db.exec('ALTER TABLE products ADD COLUMN detail_content TEXT') } catch (e) { }
   try { db.exec('ALTER TABLE products ADD COLUMN seo_title TEXT') } catch (e) { }

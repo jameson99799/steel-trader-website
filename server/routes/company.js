@@ -41,12 +41,12 @@ router.put('/', authMiddleware, upload.fields([
     facebook, linkedin, instagram, tiktok, twitter, youtube, advantages, advantages_en, map_embed_url,
     company_video_embed, about_show_video, about_video_autoplay, home_show_video } = req.body
 
-  // Only update image paths when a new valid file was uploaded; otherwise keep existing value
-  const logo = fileUrl(req.files, 'logo', company?.logo)
-  const favicon = fileUrl(req.files, 'favicon', company?.favicon)
-  const about_image = fileUrl(req.files, 'about_image', company?.about_image)
-  const whatsapp_qr = fileUrl(req.files, 'whatsapp_qr', company?.whatsapp_qr)
-  const wechat_qr = fileUrl(req.files, 'wechat_qr', company?.wechat_qr)
+  // Only update image paths when a new valid file was uploaded; otherwise use provided url or keep existing value
+  const logo = fileUrl(req.files, 'logo', req.body.logo_url || company?.logo)
+  const favicon = fileUrl(req.files, 'favicon', req.body.favicon_url || company?.favicon)
+  const about_image = fileUrl(req.files, 'about_image', req.body.about_image_url || company?.about_image)
+  const whatsapp_qr = fileUrl(req.files, 'whatsapp_qr', req.body.whatsapp_qr_url || company?.whatsapp_qr)
+  const wechat_qr = fileUrl(req.files, 'wechat_qr', req.body.wechat_qr_url || company?.wechat_qr)
 
   if (company) {
     run(`

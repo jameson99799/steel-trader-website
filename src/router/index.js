@@ -10,6 +10,7 @@ const publicRoutes = [
   { path: 'news/:slug', name: 'NewsDetail', component: () => import('../views/NewsDetail.vue') },
   { path: 'about', name: 'About', component: () => import('../views/About.vue') },
   { path: 'contact', name: 'Contact', component: () => import('../views/Contact.vue') },
+  { path: 'factory', name: 'Factory', component: () => import('../views/Factory.vue') },
   { path: 'ral-colors', name: 'RalColors', component: () => import('../views/RalColors.vue') },
   { path: 'roofing-profiles', name: 'RoofingProfiles', component: () => import('../views/RoofingProfiles.vue') }
 ]
@@ -35,6 +36,7 @@ const routes = [
   { path: '/news/:slug?', redirect: to => `/en/news${to.params.slug ? '/' + to.params.slug : ''}` },
   { path: '/about', redirect: '/en/about' },
   { path: '/contact', redirect: '/en/contact' },
+  { path: '/factory', redirect: '/en/factory' },
   { path: '/ral-colors', redirect: '/en/ral-colors' },
   { path: '/roofing-profiles', redirect: '/en/roofing-profiles' },
   {
@@ -54,6 +56,7 @@ const routes = [
       { path: 'products', name: 'AdminProducts', component: () => import('../views/admin/Products.vue') },
       { path: 'inquiries', name: 'AdminInquiries', component: () => import('../views/admin/Inquiries.vue') },
       { path: 'company', name: 'AdminCompany', component: () => import('../views/admin/Company.vue') },
+      { path: 'factory', name: 'AdminFactory', component: () => import('../views/admin/Factory.vue') },
       { path: 'pagetexts', name: 'AdminPageTexts', component: () => import('../views/admin/PageTexts.vue') },
       { path: 'roofing-profiles', name: 'AdminRoofingProfiles', component: () => import('../views/admin/RoofingProfiles.vue') },
       { path: 'news', name: 'AdminNews', component: () => import('../views/admin/News.vue') },

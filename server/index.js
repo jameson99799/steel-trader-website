@@ -3,7 +3,7 @@ import cors from 'cors'
 import compression from 'compression'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync, unlinkSync } from 'fs'
 
 import { initDb, getAll, getOne, run } from './db.js'
 import authRoutes from './routes/auth.js'
@@ -101,6 +101,20 @@ async function startServer() {
     }
     setTimeout(autoFreshnessRefresh, 10000) // Run 10s after startup
     setInterval(autoFreshnessRefresh, 6 * 60 * 60 * 1000) // Then every 6 hours
+
+    // ── One-time cleanup of corrupt files on server start ──────────────
+    try {
+      const corruptFiles = ['1772267763272-657208953.jpg', '1774495865285-160388171.jpg']
+      for (const file of corruptFiles) {
+        const filePath = join(__dirname, '..', 'uploads', file)
+        if (existsSync(filePath)) {
+          unlinkSync(filePath)
+          console.log(`[Cleanup] Deleted corrupted image file: ${file}`)
+        }
+      }
+    } catch (e) {
+      console.warn('Cleanup error:', e.message)
+    }
 
     // CORS 配置
     const corsOptions = {

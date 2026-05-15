@@ -98,9 +98,11 @@ router.get('/static', (req, res) => {
             { loc: '/', priority: '1.0', changefreq: 'daily' },
             { loc: '/products', priority: '0.9', changefreq: 'daily' },
             { loc: '/news', priority: '0.8', changefreq: 'daily' },
+            { loc: '/factory', priority: '0.8', changefreq: 'weekly' },
             { loc: '/about', priority: '0.7', changefreq: 'monthly' },
             { loc: '/contact', priority: '0.7', changefreq: 'monthly' },
             { loc: '/ral-colors', priority: '0.5', changefreq: 'yearly' },
+            { loc: '/roofing-profiles', priority: '0.7', changefreq: 'weekly' },
         ]
 
         // Category pages — path-based, no query params
