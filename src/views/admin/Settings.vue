@@ -139,7 +139,6 @@
         </div>
       </div>
     </div>
-    </div>
 
     <!-- Media Library Picker -->
     <div v-if="showMediaPicker" class="modal-overlay" @click.self="showMediaPicker=false">
