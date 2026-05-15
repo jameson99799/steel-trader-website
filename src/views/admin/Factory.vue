@@ -223,7 +223,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 const loading = ref(true)
 const groups = ref([])
