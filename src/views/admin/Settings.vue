@@ -146,7 +146,7 @@
     </div>
 
     <!-- Media Library Picker -->
-    <div v-if="showMediaPicker" class="modal-overlay" @click.self="showMediaPicker=false">
+    <div v-if="showMediaPicker" class="modal-overlay" @click.self="showMediaPicker=false" style="z-index: 1010;">
       <div class="modal" style="max-width:700px;">
         <div class="modal-header" style="background:#f5f3ff;color:#7c3aed;">
           <h3>📷 从图库选择水印</h3>

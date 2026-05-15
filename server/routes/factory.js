@@ -139,7 +139,7 @@ router.post('/groups/:id/batch-watermark', authMiddleware, async (req, res) => {
   try {
     let successCount = 0
     for (const mid of media_ids) {
-      const media = getOne('SELECT * FROM factory_media WHERE id = ? AND group_id = ? AND type = "image"', [mid, req.params.id])
+      const media = getOne("SELECT * FROM factory_media WHERE id = ? AND group_id = ? AND type = 'image'", [mid, req.params.id])
       if (media && media.media_url) {
         const finalUrl = await applyWatermark(media.media_url, template_id || null)
         if (finalUrl !== media.media_url) {
