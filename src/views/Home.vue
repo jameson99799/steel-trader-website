@@ -144,7 +144,8 @@
             width="100%" 
             height="500" 
             style="border:0; border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); margin-bottom:var(--spacing-2xl);" 
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+            referrerpolicy="strict-origin-when-cross-origin"
             allowfullscreen>
           </iframe>
         </div>
