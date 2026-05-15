@@ -48,11 +48,11 @@
 
           <div class="media-grid">
             <div v-for="item in group.items" :key="item.id" class="media-card">
-              <div class="media-preview" v-if="item.type === 'image'">
+              <div class="media-preview" v-if="item.type === 'image'" @click="openAdminPreview(item)" style="cursor: pointer;">
                 <img :src="item.media_url" />
                 <span class="media-badge image-badge">图片</span>
               </div>
-              <div class="media-preview video-preview" v-else>
+              <div class="media-preview video-preview" v-else @click="openAdminPreview(item)" style="cursor: pointer;">
                 <div class="video-icon">▶</div>
                 <span class="media-badge video-badge">视频</span>
               </div>
@@ -195,6 +195,21 @@
       <div style="margin-top:16px;color:white;">系统处理中，请稍候...</div>
     </div>
 
+    <!-- Admin Preview Modal -->
+    <div v-if="adminPreviewItem" class="modal-overlay" @click.self="adminPreviewItem=null" style="z-index: 2000;">
+      <div class="modal" style="max-width:800px; background: transparent; box-shadow: none;">
+        <div style="position: relative; display: flex; justify-content: center; align-items: center;">
+          <button class="modal-close" @click="adminPreviewItem=null" style="position: absolute; top: -40px; right: 0; color: white; font-size: 36px; background: none; border: none; cursor: pointer;">&times;</button>
+          
+          <img v-if="adminPreviewItem.type === 'image'" :src="adminPreviewItem.media_url" style="max-width: 100%; max-height: 80vh; object-fit: contain; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);" @click="adminPreviewItem=null" />
+          
+          <div v-else-if="adminPreviewItem.type === 'video'" style="width: 100%; max-width: 800px; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <iframe :src="getYoutubeEmbedUrl(adminPreviewItem.media_url)" style="width: 100%; height: 100%; border: none;" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -219,6 +234,8 @@ const showVideoModal = ref(false)
 const videoUrlInput = ref('')
 const videoAutoplayInput = ref(false)
 const currentGroupIdForVideo = ref(null)
+
+const adminPreviewItem = ref(null)
 
 const token = () => localStorage.getItem('token')
 const globalProcessing = ref(false)
@@ -270,11 +287,15 @@ const deleteGroup = async (id) => {
 
 const updateMedia = async (item) => {
   try {
-    await fetch(`/api/factory/media/${item.id}`, {
+    const res = await fetch(`/api/factory/media/${item.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
       body: JSON.stringify(item)
     })
+    if (res.ok) {
+      // Reload to reflect sorting changes
+      loadData()
+    }
   } catch (e) { console.error(e) }
 }
 
@@ -287,6 +308,31 @@ const deleteMedia = async (id) => {
     })
     loadData()
   } catch (e) { console.error(e) }
+}
+
+const openAdminPreview = (item) => {
+  adminPreviewItem.value = item
+}
+
+const getYoutubeEmbedUrl = (url) => {
+  if (!url) return '';
+  let videoId = '';
+  if (url.includes('youtube.com/watch?v=')) {
+    videoId = url.split('v=')[1];
+    const ampersandPosition = videoId.indexOf('&');
+    if(ampersandPosition !== -1) videoId = videoId.substring(0, ampersandPosition);
+  } else if (url.includes('youtu.be/')) {
+    videoId = url.split('youtu.be/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
+  } else if (url.includes('youtube.com/embed/')) {
+    videoId = url.split('embed/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
+  } else {
+    return url + '?autoplay=1';
+  }
+  return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
 }
 
 // Media Picker Logic
