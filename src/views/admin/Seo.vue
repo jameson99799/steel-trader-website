@@ -205,7 +205,6 @@
           ✅ 已刷新 {{ refreshResult.articlesUpdated }} 篇文章、{{ refreshResult.productsUpdated }} 个产品
         </span>
       </div>
-      </div>
     </div>
 
     <!-- Media Library Picker -->
