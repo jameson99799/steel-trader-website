@@ -1028,6 +1028,7 @@ async function initDb() {
   if (!tsExists) {
     db.prepare("INSERT INTO translation_settings (id, api_url, api_key, model_name, multilingual_enabled) VALUES (1, 'https://api.openai.com/v1', '', 'gpt-3.5-turbo', 1)").run()
   }
+  try { db.exec("ALTER TABLE translation_settings ADD COLUMN concurrency INTEGER DEFAULT 3") } catch (e) { }
 
   // Translations table — stores all translated content
   db.exec(`
