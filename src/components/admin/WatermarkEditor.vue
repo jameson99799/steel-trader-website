@@ -44,8 +44,8 @@
             </div>
           </div>
           <div class="form-group" v-if="form.stroke_color !== 'transparent'">
-            <label>描边粗细 ({{ Math.round(form.stroke_width * 100) }}%)</label>
-            <input type="range" v-model.number="form.stroke_width" min="0.01" max="0.1" step="0.01" />
+            <label>描边粗细 ({{ Math.round((form.stroke_width || 0.02) * 100) }}%)</label>
+            <input type="range" :value="form.stroke_width || 0.02" @input="form.stroke_width = parseFloat($event.target.value)" min="0.01" max="0.1" step="0.01" />
           </div>
           <div class="form-group">
             <label>相对大小 ({{ Math.round(form.font_size * 100) }}%)</label>
@@ -151,6 +151,7 @@ const form = ref({
 
 if (props.template) {
   Object.assign(form.value, props.template)
+  if (form.value.stroke_width == null) form.value.stroke_width = 0.02
 }
 
 // Ensure the form gets the selected media url if changed externally
@@ -178,12 +179,19 @@ const watermarkStyle = computed(() => {
 
 const textStyle = computed(() => {
   const fontSizePx = form.value.font_size * 800
-  const strokeWidthPx = form.value.stroke_color === 'transparent' ? 0 : Math.max(1, Math.round(fontSizePx * form.value.stroke_width))
+  const swRatio = form.value.stroke_width != null ? form.value.stroke_width : 0.02
+  const strokeWidthPx = form.value.stroke_color === 'transparent' ? 0 : Math.max(1, Math.round(fontSizePx * swRatio))
+  
+  const shadowValue = form.value.stroke_color !== 'transparent' 
+    ? `-${strokeWidthPx}px -${strokeWidthPx}px 0 ${form.value.stroke_color}, ${strokeWidthPx}px -${strokeWidthPx}px 0 ${form.value.stroke_color}, -${strokeWidthPx}px ${strokeWidthPx}px 0 ${form.value.stroke_color}, ${strokeWidthPx}px ${strokeWidthPx}px 0 ${form.value.stroke_color}`
+    : 'none'
+    
   return {
     fontFamily: form.value.font_family,
     color: form.value.text_color,
     fontSize: `${fontSizePx}px`, // approximate based on 800px preview width
     fontWeight: 'bold',
+    textShadow: shadowValue,
     WebkitTextStroke: form.value.stroke_color !== 'transparent' ? `${strokeWidthPx}px ${form.value.stroke_color}` : 'none',
     whiteSpace: 'nowrap'
   }

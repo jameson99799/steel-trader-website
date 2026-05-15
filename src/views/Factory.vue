@@ -90,17 +90,14 @@
 
     <!-- Lightbox -->
     <div class="lightbox" :class="{ 'active': lightboxActive }" @click="closeLightbox">
+      <div class="lightbox-top-bar" @click.stop v-if="lightboxGroup && lightboxImages.length > 0">
+        <button class="lightbox-top-nav prev" @click="lightboxPrev" :disabled="lightboxIndex === 0">❮</button>
+        <div class="lightbox-title">{{ localizedValue(lightboxGroup, 'name') }} &nbsp;&nbsp; {{ lightboxIndex + 1 }} / {{ lightboxImages.length }}</div>
+        <button class="lightbox-top-nav next" @click="lightboxNext" :disabled="lightboxIndex === lightboxImages.length - 1">❯</button>
+        <button class="lightbox-close" @click="closeLightbox">&times;</button>
+      </div>
+
       <div class="lightbox-content" @click.stop v-if="lightboxGroup && lightboxImages.length > 0">
-        <!-- Title bar -->
-        <div class="lightbox-header">
-          <span class="lightbox-title">{{ localizedValue(lightboxGroup.name_zh, lightboxGroup.name_en) }} ({{ lightboxIndex + 1 }} / {{ lightboxImages.length }})</span>
-          <button class="lightbox-close" @click="closeLightbox">&times;</button>
-        </div>
-        
-        <!-- Navigation -->
-        <button class="lightbox-nav prev" @click="lightboxPrev" v-show="lightboxIndex > 0">❮</button>
-        <button class="lightbox-nav next" @click="lightboxNext" v-show="lightboxIndex < lightboxImages.length - 1">❯</button>
-        
         <!-- Image -->
         <img :src="lightboxImages[lightboxIndex].media_url" @click="closeLightbox" />
       </div>
@@ -569,22 +566,71 @@ onUnmounted(() => {
 .lightbox-content {
   position: relative;
   max-width: 90vw;
-  max-height: 90vh;
+  max-height: calc(100vh - 100px);
+  margin-top: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .lightbox-content img {
   max-width: 100%;
-  max-height: 90vh;
+  max-height: calc(100vh - 100px);
   object-fit: contain;
   border-radius: 4px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   cursor: zoom-out;
 }
 
-.lightbox-close {
+.lightbox-top-bar {
   position: absolute;
-  top: -40px;
-  right: 0;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 60px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  color: white;
+  z-index: 10;
+}
+
+.lightbox-title {
+  flex: 1;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 1px;
+}
+
+.lightbox-top-nav {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 28px;
+  cursor: pointer;
+  padding: 10px 20px;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.lightbox-top-nav:hover:not(:disabled) {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.lightbox-top-nav:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+
+.lightbox-close {
   background: none;
   border: none;
   color: white;
@@ -593,60 +639,11 @@ onUnmounted(() => {
   line-height: 1;
   opacity: 0.7;
   transition: opacity 0.2s;
+  padding: 0 10px;
 }
 
 .lightbox-close:hover {
   opacity: 1;
-}
-
-.lightbox-header {
-  position: absolute;
-  top: -40px;
-  left: 0;
-  color: white;
-  font-size: 18px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.lightbox-title {
-  background: rgba(0,0,0,0.5);
-  padding: 4px 12px;
-  border-radius: 4px;
-}
-
-.lightbox-nav {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  border: none;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  font-size: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  backdrop-filter: blur(4px);
-}
-
-.lightbox-nav:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: translateY(-50%) scale(1.1);
-}
-
-.lightbox-nav.prev {
-  left: -70px;
-}
-
-.lightbox-nav.next {
-  right: -70px;
 }
 
 /* Responsive */
@@ -657,9 +654,9 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .lightbox-nav.prev { left: -10px; }
-  .lightbox-nav.next { right: -10px; }
-  .lightbox-header { top: -30px; font-size: 14px; }
+  .lightbox-top-bar { padding: 0 10px; height: 50px; }
+  .lightbox-title { font-size: 14px; }
+  .lightbox-top-nav { padding: 5px 10px; font-size: 24px; }
   
   .page-title {
     font-size: var(--text-4xl);
