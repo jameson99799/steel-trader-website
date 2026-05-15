@@ -250,17 +250,17 @@ watch(lang, (newLang) => {
 })
 
 export function useLang() {
-  const setLang = (newLang, fromRouter = false) => {
+  const setLang = async (newLang, fromRouter = false) => {
     _fromRouter = fromRouter
+    if (!loadedLangs.has(newLang) && newLang !== 'en' && newLang !== 'zh') {
+      await loadUITranslations(newLang)
+    }
     lang.value = newLang
     localStorage.setItem('lang', newLang)
-    if (!loadedLangs.has(newLang)) {
-      loadUITranslations(newLang)
-    }
   }
 
-  const toggleLang = () => {
-    setLang(lang.value === 'zh' ? 'en' : 'zh')
+  const toggleLang = async () => {
+    await setLang(lang.value === 'zh' ? 'en' : 'zh')
   }
 
   const t = (key) => {
