@@ -1,7 +1,7 @@
 <template>
   <header class="site-header">
     <div class="header-top">
-      <div class="container">
+      <div class="container" style="max-width: 1440px;">
         <div class="header-top-content">
           <div class="contact-info">
             <a v-if="company?.email" :href="`mailto:${company.email}`" class="contact-item">
@@ -60,7 +60,7 @@
     </div>
     
     <div class="header-main">
-      <div class="container">
+      <div class="container" style="max-width: 1440px;">
         <div class="header-main-content">
           <router-link :to="langPath('/')" class="logo">
             <div class="logo-image" v-if="company?.logo">
@@ -544,7 +544,7 @@ onUnmounted(() => {
 .main-nav {
   display: flex;
   align-items: center;
-  gap: var(--spacing-lg);
+  gap: 24px;
 }
 
 .nav-link {
@@ -640,6 +640,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  white-space: nowrap;
 }
 
 .header-cta .btn .icon {
