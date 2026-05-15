@@ -75,7 +75,11 @@
         <h3>社交分享 (Open Graph)</h3>
         <div class="form-group">
           <label>OG图片（分享时显示的封面图）</label>
-          <input type="file" @change="handleOgImage" accept="image/*" class="form-control" />
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="file" @change="handleOgImage" accept="image/*" class="form-control" style="flex:1;" />
+            <span style="color:#64748b;">或</span>
+            <button class="btn btn-outline" @click="showMediaPicker = true">📷 从图库选择</button>
+          </div>
           <img v-if="ogPreview" :src="ogPreview" class="og-preview" />
           <small>建议尺寸 1200×630px</small>
         </div>
@@ -201,7 +205,36 @@
           ✅ 已刷新 {{ refreshResult.articlesUpdated }} 篇文章、{{ refreshResult.productsUpdated }} 个产品
         </span>
       </div>
+      </div>
     </div>
+
+    <!-- Media Library Picker -->
+    <div v-if="showMediaPicker" class="modal-overlay" @click.self="showMediaPicker=false">
+      <div class="modal" style="max-width:700px;">
+        <div class="modal-header" style="background:#f5f3ff;color:#7c3aed;">
+          <h3>📷 从图库选择</h3>
+          <button class="modal-close" @click="showMediaPicker=false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <input v-model="mediaPickerSearch" class="form-control" placeholder="搜索文件名..." @input="loadMediaPicker" style="max-width:200px;" />
+            <select v-model="mediaPickerGroup" class="form-control" @change="loadMediaPicker" style="max-width:140px;">
+              <option value="">全部分组</option>
+              <option v-for="g in mediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            </select>
+          </div>
+          <div v-if="mediaPickerItems.length" class="lib-grid">
+            <div v-for="item in mediaPickerItems" :key="item.id" 
+                 class="lib-item"
+                 @click="selectMediaFromLibrary(item.filepath)">
+              <img :src="item.filepath" />
+            </div>
+          </div>
+          <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -216,6 +249,12 @@ const refreshResult = ref(null)
 const ogFile = ref(null)
 const ogPreview = ref(null)
 const auditResult = ref(null)
+
+const showMediaPicker = ref(false)
+const mediaPickerSearch = ref('')
+const mediaPickerGroup = ref('')
+const mediaPickerItems = ref([])
+const mediaGroups = ref([])
 
 const form = ref({
   site_title: '',
@@ -292,11 +331,39 @@ async function save() {
   try {
     const fd = new FormData()
     Object.entries(form.value).forEach(([k,v]) => fd.append(k, v !== null && v !== undefined ? v : ''))
-    if (ogFile.value) fd.append('og_image', ogFile.value)
+    if (ogFile.value) {
+      fd.append('og_image', ogFile.value)
+    } else if (ogPreview.value && ogPreview.value.startsWith('/')) {
+      fd.append('og_image', ogPreview.value)
+    }
     await api.updateSeoSettings(fd)
     alert('SEO设置保存成功！')
   } catch(e) { alert(e.message) }
   saving.value = false
+}
+
+const loadMediaPicker = async () => {
+  try {
+    const res = await fetch(`/api/media?search=${encodeURIComponent(mediaPickerSearch.value)}&group_id=${mediaPickerGroup.value}`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    })
+    mediaPickerItems.value = await res.json()
+  } catch (e) { console.error(e) }
+}
+
+const loadMediaGroups = async () => {
+  try {
+    const res = await fetch('/api/media/groups', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    })
+    mediaGroups.value = await res.json()
+  } catch (e) { console.error(e) }
+}
+
+const selectMediaFromLibrary = (filepath) => {
+  ogFile.value = null // clear file
+  ogPreview.value = filepath // set to url
+  showMediaPicker.value = false
 }
 
 async function runAudit() {
@@ -326,7 +393,11 @@ async function triggerRefresh() {
   refreshing.value = false
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadMediaGroups()
+  loadMediaPicker()
+})
 </script>
 
 <style scoped>
@@ -462,4 +533,21 @@ onMounted(load)
 .btn-refresh:hover { opacity: 0.9; }
 .btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
 .refresh-result { font-size: 14px; color: #16a34a; font-weight: 600; }
+
+/* ── Modal & Library ──────────────────────────────── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 20px; }
+.modal { background: white; border-radius: 12px; width: 100%; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+.modal-header { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; }
+.modal-header h3 { font-size: 18px; font-weight: 700; margin: 0; }
+.modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: inherit; opacity: 0.6; transition: opacity 0.2s; line-height: 1; }
+.modal-close:hover { opacity: 1; }
+.modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+.btn-outline { background: white; border: 1px solid var(--border); color: var(--text-primary); }
+.btn-outline:hover { background: #f8fafc; border-color: #cbd5e1; }
+
+.lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
+.lib-item { position: relative; border-radius: 8px; overflow: hidden; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; aspect-ratio: 1; background: #f8fafc; }
+.lib-item:hover { border-color: #cbd5e1; transform: translateY(-2px); }
+.lib-item img { width: 100%; height: 100%; object-fit: cover; }
+
 </style>

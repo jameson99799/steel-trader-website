@@ -48,11 +48,11 @@
 
           <div class="media-grid">
             <div v-for="item in group.items" :key="item.id" class="media-card">
-              <div class="media-preview" v-if="item.type === 'image'" @click="openAdminPreview(item)" style="cursor: pointer;">
+              <div class="media-preview" v-if="item.type === 'image'" @click="openAdminPreview(item, group)" style="cursor: pointer;">
                 <img :src="item.media_url" />
                 <span class="media-badge image-badge">图片</span>
               </div>
-              <div class="media-preview video-preview" v-else @click="openAdminPreview(item)" style="cursor: pointer;">
+              <div class="media-preview video-preview" v-else @click="openAdminPreview(item, group)" style="cursor: pointer;">
                 <div class="video-icon">▶</div>
                 <span class="media-badge video-badge">视频</span>
               </div>
@@ -196,16 +196,25 @@
     </div>
 
     <!-- Admin Preview Modal -->
-    <div v-if="adminPreviewItem" class="modal-overlay" @click.self="adminPreviewItem=null" style="z-index: 2000;">
+    <div v-if="adminPreviewItem" class="modal-overlay" @click.self="closeAdminPreview" style="z-index: 2000;">
       <div class="modal" style="max-width:800px; background: transparent; box-shadow: none;">
         <div style="position: relative; display: flex; justify-content: center; align-items: center;">
-          <button class="modal-close" @click="adminPreviewItem=null" style="position: absolute; top: -40px; right: 0; color: white; font-size: 36px; background: none; border: none; cursor: pointer;">&times;</button>
+          <div style="position: absolute; top: -50px; width: 100%; display: flex; justify-content: space-between; align-items: center; z-index: 10;">
+            <!-- Delete Button (Top Left) -->
+            <button class="btn btn-danger btn-sm" @click="deleteAdminPreview" style="box-shadow: 0 4px 6px rgba(0,0,0,0.3);">🗑️ 删除当前照片</button>
+            <!-- Close Button (Top Right) -->
+            <button class="modal-close" @click="closeAdminPreview" style="color: white; font-size: 36px; background: none; border: none; cursor: pointer;">&times;</button>
+          </div>
           
-          <img v-if="adminPreviewItem.type === 'image'" :src="adminPreviewItem.media_url" style="max-width: 100%; max-height: 80vh; object-fit: contain; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);" @click="adminPreviewItem=null" />
+          <img v-if="adminPreviewItem.type === 'image'" :src="adminPreviewItem.media_url" style="max-width: 100%; max-height: 80vh; object-fit: contain; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);" @click="closeAdminPreview" />
           
           <div v-else-if="adminPreviewItem.type === 'video'" style="width: 100%; max-width: 800px; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
             <iframe :src="getYoutubeEmbedUrl(adminPreviewItem.media_url)" style="width: 100%; height: 100%; border: none;" allow="autoplay; encrypted-media" allowfullscreen></iframe>
           </div>
+
+          <!-- Navigation Buttons -->
+          <button v-if="adminPreviewIndex > 0" class="preview-nav-btn prev" @click.stop="adminPreviewPrev" style="position: absolute; left: -60px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; font-size: 32px; width: 50px; height: 50px; border-radius: 50%; cursor: pointer;">❮</button>
+          <button v-if="adminPreviewGroup && adminPreviewIndex < adminPreviewGroup.items.length - 1" class="preview-nav-btn next" @click.stop="adminPreviewNext" style="position: absolute; right: -60px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; font-size: 32px; width: 50px; height: 50px; border-radius: 50%; cursor: pointer;">❯</button>
         </div>
       </div>
     </div>
@@ -236,6 +245,8 @@ const videoAutoplayInput = ref(false)
 const currentGroupIdForVideo = ref(null)
 
 const adminPreviewItem = ref(null)
+const adminPreviewGroup = ref(null)
+const adminPreviewIndex = ref(-1)
 
 const token = () => localStorage.getItem('token')
 const globalProcessing = ref(false)
@@ -310,9 +321,64 @@ const deleteMedia = async (id) => {
   } catch (e) { console.error(e) }
 }
 
-const openAdminPreview = (item) => {
+const openAdminPreview = (item, group) => {
+  adminPreviewGroup.value = group
+  adminPreviewIndex.value = group.items.findIndex(i => i.id === item.id)
   adminPreviewItem.value = item
 }
+
+const closeAdminPreview = () => {
+  adminPreviewItem.value = null
+  adminPreviewGroup.value = null
+  adminPreviewIndex.value = -1
+}
+
+const adminPreviewPrev = () => {
+  if (adminPreviewIndex.value > 0 && adminPreviewGroup.value) {
+    adminPreviewIndex.value--
+    adminPreviewItem.value = adminPreviewGroup.value.items[adminPreviewIndex.value]
+  }
+}
+
+const adminPreviewNext = () => {
+  if (adminPreviewGroup.value && adminPreviewIndex.value < adminPreviewGroup.value.items.length - 1) {
+    adminPreviewIndex.value++
+    adminPreviewItem.value = adminPreviewGroup.value.items[adminPreviewIndex.value]
+  }
+}
+
+const deleteAdminPreview = async () => {
+  if (!adminPreviewItem.value) return
+  if (confirm('确定删除正在预览的照片吗？')) {
+    const idToDelete = adminPreviewItem.value.id
+    try {
+      await fetch(`/api/factory/media/${idToDelete}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token()}` }
+      })
+      // Close preview, reload data
+      closeAdminPreview()
+      loadData()
+    } catch (e) { console.error(e) }
+  }
+}
+
+const handleAdminKeydown = (e) => {
+  if (!adminPreviewItem.value) return
+  if (e.key === 'ArrowLeft') adminPreviewPrev()
+  if (e.key === 'ArrowRight') adminPreviewNext()
+  if (e.key === 'Escape') closeAdminPreview()
+  if (e.key === 'Delete') deleteAdminPreview()
+}
+
+onMounted(() => {
+  loadData()
+  window.addEventListener('keydown', handleAdminKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleAdminKeydown)
+})
 
 const getYoutubeEmbedUrl = (url) => {
   if (!url) return '';

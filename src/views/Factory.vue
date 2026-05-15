@@ -43,6 +43,8 @@
               <div v-if="getVideos(group).length > 0" class="videos-grid">
                 <div v-for="video in getVideos(group)" :key="video.id" class="video-item">
                   <iframe 
+                    :id="'yt-player-' + video.id"
+                    class="yt-video-iframe"
                     :src="getYoutubeEmbedUrl(video.media_url, video.autoplay)" 
                     width="100%" 
                     height="400" 
@@ -172,9 +174,10 @@ const getYoutubeEmbedUrl = (url, autoplay) => {
     const questionPosition = videoId.indexOf('?');
     if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
   } else {
-    return url + (autoplay ? '?autoplay=1&mute=1' : '');
+    // Basic fallback, might not have enablejsapi
+    return url + (url.includes('?') ? '&' : '?') + (autoplay ? 'autoplay=1&mute=1&' : '') + 'enablejsapi=1';
   }
-  return `https://www.youtube.com/embed/${videoId}${autoplay ? '?autoplay=1&mute=1' : ''}`;
+  return `https://www.youtube.com/embed/${videoId}?enablejsapi=1${autoplay ? '&autoplay=1&mute=1' : ''}`;
 }
 
 const openLightbox = (group, index) => {
@@ -251,8 +254,50 @@ const scrollCarousel = (id, direction) => {
   track.scrollBy({ left: direction * slideWidth, behavior: 'smooth' })
 }
 
+// YouTube Players Management
+const ytPlayers = []
+
+const initYouTubePlayers = () => {
+  const iframes = document.querySelectorAll('.yt-video-iframe')
+  iframes.forEach(iframe => {
+    try {
+      const player = new window.YT.Player(iframe.id, {
+        events: {
+          'onStateChange': (event) => {
+            if (event.data === window.YT.PlayerState.PLAYING) {
+              // Pause all other players
+              ytPlayers.forEach(p => {
+                if (p !== player && typeof p.pauseVideo === 'function') {
+                  p.pauseVideo()
+                }
+              })
+            }
+          }
+        }
+      })
+      ytPlayers.push(player)
+    } catch (e) {
+      console.warn('Failed to init YT player for', iframe.id, e)
+    }
+  })
+}
+
 onMounted(() => {
-  loadData()
+  loadData().then(() => {
+    // Load YouTube API script if not loaded
+    if (!window.YT) {
+      const tag = document.createElement('script')
+      tag.src = "https://www.youtube.com/iframe_api"
+      const firstScriptTag = document.getElementsByTagName('script')[0]
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag)
+      
+      window.onYouTubeIframeAPIReady = () => {
+        setTimeout(initYouTubePlayers, 500)
+      }
+    } else {
+      setTimeout(initYouTubePlayers, 500)
+    }
+  })
   window.addEventListener('keydown', handleKeydown)
 })
 
@@ -260,6 +305,7 @@ onUnmounted(() => {
   // Clear all carousel intervals
   Object.values(carousels).forEach(clearInterval)
   window.removeEventListener('keydown', handleKeydown)
+  ytPlayers.length = 0 // clear players reference
 })
 </script>
 

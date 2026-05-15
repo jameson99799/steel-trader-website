@@ -36,7 +36,7 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
         product_refresh_days = existing.product_refresh_days,
         default_news_author = existing.default_news_author
     } = req.body
-    const og_image = req.file ? `/uploads/${req.file.filename}` : existing?.og_image
+    const og_image = req.file ? `/uploads/${req.file.filename}` : (req.body.og_image !== undefined ? req.body.og_image : existing?.og_image)
 
     if (existing && existing.id) {
         run(
