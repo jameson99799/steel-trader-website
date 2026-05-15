@@ -166,6 +166,20 @@ async function initDb() {
     )
   `)
 
+  try {
+    const hasFactoryGroups = db.prepare("SELECT count(*) as c FROM factory_groups").get().c
+    if (hasFactoryGroups === 0) {
+      const insertGroup = db.prepare('INSERT INTO factory_groups (name, name_en, sort_order) VALUES (?, ?, ?)')
+      insertGroup.run('工厂生产', 'Factory Production', 10)
+      insertGroup.run('包装', 'Packaging', 20)
+      insertGroup.run('运输', 'Shipping', 30)
+      insertGroup.run('质检', 'Quality Inspection', 40)
+      console.log('[db] Seeded default factory groups')
+    }
+  } catch (e) {
+    console.error('[db] Error populating default factory groups:', e)
+  }
+
   // Migrations: add product columns if not exist
   try { db.exec('ALTER TABLE products ADD COLUMN detail_content TEXT') } catch (e) { }
   try { db.exec('ALTER TABLE products ADD COLUMN seo_title TEXT') } catch (e) { }

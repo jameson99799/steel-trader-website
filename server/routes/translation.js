@@ -656,6 +656,19 @@ function collectRoofingProfiles() {
     }
 }
 
+function collectFactory() {
+    try {
+        const items = []
+        const groups = getAll('SELECT id, name FROM factory_groups')
+        for (const g of groups) {
+            if (g.name) items.push({ type: 'factory_group', id: g.id, field: 'name', text: g.name, itemName: `Factory Group ${g.id}: Name` })
+        }
+        return items
+    } catch (e) {
+        return []
+    }
+}
+
 const PAGES = {
     ui_texts_static: () => collectUITexts(),
     products: collectProducts,
@@ -667,7 +680,8 @@ const PAGES = {
     hero: collectHero,
     ral_colors: collectRalColors,
     roofing_categories: () => [...collectRoofingCategories(), ...collectRoofingProfiles()],
-    roofing_profiles: collectRoofingProfiles
+    roofing_profiles: collectRoofingProfiles,
+    factory: collectFactory
 };
 
 

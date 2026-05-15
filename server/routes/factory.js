@@ -29,6 +29,7 @@ router.get('/public', (req, res) => {
     const result = groups.map(g => {
       return {
         ...g,
+        type: 'factory_group',
         items: media.filter(m => m.group_id === g.id)
       }
     })
@@ -51,6 +52,7 @@ router.get('/', authMiddleware, (req, res) => {
     
     const result = groups.map(g => ({
       ...g,
+      type: 'factory_group',
       items: media.filter(m => m.group_id === g.id)
     }))
     
