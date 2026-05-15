@@ -44,14 +44,19 @@
                 <div v-for="video in getVideos(group)" :key="video.id" class="video-item">
                   <div v-if="activeVideoId === video.id" class="yt-video-active">
                     <iframe 
-                      :src="getYoutubeEmbedUrl(video.media_url, true)" 
+                      :src="getYoutubeEmbedUrl(video.media_url, true, isAutoPlaying)" 
                       width="100%" 
                       height="100%" 
                       style="border:0;" 
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
-                      referrerpolicy="strict-origin-when-cross-origin"
                       allowfullscreen>
                     </iframe>
+                    <div style="text-align: right; margin-top: 8px; font-size: 13px;">
+                      <a :href="video.media_url" target="_blank" style="color: var(--primary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                        <svg viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        Watch on YouTube App (If Sign-In Fails)
+                      </a>
+                    </div>
                   </div>
                   <div v-else class="yt-video-cover" @click="playVideo(video.id)">
                     <img v-if="getYoutubeThumbnail(video.media_url)" :src="getYoutubeThumbnail(video.media_url)" class="yt-thumbnail" />
@@ -136,9 +141,11 @@ const lightboxGroup = ref(null)
 const carousels = {} // track intervals
 
 const activeVideoId = ref(null)
+const isAutoPlaying = ref(false)
 
 const playVideo = (id) => {
   activeVideoId.value = id
+  isAutoPlaying.value = false // manual click, so not auto-playing on load
 }
 
 const loadData = async () => {
@@ -152,6 +159,7 @@ const loadData = async () => {
       const autoVideo = group.items?.find(item => item.type === 'video' && item.autoplay === 1)
       if (autoVideo) {
         activeVideoId.value = autoVideo.id
+        isAutoPlaying.value = true // set flag so we can mute it
         break
       }
     }
@@ -206,7 +214,7 @@ const getYoutubeThumbnail = (url) => {
   return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
 }
 
-const getYoutubeEmbedUrl = (url, autoplay) => {
+const getYoutubeEmbedUrl = (url, autoplay, mute = false) => {
   if (!url) return '';
   let videoId = '';
   if (url.includes('youtube.com/watch?v=')) {
@@ -222,10 +230,9 @@ const getYoutubeEmbedUrl = (url, autoplay) => {
     const questionPosition = videoId.indexOf('?');
     if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
   } else {
-    // Basic fallback, might not have enablejsapi
-    return url + (url.includes('?') ? '&' : '?') + (autoplay ? 'autoplay=1&mute=1&' : '') + 'enablejsapi=1&playsinline=1';
+    return url + (url.includes('?') ? '&' : '?') + (autoplay ? `autoplay=1${mute ? '&mute=1' : ''}&` : '') + 'enablejsapi=1&playsinline=1';
   }
-  return `https://www.youtube.com/embed/${videoId}?enablejsapi=1&playsinline=1${autoplay ? '&autoplay=1&mute=1' : ''}`;
+  return `https://www.youtube.com/embed/${videoId}?enablejsapi=1&playsinline=1${autoplay ? `&autoplay=1${mute ? '&mute=1' : ''}` : ''}`;
 }
 
 const openLightbox = (group, index) => {
