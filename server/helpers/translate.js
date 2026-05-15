@@ -188,3 +188,16 @@ export function translateRoofingProfile(profile, map, langCode) {
 
     return profile
 }
+
+/**
+ * Apply translations to a factory group.
+ */
+export function translateFactoryGroup(group, map, langCode) {
+    if (!map || !group?.id) return group
+    const t = map[`factory_group_${group.id}`]
+    if (!t) return group
+
+    if (t.name) group[`name_${langCode}`] = t.name
+
+    return group
+}

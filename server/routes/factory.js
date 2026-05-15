@@ -2,6 +2,7 @@ import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 import { getAll, getOne, run } from '../db.js'
 import { applyWatermark } from '../utils/watermark.js'
+import { loadTranslationsForLang, translateFactoryGroup } from '../helpers/translate.js'
 
 const router = Router()
 const JWT_SECRET = process.env.JWT_SECRET || 'led-trade-secret-key-2024'
@@ -26,6 +27,13 @@ router.get('/public', (req, res) => {
     const groups = getAll('SELECT * FROM factory_groups ORDER BY sort_order DESC, id ASC')
     const media = getAll('SELECT * FROM factory_media ORDER BY sort_order DESC, id ASC')
     
+    // Inject translations if lang param is provided
+    const lang = req.query.lang
+    if (lang && lang !== 'en') {
+        const tMap = loadTranslationsForLang(lang)
+        if (tMap) groups.forEach(g => translateFactoryGroup(g, tMap, lang))
+    }
+
     // Attach media to groups
     const result = groups.map(g => {
       return {

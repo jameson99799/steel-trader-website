@@ -126,11 +126,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
-const { t, localizedValue, langPath } = useLang()
+const { t, localizedValue, langPath, lang } = useLang()
 const loading = ref(true)
 const groups = ref([])
 const lightboxActive = ref(false)
@@ -150,7 +150,7 @@ const playVideo = (id) => {
 
 const loadData = async () => {
   try {
-    const res = await fetch('/api/factory/public')
+    const res = await fetch(`/api/factory/public${lang.value !== 'en' ? '?lang=' + lang.value : ''}`)
     const data = await res.json()
     groups.value = data
     
@@ -169,6 +169,11 @@ const loadData = async () => {
     loading.value = false
   }
 }
+
+watch(lang, () => {
+  loading.value = true
+  loadData()
+})
 
 const scrollToGroup = (id) => {
   const el = document.getElementById('factory-group-' + id)
