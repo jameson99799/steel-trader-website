@@ -48,7 +48,6 @@
                       width="100%" 
                       height="100%" 
                       style="border:0;" 
-                      sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                       allowfullscreen>
                     </iframe>

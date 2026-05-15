@@ -281,8 +281,8 @@ onMounted(async () => {
 }
 .copy-toast.show { opacity: 1; bottom: -40px; }
 
-/* Mobile: bottom bar */
-@media (max-width: 768px) {
+/* Mobile & Tablet: bottom bar */
+@media (max-width: 1024px) {
   .float-panel {
     top: auto;
     bottom: 0;
