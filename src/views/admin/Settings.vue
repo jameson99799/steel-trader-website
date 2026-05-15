@@ -78,44 +78,49 @@
       </div>
     </div>
 
-    <!-- Watermark Settings Section -->
+    <!-- Watermark Templates Section -->
     <div class="card ssl-card">
-      <div class="card-header">💦 媒体库水印配置</div>
+      <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>💦 水印模板管理</span>
+        <button class="btn btn-sm btn-primary" @click="openWatermarkEditor(null)">+ 新建模板</button>
+      </div>
       <div class="card-body">
         <div class="ssl-info">
           <h4>📋 说明：</h4>
-          <p>配置全局默认的图片水印。在工厂展示等模块选择图片时，您可以勾选是否叠加此水印生成新图。</p>
+          <p>您可以创建多个图片或文字水印模板。设置一个为「默认模板」后，在图库或工厂管理中勾选添加水印时将自动使用默认模板。</p>
         </div>
-        <form @submit.prevent="saveWatermarkSettings" style="max-width: 500px; margin-top:16px;">
-          <div class="form-group">
-            <label>水印 Logo 图片</label>
-            <div style="display:flex;gap:8px;align-items:center;">
-              <input v-model="wmForm.watermark_url" type="text" class="form-control" placeholder="/uploads/wangzhanlogo.png" />
-              <button type="button" class="btn btn-sm btn-outline" @click="openMediaPicker('watermark')" style="color:#7c3aed;border-color:#7c3aed;">📷 选择</button>
-            </div>
-            <div class="preview-box preview-small" v-if="wmForm.watermark_url" style="margin-top:8px;">
-              <img :src="wmForm.watermark_url" style="max-height:64px; border:1px solid #e2e8f0; border-radius:4px; padding:4px; background:#f8fafc;" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label>水印位置 (Position)</label>
-            <select v-model="wmForm.position" class="form-control">
-              <option value="bottom-right">右下角 (Bottom Right)</option>
-              <option value="bottom-left">左下角 (Bottom Left)</option>
-              <option value="top-right">右上角 (Top Right)</option>
-              <option value="top-left">左上角 (Top Left)</option>
-              <option value="center">居中 (Center)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>水印比例缩放 (Scale)</label>
-            <input type="number" v-model.number="wmForm.scale" step="0.01" min="0.05" max="1" class="form-control" />
-            <p class="hint">0.15 表示占原图宽度的 15%</p>
-          </div>
-          <button type="submit" class="btn btn-primary" :disabled="wmLoading">
-            {{ wmLoading ? '保存中...' : '保存水印配置' }}
-          </button>
-        </form>
+        
+        <table class="table" style="margin-top:16px;">
+          <thead>
+            <tr>
+              <th>模板名称</th>
+              <th>类型</th>
+              <th>默认</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="tpl in watermarkTemplates" :key="tpl.id">
+              <td>{{ tpl.name }}</td>
+              <td>
+                <span class="badge" :class="tpl.type === 'text' ? 'badge-blue' : 'badge-green'">
+                  {{ tpl.type === 'text' ? '文字' : '图片' }}
+                </span>
+              </td>
+              <td>
+                <span v-if="tpl.is_default" class="badge badge-yellow">默认</span>
+                <button v-else class="btn btn-sm btn-outline" @click="setDefaultTemplate(tpl.id)">设为默认</button>
+              </td>
+              <td style="display:flex;gap:8px;">
+                <button class="btn btn-sm btn-outline" @click="openWatermarkEditor(tpl)">编辑</button>
+                <button class="btn btn-sm btn-outline" style="color:#dc2626;border-color:#dc2626;" @click="deleteTemplate(tpl.id)">删除</button>
+              </td>
+            </tr>
+            <tr v-if="watermarkTemplates.length === 0">
+              <td colspan="4" style="text-align:center; color:#94a3b8;">暂无模板，请新建</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -169,12 +174,25 @@
       </div>
     </div>
 
+    <!-- Watermark Editor Modal -->
+    <div v-if="showWatermarkEditor" class="modal-overlay" style="z-index: 1000;">
+      <WatermarkEditor 
+        :template="editingTemplate" 
+        @close="showWatermarkEditor=false" 
+        @save="saveWatermarkTemplate"
+        @pick-media="openMediaPicker('watermark')"
+        ref="watermarkEditorRef"
+        style="width: 90vw; max-width: 1200px;"
+      />
+    </div>
+
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
+import WatermarkEditor from '../../components/admin/WatermarkEditor.vue'
 
 const loading = ref(false)
 const form = reactive({
@@ -266,40 +284,53 @@ onMounted(() => {
   loadWatermarkSettings()
 })
 
-// Watermark Settings
-const wmLoading = ref(false)
-const wmForm = reactive({
-  enabled: 0,
-  watermark_url: '',
-  position: 'bottom-right',
-  opacity: 0.8,
-  scale: 0.15
-})
+// Watermark Templates
+const watermarkTemplates = ref([])
+const showWatermarkEditor = ref(false)
+const editingTemplate = ref(null)
+const watermarkEditorRef = ref(null)
 
 const loadWatermarkSettings = async () => {
   try {
-    const data = await api.request('/media/watermark-settings')
-    if (data) {
-      Object.assign(wmForm, data)
-    }
+    const data = await api.request('/media/watermark-templates')
+    watermarkTemplates.value = data || []
   } catch (e) {
-    console.error('Failed to load watermark settings', e)
+    console.error('Failed to load watermark templates', e)
   }
 }
 
-const saveWatermarkSettings = async () => {
-  wmLoading.value = true
+const openWatermarkEditor = (tpl) => {
+  editingTemplate.value = tpl
+  showWatermarkEditor.value = true
+}
+
+const saveWatermarkTemplate = async (form) => {
   try {
-    await api.request('/media/watermark-settings', {
-      method: 'POST',
-      body: JSON.stringify(wmForm)
-    })
-    alert('水印配置已保存')
+    if (form.id) {
+      await api.request(`/media/watermark-templates/${form.id}`, { method: 'PUT', body: JSON.stringify(form) })
+    } else {
+      await api.request('/media/watermark-templates', { method: 'POST', body: JSON.stringify(form) })
+    }
+    showWatermarkEditor.value = false
+    await loadWatermarkSettings()
   } catch (e) {
     alert(e.message)
-  } finally {
-    wmLoading.value = false
   }
+}
+
+const deleteTemplate = async (id) => {
+  if (!confirm('确定删除此模板吗？')) return
+  try {
+    await api.request(`/media/watermark-templates/${id}`, { method: 'DELETE' })
+    await loadWatermarkSettings()
+  } catch (e) { alert(e.message) }
+}
+
+const setDefaultTemplate = async (id) => {
+  try {
+    await api.request(`/media/watermark-templates/${id}/set-default`, { method: 'PUT' })
+    await loadWatermarkSettings()
+  } catch (e) { alert(e.message) }
 }
 
 // Media Picker
@@ -326,13 +357,15 @@ const loadMediaPicker = async () => {
     if (mediaPickerGroup.value) url += `&group_id=${mediaPickerGroup.value}`
     if (mediaPickerSearch.value) url += `&search=${encodeURIComponent(mediaPickerSearch.value)}`
     const data = await api.request(url)
-    mediaPickerItems.value = data.items.map(m => ({ id: m.id, filepath: m.media_url }))
+    mediaPickerItems.value = data.items.map(m => ({ id: m.id, filepath: m.filepath }))
   } catch (e) { console.error(e) }
 }
 
 const doSelectMedia = () => {
   if (mediaPickerSelected.value) {
-    wmForm.watermark_url = mediaPickerSelected.value
+    if (watermarkEditorRef.value) {
+      watermarkEditorRef.value.setMediaUrl(mediaPickerSelected.value)
+    }
     showMediaPicker.value = false
   }
 }

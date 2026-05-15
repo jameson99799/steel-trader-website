@@ -177,6 +177,26 @@ async function initDb() {
     )
   `)
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS watermark_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      is_default INTEGER DEFAULT 0,
+      type TEXT DEFAULT 'image',
+      watermark_url TEXT,
+      text_content TEXT,
+      font_family TEXT DEFAULT 'Arial',
+      font_size REAL DEFAULT 0.05,
+      text_color TEXT DEFAULT '#000000',
+      stroke_color TEXT DEFAULT 'transparent',
+      opacity REAL DEFAULT 0.8,
+      scale REAL DEFAULT 0.15,
+      pos_x REAL DEFAULT 0.9,
+      pos_y REAL DEFAULT 0.9,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
   try {
     const hasWatermark = db.prepare("SELECT count(*) as c FROM watermark_settings").get().c
     if (hasWatermark === 0) {

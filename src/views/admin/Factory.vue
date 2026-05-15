@@ -42,6 +42,7 @@
             <div class="media-actions">
               <button class="btn btn-outline btn-sm" @click="openMediaPicker(group.id)">📷 从图库添加图片</button>
               <button class="btn btn-outline btn-sm" @click="openVideoModal(group.id)">🎥 添加 YouTube 视频</button>
+              <button class="btn btn-outline btn-sm" style="color:#2563eb;border-color:#bfdbfe;" @click="openBatchWatermarkModal(group.id)">💦 批量追加水印</button>
             </div>
           </div>
 
@@ -151,6 +152,49 @@
       </div>
     </div>
 
+    <!-- Batch Watermark Modal -->
+    <div v-if="showBatchWatermark" class="modal-overlay" @click.self="showBatchWatermark=false">
+      <div class="modal" style="max-width:600px;">
+        <div class="modal-header" style="background:#eff6ff;color:#1e40af;">
+          <h3>💦 批量追加水印</h3>
+          <button class="modal-close" @click="showBatchWatermark=false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="margin-bottom:12px;color:#475569;font-size:14px;">请勾选当前分组中需要追加水印的照片。原照片不会受影响，系统将生成带有水印的新图并替换当前展示记录。</p>
+          
+          <div class="form-group">
+            <label>选择水印模板</label>
+            <select v-model="batchWatermarkTemplateId" class="form-control">
+              <option value="">使用默认水印模板</option>
+              <option v-for="t in watermarkTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+            </select>
+          </div>
+
+          <div v-if="batchWatermarkItems.length" class="lib-grid" style="max-height: 300px;">
+            <div v-for="item in batchWatermarkItems" :key="item.id" 
+                 :class="['lib-item', { selected: batchWatermarkSelected.includes(item.id) }]" 
+                 @click="toggleBatchWatermarkSelect(item.id)">
+              <img :src="item.media_url" />
+              <div class="check-icon">✓</div>
+            </div>
+          </div>
+          <p v-else style="color:#94a3b8;text-align:center;padding:20px;">当前分组下没有可用的照片</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="showBatchWatermark=false">取消</button>
+          <button type="button" class="btn btn-primary" style="background:#2563eb;" @click="doBatchWatermark" :disabled="!batchWatermarkSelected.length || isBatchWatermarking">
+            {{ isBatchWatermarking ? '处理中...' : `对选中的 ${batchWatermarkSelected.length} 张图执行水印` }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Global Loading Overlay -->
+    <div v-if="globalProcessing" class="loading-overlay">
+      <div class="loader"></div>
+      <div style="margin-top:16px;color:white;">系统处理中，请稍候...</div>
+    </div>
+
   </div>
 </template>
 
@@ -177,6 +221,7 @@ const videoAutoplayInput = ref(false)
 const currentGroupIdForVideo = ref(null)
 
 const token = () => localStorage.getItem('token')
+const globalProcessing = ref(false)
 
 const loadData = async () => {
   try {
@@ -300,6 +345,64 @@ const doAddSelectedMedia = async () => {
   loadData()
 }
 
+// Batch Watermark
+const showBatchWatermark = ref(false)
+const batchWatermarkItems = ref([])
+const batchWatermarkSelected = ref([])
+const batchWatermarkTemplateId = ref('')
+const watermarkTemplates = ref([])
+const isBatchWatermarking = ref(false)
+
+const openBatchWatermarkModal = async (groupId) => {
+  currentGroupIdForMedia.value = groupId
+  const group = groups.value.find(g => g.id === groupId)
+  if (!group) return
+  batchWatermarkItems.value = group.items.filter(i => i.type === 'image')
+  batchWatermarkSelected.value = []
+  batchWatermarkTemplateId.value = ''
+  
+  try {
+    const res = await fetch('/api/media/watermark-templates', {
+      headers: { 'Authorization': `Bearer ${token()}` }
+    })
+    watermarkTemplates.value = await res.json()
+  } catch (e) { console.error(e) }
+  
+  showBatchWatermark.value = true
+}
+
+const toggleBatchWatermarkSelect = (id) => {
+  const idx = batchWatermarkSelected.value.indexOf(id)
+  if (idx >= 0) batchWatermarkSelected.value.splice(idx, 1)
+  else batchWatermarkSelected.value.push(id)
+}
+
+const doBatchWatermark = async () => {
+  if (!batchWatermarkSelected.value.length || !currentGroupIdForMedia.value) return
+  isBatchWatermarking.value = true
+  globalProcessing.value = true
+  try {
+    const res = await fetch(`/api/factory/groups/${currentGroupIdForMedia.value}/batch-watermark`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
+      body: JSON.stringify({
+        media_ids: batchWatermarkSelected.value,
+        template_id: batchWatermarkTemplateId.value || null
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '批量处理失败')
+    alert(data.message)
+    showBatchWatermark.value = false
+    await loadData()
+  } catch (e) {
+    alert(e.message)
+  } finally {
+    isBatchWatermarking.value = false
+    globalProcessing.value = false
+  }
+}
+
 // Video Modal Logic
 const openVideoModal = (groupId) => {
   currentGroupIdForVideo.value = groupId
@@ -395,4 +498,29 @@ onMounted(() => {
 .form-control:focus { outline: none; border-color: #2563eb; }
 .form-hint { font-size: 12px; color: #64748b; margin: 0; }
 .checkbox-label { cursor: pointer; }
+
+.loading-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.loader {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #2563eb;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 </style>

@@ -71,23 +71,45 @@ router.get('/', authMiddleware, (req, res) => {
   res.json({ items, total: total.c, page: parseInt(page), per_page: parseInt(per_page) })
 })
 
-// ─── Watermark Settings ───────────────────────────────────────────────────────
-router.get('/watermark-settings', authMiddleware, (req, res) => {
-  const settings = getOne('SELECT * FROM watermark_settings LIMIT 1')
-  res.json(settings || { enabled: 0, position: 'bottom-right', scale: 0.15 })
+// ─── Watermark Templates ───────────────────────────────────────────────────────
+router.get('/watermark-templates', authMiddleware, (req, res) => {
+  const templates = getAll('SELECT * FROM watermark_templates ORDER BY is_default DESC, created_at DESC')
+  res.json(templates)
 })
 
-router.post('/watermark-settings', authMiddleware, (req, res) => {
-  const { enabled, watermark_url, position, opacity, scale } = req.body
-  const current = getOne('SELECT id FROM watermark_settings LIMIT 1')
-  if (current) {
-    run('UPDATE watermark_settings SET enabled=?, watermark_url=?, position=?, opacity=?, scale=? WHERE id=?',
-      [enabled ? 1 : 0, watermark_url, position, opacity, scale, current.id])
-  } else {
-    run('INSERT INTO watermark_settings (enabled, watermark_url, position, opacity, scale) VALUES (?, ?, ?, ?, ?)',
-      [enabled ? 1 : 0, watermark_url, position, opacity, scale])
-  }
-  res.json({ message: '水印设置已保存' })
+router.post('/watermark-templates', authMiddleware, (req, res) => {
+  const { name, type, watermark_url, text_content, font_family, font_size, text_color, stroke_color, opacity, scale, pos_x, pos_y } = req.body
+  if (!name) return res.status(400).json({ error: '请填写模板名称' })
+  
+  const hasTemplates = getOne('SELECT count(*) as c FROM watermark_templates').c > 0
+  const isDefault = hasTemplates ? 0 : 1
+
+  const r = run(`
+    INSERT INTO watermark_templates (name, is_default, type, watermark_url, text_content, font_family, font_size, text_color, stroke_color, opacity, scale, pos_x, pos_y) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [name, isDefault, type || 'image', watermark_url || '', text_content || '', font_family || 'Arial', font_size || 0.05, text_color || '#000000', stroke_color || 'transparent', opacity || 0.8, scale || 0.15, pos_x || 0.9, pos_y || 0.9])
+  res.json({ id: r.lastInsertRowid, message: '水印模板已创建' })
+})
+
+router.put('/watermark-templates/:id', authMiddleware, (req, res) => {
+  const { name, type, watermark_url, text_content, font_family, font_size, text_color, stroke_color, opacity, scale, pos_x, pos_y } = req.body
+  run(`
+    UPDATE watermark_templates 
+    SET name=?, type=?, watermark_url=?, text_content=?, font_family=?, font_size=?, text_color=?, stroke_color=?, opacity=?, scale=?, pos_x=?, pos_y=?
+    WHERE id=?
+  `, [name, type, watermark_url, text_content, font_family, font_size, text_color, stroke_color, opacity, scale, pos_x, pos_y, req.params.id])
+  res.json({ message: '水印模板已更新' })
+})
+
+router.delete('/watermark-templates/:id', authMiddleware, (req, res) => {
+  run('DELETE FROM watermark_templates WHERE id=?', [req.params.id])
+  res.json({ message: '模板已删除' })
+})
+
+router.put('/watermark-templates/:id/set-default', authMiddleware, (req, res) => {
+  run('UPDATE watermark_templates SET is_default=0')
+  run('UPDATE watermark_templates SET is_default=1 WHERE id=?', [req.params.id])
+  res.json({ message: '已设置为默认模板' })
 })
 
 // ─── Media Detail ───────────────────────────────────────────────────────────

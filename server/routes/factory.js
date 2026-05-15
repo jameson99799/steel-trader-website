@@ -129,6 +129,31 @@ router.post('/media', authMiddleware, async (req, res) => {
   }
 })
 
+// Batch Watermark Media
+router.post('/groups/:id/batch-watermark', authMiddleware, async (req, res) => {
+  const { media_ids, template_id } = req.body
+  if (!media_ids || !Array.isArray(media_ids) || media_ids.length === 0) {
+    return res.status(400).json({ error: '未选择任何图片' })
+  }
+  
+  try {
+    let successCount = 0
+    for (const mid of media_ids) {
+      const media = getOne('SELECT * FROM factory_media WHERE id = ? AND group_id = ? AND type = "image"', [mid, req.params.id])
+      if (media && media.media_url) {
+        const finalUrl = await applyWatermark(media.media_url, template_id || null)
+        if (finalUrl !== media.media_url) {
+          run('UPDATE factory_media SET media_url = ? WHERE id = ?', [finalUrl, mid])
+          successCount++
+        }
+      }
+    }
+    res.json({ message: `批量处理完成，共处理 ${successCount} 张图片` })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 // Update media
 router.put('/media/:id', authMiddleware, (req, res) => {
   const { sort_order, autoplay, media_url } = req.body
