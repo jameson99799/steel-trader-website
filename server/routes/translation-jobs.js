@@ -111,7 +111,8 @@ async function runJobInBackground(jobId) {
                 product: 'products', news: 'news', company: 'company',
                 page_text: 'page_texts', category: 'categories', news_category: 'news_categories',
                 hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors',
-                roofing_profile: 'roofing_profiles', roofing_category: 'roofing_categories'
+                roofing_profile: 'roofing_profiles', roofing_category: 'roofing_categories',
+                factory_group: 'factory'
             }
             
             for (const ei of explicitItems) {
@@ -193,7 +194,8 @@ async function runJobInBackground(jobId) {
         product: 'products', news: 'news', company: 'company',
         page_text: 'page_texts', category: 'categories', news_category: 'news_categories',
         hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors',
-        roofing_profile: 'roofing_profiles', roofing_category: 'roofing_categories'
+        roofing_profile: 'roofing_profiles', roofing_category: 'roofing_categories',
+        factory_group: 'factory'
     }
 
     // ── Process items with concurrency ──

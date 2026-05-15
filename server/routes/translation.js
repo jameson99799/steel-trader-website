@@ -496,6 +496,16 @@ const UI_TEXTS_EN = {
     "readyToStart": "Ready to Start Your Project?",
     "getQuote": "Get in touch with our experts for professional solutions",
     "companyLabel": "Company",
+    "factory": "Factory",
+    "factoryTour": "Factory Tour",
+    "factoryDesc": "Explore our modern manufacturing facilities and advanced production lines.",
+    "ralColors": "RAL Colors",
+    "ralColorChart": "RAL Color Chart",
+    "ralDesc": "Standard RAL colors available for our prepainted steel coils (PPGI/PPGL).",
+    "searchColor": "Search by RAL code or color name...",
+    "noColorsFound": "No colors found matching your search.",
+    "roofingProfiles": "Roofing Profiles",
+    "roofingProfilesDesc": "Discover our wide range of corrugated roofing sheet profiles.",
     "aboutUs": "About Us",
     "featured": "Featured",
     "available": "products available",
@@ -1826,7 +1836,7 @@ router.post('/run-selective', authMiddleware, async (req, res) => {
     if (!langs.length) return res.status(400).json({ error: 'No valid languages found' })
 
     const enhanced = enhanceWithDefaultChannel(s)
-    const TYPE_TO_PAGE = { product: 'products', news: 'news' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory' }
     const pageKey = TYPE_TO_PAGE[type]
     if (!PAGES[pageKey]) return res.status(400).json({ error: 'Invalid type' })
 
@@ -2059,7 +2069,7 @@ async function executeTranslationTask(targetLang, contentType, contentId) {
         throw new Error('AI API key not configured.')
     }
 
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory' }
     const pageKey = TYPE_TO_PAGE[contentType] || contentType
     if (!PAGES[pageKey]) throw new Error(`Unknown content type: ${contentType}`)
     

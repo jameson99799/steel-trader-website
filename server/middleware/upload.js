@@ -65,8 +65,9 @@ export async function compressImage(req, res, next) {
   if (!req.file || !sharp) return next()
 
   const ext = extname(req.file.originalname).toLowerCase()
-  const skipTypes = ['.svg', '.gif', '.ico']
-  if (skipTypes.includes(ext)) return next()
+  // Only attempt compression for standard raster images
+  const imageExts = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff']
+  if (!imageExts.includes(ext)) return next()
 
   try {
     const originalPath = req.file.path

@@ -242,19 +242,29 @@ async function startServer() {
       // This replaces client-side redirects in Vue Router, making them proper 301s
       // that Google treats as permanent redirects, not "redirect" pages
       const VALID_LANGS = new Set(['en','zh','es','fr','ru','ar','pt','tr','hi','th'])
-      const SITE_PAGES = ['products', 'news', 'about', 'contact']
+      const SITE_PAGES = ['products', 'news', 'about', 'contact', 'factory', 'ral-colors', 'roofing-profiles']
       app.use((req, res, next) => {
         const p = req.path
         // Skip non-SPA paths
         if (p.startsWith('/api/') || p.startsWith('/uploads/') || p.startsWith('/admin') ||
-            p.startsWith('/crm') || p === '/sitemap.xml' || p === '/health' ||
+            p.startsWith('/crm') || p.endsWith('.xml') || p === '/health' ||
             p.startsWith('/assets/')) return next()
-        // /  → /en/
-        if (p === '/') return res.redirect(301, '/en/')
+
+        // ── Strict Trailing Slash Normalization ──
+        // Permanent 301 redirect to version without trailing slash
+        // Fixes Google Search Console "Duplicate without user-selected canonical"
+        if (p.length > 1 && p.endsWith('/')) {
+          const qs = req.url.slice(req.path.length)
+          return res.redirect(301, p.slice(0, -1) + qs)
+        }
+
+        // /  → /en
+        if (p === '/') return res.redirect(301, '/en')
         // /products, /products/slug, /news/slug, /about, /contact → /en/...
         const m = p.match(/^\/([^/]+)(\/.*)?$/)
         if (m && !VALID_LANGS.has(m[1]) && SITE_PAGES.some(pg => m[1] === pg || m[1].startsWith(pg + '/'))) {
-          return res.redirect(301, `/en${p}`)
+          const qs = req.url.slice(req.path.length)
+          return res.redirect(301, `/en${p}${qs}`)
         }
         next()
       })
@@ -299,10 +309,10 @@ async function startServer() {
           if (productMatch) {
             matchedRoute = true
             const slug = productMatch[1]
-            let product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.slug=?', [slug])
+            let product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.slug=? AND p.status=1', [slug])
             if (!product) {
               const idMatch = slug.match(/-(\d+)$/)
-              if (idMatch) product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.id=?', [idMatch[1]])
+              if (idMatch) product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.id=? AND p.status=1', [idMatch[1]])
             }
             if (product) {
               const baseProductTitle = product.seo_title || product.name_en || product.name || pageTitle
@@ -426,10 +436,10 @@ async function startServer() {
           if (newsMatch) {
             matchedRoute = true
             const slug = newsMatch[1]
-            let article = getOne('SELECT * FROM news WHERE slug=?', [slug])
+            let article = getOne('SELECT * FROM news WHERE slug=? AND status=1', [slug])
             if (!article) {
               const idMatch = slug.match(/-(\d+)$/)
-              if (idMatch) article = getOne('SELECT * FROM news WHERE id=?', [idMatch[1]])
+              if (idMatch) article = getOne('SELECT * FROM news WHERE id=? AND status=1', [idMatch[1]])
             }
             if (article) {
               const baseArticleTitle = article.seo_title || article.title_en || article.title || pageTitle
@@ -655,6 +665,30 @@ async function startServer() {
                 ...(company.phone && { telephone: company.phone })
               }
             })
+          } else if (subPath === '/factory' || subPath === '/factory/') {
+            matchedRoute = true
+            pageTitle = `Factory Tour & Production Lines | ${companyName}`
+            pageDesc = `Take a virtual tour of ${companyName}'s manufacturing facility. See our advanced production lines, quality control processes, and extensive inventory of steel coils.`
+            extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: 'Factory', item: pageCanonical }
+            ] })
+          } else if (subPath === '/ral-colors' || subPath === '/ral-colors/') {
+            matchedRoute = true
+            pageTitle = `RAL Color Chart for PPGI & PPGL | ${companyName}`
+            pageDesc = `Explore the full RAL color chart for our prepainted galvanized (PPGI) and galvalume (PPGL) steel coils. Custom colors available upon request.`
+            extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: 'RAL Colors', item: pageCanonical }
+            ] })
+          } else if (subPath === '/roofing-profiles' || subPath === '/roofing-profiles/') {
+            matchedRoute = true
+            pageTitle = `Roofing Sheet Profiles & Corrugated Steel | ${companyName}`
+            pageDesc = `View our catalog of steel roofing sheet profiles. We manufacture corrugated, trapezoidal, and glazed tile roofing sheets in various dimensions and colors.`
+            extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: 'Roofing Profiles', item: pageCanonical }
+            ] })
           }
 
           // ── Homepage BreadcrumbList + WebSite schema + SSR content ──
