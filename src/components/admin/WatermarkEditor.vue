@@ -43,6 +43,10 @@
               <button class="btn btn-sm btn-outline" @click="form.stroke_color = 'transparent'">无描边</button>
             </div>
           </div>
+          <div class="form-group" v-if="form.stroke_color !== 'transparent'">
+            <label>描边粗细 ({{ Math.round(form.stroke_width * 100) }}%)</label>
+            <input type="range" v-model.number="form.stroke_width" min="0.01" max="0.1" step="0.01" />
+          </div>
           <div class="form-group">
             <label>相对大小 ({{ Math.round(form.font_size * 100) }}%)</label>
             <input type="range" v-model.number="form.font_size" min="0.02" max="0.3" step="0.01" />
@@ -138,6 +142,7 @@ const form = ref({
   font_size: 0.05,
   text_color: '#ffffff',
   stroke_color: '#000000',
+  stroke_width: 0.02,
   opacity: 0.8,
   scale: 0.15,
   pos_x: 0.9,
@@ -172,12 +177,14 @@ const watermarkStyle = computed(() => {
 })
 
 const textStyle = computed(() => {
+  const fontSizePx = form.value.font_size * 800
+  const strokeWidthPx = form.value.stroke_color === 'transparent' ? 0 : Math.max(1, Math.round(fontSizePx * form.value.stroke_width))
   return {
     fontFamily: form.value.font_family,
     color: form.value.text_color,
-    fontSize: `${form.value.font_size * 800}px`, // approximate based on 800px preview width
+    fontSize: `${fontSizePx}px`, // approximate based on 800px preview width
     fontWeight: 'bold',
-    textShadow: form.value.stroke_color !== 'transparent' ? `-1px -1px 0 ${form.value.stroke_color}, 1px -1px 0 ${form.value.stroke_color}, -1px 1px 0 ${form.value.stroke_color}, 1px 1px 0 ${form.value.stroke_color}` : 'none',
+    WebkitTextStroke: form.value.stroke_color !== 'transparent' ? `${strokeWidthPx}px ${form.value.stroke_color}` : 'none',
     whiteSpace: 'nowrap'
   }
 })

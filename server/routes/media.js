@@ -78,26 +78,26 @@ router.get('/watermark-templates', authMiddleware, (req, res) => {
 })
 
 router.post('/watermark-templates', authMiddleware, (req, res) => {
-  const { name, type, watermark_url, text_content, font_family, font_size, text_color, stroke_color, opacity, scale, pos_x, pos_y } = req.body
+  const { name, type, watermark_url, text_content, font_family, font_size, text_color, stroke_color, stroke_width, opacity, scale, pos_x, pos_y } = req.body
   if (!name) return res.status(400).json({ error: '请填写模板名称' })
   
   const hasTemplates = getOne('SELECT count(*) as c FROM watermark_templates').c > 0
   const isDefault = hasTemplates ? 0 : 1
 
   const r = run(`
-    INSERT INTO watermark_templates (name, is_default, type, watermark_url, text_content, font_family, font_size, text_color, stroke_color, opacity, scale, pos_x, pos_y) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [name, isDefault, type || 'image', watermark_url || '', text_content || '', font_family || 'Arial', font_size || 0.05, text_color || '#000000', stroke_color || 'transparent', opacity || 0.8, scale || 0.15, pos_x || 0.9, pos_y || 0.9])
+    INSERT INTO watermark_templates (name, is_default, type, watermark_url, text_content, font_family, font_size, text_color, stroke_color, stroke_width, opacity, scale, pos_x, pos_y) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [name, isDefault, type || 'image', watermark_url || '', text_content || '', font_family || 'Arial', font_size || 0.05, text_color || '#000000', stroke_color || 'transparent', stroke_width || 0.02, opacity || 0.8, scale || 0.15, pos_x || 0.9, pos_y || 0.9])
   res.json({ id: r.lastInsertRowid, message: '水印模板已创建' })
 })
 
 router.put('/watermark-templates/:id', authMiddleware, (req, res) => {
-  const { name, type, watermark_url, text_content, font_family, font_size, text_color, stroke_color, opacity, scale, pos_x, pos_y } = req.body
+  const { name, type, watermark_url, text_content, font_family, font_size, text_color, stroke_color, stroke_width, opacity, scale, pos_x, pos_y } = req.body
   run(`
     UPDATE watermark_templates 
-    SET name=?, type=?, watermark_url=?, text_content=?, font_family=?, font_size=?, text_color=?, stroke_color=?, opacity=?, scale=?, pos_x=?, pos_y=?
+    SET name=?, type=?, watermark_url=?, text_content=?, font_family=?, font_size=?, text_color=?, stroke_color=?, stroke_width=?, opacity=?, scale=?, pos_x=?, pos_y=?
     WHERE id=?
-  `, [name, type, watermark_url, text_content, font_family, font_size, text_color, stroke_color, opacity, scale, pos_x, pos_y, req.params.id])
+  `, [name, type, watermark_url, text_content, font_family, font_size, text_color, stroke_color, stroke_width, opacity, scale, pos_x, pos_y, req.params.id])
   res.json({ message: '水印模板已更新' })
 })
 

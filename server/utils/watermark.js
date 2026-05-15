@@ -77,10 +77,13 @@ export async function applyWatermark(originalFilepath, templateId = null) {
       const opacity = settings.opacity || 1.0
       const font = settings.font_family || 'Arial'
 
+      const strokeWidthRatio = settings.stroke_width !== undefined ? settings.stroke_width : 0.02
+      const strokeWidthPx = stroke === 'transparent' ? 0 : Math.max(1, Math.round(fontSizePx * strokeWidthRatio))
+
       const svgImage = `
         <svg width="${compositeWidth}" height="${compositeHeight}" viewBox="0 0 ${compositeWidth} ${compositeHeight}">
           <style>
-            .title { fill: ${color}; font-size: ${fontSizePx}px; font-family: ${font}; font-weight: bold; stroke: ${stroke}; stroke-width: ${stroke === 'transparent' ? 0 : 2}px; opacity: ${opacity}; }
+            .title { fill: ${color}; font-size: ${fontSizePx}px; font-family: ${font}; font-weight: bold; stroke: ${stroke}; stroke-width: ${strokeWidthPx}px; opacity: ${opacity}; }
           </style>
           <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" class="title">${text}</text>
         </svg>

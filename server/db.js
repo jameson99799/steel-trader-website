@@ -189,6 +189,7 @@ async function initDb() {
       font_size REAL DEFAULT 0.05,
       text_color TEXT DEFAULT '#000000',
       stroke_color TEXT DEFAULT 'transparent',
+      stroke_width REAL DEFAULT 0.02,
       opacity REAL DEFAULT 0.8,
       scale REAL DEFAULT 0.15,
       pos_x REAL DEFAULT 0.9,
@@ -1331,6 +1332,17 @@ async function initDb() {
     console.log('[db] Slug migration complete (ID suffixes stripped from product/news slugs)')
   } catch (e) {
     console.warn('[db] Slug migration skipped:', e.message)
+  }
+
+  // Add stroke_width to watermark_templates if missing
+  try {
+    const wtColumns = db.prepare("PRAGMA table_info(watermark_templates)").all()
+    if (!wtColumns.some(col => col.name === 'stroke_width')) {
+      db.prepare("ALTER TABLE watermark_templates ADD COLUMN stroke_width REAL DEFAULT 0.02").run()
+      console.log('[db] Migration: Added stroke_width to watermark_templates')
+    }
+  } catch (e) {
+    console.warn('[db] Migration stroke_width failed:', e.message)
   }
 
   return db

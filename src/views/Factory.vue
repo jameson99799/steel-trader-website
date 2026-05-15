@@ -59,8 +59,8 @@
                 <div v-if="group.carousel_enabled" class="carousel-wrapper">
                   <div class="carousel-container" :ref="el => { if (el) startCarousel(el, group.id, group.carousel_speed) }">
                     <div class="carousel-track" :id="'carousel-' + group.id">
-                      <div v-for="img in getImages(group)" :key="img.id" class="carousel-slide">
-                        <img :src="img.media_url" @click="openLightbox(img.media_url)" loading="lazy" />
+                      <div v-for="(img, idx) in getImages(group)" :key="img.id" class="carousel-slide" :id="'factory-img-' + img.id">
+                        <img :src="img.media_url" @click="openLightbox(group, idx)" loading="lazy" />
                       </div>
                     </div>
                   </div>
@@ -70,7 +70,7 @@
 
                 <!-- Grid Mode -->
                 <div v-else class="images-grid">
-                  <div v-for="img in getImages(group)" :key="img.id" class="image-item" @click="openLightbox(img.media_url)">
+                  <div v-for="(img, idx) in getImages(group)" :key="img.id" class="image-item" :id="'factory-img-' + img.id" @click="openLightbox(group, idx)">
                     <div class="image-inner">
                       <img :src="img.media_url" loading="lazy" />
                       <div class="image-overlay-hover">
@@ -90,9 +90,19 @@
 
     <!-- Lightbox -->
     <div class="lightbox" :class="{ 'active': lightboxActive }" @click="closeLightbox">
-      <div class="lightbox-content" @click.stop>
-        <button class="lightbox-close" @click="closeLightbox">&times;</button>
-        <img :src="lightboxImage" v-if="lightboxImage" @click="closeLightbox" />
+      <div class="lightbox-content" @click.stop v-if="lightboxGroup && lightboxImages.length > 0">
+        <!-- Title bar -->
+        <div class="lightbox-header">
+          <span class="lightbox-title">{{ localizedValue(lightboxGroup.name_zh, lightboxGroup.name_en) }} ({{ lightboxIndex + 1 }} / {{ lightboxImages.length }})</span>
+          <button class="lightbox-close" @click="closeLightbox">&times;</button>
+        </div>
+        
+        <!-- Navigation -->
+        <button class="lightbox-nav prev" @click="lightboxPrev" v-show="lightboxIndex > 0">❮</button>
+        <button class="lightbox-nav next" @click="lightboxNext" v-show="lightboxIndex < lightboxImages.length - 1">❯</button>
+        
+        <!-- Image -->
+        <img :src="lightboxImages[lightboxIndex].media_url" @click="closeLightbox" />
       </div>
     </div>
   </div>
@@ -107,7 +117,9 @@ const { t, localizedValue, langPath } = useLang()
 const loading = ref(true)
 const groups = ref([])
 const lightboxActive = ref(false)
-const lightboxImage = ref('')
+const lightboxImages = ref([])
+const lightboxIndex = ref(0)
+const lightboxGroup = ref(null)
 
 const carousels = {} // track intervals
 
@@ -166,16 +178,50 @@ const getYoutubeEmbedUrl = (url, autoplay) => {
   return `https://www.youtube.com/embed/${videoId}${autoplay ? '?autoplay=1&mute=1' : ''}`;
 }
 
-const openLightbox = (url) => {
-  lightboxImage.value = url
+const openLightbox = (group, index) => {
+  lightboxGroup.value = group
+  lightboxImages.value = getImages(group)
+  lightboxIndex.value = index
   lightboxActive.value = true
-  document.body.style.overflow = 'hidden' // Prevent scrolling
+  // document.body.style.overflow = 'hidden' // Removed to allow background scrolling syncing
 }
 
 const closeLightbox = () => {
   lightboxActive.value = false
-  setTimeout(() => { lightboxImage.value = '' }, 300)
-  document.body.style.overflow = ''
+  setTimeout(() => {
+    lightboxImages.value = []
+    lightboxGroup.value = null
+  }, 300)
+}
+
+const syncLightboxScroll = () => {
+  const currentImg = lightboxImages.value[lightboxIndex.value]
+  if (!currentImg) return
+  const el = document.getElementById('factory-img-' + currentImg.id)
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
+
+const lightboxPrev = () => {
+  if (lightboxIndex.value > 0) {
+    lightboxIndex.value--
+    syncLightboxScroll()
+  }
+}
+
+const lightboxNext = () => {
+  if (lightboxIndex.value < lightboxImages.value.length - 1) {
+    lightboxIndex.value++
+    syncLightboxScroll()
+  }
+}
+
+const handleKeydown = (e) => {
+  if (!lightboxActive.value) return
+  if (e.key === 'ArrowLeft') lightboxPrev()
+  if (e.key === 'ArrowRight') lightboxNext()
+  if (e.key === 'Escape') closeLightbox()
 }
 
 // Carousel logic
@@ -208,11 +254,13 @@ const scrollCarousel = (id, direction) => {
 
 onMounted(() => {
   loadData()
+  window.addEventListener('keydown', handleKeydown)
 })
 
 onUnmounted(() => {
   // Clear all carousel intervals
   Object.values(carousels).forEach(clearInterval)
+  window.removeEventListener('keydown', handleKeydown)
 })
 </script>
 
@@ -551,6 +599,56 @@ onUnmounted(() => {
   opacity: 1;
 }
 
+.lightbox-header {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  color: white;
+  font-size: 18px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lightbox-title {
+  background: rgba(0,0,0,0.5);
+  padding: 4px 12px;
+  border-radius: 4px;
+}
+
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: none;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(4px);
+}
+
+.lightbox-nav:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.lightbox-nav.prev {
+  left: -70px;
+}
+
+.lightbox-nav.next {
+  right: -70px;
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
   .carousel-slide {
@@ -559,6 +657,10 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
+  .lightbox-nav.prev { left: -10px; }
+  .lightbox-nav.next { right: -10px; }
+  .lightbox-header { top: -30px; font-size: 14px; }
+  
   .page-title {
     font-size: var(--text-4xl);
   }
