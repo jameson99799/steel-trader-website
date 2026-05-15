@@ -597,8 +597,8 @@ onUnmounted(() => {
 .nav-dropdown {
   position: absolute;
   top: 100%;
-  left: 50%;
-  transform: translateX(-50%) translateY(10px);
+  left: 0;
+  transform: translateY(10px);
   min-width: 220px;
   background: var(--white);
   border-radius: var(--radius-lg);

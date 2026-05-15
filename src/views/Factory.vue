@@ -48,6 +48,7 @@
                       width="100%" 
                       height="100%" 
                       style="border:0;" 
+                      sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                       allowfullscreen>
                     </iframe>
@@ -101,9 +102,7 @@
     <div class="lightbox" :class="{ 'active': lightboxActive }" @click="closeLightbox">
       <div class="lightbox-top-bar" @click.stop v-if="lightboxGroup && lightboxImages.length > 0">
         <div class="lightbox-center-controls">
-          <button class="lightbox-top-nav prev" @click="lightboxPrev" :disabled="lightboxIndex === 0">❮</button>
           <div class="lightbox-title">{{ localizedValue(lightboxGroup, 'name') }} &nbsp;&nbsp; {{ lightboxIndex + 1 }} / {{ lightboxImages.length }}</div>
-          <button class="lightbox-top-nav next" @click="lightboxNext" :disabled="lightboxIndex === lightboxImages.length - 1">❯</button>
         </div>
         <button class="lightbox-close" @click="closeLightbox">&times;</button>
       </div>
@@ -111,6 +110,11 @@
       <div class="lightbox-content" @click.stop v-if="lightboxGroup && lightboxImages.length > 0">
         <!-- Image -->
         <img :src="lightboxImages[lightboxIndex].media_url" @click="closeLightbox" />
+      </div>
+
+      <div class="lightbox-bottom-bar" @click.stop v-if="lightboxGroup && lightboxImages.length > 0">
+        <button class="lightbox-bottom-nav prev" @click="lightboxPrev" :disabled="lightboxIndex === 0">❮</button>
+        <button class="lightbox-bottom-nav next" @click="lightboxNext" :disabled="lightboxIndex === lightboxImages.length - 1">❯</button>
       </div>
     </div>
   </div>
@@ -211,7 +215,7 @@ const getYoutubeEmbedUrl = (url, autoplay) => {
     // Basic fallback, might not have enablejsapi
     return url + (url.includes('?') ? '&' : '?') + (autoplay ? 'autoplay=1&mute=1&' : '') + 'enablejsapi=1&playsinline=1';
   }
-  return `https://www.youtube.com/embed/${videoId}?enablejsapi=1&playsinline=1${autoplay ? '&autoplay=1&mute=1' : ''}`;
+  return `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&playsinline=1${autoplay ? '&autoplay=1&mute=1' : ''}`;
 }
 
 const openLightbox = (group, index) => {
@@ -709,27 +713,43 @@ onUnmounted(() => {
   flex: 1;
 }
 
-.lightbox-top-nav {
-  background: none;
-  border: none;
+.lightbox-bottom-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 80px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 60px;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+}
+
+.lightbox-bottom-nav {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: white;
-  font-size: 56px;
+  font-size: 32px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
   cursor: pointer;
-  padding: 10px 40px;
-  opacity: 0.8;
-  transition: opacity 0.2s;
   display: flex;
   align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
 }
 
-.lightbox-top-nav:hover:not(:disabled) {
-  opacity: 1;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+.lightbox-bottom-nav:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
 }
 
-.lightbox-top-nav:disabled {
-  opacity: 0.2;
+.lightbox-bottom-nav:disabled {
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
@@ -762,7 +782,7 @@ onUnmounted(() => {
   .lightbox-top-bar { padding: 0; height: 60px; }
   .lightbox-center-controls { padding: 0 60px; }
   .lightbox-title { font-size: 24px; }
-  .lightbox-top-nav { padding: 5px 10px; font-size: 40px; }
+  .lightbox-bottom-nav { width: 44px; height: 44px; font-size: 28px; }
   .lightbox-close { right: 10px; font-size: 36px; z-index: 20; }
   
   .page-title {
