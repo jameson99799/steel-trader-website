@@ -143,7 +143,17 @@ const playVideo = (id) => {
 const loadData = async () => {
   try {
     const res = await fetch('/api/factory/public')
-    groups.value = await res.json()
+    const data = await res.json()
+    groups.value = data
+    
+    // Automatically play the first video marked as autoplay
+    for (const group of data) {
+      const autoVideo = group.items?.find(item => item.type === 'video' && item.autoplay === 1)
+      if (autoVideo) {
+        activeVideoId.value = autoVideo.id
+        break
+      }
+    }
   } catch (e) {
     console.error('Failed to load factory data', e)
   } finally {
