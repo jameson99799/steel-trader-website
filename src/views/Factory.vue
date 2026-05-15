@@ -151,11 +151,11 @@ const scrollToGroup = (id) => {
 }
 
 const getVideos = (group) => {
-  return group.items.filter(item => item.type === 'video').sort((a, b) => a.sort_order - b.sort_order)
+  return group.items.filter(item => item.type === 'video').sort((a, b) => b.sort_order - a.sort_order)
 }
 
 const getImages = (group) => {
-  return group.items.filter(item => item.type === 'image').sort((a, b) => a.sort_order - b.sort_order)
+  return group.items.filter(item => item.type === 'image').sort((a, b) => b.sort_order - a.sort_order)
 }
 
 const getYoutubeEmbedUrl = (url, autoplay) => {

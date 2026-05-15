@@ -23,8 +23,8 @@ function authMiddleware(req, res, next) {
 
 router.get('/public', (req, res) => {
   try {
-    const groups = getAll('SELECT * FROM factory_groups ORDER BY sort_order ASC, id ASC')
-    const media = getAll('SELECT * FROM factory_media ORDER BY sort_order ASC, id ASC')
+    const groups = getAll('SELECT * FROM factory_groups ORDER BY sort_order DESC, id ASC')
+    const media = getAll('SELECT * FROM factory_media ORDER BY sort_order DESC, id ASC')
     
     // Attach media to groups
     const result = groups.map(g => {
@@ -48,8 +48,8 @@ router.get('/public', (req, res) => {
 // Get all groups with media
 router.get('/', authMiddleware, (req, res) => {
   try {
-    const groups = getAll('SELECT * FROM factory_groups ORDER BY sort_order ASC, id ASC')
-    const media = getAll('SELECT * FROM factory_media ORDER BY sort_order ASC, id ASC')
+    const groups = getAll('SELECT * FROM factory_groups ORDER BY sort_order DESC, id ASC')
+    const media = getAll('SELECT * FROM factory_media ORDER BY sort_order DESC, id ASC')
     
     const result = groups.map(g => ({
       ...g,
