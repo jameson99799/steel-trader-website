@@ -42,16 +42,23 @@
               <!-- Videos block: display videos first if any -->
               <div v-if="getVideos(group).length > 0" class="videos-grid">
                 <div v-for="video in getVideos(group)" :key="video.id" class="video-item">
-                  <iframe 
-                    :id="'yt-player-' + video.id"
-                    class="yt-video-iframe"
-                    :src="getYoutubeEmbedUrl(video.media_url, video.autoplay)" 
-                    width="100%" 
-                    height="400" 
-                    style="border:0; border-radius:var(--radius-lg); box-shadow:var(--shadow);" 
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                    allowfullscreen>
-                  </iframe>
+                  <div v-if="activeVideoId === video.id" class="yt-video-active">
+                    <iframe 
+                      :src="getYoutubeEmbedUrl(video.media_url, true)" 
+                      width="100%" 
+                      height="100%" 
+                      style="border:0;" 
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                      allowfullscreen>
+                    </iframe>
+                  </div>
+                  <div v-else class="yt-video-cover" @click="playVideo(video.id)">
+                    <img v-if="getYoutubeThumbnail(video.media_url)" :src="getYoutubeThumbnail(video.media_url)" class="yt-thumbnail" />
+                    <div v-else class="yt-thumbnail-fallback"></div>
+                    <div class="yt-play-button">
+                      <svg viewBox="0 0 68 48"><path class="yt-play-bg" d="M66.52,7.74c-0.78-2.93-2.49-5.41-5.42-6.19C55.79,.13,34,0,34,0S12.21,.13,6.9,1.55 C3.97,2.33,2.27,4.81,1.48,7.74C0.06,13.05,0,24,0,24s0.06,10.95,1.48,16.26c0.78,2.93,2.49,5.41,5.42,6.19 C12.21,47.87,34,48,34,48s21.79-0.13,27.1-1.55c2.93-0.78,4.64-3.26,5.42-6.19C67.94,34.95,68,24,68,24S67.94,13.05,66.52,7.74z" fill="#f00"></path><path d="M 45,24 27,14 27,34" fill="#fff"></path></svg>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -110,7 +117,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
@@ -123,6 +130,12 @@ const lightboxIndex = ref(0)
 const lightboxGroup = ref(null)
 
 const carousels = {} // track intervals
+
+const activeVideoId = ref(null)
+
+const playVideo = (id) => {
+  activeVideoId.value = id
+}
 
 const loadData = async () => {
   try {
@@ -156,6 +169,27 @@ const getVideos = (group) => {
 
 const getImages = (group) => {
   return group.items.filter(item => item.type === 'image').sort((a, b) => b.sort_order - a.sort_order)
+}
+
+const getYoutubeThumbnail = (url) => {
+  if (!url) return '';
+  let videoId = '';
+  if (url.includes('youtube.com/watch?v=')) {
+    videoId = url.split('v=')[1];
+    const ampersandPosition = videoId.indexOf('&');
+    if(ampersandPosition !== -1) videoId = videoId.substring(0, ampersandPosition);
+  } else if (url.includes('youtu.be/')) {
+    videoId = url.split('youtu.be/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
+  } else if (url.includes('youtube.com/embed/')) {
+    videoId = url.split('embed/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
+  } else {
+    return '';
+  }
+  return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
 }
 
 const getYoutubeEmbedUrl = (url, autoplay) => {
@@ -254,54 +288,8 @@ const scrollCarousel = (id, direction) => {
   track.scrollBy({ left: direction * slideWidth, behavior: 'smooth' })
 }
 
-// YouTube Players Management
-const ytPlayers = []
-
-const initYouTubePlayers = () => {
-  ytPlayers.length = 0 // Clear existing references
-  const iframes = document.querySelectorAll('.yt-video-iframe')
-  iframes.forEach(iframe => {
-    try {
-      const player = new window.YT.Player(iframe.id, {
-        events: {
-          'onStateChange': (event) => {
-            if (event.data === window.YT.PlayerState.PLAYING) {
-              // Pause all other players
-              ytPlayers.forEach(p => {
-                if (p !== player && typeof p.pauseVideo === 'function') {
-                  p.pauseVideo()
-                }
-              })
-            }
-          }
-        }
-      })
-      ytPlayers.push(player)
-    } catch (e) {
-      console.warn('Failed to init YT player for', iframe.id, e)
-    }
-  })
-}
-
 onMounted(() => {
-  loadData().then(async () => {
-    await nextTick()
-    setTimeout(() => {
-      // Load YouTube API script if not loaded
-      if (!window.YT) {
-        const tag = document.createElement('script')
-        tag.src = "https://www.youtube.com/iframe_api"
-        const firstScriptTag = document.getElementsByTagName('script')[0]
-        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag)
-        
-        window.onYouTubeIframeAPIReady = () => {
-          initYouTubePlayers()
-        }
-      } else {
-        initYouTubePlayers()
-      }
-    }, 1000)
-  })
+  loadData()
   window.addEventListener('keydown', handleKeydown)
 })
 
@@ -309,7 +297,6 @@ onUnmounted(() => {
   // Clear all carousel intervals
   Object.values(carousels).forEach(clearInterval)
   window.removeEventListener('keydown', handleKeydown)
-  ytPlayers.length = 0 // clear players reference
 })
 </script>
 
@@ -453,6 +440,61 @@ onUnmounted(() => {
   grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
   gap: var(--spacing-xl);
   margin-bottom: var(--spacing-xl);
+}
+
+.yt-video-active, .yt-video-cover {
+  width: 100%;
+  height: 400px;
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  background: #000;
+}
+
+.yt-video-cover {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.yt-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.8;
+  transition: opacity 0.3s;
+}
+
+.yt-video-cover:hover .yt-thumbnail {
+  opacity: 1;
+}
+
+.yt-thumbnail-fallback {
+  width: 100%;
+  height: 100%;
+  background: #222;
+}
+
+.yt-play-button {
+  position: absolute;
+  width: 68px;
+  height: 48px;
+  transition: transform 0.2s;
+  z-index: 2;
+}
+
+.yt-video-cover:hover .yt-play-button {
+  transform: scale(1.1);
+}
+
+.yt-play-bg {
+  transition: fill 0.2s;
+}
+
+.yt-video-cover:hover .yt-play-bg {
+  fill: #ff0000;
 }
 
 .images-grid {
@@ -656,6 +698,7 @@ onUnmounted(() => {
   justify-content: space-between;
   width: 100%;
   max-width: 800px;
+  padding: 0 80px; /* Space for the absolute X button */
 }
 
 .lightbox-title {
@@ -716,11 +759,11 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .lightbox-top-bar { padding: 0 10px; height: 50px; }
-  .lightbox-center-controls { padding: 0 10px; }
+  .lightbox-top-bar { padding: 0; height: 60px; }
+  .lightbox-center-controls { padding: 0 60px; }
   .lightbox-title { font-size: 24px; }
   .lightbox-top-nav { padding: 5px 10px; font-size: 40px; }
-  .lightbox-close { right: 5px; font-size: 36px; }
+  .lightbox-close { right: 10px; font-size: 36px; z-index: 20; }
   
   .page-title {
     font-size: var(--text-4xl);
@@ -746,7 +789,7 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .video-item iframe {
+  .yt-video-active, .yt-video-cover {
     height: 250px;
   }
 }
