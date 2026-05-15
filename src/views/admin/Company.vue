@@ -113,7 +113,10 @@
             <div class="form-group">
               <label>公司 Logo</label>
               <p class="form-hint">建议尺寸：200×60px，PNG/SVG格式，透明背景</p>
-              <input type="file" @change="e => logoFile = e.target.files[0]" accept="image/*" />
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="file" @change="e => logoFile = e.target.files[0]" accept="image/*" />
+                <button type="button" class="btn btn-sm btn-outline" @click="openMediaPicker('logo')" style="color:#7c3aed;border-color:#7c3aed;">📷 从图库选择</button>
+              </div>
               <div class="preview-box" v-if="form.logo || logoFile">
                 <img :src="logoFile ? getPreviewUrl(logoFile) : form.logo" />
               </div>
@@ -121,7 +124,10 @@
             <div class="form-group">
               <label>网站图标 (Favicon)</label>
               <p class="form-hint">建议尺寸：32×32px 或 64×64px，ICO/PNG格式</p>
-              <input type="file" @change="e => faviconFile = e.target.files[0]" accept=".ico,.png,.svg,image/*" />
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="file" @change="e => faviconFile = e.target.files[0]" accept=".ico,.png,.svg,image/*" />
+                <button type="button" class="btn btn-sm btn-outline" @click="openMediaPicker('favicon')" style="color:#7c3aed;border-color:#7c3aed;">📷 从图库选择</button>
+              </div>
               <div class="preview-box preview-small" v-if="form.favicon || faviconFile">
                 <img :src="faviconFile ? getPreviewUrl(faviconFile) : form.favicon" />
               </div>
@@ -129,7 +135,10 @@
             <div class="form-group">
               <label>关于我们页面图片</label>
               <p class="form-hint">建议尺寸：800×600px，JPG/PNG格式</p>
-              <input type="file" @change="e => aboutImageFile = e.target.files[0]" accept="image/*" />
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="file" @change="e => aboutImageFile = e.target.files[0]" accept="image/*" />
+                <button type="button" class="btn btn-sm btn-outline" @click="openMediaPicker('about_image')" style="color:#7c3aed;border-color:#7c3aed;">📷 从图库选择</button>
+              </div>
               <div class="preview-box" v-if="form.about_image || aboutImageFile">
                 <img :src="aboutImageFile ? getPreviewUrl(aboutImageFile) : form.about_image" />
               </div>
@@ -295,6 +304,15 @@ const doSelectMedia = () => {
     } else if (mediaPickerTarget.value === 'wechat_qr') {
       form.wechat_qr = mediaPickerSelected.value
       wechatQrFile.value = null
+    } else if (mediaPickerTarget.value === 'logo') {
+      form.logo = mediaPickerSelected.value
+      logoFile.value = null
+    } else if (mediaPickerTarget.value === 'favicon') {
+      form.favicon = mediaPickerSelected.value
+      faviconFile.value = null
+    } else if (mediaPickerTarget.value === 'about_image') {
+      form.about_image = mediaPickerSelected.value
+      aboutImageFile.value = null
     }
   }
   showMediaPicker.value = false
@@ -330,9 +348,23 @@ const handleSubmit = async () => {
         formData.append(key, form[key] || '')
       }
     })
-    if (logoFile.value) formData.append('logo', logoFile.value)
-    if (faviconFile.value) formData.append('favicon', faviconFile.value)
-    if (aboutImageFile.value) formData.append('about_image', aboutImageFile.value)
+    if (logoFile.value) {
+      formData.append('logo', logoFile.value)
+    } else if (form.logo) {
+      formData.append('logo_url', form.logo)
+    }
+
+    if (faviconFile.value) {
+      formData.append('favicon', faviconFile.value)
+    } else if (form.favicon) {
+      formData.append('favicon_url', form.favicon)
+    }
+
+    if (aboutImageFile.value) {
+      formData.append('about_image', aboutImageFile.value)
+    } else if (form.about_image) {
+      formData.append('about_image_url', form.about_image)
+    }
     if (wechatQrFile.value) {
       formData.append('wechat_qr', wechatQrFile.value)
     } else if (form.wechat_qr) {
