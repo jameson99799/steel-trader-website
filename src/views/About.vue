@@ -207,7 +207,7 @@ const getYoutubeEmbedUrl = (url, autoplay) => {
   } else {
     return url + (autoplay ? '?autoplay=1&mute=1' : '');
   }
-  return `https://www.youtube.com/embed/${videoId}${autoplay ? '?autoplay=1&mute=1' : ''}`;
+  return `https://www.youtube.com/embed/${videoId}?vq=hd1080${autoplay ? '&autoplay=1&mute=1' : ''}`;
 }
 
 const advantages = computed(() => {

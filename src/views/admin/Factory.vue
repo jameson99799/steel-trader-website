@@ -429,10 +429,11 @@ const getYoutubeEmbedUrl = (url) => {
     videoId = url.split('embed/')[1];
     const questionPosition = videoId.indexOf('?');
     if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
+    return url + (url.includes('?') ? '&' : '?') + 'vq=hd1080&autoplay=1';
   } else {
-    return url + '?autoplay=1';
+    return url + '?vq=hd1080&autoplay=1';
   }
-  return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+  return `https://www.youtube.com/embed/${videoId}?vq=hd1080&autoplay=1`;
 }
 
 // Media Picker Logic

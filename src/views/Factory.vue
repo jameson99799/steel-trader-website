@@ -248,9 +248,9 @@ const getYoutubeEmbedUrl = (url, autoplay, mute = false) => {
     const questionPosition = videoId.indexOf('?');
     if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
   } else {
-    return url + (url.includes('?') ? '&' : '?') + (autoplay ? `autoplay=1${mute ? '&mute=1' : ''}&` : '') + 'enablejsapi=1&playsinline=1';
+    return url + (url.includes('?') ? '&' : '?') + (autoplay ? `autoplay=1${mute ? '&mute=1' : ''}&` : '') + 'enablejsapi=1&playsinline=1&vq=hd1080';
   }
-  return `https://www.youtube.com/embed/${videoId}?enablejsapi=1&playsinline=1${autoplay ? `&autoplay=1${mute ? '&mute=1' : ''}` : ''}`;
+  return `https://www.youtube.com/embed/${videoId}?vq=hd1080&enablejsapi=1&playsinline=1${autoplay ? `&autoplay=1${mute ? '&mute=1' : ''}` : ''}`;
 }
 
 const openLightbox = (group, index) => {
