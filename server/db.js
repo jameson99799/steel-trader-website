@@ -265,8 +265,11 @@ async function initDb() {
   try { db.exec("ALTER TABLE seo_settings ADD COLUMN hreflang_zh TEXT DEFAULT 'zh-CN'") } catch (e) { }
   try { db.exec("ALTER TABLE seo_settings ADD COLUMN local_business_type TEXT DEFAULT 'Manufacturer'") } catch (e) { }
   try { db.exec("ALTER TABLE seo_settings ADD COLUMN local_business_address TEXT DEFAULT ''") } catch (e) { }
-  // Migration: add Google Indexing API Service Account credentials
   try { db.exec("ALTER TABLE seo_settings ADD COLUMN service_account_json TEXT DEFAULT ''") } catch (e) { }
+  // Migration: add Google OAuth 2.0 credentials
+  try { db.exec("ALTER TABLE seo_settings ADD COLUMN oauth_client_id TEXT DEFAULT ''") } catch (e) { }
+  try { db.exec("ALTER TABLE seo_settings ADD COLUMN oauth_client_secret TEXT DEFAULT ''") } catch (e) { }
+  try { db.exec("ALTER TABLE seo_settings ADD COLUMN oauth_refresh_token TEXT DEFAULT ''") } catch (e) { }
   // Migration: add faq_items for GEO (Generative Engine Optimization) FAQ schema
   try { db.exec("ALTER TABLE products ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }
   try { db.exec("ALTER TABLE news ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }
@@ -302,6 +305,11 @@ async function initDb() {
       auto_paused INTEGER DEFAULT 0
     )
   `)
+  // Migration: Add GSC URL Inspection columns
+  try { db.exec("ALTER TABLE indexing_queue ADD COLUMN gsc_verdict TEXT") } catch (e) { }
+  try { db.exec("ALTER TABLE indexing_queue ADD COLUMN gsc_coverage_state TEXT") } catch (e) { }
+  try { db.exec("ALTER TABLE indexing_queue ADD COLUMN gsc_last_crawl_time DATETIME") } catch (e) { }
+  try { db.exec("ALTER TABLE indexing_queue ADD COLUMN gsc_inspection_date DATETIME") } catch (e) { }
 
   // AI Channels table for AI product generation
   db.exec(`

@@ -1,57 +1,59 @@
 import express from 'express'
 import { authMiddleware } from '../middleware/auth.js'
 import { getAll, getOne, run } from '../db.js'
-import { createPrivateKey, createSign } from 'crypto'
 
 const router = express.Router()
 const BASE_URL = 'https://www.sunseasteel.com'
 const DAILY_QUOTA = 200         // Google Indexing API free quota per day
-const BATCH_DELAY_MS = 300      // delay between API calls to avoid rate limiting
+const BATCH_DELAY_MS = 500      // delay between API calls to avoid rate limiting
 const SCHEDULER_INTERVAL = 60 * 60 * 1000  // check every hour
+
+// ════════════════════════════════════════════════════════════════════════════
+// OAUTH & TOKEN MANAGEMENT
+// ════════════════════════════════════════════════════════════════════════════
+
+function getOAuthConfig() {
+    return getOne('SELECT oauth_client_id, oauth_client_secret, oauth_refresh_token FROM seo_settings WHERE id = 1')
+}
+
+let cachedAccessToken = null
+let tokenExpiry = 0
+
+async function getAccessToken() {
+    if (cachedAccessToken && Date.now() < tokenExpiry) {
+        return cachedAccessToken
+    }
+    const config = getOAuthConfig()
+    if (!config?.oauth_client_id || !config?.oauth_client_secret || !config?.oauth_refresh_token) {
+        throw new Error('OAuth 未配置或未登录')
+    }
+
+    const r = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            client_id: config.oauth_client_id,
+            client_secret: config.oauth_client_secret,
+            refresh_token: config.oauth_refresh_token,
+            grant_type: 'refresh_token'
+        })
+    })
+    const d = await r.json()
+    if (!d.access_token) throw new Error(d.error_description || 'Failed to refresh token')
+    
+    cachedAccessToken = d.access_token
+    tokenExpiry = Date.now() + (d.expires_in - 60) * 1000 // Buffer of 60s
+    return cachedAccessToken
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 // HELPERS
 // ════════════════════════════════════════════════════════════════════════════
 
 function today() {
-    return new Date().toISOString().split('T')[0]  // "YYYY-MM-DD"
+    return new Date().toISOString().split('T')[0]
 }
 
-function getServiceAccount() {
-    const row = getOne('SELECT service_account_json FROM seo_settings WHERE id = 1')
-    if (!row?.service_account_json) return null
-    try { return JSON.parse(row.service_account_json) } catch { return null }
-}
-
-async function getAccessToken(sa) {
-    const now = Math.floor(Date.now() / 1000)
-    const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url')
-    const payload = Buffer.from(JSON.stringify({
-        iss: sa.client_email,
-        scope: 'https://www.googleapis.com/auth/indexing',
-        aud: 'https://oauth2.googleapis.com/token',
-        iat: now,
-        exp: now + 3600
-    })).toString('base64url')
-    const signing = `${header}.${payload}`
-    const privateKey = createPrivateKey(sa.private_key)
-    const sign = createSign('RSA-SHA256')
-    sign.update(signing)
-    const sig = sign.sign(privateKey, 'base64url')
-    const jwt = `${signing}.${sig}`
-
-    const r = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
-        signal: AbortSignal.timeout(15000)
-    })
-    const d = await r.json()
-    if (!d.access_token) throw new Error(d.error_description || 'Failed to get access token')
-    return d.access_token
-}
-
-// Generate all site URLs from DB
 function getAllSiteUrls() {
     let langs = []
     try { langs = getAll('SELECT code FROM languages WHERE status = 1') } catch {}
@@ -73,7 +75,6 @@ function getAllSiteUrls() {
     return urls
 }
 
-// Get or create today's quota row
 function getTodayQuota() {
     const d = today()
     let q = getOne('SELECT * FROM indexing_daily_quota WHERE date = ?', [d])
@@ -95,8 +96,30 @@ function incrementDailyCount(n = 1) {
         [d, n, DAILY_QUOTA, n])
 }
 
-// Submit ONE url to Google Indexing API
-// Returns { success, httpCode, response, error }
+// 1. GSC URL Inspection
+async function inspectUrlInGSC(url, token) {
+    try {
+        const r = await fetch('https://searchconsole.googleapis.com/v1/urlInspection/index:inspect', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inspectionUrl: url, siteUrl: BASE_URL + '/', languageCode: 'en-US' }),
+            signal: AbortSignal.timeout(20000)
+        })
+        const data = await r.json()
+        if (!r.ok) return { success: false, error: data.error?.message || `HTTP ${r.status}` }
+        const res = data.inspectionResult?.indexStatusResult || {}
+        return {
+            success: true,
+            verdict: res.verdict || '',
+            coverageState: res.coverageState || '',
+            lastCrawlTime: res.lastCrawlTime || null
+        }
+    } catch (e) {
+        return { success: false, error: e.message }
+    }
+}
+
+// 2. Google Indexing Push API
 async function submitOneUrl(url, token) {
     try {
         const r = await fetch('https://indexing.googleapis.com/v3/urlNotifications:publish', {
@@ -106,15 +129,6 @@ async function submitOneUrl(url, token) {
             signal: AbortSignal.timeout(15000)
         })
         const data = await r.json()
-        /*
-         * SUCCESS/FAILURE判断依据（官方）:
-         * ✅ 200 OK  — Google收到通知，urlNotificationMetadata.url = 提交的URL
-         * ❌ 400     — 请求格式错误或URL不合法
-         * ❌ 401/403 — Service Account未授权 或 未在GSC添加为所有者
-         * ❌ 404     — URL不存在
-         * ❌ 429     — 超出每日配额（200/天）
-         * ❌ 5xx     — Google服务器错误，可重试
-         */
         const success = r.status === 200
         return {
             success,
@@ -128,7 +142,7 @@ async function submitOneUrl(url, token) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// SCHEDULER — runs in background, survives pm2 restarts
+// SCHEDULER
 // ════════════════════════════════════════════════════════════════════════════
 
 let schedulerRunning = false
@@ -140,8 +154,14 @@ export async function runIndexingScheduler() {
     console.log('[Indexing] Scheduler tick:', new Date().toISOString())
 
     try {
-        const sa = getServiceAccount()
-        if (!sa) { schedulerRunning = false; return }
+        let token
+        try {
+            token = await getAccessToken()
+        } catch (e) {
+            console.log('[Indexing] Scheduler aborted: No valid OAuth token -', e.message)
+            schedulerRunning = false
+            return
+        }
 
         const remaining = getTodayRemaining()
         if (remaining <= 0) {
@@ -151,7 +171,6 @@ export async function runIndexingScheduler() {
             return
         }
 
-        // Get pending/failed URLs that are due for (re)submission
         const toSubmit = getAll(
             `SELECT url FROM indexing_queue
              WHERE status IN ('pending', 'failed')
@@ -167,27 +186,44 @@ export async function runIndexingScheduler() {
             return
         }
 
-        console.log(`[Indexing] Submitting ${toSubmit.length} URLs (${remaining} quota remaining)`)
-        const token = await getAccessToken(sa)
+        console.log(`[Indexing] Processing ${toSubmit.length} URLs`)
         let submitted = 0
 
         for (const row of toSubmit) {
-            const result = await submitOneUrl(row.url, token)
             const now = new Date().toISOString()
+            
+            // 1. Inspect in GSC first
+            const gsc = await inspectUrlInGSC(row.url, token)
+            await new Promise(r => setTimeout(r, 500)) // Rate limit delay
+
+            if (gsc.success) {
+                // Save GSC feedback
+                run(`UPDATE indexing_queue SET gsc_verdict=?, gsc_coverage_state=?, gsc_last_crawl_time=?, gsc_inspection_date=? WHERE url=?`,
+                    [gsc.verdict, gsc.coverageState, gsc.lastCrawlTime, now, row.url])
+                
+                // If already indexed, mark successful and skip indexing push!
+                if (gsc.coverageState && gsc.coverageState.includes('Indexed')) {
+                    run(`UPDATE indexing_queue SET status='submitted', error_message=NULL, submitted_at=?, updated_at=? WHERE url=?`,
+                        [now, now, row.url])
+                    continue
+                }
+            }
+
+            // 2. Not indexed? Push to Indexing API
+            const result = await submitOneUrl(row.url, token)
+            await new Promise(r => setTimeout(r, 500))
 
             if (result.success) {
                 run(`UPDATE indexing_queue SET status='submitted', http_code=?, api_response=?,
                      error_message=NULL, submitted_at=?, updated_at=? WHERE url=?`,
                     [result.httpCode, result.response, now, now, row.url])
             } else if (result.httpCode === 429) {
-                // Quota exceeded mid-batch — stop immediately
                 run(`UPDATE indexing_queue SET status='pending', http_code=?, error_message=?, updated_at=? WHERE url=?`,
                     [result.httpCode, result.error, now, row.url])
                 run('UPDATE indexing_daily_quota SET auto_paused=1 WHERE date=?', [today()])
                 console.log('[Indexing] 429 quota exceeded, pausing')
                 break
             } else {
-                // Calculate backoff: 1h, 4h, 24h, 48h based on retry count
                 const retryCount = (getOne('SELECT retry_count FROM indexing_queue WHERE url=?', [row.url])?.retry_count || 0) + 1
                 const backoffHours = [1, 4, 24, 48][Math.min(retryCount - 1, 3)]
                 const nextRetry = new Date(Date.now() + backoffHours * 3600000).toISOString()
@@ -198,9 +234,6 @@ export async function runIndexingScheduler() {
 
             incrementDailyCount(1)
             submitted++
-
-            // Small delay between requests
-            await new Promise(r => setTimeout(r, BATCH_DELAY_MS))
         }
 
         console.log(`[Indexing] Done: ${submitted} submitted`)
@@ -211,12 +244,8 @@ export async function runIndexingScheduler() {
     schedulerRunning = false
 }
 
-// Start the background scheduler (called from server/index.js)
 export function startIndexingScheduler() {
-    // Run immediately on startup
     setTimeout(runIndexingScheduler, 5000)
-
-    // Then check every hour
     schedulerTimer = setInterval(runIndexingScheduler, SCHEDULER_INTERVAL)
     console.log('✓ Google Indexing Scheduler started (every 1h)')
 }
@@ -225,18 +254,15 @@ export function startIndexingScheduler() {
 // REST API ROUTES
 // ════════════════════════════════════════════════════════════════════════════
 
-// GET /api/indexing/status — queue stats + quota info
 router.get('/status', authMiddleware, (req, res) => {
     const q = getTodayQuota()
-    const counts = getAll(`
-        SELECT status, COUNT(*) as count
-        FROM indexing_queue GROUP BY status
-    `)
+    const counts = getAll(`SELECT status, COUNT(*) as count FROM indexing_queue GROUP BY status`)
     const statusMap = {}
     counts.forEach(r => { statusMap[r.status] = r.count })
 
     const recent = getAll(`
-        SELECT url, status, http_code, error_message, submitted_at, retry_count
+        SELECT url, status, http_code, error_message, submitted_at, retry_count,
+               gsc_verdict, gsc_coverage_state, gsc_last_crawl_time, gsc_inspection_date
         FROM indexing_queue
         ORDER BY updated_at DESC LIMIT 50
     `)
@@ -249,29 +275,75 @@ router.get('/status', authMiddleware, (req, res) => {
     })
 })
 
-// GET /api/indexing/credentials-status
-router.get('/credentials-status', authMiddleware, (req, res) => {
-    const sa = getServiceAccount()
-    res.json({ configured: !!sa, email: sa?.client_email || null })
+// OAUTH ROUTES
+router.get('/oauth/status', authMiddleware, (req, res) => {
+    const conf = getOAuthConfig()
+    res.json({ 
+        has_client: !!(conf?.oauth_client_id && conf?.oauth_client_secret),
+        client_id: conf?.oauth_client_id || '',
+        authorized: !!conf?.oauth_refresh_token
+    })
 })
 
-// POST /api/indexing/save-credentials
-router.post('/save-credentials', authMiddleware, (req, res) => {
-    const { service_account_json } = req.body
-    if (!service_account_json) return res.status(400).json({ error: '请提供 service_account_json' })
+router.post('/oauth/save-client', authMiddleware, (req, res) => {
+    const { client_id, client_secret } = req.body
+    if (!client_id || !client_secret) return res.status(400).json({ error: 'Missing client id or secret' })
+    const existing = getOne('SELECT id FROM seo_settings WHERE id = 1')
+    if (existing) run('UPDATE seo_settings SET oauth_client_id=?, oauth_client_secret=? WHERE id=1', [client_id, client_secret])
+    else run('INSERT INTO seo_settings (id, oauth_client_id, oauth_client_secret) VALUES (1, ?, ?)', [client_id, client_secret])
+    res.json({ message: 'Client ID & Secret Saved' })
+})
+
+router.get('/oauth/auth-url', authMiddleware, (req, res) => {
+    const conf = getOAuthConfig()
+    if (!conf?.oauth_client_id) return res.status(400).json({ error: 'Client ID missing' })
+    const redirectUri = `${BASE_URL}/api/indexing/oauth/callback`
+    const scopes = encodeURIComponent('https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/indexing')
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${conf.oauth_client_id}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scopes}&access_type=offline&prompt=consent`
+    res.json({ url })
+})
+
+// IMPORTANT: Callback doesn't have authMiddleware because it's called by Google!
+router.get('/oauth/callback', async (req, res) => {
+    const code = req.query.code
+    if (!code) return res.status(400).send('No code provided by Google.')
+    
+    const conf = getOAuthConfig()
+    const redirectUri = `${BASE_URL}/api/indexing/oauth/callback`
+    
     try {
-        const parsed = JSON.parse(service_account_json)
-        if (!parsed.client_email || !parsed.private_key) return res.status(400).json({ error: '缺少 client_email 或 private_key' })
-        const existing = getOne('SELECT id FROM seo_settings WHERE id = 1')
-        if (existing) run('UPDATE seo_settings SET service_account_json=? WHERE id=1', [service_account_json])
-        else run('INSERT INTO seo_settings (id, service_account_json) VALUES (1, ?)', [service_account_json])
-        res.json({ message: '保存成功', email: parsed.client_email })
+        const r = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                code,
+                client_id: conf.oauth_client_id,
+                client_secret: conf.oauth_client_secret,
+                redirect_uri: redirectUri,
+                grant_type: 'authorization_code'
+            })
+        })
+        const d = await r.json()
+        if (d.error) throw new Error(d.error_description || d.error)
+        if (d.refresh_token) {
+            run('UPDATE seo_settings SET oauth_refresh_token=? WHERE id=1', [d.refresh_token])
+            cachedAccessToken = d.access_token
+            tokenExpiry = Date.now() + (d.expires_in - 60) * 1000
+            res.send(`<h1>Google Authorization Successful!</h1><p>You can close this window and refresh the dashboard.</p><script>setTimeout(() => window.close(), 3000)</script>`)
+        } else {
+            res.send(`<h1>Authorization Failed</h1><p>No refresh token returned. You might need to revoke access in your Google Account and try again to force consent.</p>`)
+        }
     } catch (e) {
-        res.status(400).json({ error: '无效 JSON: ' + e.message })
+        res.status(500).send(`<h1>Error</h1><p>${e.message}</p>`)
     }
 })
 
-// POST /api/indexing/enqueue — sync all site URLs into queue (skip already submitted)
+router.post('/oauth/revoke', authMiddleware, (req, res) => {
+    run('UPDATE seo_settings SET oauth_refresh_token=NULL WHERE id=1')
+    cachedAccessToken = null
+    res.json({ message: 'Authorization revoked' })
+})
+
 router.post('/enqueue', authMiddleware, (req, res) => {
     const { force = false } = req.body
     const siteUrls = getAllSiteUrls()
@@ -295,15 +367,12 @@ router.post('/enqueue', authMiddleware, (req, res) => {
     res.json({ total: siteUrls.length, added, skipped, message: `已加入队列 ${added} 个 URL，跳过已成功 ${skipped} 个` })
 })
 
-// POST /api/indexing/run-now — manually trigger scheduler
 router.post('/run-now', authMiddleware, async (req, res) => {
     if (schedulerRunning) return res.json({ message: '调度器正在运行中，请稍后' })
-    res.json({ message: '已触发，后台开始提交...' })
-    // Run async after response
+    res.json({ message: '已触发，后台开始处理（检查GSC并提交）...' })
     setTimeout(runIndexingScheduler, 100)
 })
 
-// POST /api/indexing/reset-url — reset a specific URL back to pending
 router.post('/reset-url', authMiddleware, (req, res) => {
     const { url } = req.body
     if (!url) return res.status(400).json({ error: '请提供 url' })
@@ -311,35 +380,30 @@ router.post('/reset-url', authMiddleware, (req, res) => {
     res.json({ message: '已重置为待提交' })
 })
 
-// DELETE /api/indexing/clear-submitted — remove submitted records (allow re-notify)
 router.delete('/clear-submitted', authMiddleware, (req, res) => {
-    const result = run("UPDATE indexing_queue SET status='pending', submitted_at=NULL, retry_count=0 WHERE status='submitted'")
-    res.json({ message: `已将所有已提交记录重置为待提交` })
+    run("UPDATE indexing_queue SET status='pending', submitted_at=NULL, retry_count=0 WHERE status='submitted'")
+    res.json({ message: `已将所有已提交记录重置为待处理` })
 })
 
-// GET /api/indexing/url-list — raw URL list (for manual submission UI)
 router.get('/url-list', authMiddleware, (req, res) => {
     const urls = getAllSiteUrls()
     res.json({ urls, total: urls.length })
 })
 
-// POST /api/indexing/submit — IndexNow ping for Bing/Yandex
 router.post('/submit', authMiddleware, async (req, res) => {
     const urls = getAllSiteUrls()
     const results = []
 
-    // Yandex Sitemap Ping (Backup)
     try {
-        const yRes = await fetch(`https://webmaster.yandex.com/ping?sitemap=https://www.sunseasteel.com/sitemap.xml`, { method: 'GET', signal: AbortSignal.timeout(10000) })
+        const yRes = await fetch(`https://webmaster.yandex.com/ping?sitemap=${BASE_URL}/sitemap.xml`, { method: 'GET', signal: AbortSignal.timeout(10000) })
         results.push({ engine: 'Yandex (Sitemap)', status: yRes.status, success: yRes.ok, message: yRes.ok ? '✅ Yandex Sitemap 已收到通知' : `⚠️ Yandex ${yRes.status}` })
     } catch (e) { results.push({ engine: 'Yandex (Sitemap)', success: false, message: `❌ ${e.message}` }) }
 
-    // IndexNow API (Supported by Bing, Yandex, Seznam, Naver)
     try {
         const indexNowBody = {
-            host: 'www.sunseasteel.com',
+            host: BASE_URL.replace('https://', ''),
             key: 'sunseasteel',
-            keyLocation: 'https://www.sunseasteel.com/sunseasteel.txt',
+            keyLocation: `${BASE_URL}/sunseasteel.txt`,
             urlList: urls
         }
         
