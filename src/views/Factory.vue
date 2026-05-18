@@ -486,12 +486,14 @@ onUnmounted(() => {
 .video-description {
   margin-top: 12px;
   font-size: 15px;
+  font-weight: 700;
+  text-align: center;
   line-height: 1.6;
   color: var(--text);
   background: #f8fafc;
   padding: 16px 20px;
   border-radius: var(--radius-md);
-  border-left: 4px solid var(--primary);
+  border: 1px solid #e2e8f0;
   white-space: pre-wrap;
   word-wrap: break-word;
 }

@@ -720,9 +720,15 @@ async function startServer() {
 
           // ── Catch-all for invalid routes ──
           if (!matchedRoute) {
-            isNotFound = true
-            pageTitle = 'Page Not Found | ' + companyName
-            pageDesc = 'The requested page could not be found.'
+            if (url.startsWith('/admin') || url.startsWith('/crm')) {
+              matchedRoute = true
+              pageTitle = (url.startsWith('/admin') ? 'Admin Console' : 'CRM Console') + ' | ' + companyName
+              pageDesc = 'Backend Management Console'
+            } else {
+              isNotFound = true
+              pageTitle = 'Page Not Found | ' + companyName
+              pageDesc = 'The requested page could not be found.'
+            }
           }
 
         // ── Global Organization schema (on every page) ──
