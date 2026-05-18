@@ -37,7 +37,7 @@ router.post('/groups', authMiddleware, (req, res) => {
 
 router.put('/groups/:id', authMiddleware, (req, res) => {
   const { name, slug } = req.body
-  run('UPDATE media_groups SET name=?, slug=? WHERE id=? AND is_system=0',
+  run('UPDATE media_groups SET name=?, slug=? WHERE id=?',
     [name?.trim(), (slug || name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'), req.params.id])
   res.json({ message: '分组已更新' })
 })
@@ -45,7 +45,6 @@ router.put('/groups/:id', authMiddleware, (req, res) => {
 router.delete('/groups/:id', authMiddleware, (req, res) => {
   const group = getOne('SELECT * FROM media_groups WHERE id=?', [req.params.id])
   if (!group) return res.status(404).json({ error: '分组不存在' })
-  if (group.is_system) return res.status(400).json({ error: '系统默认分组不能删除' })
   const count = getOne('SELECT COUNT(*) as c FROM media WHERE group_id=? AND status=1', [req.params.id])
   if (count.c > 0) return res.status(400).json({ error: `该分组下有 ${count.c} 张图片，请先移动或删除` })
   run('DELETE FROM media_groups WHERE id=?', [req.params.id])

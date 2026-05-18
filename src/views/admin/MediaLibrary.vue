@@ -6,7 +6,7 @@
         <button class="btn btn-outline" @click="optimizeAllImages" :disabled="optimizing" style="color:#d97706;border-color:#d97706;">
           {{ optimizing ? '正在压缩优化中...' : '🚀 一键优化所有旧图片 (WebP)' }}
         </button>
-        <button class="btn btn-primary" @click="showUploadModal = true">📤 上传图片</button>
+        <button class="btn btn-primary" @click="openUploadModal">📤 上传图片</button>
         <button class="btn btn-secondary" @click="showGroupMgr = !showGroupMgr">📁 分组管理</button>
       </div>
     </div>
@@ -45,8 +45,8 @@
           <input v-else v-model="editGroupName" class="form-control form-control-sm" @keyup.enter="saveGroup(g)" style="width:120px" />
           <div class="group-actions">
             <template v-if="editGroupId !== g.id">
-              <button v-if="!g.is_system" class="btn btn-sm btn-outline" @click="editGroupId=g.id; editGroupName=g.name">编辑</button>
-              <button v-if="!g.is_system" class="btn btn-sm btn-danger" @click="deleteGroup(g)">删除</button>
+              <button class="btn btn-sm btn-outline" @click="editGroupId=g.id; editGroupName=g.name">编辑</button>
+              <button class="btn btn-sm btn-danger" @click="deleteGroup(g)">删除</button>
             </template>
             <template v-else>
               <button class="btn btn-sm btn-primary" @click="saveGroup(g)">保存</button>
@@ -87,7 +87,7 @@
            @click="toggleSelect(item.id)">
         <div class="media-thumb">
           <img :src="item.filepath" :alt="item.alt || item.original_filename" loading="lazy" />
-          <div class="media-check"><input type="checkbox" :checked="selectedIds.includes(item.id)" @click.stop /></div>
+          <div class="media-check"><input type="checkbox" :checked="selectedIds.includes(item.id)" @click.stop="toggleSelect(item.id)" /></div>
           <div class="media-badge" v-if="item.ref_count">引用 {{ item.ref_count }}</div>
         </div>
         <div class="media-info">
@@ -261,6 +261,11 @@ function copyUrl(item) {
 }
 
 // Upload
+function openUploadModal() {
+  uploadGroupId.value = filterGroup.value || ''
+  showUploadModal.value = true
+}
+
 function handleUploadFiles(e) { uploadFiles.value = Array.from(e.target.files || []) }
 
 async function doUpload() {
