@@ -25,7 +25,7 @@
         <div v-if="!oauthStatus?.authorized" class="form-row">
           <div class="form-group">
             <label>Client ID</label>
-            <input v-model="clientId" class="form-control" placeholder="例如：12345678-xxxx.apps.googleusercontent.com" />
+            <input v-model="clientId" type="password" class="form-control" placeholder="例如：12345678-xxxx.apps.googleusercontent.com" />
           </div>
           <div class="form-group">
             <label>Client Secret</label>
