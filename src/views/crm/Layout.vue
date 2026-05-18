@@ -56,17 +56,21 @@ const router = useRouter()
 const route = useRoute()
 const sidebarCollapsed = ref(false)
 const globalSearch = ref('')
-const user = ref(null)
+
+// Initialize synchronously to prevent layout flicker
+let initialUser = {}
+try {
+  const userKey = crmApi.getUserKey()
+  initialUser = JSON.parse(localStorage.getItem(userKey) || '{}')
+} catch (e) {}
+const user = ref(initialUser)
 
 const basePath = computed(() => {
   return route.path.startsWith('/crm/sub') ? '/crm/sub' : '/crm'
 })
 
 onMounted(() => {
-  try {
-    const userKey = crmApi.getUserKey()
-    user.value = JSON.parse(localStorage.getItem(userKey) || '{}')
-  } catch (e) { user.value = {} }
+  // Any client-only logic if needed
 })
 
 function handleLogout() {
