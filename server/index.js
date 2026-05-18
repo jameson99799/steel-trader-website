@@ -276,6 +276,11 @@ async function startServer() {
       const jsonLd = (obj) => `<script type="application/ld+json">${JSON.stringify(obj)}</script>`
 
       app.get('*', (req, res) => {
+        // Fast-fail for missing static assets to prevent heavy SSR fallback
+        if (req.path.match(/\.(js|css|ico|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot|mp4|webm|pdf)$/)) {
+          return res.status(404).send('Not Found')
+        }
+        
         if (!indexHtmlTemplate) return res.sendFile(distIndexPath)
 
         try {
