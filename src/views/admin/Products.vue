@@ -1296,7 +1296,7 @@ const copyImgGroupFilter = ref('')
 
 // Filter product list by selected group (only products with detail_content, excluding current)
 const copyImgProductList = computed(() => {
-  let list = products.value.filter(x => x.id !== editingProduct.value?.id && x.detail_content)
+  let list = products.value.filter(x => x.id !== editingProduct.value?.id)
   if (copyImgGroupFilter.value === 'all') return list
   const gid = copyImgGroupFilter.value
   if (!gid) return list
