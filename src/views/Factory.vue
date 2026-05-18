@@ -210,6 +210,10 @@ const getYoutubeThumbnail = (url) => {
     videoId = url.split('v=')[1];
     const ampersandPosition = videoId.indexOf('&');
     if(ampersandPosition !== -1) videoId = videoId.substring(0, ampersandPosition);
+  } else if (url.includes('youtube.com/shorts/')) {
+    videoId = url.split('shorts/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
   } else if (url.includes('youtu.be/')) {
     videoId = url.split('youtu.be/')[1];
     const questionPosition = videoId.indexOf('?');
@@ -231,6 +235,10 @@ const getYoutubeEmbedUrl = (url, autoplay, mute = false) => {
     videoId = url.split('v=')[1];
     const ampersandPosition = videoId.indexOf('&');
     if(ampersandPosition !== -1) videoId = videoId.substring(0, ampersandPosition);
+  } else if (url.includes('youtube.com/shorts/')) {
+    videoId = url.split('shorts/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
   } else if (url.includes('youtu.be/')) {
     videoId = url.split('youtu.be/')[1];
     const questionPosition = videoId.indexOf('?');
