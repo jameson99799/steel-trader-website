@@ -2,7 +2,7 @@ import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 import { getAll, getOne, run } from '../db.js'
 import { applyWatermark } from '../utils/watermark.js'
-import { loadTranslationsForLang, translateFactoryGroup } from '../helpers/translate.js'
+import { loadTranslationsForLang, translateFactoryGroup, translateFactoryMedia } from '../helpers/translate.js'
 
 const router = Router()
 const JWT_SECRET = process.env.JWT_SECRET || 'led-trade-secret-key-2024'
@@ -31,7 +31,10 @@ router.get('/public', (req, res) => {
     const lang = req.query.lang
     if (lang && lang !== 'en') {
         const tMap = loadTranslationsForLang(lang)
-        if (tMap) groups.forEach(g => translateFactoryGroup(g, tMap, lang))
+        if (tMap) {
+            groups.forEach(g => translateFactoryGroup(g, tMap, lang))
+            media.forEach(m => translateFactoryMedia(m, tMap, lang))
+        }
     }
 
     // Attach media to groups
@@ -117,7 +120,7 @@ router.delete('/groups/:id', authMiddleware, (req, res) => {
 
 // Add media to group
 router.post('/media', authMiddleware, async (req, res) => {
-  const { group_id, type, media_url, sort_order, autoplay, apply_watermark } = req.body
+  const { group_id, type, media_url, sort_order, autoplay, apply_watermark, description, show_desc } = req.body
   if (!group_id || !type || !media_url) return res.status(400).json({ error: '参数不完整' })
   
   try {
@@ -127,9 +130,9 @@ router.post('/media', authMiddleware, async (req, res) => {
     }
 
     const r = run(`
-      INSERT INTO factory_media (group_id, type, media_url, sort_order, autoplay)
-      VALUES (?, ?, ?, ?, ?)
-    `, [group_id, type, finalUrl, sort_order || 0, autoplay ? 1 : 0])
+      INSERT INTO factory_media (group_id, type, media_url, sort_order, autoplay, description, show_desc)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [group_id, type, finalUrl, sort_order || 0, autoplay ? 1 : 0, description || '', show_desc ? 1 : 0])
     
     res.json({ id: r.lastInsertRowid, message: '媒体已添加', media_url: finalUrl })
   } catch (e) {
@@ -164,13 +167,13 @@ router.post('/groups/:id/batch-watermark', authMiddleware, async (req, res) => {
 
 // Update media
 router.put('/media/:id', authMiddleware, (req, res) => {
-  const { sort_order, autoplay, media_url } = req.body
+  const { sort_order, autoplay, media_url, description, show_desc } = req.body
   try {
     run(`
       UPDATE factory_media 
-      SET sort_order = ?, autoplay = ?, media_url = ?
+      SET sort_order = ?, autoplay = ?, media_url = ?, description = ?, show_desc = ?
       WHERE id = ?
-    `, [sort_order || 0, autoplay ? 1 : 0, media_url, req.params.id])
+    `, [sort_order || 0, autoplay ? 1 : 0, media_url, description || '', show_desc ? 1 : 0, req.params.id])
     
     res.json({ message: '媒体已更新' })
   } catch (e) {

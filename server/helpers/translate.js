@@ -201,3 +201,16 @@ export function translateFactoryGroup(group, map, langCode) {
 
     return group
 }
+
+/**
+ * Apply translations to a factory media item.
+ */
+export function translateFactoryMedia(media, map, langCode) {
+    if (!map || !media?.id) return media
+    const t = map[`factory_media_${media.id}`]
+    if (!t) return media
+
+    if (t.description) media[`description_${langCode}`] = t.description
+
+    return media
+}

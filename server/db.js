@@ -160,6 +160,8 @@ async function initDb() {
       group_id INTEGER NOT NULL,
       type TEXT NOT NULL,
       media_url TEXT NOT NULL,
+      description TEXT,
+      show_desc INTEGER DEFAULT 0,
       sort_order INTEGER DEFAULT 0,
       autoplay INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -1352,6 +1354,18 @@ async function initDb() {
     }
   } catch (e) {
     console.warn('[db] Migration stroke_width failed:', e.message)
+  }
+
+  // Add description and show_desc to factory_media
+  try {
+    const fmColumns = db.prepare("PRAGMA table_info(factory_media)").all()
+    if (!fmColumns.some(col => col.name === 'description')) {
+      db.prepare("ALTER TABLE factory_media ADD COLUMN description TEXT").run()
+      db.prepare("ALTER TABLE factory_media ADD COLUMN show_desc INTEGER DEFAULT 0").run()
+      console.log('[db] Migration: Added description and show_desc to factory_media')
+    }
+  } catch (e) {
+    console.warn('[db] Migration factory_media failed:', e.message)
   }
 
   return db

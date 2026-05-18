@@ -71,6 +71,21 @@
                     自动播放
                   </label>
                 </div>
+
+                <div v-if="item.type === 'video'" style="margin-top: 8px;">
+                  <label class="setting-item checkbox-label" style="margin-bottom: 4px;">
+                    <input type="checkbox" v-model="item.show_desc" :true-value="1" :false-value="0" @change="updateMedia(item)" />
+                    在视频下方显示描述文本
+                  </label>
+                  <textarea 
+                    v-if="item.show_desc" 
+                    v-model="item.description" 
+                    class="form-control" 
+                    placeholder="Enter English description here (it will be translated automatically)" 
+                    rows="2" 
+                    @blur="updateMedia(item)" 
+                    style="font-size: 12px; padding: 6px;"></textarea>
+                </div>
               </div>
               
               <button class="btn-delete-media" @click="deleteMedia(item.id)">✕</button>
@@ -143,6 +158,19 @@
               <input type="checkbox" v-model="videoAutoplayInput" />
               进入页面后自动静音播放
             </label>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="videoShowDescInput" />
+              在视频下方显示描述文本
+            </label>
+            <textarea 
+              v-if="videoShowDescInput"
+              v-model="videoDescInput" 
+              class="form-control" 
+              placeholder="Enter English description here" 
+              rows="3" 
+              style="margin-top: 8px;"></textarea>
           </div>
         </div>
         <div class="modal-footer">
@@ -242,6 +270,8 @@ const currentGroupIdForMedia = ref(null)
 const showVideoModal = ref(false)
 const videoUrlInput = ref('')
 const videoAutoplayInput = ref(false)
+const videoShowDescInput = ref(false)
+const videoDescInput = ref('')
 const currentGroupIdForVideo = ref(null)
 
 const adminPreviewItem = ref(null)
@@ -520,6 +550,8 @@ const openVideoModal = (groupId) => {
   currentGroupIdForVideo.value = groupId
   videoUrlInput.value = ''
   videoAutoplayInput.value = false
+  videoShowDescInput.value = false
+  videoDescInput.value = ''
   showVideoModal.value = true
 }
 
@@ -532,7 +564,9 @@ const doAddVideo = async () => {
       group_id: currentGroupIdForVideo.value,
       type: 'video',
       media_url: videoUrlInput.value,
-      autoplay: videoAutoplayInput.value ? 1 : 0
+      autoplay: videoAutoplayInput.value ? 1 : 0,
+      description: videoDescInput.value,
+      show_desc: videoShowDescInput.value ? 1 : 0
     })
   })
   showVideoModal.value = false
