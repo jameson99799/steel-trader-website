@@ -4,6 +4,7 @@ import { useLang } from '../composables/useLang'
 const publicRoutes = [
   { path: '', name: 'Home', component: () => import('../views/Home.vue') },
   { path: 'products', name: 'Products', component: () => import('../views/Products.vue') },
+  { path: 'products/category/:catSlug', name: 'ProductsCategory', component: () => import('../views/Products.vue') },
   { path: 'products/:slug', name: 'ProductDetail', component: () => import('../views/ProductDetail.vue') },
   { path: 'news', name: 'News', component: () => import('../views/News.vue') },
   { path: 'news/category/:catSlug', name: 'NewsCategory', component: () => import('../views/News.vue') },
@@ -31,6 +32,7 @@ const routes = [
     }
   },
   // Legacy paths without lang prefix → redirect to /en/path
+  { path: '/products/category/:catSlug', redirect: to => `/en/products/category/${to.params.catSlug}` },
   { path: '/products/:slug?', redirect: to => `/en/products${to.params.slug ? '/' + to.params.slug : ''}` },
   { path: '/news/category/:catSlug', redirect: to => `/en/news/category/${to.params.catSlug}` },
   { path: '/news/:slug?', redirect: to => `/en/news${to.params.slug ? '/' + to.params.slug : ''}` },

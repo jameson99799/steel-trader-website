@@ -99,7 +99,7 @@
           <router-link
             v-for="cat in allCategories"
             :key="cat.id"
-            :to="langPath(`/products?category=${cat.slug || cat.id}`)"
+            :to="langPath(`/products/category/${cat.slug || cat.id}`)"
             class="cat-card"
           >
             <div class="cat-image" v-if="cat.image">

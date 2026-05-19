@@ -44,7 +44,7 @@
                   </li>
                   <li v-for="cat in categoryTree" :key="cat.id" class="category-item">
                     <router-link
-                      :to="langPath(`/products?category=${cat.slug || cat.id}`)"
+                      :to="langPath(`/products/category/${cat.slug || cat.id}`)"
                       :class="['category-link', { active: selectedCategory === (cat.slug || String(cat.id)) }]"
                     >
                       <svg class="category-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -56,7 +56,7 @@
                     <ul v-if="cat.children?.length" class="subcategory-list">
                       <li v-for="child in cat.children" :key="child.id" class="category-item">
                         <router-link
-                          :to="langPath(`/products?category=${child.slug || child.id}`)"
+                          :to="langPath(`/products/category/${child.slug || child.id}`)"
                           :class="['category-link subcategory-link', { active: selectedCategory === (child.slug || String(child.id)) }]"
                         >
                           <span class="category-name">{{ localizedValue(child, 'name') }}</span>
@@ -65,7 +65,7 @@
                         <ul v-if="child.children?.length" class="subcategory-list">
                           <li v-for="grandChild in child.children" :key="grandChild.id" class="category-item">
                             <router-link
-                              :to="langPath(`/products?category=${grandChild.slug || grandChild.id}`)"
+                              :to="langPath(`/products/category/${grandChild.slug || grandChild.id}`)"
                               :class="['category-link subcategory-link', { active: selectedCategory === (grandChild.slug || String(grandChild.id)) }]"
                             >
                               <span class="category-name">{{ localizedValue(grandChild, 'name') }}</span>
@@ -220,18 +220,26 @@ const loadProducts = async () => {
   finally { loading.value = false }
 }
 
-// Watch route query changes (back/forward navigation)
-watch(() => route.query.category, (slug) => {
+// Watch route query or params changes (back/forward navigation)
+watch(() => route.params.catSlug || route.query.category, (slug) => {
   selectedCategory.value = slug || null
 })
 
 watch(selectedCategory, loadProducts)
 
+const selectCategory = (catIdOrSlug) => {
+  if (!catIdOrSlug) {
+    router.push(langPath('/products'))
+  } else {
+    router.push(langPath(`/products/category/${catIdOrSlug}`))
+  }
+}
+
 onMounted(async () => {
   try {
     categoryTree.value = await api.getCategoryTree()
-    if (route.query.category) {
-      selectedCategory.value = route.query.category // use slug directly
+    if (route.params.catSlug || route.query.category) {
+      selectedCategory.value = route.params.catSlug || route.query.category // use slug directly
     }
     await loadProducts()
   } catch (e) { console.error(e) }

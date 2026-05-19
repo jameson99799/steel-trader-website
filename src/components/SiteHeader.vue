@@ -113,7 +113,7 @@
               <div class="nav-dropdown" v-if="productCategories.length" :class="{ 'mobile-show': mobileProductsExpanded }">
                 <router-link 
                   v-for="cat in productCategories" :key="cat.id" 
-                  :to="langPath(`/products?category=${cat.slug || cat.id}`)" 
+                  :to="langPath(`/products/category/${cat.slug || cat.id}`)" 
                   @click="menuOpen = false"
                   class="nav-dropdown-item"
                 >
