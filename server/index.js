@@ -325,6 +325,8 @@ async function startServer() {
         let ogType = 'website'
         let extraSchemas = ''
         let isNotFound = false  // Track soft 404
+        
+        const orgType = seoSettings.local_business_type || 'Organization'
         let matchedRoute = false
         let ssrContent = ''    // Server-rendered content for SEO/GEO crawlers
 
@@ -363,7 +365,7 @@ async function startServer() {
                 description: (pageDesc).substring(0, 500),
                 url: pageCanonical,
                 brand: { '@type': 'Brand', name: companyNameTranslated },
-                manufacturer: { '@type': 'Organization', name: companyNameTranslated, url: siteUrl },
+                manufacturer: { '@type': orgType, name: companyNameTranslated, url: siteUrl },
                 offers: {
                   '@type': 'Offer',
                   url: pageCanonical,
@@ -372,7 +374,7 @@ async function startServer() {
                   priceValidUntil: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
                   itemCondition: 'https://schema.org/NewCondition',
                   availability: 'https://schema.org/InStock',
-                  seller: { '@type': 'Organization', name: companyName },
+                  seller: { '@type': orgType, name: companyName },
                   hasMerchantReturnPolicy: {
                     '@type': 'MerchantReturnPolicy',
                     applicableCountry: 'US',
@@ -494,7 +496,7 @@ async function startServer() {
                 ...(article.updated_at && { dateModified: article.updated_at }),
                 ...(pageImage && { image: pageImage }),
                 ...(seoSettings.default_news_author && { author: { '@type': 'Person', name: seoSettings.default_news_author } }),
-                publisher: { '@type': 'Organization', name: companyNameTranslated, logo: { '@type': 'ImageObject', url: `${siteUrl}/uploads/logo.png` } },
+                publisher: { '@type': orgType, name: companyNameTranslated, logo: { '@type': 'ImageObject', url: `${siteUrl}/uploads/logo.png` } },
                 mainEntityOfPage: { '@type': 'WebPage', '@id': pageCanonical }
               })
               extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
@@ -692,7 +694,7 @@ async function startServer() {
               '@context': 'https://schema.org', '@type': 'ContactPage',
               name: `Contact ${companyName}`,
               url: pageCanonical,
-              mainEntity: { '@type': 'Organization', name: companyName,
+              mainEntity: { '@type': orgType, name: companyName,
                 ...(company.email && { email: company.email }),
                 ...(company.phone && { telephone: company.phone })
               }
@@ -768,12 +770,12 @@ async function startServer() {
 
         // ── Global Organization schema (on every page) ──
         const orgSchema = {
-          '@context': 'https://schema.org', '@type': 'Organization',
+          '@context': 'https://schema.org', '@type': orgType,
           name: companyName,
           url: siteUrl,
           logo: `${siteUrl}/uploads/logo.png`,
           description: (company.description_en || '').substring(0, 300),
-          address: company.address_en || company.address || '',
+          address: seoSettings.local_business_address || company.address_en || company.address || '',
           foundingDate: '2010',
           areaServed: 'Worldwide',
           numberOfEmployees: { '@type': 'QuantitativeValue', minValue: 100, maxValue: 500 },
@@ -792,12 +794,15 @@ async function startServer() {
           const languages = getAll('SELECT code FROM languages WHERE status=1') || []
           const langCodes = languages.map(l => l.code)
           if (!langCodes.includes('en')) langCodes.unshift('en')
-          hreflangTags = langCodes.map(code =>
-            `<link rel="alternate" hreflang="${esc(code)}" href="${siteUrl}/${code}${subPath}" />`
-          ).join('\n  ')
+          hreflangTags = langCodes.map(code => {
+            let actualHreflang = code
+            if (code === 'en' && seoSettings.hreflang_en) actualHreflang = seoSettings.hreflang_en
+            if (code === 'zh' && seoSettings.hreflang_zh) actualHreflang = seoSettings.hreflang_zh
+            return `<link rel="alternate" hreflang="${esc(actualHreflang)}" href="${siteUrl}/${code}${subPath}" />`
+          }).join('\n  ')
           hreflangTags += `\n  <link rel="alternate" hreflang="x-default" href="${siteUrl}/en${subPath}" />`
         } catch (e) {
-          hreflangTags = `<link rel="alternate" hreflang="en" href="${siteUrl}/en${subPath}" />\n  <link rel="alternate" hreflang="x-default" href="${siteUrl}/en${subPath}" />`
+          hreflangTags = `<link rel="alternate" hreflang="${esc(seoSettings.hreflang_en || 'en')}" href="${siteUrl}/en${subPath}" />\n  <link rel="alternate" hreflang="x-default" href="${siteUrl}/en${subPath}" />`
         }
 
         // ── Build OG meta tags ──
@@ -819,7 +824,7 @@ async function startServer() {
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${esc(pageTitle)}" />
   <meta name="twitter:description" content="${esc(safeDesc)}" />
-  <meta name="twitter:image" content="${esc(ogImage)}" />
+  <meta name="twitter:image" content="${esc(ogImage)}" />${seoSettings.geo_region ? `\n  <meta name="geo.region" content="${esc(seoSettings.geo_region)}" />` : ''}${seoSettings.geo_placename ? `\n  <meta name="geo.placename" content="${esc(seoSettings.geo_placename)}" />` : ''}${(seoSettings.geo_lat && seoSettings.geo_lng) ? `\n  <meta name="geo.position" content="${esc(seoSettings.geo_lat)};${esc(seoSettings.geo_lng)}" />\n  <meta name="ICBM" content="${esc(seoSettings.geo_lat)}, ${esc(seoSettings.geo_lng)}" />` : ''}
   ${hreflangTags}`
 
         // ── Replace meta tags in HTML ──

@@ -24,11 +24,15 @@ function getActiveLangs() {
 }
 
 function hreflangLinks(path, activeLangs) {
+    const seoSettings = (() => { try { return getOne('SELECT * FROM seo_settings WHERE id = 1') || {} } catch(e){return {}} })();
     const enPath = `/en${path === '/' ? '' : path}`
     return activeLangs.map(l => {
         const code = (l.code || '').trim()
+        let actualHreflang = code
+        if (code === 'en' && seoSettings.hreflang_en) actualHreflang = seoSettings.hreflang_en
+        if (code === 'zh' && seoSettings.hreflang_zh) actualHreflang = seoSettings.hreflang_zh
         const langPath = `/${code}${path === '/' ? '' : path}`
-        return `    <xhtml:link rel="alternate" hreflang="${escapeXml(code)}" href="${escapeXml(BASE_URL + langPath)}" />`
+        return `    <xhtml:link rel="alternate" hreflang="${escapeXml(actualHreflang)}" href="${escapeXml(BASE_URL + langPath)}" />`
     }).concat([
         `    <xhtml:link rel="alternate" hreflang="x-default" href="${escapeXml(BASE_URL + enPath)}" />`
     ]).join('\n')
