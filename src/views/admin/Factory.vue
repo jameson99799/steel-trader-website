@@ -81,7 +81,7 @@
                     v-if="item.show_desc" 
                     v-model="item.description" 
                     class="form-control" 
-                    placeholder="Enter English description here (it will be translated automatically)" 
+                    placeholder="Enter English description here" 
                     rows="2" 
                     @blur="updateMedia(item)" 
                     style="font-size: 12px; padding: 6px;"></textarea>

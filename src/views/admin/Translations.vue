@@ -422,7 +422,7 @@
     <!-- Explicit Selection Modal -->
     <div class="modal-overlay" v-if="showExplicitModal" @click.self="showExplicitModal = false">
       <div class="modal-box" style="max-width:900px; width:95%; height:85vh; display:flex; flex-direction:column;">
-        <h3>{{ explicitType === 'product' ? '📦 选择特定产品' : '📰 选择特定文章' }}</h3>
+        <h3>{{ explicitType === 'product' ? '🎯 选择特定产品' : (explicitType === 'factory_group' ? '🎯 选择特定工厂分组' : '🎯 选择特定新闻') }}</h3>
         
         <!-- Toolbar -->
         <div class="gt-toolbar" style="margin-top:16px;">

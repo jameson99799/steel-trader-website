@@ -1320,7 +1320,7 @@ router.post('/run', authMiddleware, async (req, res) => {
 // Check translation status for a specific item across all active languages
 router.get('/status/:type/:id', authMiddleware, (req, res) => {
     const { type, id } = req.params
-    if (!['product', 'news'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
+    if (!['product', 'news', 'factory_group', 'factory_media'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
 
     const langs = getAll("SELECT code, name FROM languages WHERE code != 'en' AND status=1")
     if (!langs.length) return res.json({ status: [] })
@@ -1335,22 +1335,29 @@ router.get('/status/:type/:id', authMiddleware, (req, res) => {
             if (r.seo_title) expectedFields++
             if (r.seo_description) expectedFields++
             if (r.seo_keywords) expectedFields++
-            if (r.detail_content?.length > 10) expectedFields++
-            try { const f = JSON.parse(r.faq_items); expectedFields += Array.isArray(f) ? f.filter(x=>x.question||x.answer).length * 2 : 0 } catch(e){}
-            try { const s = JSON.parse(r.specs); expectedFields += Array.isArray(s) ? s.filter(x=>x.name||x.value).length * 2 : 0 } catch(e){}
+            if (r.detail_content) expectedFields++
+            if (r.faq_items && r.faq_items !== '[]') expectedFields++
+            if (r.specs && r.specs !== '[]') expectedFields++
         }
     } else if (type === 'news') {
-        const r = getOne('SELECT title_en, summary_en, seo_title, seo_description, seo_keywords, content, faq_items FROM news WHERE id=?', [id])
+        const r = getOne('SELECT title_en, summary_en, content, seo_title, seo_description, seo_keywords, faq_items FROM news WHERE id=?', [id])
         if (r) {
             if (r.title_en) expectedFields++
             if (r.summary_en) expectedFields++
+            if (r.content) expectedFields++
             if (r.seo_title) expectedFields++
             if (r.seo_description) expectedFields++
             if (r.seo_keywords) expectedFields++
-            if (r.content?.length > 10) expectedFields++
-            try { const f = JSON.parse(r.faq_items); expectedFields += Array.isArray(f) ? f.filter(x=>x.question||x.answer).length * 2 : 0 } catch(e){}
+            if (r.faq_items && r.faq_items !== '[]') expectedFields++
         }
+    } else if (type === 'factory_group') {
+        const r = getOne('SELECT name FROM factory_groups WHERE id=?', [id])
+        if (r && r.name) expectedFields = 1
+    } else if (type === 'factory_media') {
+        const r = getOne('SELECT description FROM factory_media WHERE id=?', [id])
+        if (r && r.description) expectedFields = 1
     }
+
 
     if (expectedFields === 0) {
         return res.json({ status: langs.map(l => ({ code: l.code, name: l.name, translated: true, ratio: '0/0' })) })
@@ -1568,8 +1575,8 @@ router.post('/batch-replace', authMiddleware, (req, res) => {
 // ─── Translation status for products/news (per-item granular status) ─────────
 
 router.get('/translation-status', authMiddleware, (req, res) => {
-    const { type } = req.query  // 'product' or 'news'
-    if (!type || !['product', 'news'].includes(type)) return res.status(400).json({ error: 'type must be product or news' })
+    const { type } = req.query  // 'product' or 'news' or 'factory_group'
+    if (!type || !['product', 'news', 'factory_group'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
 
     const nonEnLangs = getAll("SELECT code, name, flag FROM languages WHERE code != 'en' AND status = 1")
     if (!nonEnLangs.length) return res.json({ items: [], languages: [] })
@@ -1581,9 +1588,11 @@ router.get('/translation-status', authMiddleware, (req, res) => {
             p.detail_content, p.faq_items, p.specs, p.category_id, p.created_at, c.name_en as category_name
             FROM products p LEFT JOIN categories c ON p.category_id = c.id
             WHERE p.status = 1 ORDER BY p.id DESC`)
-    } else {
+    } else if (type === 'news') {
         items = getAll(`SELECT id, title_en, summary_en, content, seo_title, seo_description, seo_keywords,
             faq_items, created_at FROM news WHERE status = 1 ORDER BY id DESC`)
+    } else if (type === 'factory_group') {
+        items = getAll(`SELECT id, name as name_en FROM factory_groups ORDER BY id DESC`)
     }
 
     // Calculate expected field count per item based on actual content
@@ -1602,7 +1611,7 @@ router.get('/translation-status', authMiddleware, (req, res) => {
             if (item.specs) {
                 try { const s = JSON.parse(item.specs); if (Array.isArray(s) && s.length > 0) count += s.length * 2 } catch {}
             }
-        } else {
+        } else if (itemType === 'news') {
             if (item.title_en) count++
             if (item.summary_en) count++
             if (item.seo_title) count++
@@ -1612,6 +1621,8 @@ router.get('/translation-status', authMiddleware, (req, res) => {
             if (item.faq_items) {
                 try { const f = JSON.parse(item.faq_items); if (Array.isArray(f) && f.length > 0) count += f.length * 2 } catch {}
             }
+        } else if (itemType === 'factory_group') {
+            if (item.name_en) count++
         }
         return Math.max(count, 1)
     }
@@ -1642,10 +1653,10 @@ router.get('/translation-status', authMiddleware, (req, res) => {
         }
         return {
             id: item.id,
-            name: (type === 'product' ? item.name_en : item.title_en) || `#${item.id}`,
+            name: (type === 'product' || type === 'factory_group' ? item.name_en : item.title_en) || `#${item.id}`,
             category_id: item.category_id || null,
             category_name: item.category_name || null,
-            created_at: item.created_at,
+            created_at: item.created_at || null,
             languages: langStatus,
             expectedFields
         }
