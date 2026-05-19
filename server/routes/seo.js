@@ -195,19 +195,19 @@ router.get('/audit', authMiddleware, (req, res) => {
         if (noTitle.length > 0) {
             const examples = noTitle.slice(0, 3).map(p => `《${p.name_en || p.name}》`).join(', ')
             const more = noTitle.length > 3 ? ' 等' : ''
-            check('产品SEO', '产品SEO标题', false,
-                `❌ ${noTitle.length}/${totalProducts} 个产品缺少SEO标题。<br><b>定位排查:</b> 请检查 ${examples}${more}，前往 <a href="#/admin/products" style="color:#3b82f6;text-decoration:underline;">产品管理</a> 编辑补充。`, 2)
+            check('产品SEO', '自定义 SEO 标题', false,
+                `❌ ${noTitle.length}/${totalProducts} 个产品未设置专属的 SEO 标题（目前只能使用普通产品名称作为网页标题）。<br><b>定位排查:</b> 请检查 ${examples}${more}，前往 <a href="#/admin/products" style="color:#3b82f6;text-decoration:underline;">产品管理</a> 补充优化。`, 2)
         } else {
-            check('产品SEO', '产品SEO标题', true, '', 2)
+            check('产品SEO', '自定义 SEO 标题', true, '', 2)
         }
 
         if (noDesc.length > 0) {
             const examples = noDesc.slice(0, 3).map(p => `《${p.name_en || p.name}》`).join(', ')
             const more = noDesc.length > 3 ? ' 等' : ''
-            check('产品SEO', '产品SEO描述', false,
-                `⚠️ ${noDesc.length}/${totalProducts} 个产品缺少SEO描述。<br><b>定位排查:</b> 请检查 ${examples}${more}。`)
+            check('产品SEO', '自定义 SEO 描述', false,
+                `⚠️ ${noDesc.length}/${totalProducts} 个产品未设置专属 SEO 描述（将导致 Google 抓取随机正文）。<br><b>定位排查:</b> 请检查 ${examples}${more}。`)
         } else {
-            check('产品SEO', '产品SEO描述', true, '')
+            check('产品SEO', '自定义 SEO 描述', true, '')
         }
 
         if (noImages > 0) {
@@ -238,10 +238,10 @@ router.get('/audit', authMiddleware, (req, res) => {
         if (noSeoTitle.length > 0) {
             const examples = noSeoTitle.slice(0, 3).map(n => `《${n.title_en || n.title}》`).join(', ')
             const more = noSeoTitle.length > 3 ? ' 等' : ''
-            check('内容营销', '文章SEO标题', false,
-                `⚠️ ${noSeoTitle.length}/${totalNews} 篇文章缺少SEO标题。<br><b>定位排查:</b> 请检查 ${examples}${more}，前往 <a href="#/admin/news" style="color:#3b82f6;text-decoration:underline;">文章管理</a> 编辑补充。`)
+            check('内容营销', '自定义 SEO 标题', false,
+                `⚠️ ${noSeoTitle.length}/${totalNews} 篇文章未设置专属的 SEO 标题（目前只能使用普通文章标题）。<br><b>定位排查:</b> 请检查 ${examples}${more}，前往 <a href="#/admin/news" style="color:#3b82f6;text-decoration:underline;">文章管理</a> 补充优化。`)
         } else {
-            check('内容营销', '文章SEO标题', true, '')
+            check('内容营销', '自定义 SEO 标题', true, '')
         }
 
         const noSlug = news.filter(n => !n.slug).length
