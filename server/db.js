@@ -1098,6 +1098,17 @@ async function initDb() {
   try { db.exec("ALTER TABLE translation_jobs ADD COLUMN concurrency INTEGER DEFAULT 1") } catch (e) { }
   try { db.exec("ALTER TABLE translation_jobs ADD COLUMN pending_items TEXT") } catch (e) { }
 
+  // ── Performance Indexes ──────────────────────────────────────────────────
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)') } catch (e) { }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_slug ON products(slug)') } catch (e) { }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_status ON products(status)') } catch (e) { }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_sort_order ON products(sort_order)') } catch (e) { }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_news_category ON news(category_id)') } catch (e) { }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_news_slug ON news(slug)') } catch (e) { }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_news_status ON news(status)') } catch (e) { }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug)') } catch (e) { }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_news_categories_slug ON news_categories(slug)') } catch (e) { }
+
   // 初始化默认数据
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count
   if (userCount === 0) {

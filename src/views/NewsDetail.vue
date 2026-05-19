@@ -407,7 +407,14 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
 .article-body-direct h3, .article-body-direct h4 { margin: 20px 0 10px; font-weight: 700; }
 .article-body-direct ul, .article-body-direct ol { padding-left: 24px; margin: 8px 0; }
 .article-body-direct a { color: var(--primary); text-decoration: underline; }
-.article-body-direct table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+.article-body-direct table { 
+  width: 100%; 
+  border-collapse: collapse; 
+  margin: 16px 0; 
+  display: block; 
+  overflow-x: auto; 
+  -webkit-overflow-scrolling: touch; 
+}
 .article-body-direct td, .article-body-direct th { border: 1px solid var(--border); padding: 8px 12px; }
 .article-body-direct th { background: var(--gray-50); font-weight: 600; }
 
