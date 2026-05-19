@@ -23,7 +23,7 @@ router.put('/settings', authMiddleware, (req, res) => {
 // Get blocked IPs
 router.get('/blocked-ips', authMiddleware, (req, res) => {
   // Auto-cleanup expired blocks before returning
-  run('DELETE FROM blocked_ips WHERE blocked_until < datetime("now")')
+  run("DELETE FROM blocked_ips WHERE blocked_until < datetime('now')")
   
   const ips = getAll('SELECT * FROM blocked_ips ORDER BY blocked_until DESC')
   res.json(ips)

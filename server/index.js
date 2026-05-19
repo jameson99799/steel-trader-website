@@ -137,7 +137,7 @@ async function startServer() {
     }))
 
     app.use((req, res, next) => {
-      const blocked = getOne('SELECT * FROM blocked_ips WHERE ip = ? AND blocked_until > datetime("now")', [req.ip])
+      const blocked = getOne("SELECT * FROM blocked_ips WHERE ip = ? AND blocked_until > datetime('now')", [req.ip])
       if (blocked) return res.status(403).json({ error: 'Your IP has been blocked.', reason: blocked.reason, blocked_until: blocked.blocked_until })
       next()
     })
@@ -147,7 +147,7 @@ async function startServer() {
       max: 5,
       handler: (req, res) => {
         const settings = getOne('SELECT login_block_minutes FROM security_settings WHERE id = 1') || { login_block_minutes: 15 }
-        run('INSERT OR REPLACE INTO blocked_ips (ip, reason, blocked_until) VALUES (?, ?, datetime("now", "+" || ? || " minutes"))', [req.ip, 'Too many failed login attempts', settings.login_block_minutes])
+        run("INSERT OR REPLACE INTO blocked_ips (ip, reason, blocked_until) VALUES (?, ?, datetime('now', '+' || ? || ' minutes'))", [req.ip, 'Too many failed login attempts', settings.login_block_minutes])
         res.status(429).json({ error: 'Too many login attempts. Your IP has been temporarily blocked.' })
       }
     })
