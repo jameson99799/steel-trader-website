@@ -1575,8 +1575,8 @@ router.post('/batch-replace', authMiddleware, (req, res) => {
 // ─── Translation status for products/news (per-item granular status) ─────────
 
 router.get('/translation-status', authMiddleware, (req, res) => {
-    const { type } = req.query  // 'product' or 'news' or 'factory_group'
-    if (!type || !['product', 'news', 'factory_group'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
+    const { type } = req.query  // 'product' or 'news' or 'factory_group' or 'factory_media'
+    if (!type || !['product', 'news', 'factory_group', 'factory_media'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
 
     const nonEnLangs = getAll("SELECT code, name, flag FROM languages WHERE code != 'en' AND status = 1")
     if (!nonEnLangs.length) return res.json({ items: [], languages: [] })
@@ -1593,6 +1593,8 @@ router.get('/translation-status', authMiddleware, (req, res) => {
             faq_items, created_at FROM news WHERE status = 1 ORDER BY id DESC`)
     } else if (type === 'factory_group') {
         items = getAll(`SELECT id, name as name_en FROM factory_groups ORDER BY id DESC`)
+    } else if (type === 'factory_media') {
+        items = getAll(`SELECT id, description as name_en FROM factory_media WHERE type='video' AND show_desc=1 ORDER BY id DESC`)
     }
 
     // Calculate expected field count per item based on actual content
@@ -1622,6 +1624,8 @@ router.get('/translation-status', authMiddleware, (req, res) => {
                 try { const f = JSON.parse(item.faq_items); if (Array.isArray(f) && f.length > 0) count += f.length * 2 } catch {}
             }
         } else if (itemType === 'factory_group') {
+            if (item.name_en) count++
+        } else if (itemType === 'factory_media') {
             if (item.name_en) count++
         }
         return Math.max(count, 1)
@@ -1653,7 +1657,7 @@ router.get('/translation-status', authMiddleware, (req, res) => {
         }
         return {
             id: item.id,
-            name: (type === 'product' || type === 'factory_group' ? item.name_en : item.title_en) || `#${item.id}`,
+            name: (type === 'product' || type === 'factory_group' || type === 'factory_media' ? item.name_en : item.title_en) || `#${item.id}`,
             category_id: item.category_id || null,
             category_name: item.category_name || null,
             created_at: item.created_at || null,

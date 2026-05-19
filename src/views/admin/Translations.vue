@@ -356,6 +356,12 @@
             <button class="btn btn-outline" @click="openExplicitModal('news')">
               📰 指定文章翻译...
             </button>
+            <button class="btn btn-outline" @click="openExplicitModal('factory_group')">
+              🎯 指定工厂分组...
+            </button>
+            <button class="btn btn-outline" @click="openExplicitModal('factory_media')">
+              🎯 指定工厂视频...
+            </button>
             <button v-if="failedItems.length" class="btn btn-warning" @click="retryFailed" :disabled="translating">
               🔄 重试未完成 ({{ failedItems.length }})
             </button>
@@ -365,7 +371,7 @@
           </div>
           
           <div v-if="explicitItems.length > 0" class="explicit-selection-info" style="margin-bottom:12px; padding:8px 12px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
-            <span>🎯 <strong>精确指定模式：</strong> 已指定 <strong>{{ explicitItems.length }}</strong> 个{{ explicitType === 'product' ? '产品' : '文章' }}。启动时将<strong>仅</strong>翻译这些指定项。</span>
+            <span>🎯 <strong>精确指定模式：</strong> 已指定 <strong>{{ explicitItems.length }}</strong> 个{{ explicitType === 'product' ? '产品' : (explicitType === 'factory_group' ? '工厂分组' : (explicitType === 'factory_media' ? '工厂视频' : '文章')) }}。启动时将<strong>仅</strong>翻译这些指定项。</span>
             <button class="btn btn-xs btn-outline" @click="clearExplicitItems" style="background:#fff;color:#ef4444;border-color:#fecaca">✕ 清除指定</button>
           </div>
 
@@ -422,7 +428,7 @@
     <!-- Explicit Selection Modal -->
     <div class="modal-overlay" v-if="showExplicitModal" @click.self="showExplicitModal = false">
       <div class="modal-box" style="max-width:900px; width:95%; height:85vh; display:flex; flex-direction:column;">
-        <h3>{{ explicitType === 'product' ? '🎯 选择特定产品' : (explicitType === 'factory_group' ? '🎯 选择特定工厂分组' : '🎯 选择特定新闻') }}</h3>
+        <h3>{{ explicitType === 'product' ? '🎯 选择特定产品' : (explicitType === 'factory_group' ? '🎯 选择特定工厂分组' : (explicitType === 'factory_media' ? '🎯 选择特定工厂视频' : '🎯 选择特定新闻')) }}</h3>
         
         <!-- Toolbar -->
         <div class="gt-toolbar" style="margin-top:16px;">
