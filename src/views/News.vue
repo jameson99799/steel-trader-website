@@ -46,7 +46,7 @@
         <div v-else class="news-grid">
           <article v-for="item in news" :key="item.id" class="news-card" @click="goToArticle(item)">
             <div class="card-image" v-if="item.cover_image">
-              <img :src="item.cover_image" :alt="localizedValue(item, 'title')" />
+              <img :src="item.cover_image" :alt="localizedValue(item, 'title')" loading="lazy" />
             </div>
             <div class="card-image card-image-placeholder" v-else>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8.5 3.5c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm7 13H6.5v-.75c0-2.33 4.67-3.5 7-3.5s7 1.17 7 3.5V19.5z"/></svg>

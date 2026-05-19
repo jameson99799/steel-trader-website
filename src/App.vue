@@ -57,11 +57,13 @@ onMounted(async () => {
   try {
     const [company, seo] = await Promise.all([api.getCompany(), api.getSeoSettings()])
 
-    // ── Company / Title ───────────────────────────────────────
+    // ── Company / Favicon ───────────────────────────────────────
     if (company) {
-      document.title = localizedValue(company, 'name') || 'SunSea Steel'
       if (company.favicon) updateFavicon(company.favicon)
     }
+
+    // Mark app as mounted for router title logic
+    window.__APP_MOUNTED__ = true
 
     // ── GEO Meta Tags ─────────────────────────────────────────
     if (seo) {

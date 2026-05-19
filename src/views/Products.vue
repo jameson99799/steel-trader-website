@@ -99,7 +99,7 @@
                 class="product-card"
               >
                 <div class="product-image">
-                  <img :src="product.images?.split(',')[0] || '/placeholder.svg'" :alt="localizedValue(product, 'name')" />
+                  <img :src="product.images?.split(',')[0] || '/placeholder.svg'" :alt="localizedValue(product, 'name')" loading="lazy" />
                   <div class="product-overlay">
                     <div class="product-actions">
                       <button class="action-btn" title="Quick View">

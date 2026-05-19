@@ -152,5 +152,39 @@ router.beforeEach((to, from, next) => {
   }
 })
 
+router.afterEach((to) => {
+  const { t, localizedValue } = useLang()
+  const company = window.__INITIAL_STATE__?.company
+  const baseTitle = company ? (localizedValue(company, 'name') || 'SunSea Steel') : 'SunSea Steel'
+  
+  // Update document title for static routes (Detail pages handle their own title)
+  const nameMap = {
+    'Home': '',
+    'Products': t('products'),
+    'ProductsCategory': t('products'),
+    'News': t('news'),
+    'NewsCategory': t('news'),
+    'About': t('aboutUs'),
+    'Contact': t('contactUs'),
+    'Factory': t('factoryTour'),
+    'RalColors': t('ralColorChart'),
+    'RoofingProfiles': t('roofingTitle')
+  }
+
+  if (to.name in nameMap) {
+    const section = nameMap[to.name]
+    // If it's home, preserve the SSR title if it's the very first load, 
+    // but Vue's afterEach might trigger. Just use baseTitle for home navigation.
+    if (!section && to.name === 'Home') {
+       // Only overwrite if it's not the initial page load to preserve SSR keyword title
+       if (window.__APP_MOUNTED__) {
+         document.title = baseTitle
+       }
+    } else {
+      document.title = `${section} | ${baseTitle}`
+    }
+  }
+})
+
 export default router
 
