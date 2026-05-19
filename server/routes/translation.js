@@ -673,7 +673,7 @@ function collectFactory() {
         for (const g of groups) {
             if (g.name) items.push({ type: 'factory_group', id: g.id, field: 'name', text: g.name, itemName: `Factory Group ${g.id}: Name` })
         }
-        const media = getAll('SELECT id, description FROM factory_media WHERE type="video" AND show_desc=1')
+        const media = getAll('SELECT id, description FROM factory_media WHERE type=\'video\' AND show_desc=1')
         for (const m of media) {
             if (m.description) items.push({ type: 'factory_media', id: m.id, field: 'description', text: m.description, itemName: `Factory Video ${m.id}: Description` })
         }
