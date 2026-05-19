@@ -37,7 +37,7 @@
               {{ item.status === 'pass' ? '✅' : item.status === 'warn' ? '⚠️' : '❌' }}
             </span>
             <span class="audit-name">{{ item.name }}</span>
-            <span v-if="item.suggestion" class="audit-suggestion">{{ item.suggestion }}</span>
+            <span v-if="item.suggestion" class="audit-suggestion" v-html="item.suggestion"></span>
           </div>
         </div>
       </div>

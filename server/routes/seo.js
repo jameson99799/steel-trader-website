@@ -187,21 +187,25 @@ router.get('/audit', authMiddleware, (req, res) => {
             '⚠️ 仅有' + totalProducts + '个产品，建议至少5个以丰富网站内容', 2)
 
     if (totalProducts > 0) {
-        const noTitle = products.filter(p => !p.seo_title).length
-        const noDesc = products.filter(p => !p.seo_description).length
+        const noTitle = products.filter(p => !p.seo_title)
+        const noDesc = products.filter(p => !p.seo_description)
         const noImages = products.filter(p => !p.images).length
         const noNameEn = products.filter(p => !p.name_en).length
 
-        if (noTitle > 0) {
+        if (noTitle.length > 0) {
+            const examples = noTitle.slice(0, 3).map(p => `《${p.name_en || p.name}》`).join(', ')
+            const more = noTitle.length > 3 ? ' 等' : ''
             check('产品SEO', '产品SEO标题', false,
-                `❌ ${noTitle}/${totalProducts} 个产品缺少SEO标题，编辑产品 → 底部SEO设置 → 填写`, 2)
+                `❌ ${noTitle.length}/${totalProducts} 个产品缺少SEO标题。<br><b>定位排查:</b> 请检查 ${examples}${more}，前往 <a href="#/admin/products" style="color:#3b82f6;text-decoration:underline;">产品管理</a> 编辑补充。`, 2)
         } else {
             check('产品SEO', '产品SEO标题', true, '', 2)
         }
 
-        if (noDesc > 0) {
+        if (noDesc.length > 0) {
+            const examples = noDesc.slice(0, 3).map(p => `《${p.name_en || p.name}》`).join(', ')
+            const more = noDesc.length > 3 ? ' 等' : ''
             check('产品SEO', '产品SEO描述', false,
-                `⚠️ ${noDesc}/${totalProducts} 个产品缺少SEO描述，建议每个产品写一段150字符以内的英文描述`)
+                `⚠️ ${noDesc.length}/${totalProducts} 个产品缺少SEO描述。<br><b>定位排查:</b> 请检查 ${examples}${more}。`)
         } else {
             check('产品SEO', '产品SEO描述', true, '')
         }
@@ -230,10 +234,12 @@ router.get('/audit', authMiddleware, (req, res) => {
         check('内容营销', '新闻/文章数量', totalNews >= 3,
             `当前${totalNews}篇文章，建议至少3篇以上，且定期更新`)
 
-        const noSeoTitle = news.filter(n => !n.seo_title).length
-        if (noSeoTitle > 0) {
+        const noSeoTitle = news.filter(n => !n.seo_title)
+        if (noSeoTitle.length > 0) {
+            const examples = noSeoTitle.slice(0, 3).map(n => `《${n.title_en || n.title}》`).join(', ')
+            const more = noSeoTitle.length > 3 ? ' 等' : ''
             check('内容营销', '文章SEO标题', false,
-                `⚠️ ${noSeoTitle}/${totalNews} 篇文章缺少SEO标题`)
+                `⚠️ ${noSeoTitle.length}/${totalNews} 篇文章缺少SEO标题。<br><b>定位排查:</b> 请检查 ${examples}${more}，前往 <a href="#/admin/news" style="color:#3b82f6;text-decoration:underline;">文章管理</a> 编辑补充。`)
         } else {
             check('内容营销', '文章SEO标题', true, '')
         }
