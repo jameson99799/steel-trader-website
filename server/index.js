@@ -275,6 +275,19 @@ async function startServer() {
       // Helper: build JSON-LD script tag
       const jsonLd = (obj) => `<script type="application/ld+json">${JSON.stringify(obj)}</script>`
 
+      // Ensure robots.txt always serves text/plain, even if dist/robots.txt is missing
+      app.get('/robots.txt', (req, res) => {
+        try {
+          const seo = getOne('SELECT robots_txt FROM seo_settings WHERE id = 1')
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+          if (seo && seo.robots_txt) {
+            return res.send(seo.robots_txt)
+          }
+        } catch (e) {}
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+        res.send('User-agent: *\nAllow: /')
+      })
+
       app.get('*', (req, res) => {
         // Fast-fail for missing static assets to prevent heavy SSR fallback
         if (req.path.match(/\.(js|css|ico|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot|mp4|webm|pdf)$/)) {
