@@ -289,7 +289,13 @@ export const api = {
   // Roofing Profiles
   getRoofingProfilesPublic: () => request(appendLang('/roofing-profiles/public')),
   getRoofingCategoriesPublic: () => request(appendLang('/roofing-profiles/categories/public')),
-  getRalColors: () => cachedGet('/ral-colors')
+  getRalColors: () => cachedGet('/ral-colors'),
+  
+  // Security API
+  getSecuritySettings: () => request('/admin/security/settings'),
+  updateSecuritySettings: (data) => request('/admin/security/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  getBlockedIps: () => request('/admin/security/blocked-ips'),
+  unblockIp: (ip) => request(`/admin/security/blocked-ips/${encodeURIComponent(ip)}`, { method: 'DELETE' })
 }
 
 export default api

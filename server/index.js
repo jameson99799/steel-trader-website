@@ -2,12 +2,15 @@ import express from 'express'
 import 'express-async-errors'
 import cors from 'cors'
 import compression from 'compression'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { readFileSync, existsSync, unlinkSync } from 'fs'
 
 import { initDb, getAll, getOne, run } from './db.js'
 import authRoutes from './routes/auth.js'
+import securityRoutes from './routes/security.js'
 import categoriesRoutes from './routes/categories.js'
 import productsRoutes from './routes/products.js'
 import companyRoutes from './routes/company.js'
@@ -127,6 +130,57 @@ async function startServer() {
     }
     app.use(cors(corsOptions))
 
+    // ── Security Firewalls ──────────────────────────────────────────────────
+    app.use(helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false
+    }))
+
+    app.use((req, res, next) => {
+      const blocked = getOne('SELECT * FROM blocked_ips WHERE ip = ? AND blocked_until > datetime("now")', [req.ip])
+      if (blocked) return res.status(403).json({ error: 'Your IP has been blocked.', reason: blocked.reason, blocked_until: blocked.blocked_until })
+      next()
+    })
+
+    const loginLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 5,
+      handler: (req, res) => {
+        const settings = getOne('SELECT login_block_minutes FROM security_settings WHERE id = 1') || { login_block_minutes: 15 }
+        run('INSERT OR REPLACE INTO blocked_ips (ip, reason, blocked_until) VALUES (?, ?, datetime("now", "+" || ? || " minutes"))', [req.ip, 'Too many failed login attempts', settings.login_block_minutes])
+        res.status(429).json({ error: 'Too many login attempts. Your IP has been temporarily blocked.' })
+      }
+    })
+    
+    app.use('/api/admin/login', (req, res, next) => {
+      const settings = getOne('SELECT login_max_attempts FROM security_settings WHERE id = 1')
+      if(settings) loginLimiter.max = settings.login_max_attempts
+      loginLimiter(req, res, next)
+    })
+
+    app.use('/api/crm/auth/login', (req, res, next) => {
+      const settings = getOne('SELECT login_max_attempts FROM security_settings WHERE id = 1')
+      if(settings) loginLimiter.max = settings.login_max_attempts
+      loginLimiter(req, res, next)
+    })
+
+    const inquiryLimiter = rateLimit({
+      windowMs: 60 * 60 * 1000,
+      max: 10,
+      handler: (req, res) => res.status(429).json({ error: 'Too many inquiries per hour.' })
+    })
+
+    app.use('/api/inquiries', (req, res, next) => {
+      if (req.method === 'POST') {
+        const settings = getOne('SELECT inquiry_max_per_hour FROM security_settings WHERE id = 1')
+        if(settings) inquiryLimiter.max = settings.inquiry_max_per_hour
+        return inquiryLimiter(req, res, next)
+      }
+      next()
+    })
+    // ────────────────────────────────────────────────────────────────────────
+
+
     // Gzip compression — reduces JS/CSS/HTML by ~70%, boosts PageSpeed
     app.use(compression({
       level: 6, // Balance between speed and compression ratio
@@ -199,6 +253,7 @@ async function startServer() {
 
     // API 路由
     app.use('/api/auth', authRoutes)
+    app.use('/api/admin/security', securityRoutes)
     app.use('/api/categories', categoriesRoutes)
     app.use('/api/products', productsRoutes)
     app.use('/api/company', companyRoutes)

@@ -1379,6 +1379,30 @@ async function initDb() {
     console.warn('[db] Migration factory_media failed:', e.message)
   }
 
+  // ── Security & Firewall ──────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS security_settings (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      login_max_attempts INTEGER DEFAULT 5,
+      login_block_minutes INTEGER DEFAULT 15,
+      inquiry_max_per_hour INTEGER DEFAULT 10,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  const secExists = db.prepare('SELECT id FROM security_settings WHERE id = 1').get()
+  if (!secExists) {
+    db.prepare('INSERT INTO security_settings (id, login_max_attempts, login_block_minutes, inquiry_max_per_hour) VALUES (1, 5, 15, 10)').run()
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS blocked_ips (
+      ip TEXT PRIMARY KEY,
+      reason TEXT DEFAULT '',
+      blocked_until DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
   return db
 }
 

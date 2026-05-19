@@ -124,6 +124,65 @@
       </div>
     </div>
 
+    <!-- Security & Defense Section -->
+    <div class="card ssl-card">
+      <div class="card-header">🛡️ 安全与防火墙配置</div>
+      <div class="card-body">
+        <div class="ssl-info">
+          <h4>📋 防护说明：</h4>
+          <p>设置密码爆破与恶意刷单的防护阈值，系统将在后台自动拦截恶意 IP 并将其关入小黑屋。</p>
+        </div>
+        
+        <form @submit.prevent="saveSecuritySettings" style="max-width: 600px; margin-bottom: 24px;">
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div class="form-group">
+              <label>后台登录失败上限 (次) <span class="hint">默认 5</span></label>
+              <input type="number" v-model="securityForm.login_max_attempts" class="form-control" required min="1" />
+            </div>
+            <div class="form-group">
+              <label>触发后封锁时间 (分钟) <span class="hint">默认 15</span></label>
+              <input type="number" v-model="securityForm.login_block_minutes" class="form-control" required min="1" />
+            </div>
+            <div class="form-group">
+              <label>单IP每小时最大询盘数 <span class="hint">默认 10</span></label>
+              <input type="number" v-model="securityForm.inquiry_max_per_hour" class="form-control" required min="1" />
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary" :disabled="secLoading">
+            {{ secLoading ? '保存中...' : '💾 保存防火墙配置' }}
+          </button>
+        </form>
+
+        <h4>🚫 动态封杀黑名单 (小黑屋)</h4>
+        <table class="table" style="margin-top:12px;">
+          <thead>
+            <tr>
+              <th>封杀 IP</th>
+              <th>封杀原因</th>
+              <th>解封时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="ip in blockedIps" :key="ip.ip">
+              <td><strong>{{ ip.ip }}</strong></td>
+              <td style="color:#b91c1c;">{{ ip.reason }}</td>
+              <td>{{ new Date(ip.blocked_until).toLocaleString('zh-CN') }}</td>
+              <td>
+                <button class="btn btn-sm btn-outline" style="color:#059669;border-color:#059669;" @click="unblockIp(ip.ip)">解封</button>
+              </td>
+            </tr>
+            <tr v-if="blockedIps.length === 0">
+              <td colspan="4" style="text-align:center; color:#94a3b8;">暂无被封杀的 IP</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="text-align: right; margin-top: 12px;">
+          <button class="btn btn-sm btn-outline" @click="loadBlockedIps">🔄 刷新黑名单</button>
+        </div>
+      </div>
+    </div>
+
     <!-- External API Key Section -->
     <div class="card ssl-card">
       <div class="card-header">🔑 外部 API 密钥</div>
@@ -283,7 +342,52 @@ onMounted(() => {
   loadSslStatus()
   loadApiKey()
   loadWatermarkSettings()
+  loadSecuritySettings()
+  loadBlockedIps()
 })
+
+// Security Settings
+const secLoading = ref(false)
+const blockedIps = ref([])
+const securityForm = reactive({
+  login_max_attempts: 5,
+  login_block_minutes: 15,
+  inquiry_max_per_hour: 10
+})
+
+const loadSecuritySettings = async () => {
+  try {
+    const data = await api.getSecuritySettings()
+    if (data) {
+      securityForm.login_max_attempts = data.login_max_attempts
+      securityForm.login_block_minutes = data.login_block_minutes
+      securityForm.inquiry_max_per_hour = data.inquiry_max_per_hour
+    }
+  } catch(e) { console.error('Failed to load security settings', e) }
+}
+
+const saveSecuritySettings = async () => {
+  secLoading.value = true
+  try {
+    await api.updateSecuritySettings(securityForm)
+    alert('防火墙配置已保存')
+  } catch(e) { alert(e.message) }
+  finally { secLoading.value = false }
+}
+
+const loadBlockedIps = async () => {
+  try {
+    blockedIps.value = await api.getBlockedIps()
+  } catch(e) { console.error(e) }
+}
+
+const unblockIp = async (ip) => {
+  if (!confirm(`确定要提前解封 IP: ${ip} 吗？`)) return
+  try {
+    await api.unblockIp(ip)
+    await loadBlockedIps()
+  } catch(e) { alert(e.message) }
+}
 
 // Watermark Templates
 const watermarkTemplates = ref([])
