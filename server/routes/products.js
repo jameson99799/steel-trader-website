@@ -91,12 +91,19 @@ router.get('/:slug', (req, res) => {
   const { slug } = req.params
   // Support both numeric ID (legacy) and slug
   const isId = /^\d+$/.test(slug)
-  const product = isId
+  let product = isId
     ? getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`, [slug])
     : getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.slug = ?`, [slug])
 
+  if (!product && !isId) {
+    const idMatch = slug.match(/-(\d+)$/)
+    if (idMatch) {
+      product = getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`, [idMatch[1]])
+    }
+  }
+
   if (!product) {
-    return res.status(404).json({ error: '商品不存在' })
+    return res.status(404).json({ error: 'Product not found' })
   }
 
   // Inject translations if lang param is provided

@@ -87,9 +87,16 @@ router.get('/', (req, res) => {
 router.get('/:slug', (req, res) => {
     const { slug } = req.params
     const isId = /^\d+$/.test(slug)
-    const news = isId
+    let news = isId
         ? getOne('SELECT * FROM news WHERE id = ?', [slug])
         : getOne('SELECT * FROM news WHERE slug = ?', [slug])
+
+    if (!news && !isId) {
+        const idMatch = slug.match(/-(\d+)$/)
+        if (idMatch) {
+            news = getOne('SELECT * FROM news WHERE id = ?', [idMatch[1]])
+        }
+    }
 
     if (!news) return res.status(404).json({ error: '文章不存在' })
 
