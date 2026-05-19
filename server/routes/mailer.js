@@ -700,8 +700,8 @@ router.get('/crm-customers', authMiddleware, (req, res) => {
     // Build meta from FULL dataset (not filtered results) so filters always show all options
     // CRM customer countries
     const crmCountryRows = isAdmin
-        ? getAll('SELECT DISTINCT country FROM crm_customers WHERE country!="" ORDER BY country')
-        : getAll('SELECT DISTINCT country FROM crm_customers WHERE country!="" AND owner_id=? ORDER BY country', [userId])
+        ? getAll('SELECT DISTINCT country FROM crm_customers WHERE country!=\'\' ORDER BY country')
+        : getAll('SELECT DISTINCT country FROM crm_customers WHERE country!=\'\' AND owner_id=? ORDER BY country', [userId])
     const crmCountries = crmCountryRows.map(r => r.country)
     // Mail contact group names (act as "country" filter for mail contacts)
     const groupRows = isAdmin
@@ -716,14 +716,14 @@ router.get('/crm-customers', authMiddleware, (req, res) => {
     const countries = [...new Set([...crmCountries, ...groupNames])].sort()
     // CRM statuses
     const statusRows = isAdmin
-        ? getAll('SELECT DISTINCT status FROM crm_customers WHERE status!="" ORDER BY status')
-        : getAll('SELECT DISTINCT status FROM crm_customers WHERE status!="" AND owner_id=? ORDER BY status', [userId])
+        ? getAll('SELECT DISTINCT status FROM crm_customers WHERE status!=\'\' ORDER BY status')
+        : getAll('SELECT DISTINCT status FROM crm_customers WHERE status!=\'\' AND owner_id=? ORDER BY status', [userId])
     const statuses = statusRows.map(r => r.status)
     // CRM tags
     let allTags = []
     const tagRows = isAdmin
-        ? getAll('SELECT tags FROM crm_customers WHERE tags!="[]"')
-        : getAll('SELECT tags FROM crm_customers WHERE tags!="[]" AND owner_id=?', [userId])
+        ? getAll('SELECT tags FROM crm_customers WHERE tags!=\'[]\'')
+        : getAll('SELECT tags FROM crm_customers WHERE tags!=\'[]\' AND owner_id=?', [userId])
     for (const r of tagRows) { try { const t = JSON.parse(r.tags || '[]'); allTags.push(...t) } catch(e) {} }
     const tags = [...new Set(allTags)].sort()
 
