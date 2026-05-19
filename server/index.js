@@ -297,6 +297,25 @@ async function startServer() {
         const company = getOne('SELECT * FROM company WHERE id = 1') || {}
         const siteUrl = 'https://www.sunseasteel.com'
         const companyName = company.name_en || company.name || 'Shandong Sunsea Steel Co., Ltd'
+        
+        // Translation helpers for SSR GEO SEO
+        function getTrans(type, id, field, fallback) {
+          if (lang === 'en') return fallback
+          try {
+            const row = getOne('SELECT translated_text FROM translations WHERE content_type=? AND content_id=? AND content_field=? AND language_code=?', [type, id, field, lang])
+            return row && row.translated_text ? row.translated_text : fallback
+          } catch(e) { return fallback }
+        }
+        function getSeoTrans(type, id, lang) {
+          if (lang === 'en') return {}
+          try {
+            const row = getOne('SELECT translated_text FROM translations WHERE content_type=? AND content_id=? AND content_field=? AND language_code=?', [type, id, 'seo_combined', lang])
+            if (row && row.translated_text) return JSON.parse(row.translated_text)
+          } catch(e) {}
+          return {}
+        }
+        const companyNameTranslated = getTrans('company', 1, 'name_en', companyName)
+        const companyDescTranslated = getTrans('company', 1, 'description_en', company.description_en || company.description || '')
 
         let pageTitle = seoSettings.site_title || 'Shandong Sunsea Steel Co., Ltd'
         let pageDesc = seoSettings.site_description || ''
@@ -320,15 +339,19 @@ async function startServer() {
               if (idMatch) product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.id=? AND p.status=1', [idMatch[1]])
             }
             if (product) {
-              const baseProductTitle = product.seo_title || product.name_en || product.name || pageTitle
-              pageTitle = baseProductTitle.includes(companyName) ? baseProductTitle : `${baseProductTitle} | ${companyName}`
-              pageDesc = product.seo_description || product.description_en || product.description || pageDesc
+              const seoT = getSeoTrans('product', product.id, lang)
+              const pName = getTrans('product', product.id, 'name_en', product.name_en || product.name || '')
+              const pDesc = getTrans('product', product.id, 'description_en', product.description_en || product.description || '')
+
+              const baseProductTitle = seoT.seo_title || product.seo_title || pName || pageTitle
+              pageTitle = baseProductTitle.includes(companyNameTranslated) ? baseProductTitle : `${baseProductTitle} | ${companyNameTranslated}`
+              pageDesc = seoT.seo_description || product.seo_description || pDesc || pageDesc
               // Always ensure a meaningful description for product pages
               if (!pageDesc) {
-                const catName = product.category_name_en || product.category_name || 'steel coil'
-                pageDesc = `${product.name_en || product.name} — Professional ${catName} manufacturer and exporter. Factory direct supply from Shandong, China. ASTM/JIS/EN certified. Contact ${companyName} for competitive pricing.`
+                const catName = getTrans('category', product.category_id, 'name_en', product.category_name_en || product.category_name || 'steel coil')
+                pageDesc = `${pName} — Professional ${catName} manufacturer and exporter. Factory direct supply from Shandong, China. ASTM/JIS/EN certified. Contact ${companyNameTranslated} for competitive pricing.`
               }
-              pageKeywords = product.seo_keywords || pageKeywords
+              pageKeywords = seoT.seo_keywords || product.seo_keywords || pageKeywords
               ogType = 'product'
               const images = (product.images || '').split(',').filter(Boolean)
               if (images.length) pageImage = images[0].startsWith('http') ? images[0] : `${siteUrl}${images[0]}`
@@ -336,11 +359,11 @@ async function startServer() {
               const productImages = (product.images || '').split(',').filter(Boolean).map(img => img.startsWith('http') ? img : `${siteUrl}${img}`)
               const productSchema = {
                 '@context': 'https://schema.org', '@type': 'Product',
-                name: product.name_en || product.name,
-                description: (product.seo_description || product.description_en || product.description || '').substring(0, 500),
+                name: pName,
+                description: (pageDesc).substring(0, 500),
                 url: pageCanonical,
-                brand: { '@type': 'Brand', name: companyName },
-                manufacturer: { '@type': 'Organization', name: companyName, url: siteUrl },
+                brand: { '@type': 'Brand', name: companyNameTranslated },
+                manufacturer: { '@type': 'Organization', name: companyNameTranslated, url: siteUrl },
                 offers: {
                   '@type': 'Offer',
                   url: pageCanonical,
@@ -396,11 +419,11 @@ async function startServer() {
               extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
                 { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
                 { '@type': 'ListItem', position: 2, name: 'Products', item: `${siteUrl}/${lang}/products` },
-                { '@type': 'ListItem', position: 3, name: product.name_en || product.name, item: pageCanonical }
+                { '@type': 'ListItem', position: 3, name: pName, item: pageCanonical }
               ] })
               // ── SSR content for product detail (SEO/GEO crawlers) ──
-              const pName = esc(product.name_en || product.name || '')
-              const pDesc = esc(product.description_en || product.description || '')
+              const escPName = esc(pName)
+              const escPDesc = esc(pDesc)
               let specsHtml = ''
               if (product.specs) {
                 try {
@@ -423,11 +446,11 @@ async function startServer() {
                 .replace(/\{\{phone\}\}/g, company.phone || '')
                 .replace(/\{\{whatsapp\}\}/g, company.whatsapp || '')
                 .replace(/\{\{whatsapp_link\}\}/g, waLink)
-                .replace(/\{\{company_name\}\}/g, companyName)
+                .replace(/\{\{company_name\}\}/g, companyNameTranslated)
                 : ''
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
               const hasFaqInDetail = /frequently asked|<h[23][^>]*>\s*faq/i.test(detailHtml)
-              ssrContent = `<article id="ssr-product"><h1>${pName}</h1><p>${pDesc}</p>${specsHtml}${detailHtml}${hasFaqInDetail ? '' : faqHtml}</article>`
+              ssrContent = `<article id="ssr-product"><h1>${escPName}</h1><p>${escPDesc}</p>${specsHtml}${detailHtml}${hasFaqInDetail ? '' : faqHtml}</article>`
             } else {
               // Product not found — return 404 status to prevent soft 404
               isNotFound = true
@@ -447,38 +470,42 @@ async function startServer() {
               if (idMatch) article = getOne('SELECT * FROM news WHERE id=? AND status=1', [idMatch[1]])
             }
             if (article) {
-              const baseArticleTitle = article.seo_title || article.title_en || article.title || pageTitle
-              pageTitle = baseArticleTitle.includes(companyName) ? baseArticleTitle : `${baseArticleTitle} | ${companyName}`
-              pageDesc = article.seo_description || article.summary_en || article.summary || pageDesc
+              const seoT = getSeoTrans('news', article.id, lang)
+              const aTitle = getTrans('news', article.id, 'title_en', article.title_en || article.title || '')
+              const aSummary = getTrans('news', article.id, 'summary_en', article.summary_en || article.summary || '')
+
+              const baseArticleTitle = seoT.seo_title || article.seo_title || aTitle || pageTitle
+              pageTitle = baseArticleTitle.includes(companyNameTranslated) ? baseArticleTitle : `${baseArticleTitle} | ${companyNameTranslated}`
+              pageDesc = seoT.seo_description || article.seo_description || aSummary || pageDesc
               // Always ensure a meaningful description for news articles
               if (!pageDesc) {
-                pageDesc = `${(article.title_en || article.title || '').substring(0, 100)} — Steel industry insights and technical guides from ${companyName}.`
+                pageDesc = `${(aTitle).substring(0, 100)} — Steel industry insights and technical guides from ${companyNameTranslated}.`
               }
-              pageKeywords = article.seo_keywords || pageKeywords
+              pageKeywords = seoT.seo_keywords || article.seo_keywords || pageKeywords
               ogType = 'article'
               if (article.cover_image) pageImage = article.cover_image.startsWith('http') ? article.cover_image : `${siteUrl}${article.cover_image}`
 
               extraSchemas += jsonLd({
                 '@context': 'https://schema.org', '@type': 'Article',
-                headline: (article.seo_title || article.title_en || article.title || '').substring(0, 110),
-                description: (article.seo_description || article.summary_en || article.summary || '').substring(0, 300),
+                headline: (baseArticleTitle).substring(0, 110),
+                description: (pageDesc).substring(0, 300),
                 url: pageCanonical,
                 datePublished: article.created_at,
                 ...(article.updated_at && { dateModified: article.updated_at }),
                 ...(pageImage && { image: pageImage }),
                 ...(seoSettings.default_news_author && { author: { '@type': 'Person', name: seoSettings.default_news_author } }),
-                publisher: { '@type': 'Organization', name: companyName, logo: { '@type': 'ImageObject', url: `${siteUrl}/uploads/logo.png` } },
+                publisher: { '@type': 'Organization', name: companyNameTranslated, logo: { '@type': 'ImageObject', url: `${siteUrl}/uploads/logo.png` } },
                 mainEntityOfPage: { '@type': 'WebPage', '@id': pageCanonical }
               })
               extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
                 { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
                 { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
-                { '@type': 'ListItem', position: 3, name: article.title_en || article.title, item: pageCanonical }
+                { '@type': 'ListItem', position: 3, name: aTitle, item: pageCanonical }
               ] })
 
               // ── SSR content for article detail (SEO/GEO crawlers) ──
-              const aTitle = esc(article.title_en || article.title || '')
-              const aSummary = esc(article.summary_en || article.summary || '')
+              const escATitle = esc(aTitle)
+              const escASummary = esc(aSummary)
               // Replace template placeholders with real company data
               const whatsappLink = company.whatsapp ? `https://wa.me/${company.whatsapp.replace(/[^0-9]/g, '')}` : '#'
               let articleBody = article.content
@@ -489,7 +516,7 @@ async function startServer() {
                     .replace(/\{\{phone\}\}/g, company.phone || company.whatsapp || '')
                     .replace(/\{\{whatsapp_link\}\}/g, whatsappLink)
                     .replace(/\{\{whatsapp\}\}/g, company.whatsapp || '')
-                    .replace(/\{\{company_name\}\}/g, companyName)
+                    .replace(/\{\{company_name\}\}/g, companyNameTranslated)
                 : ''
 
               // ── FAQPage schema for news articles (GEO: used by Google SGE, ChatGPT, Perplexity) ──
@@ -511,7 +538,7 @@ async function startServer() {
                 } catch (e) {}
               }
 
-              ssrContent = `<article id="ssr-article"><h1>${aTitle}</h1><p>${aSummary}</p>${articleBody}${newsFaqHtml}</article>`
+              ssrContent = `<article id="ssr-article"><h1>${escATitle}</h1><p>${escASummary}</p>${articleBody}${newsFaqHtml}</article>`
             } else {
               // News article not found — return 404 status
               isNotFound = true
@@ -700,27 +727,30 @@ async function startServer() {
           if (!subPath || subPath === '/') {
             matchedRoute = true
             // Keyword-rich homepage title (overrides bare company name from seoSettings)
-            const baseTitle = seoSettings.site_title || companyName
+            const baseTitle = seoSettings.site_title || companyNameTranslated
             pageTitle = baseTitle.toLowerCase().includes('gi') || baseTitle.toLowerCase().includes('steel coil')
               ? baseTitle
-              : `${companyName} | GI GL PPGI PPGL CRC Steel Coil Manufacturer & Exporter`
+              : `${companyNameTranslated} | GI GL PPGI PPGL CRC Steel Coil Manufacturer & Exporter`
             // Keyword-rich homepage description
             if (!pageDesc) {
-              pageDesc = `Shandong Sunsea Steel Co., Ltd — Professional manufacturer and exporter of Galvanized (GI), Galvalume (GL), Prepainted (PPGI/PPGL) and Cold Rolled (CRC) steel coils. ASTM A653 / JIS G3302 / EN 10346 certified. Factory direct pricing, global shipping from Shandong, China.`
+              pageDesc = companyDescTranslated || `Shandong Sunsea Steel Co., Ltd — Professional manufacturer and exporter of Galvanized (GI), Galvalume (GL), Prepainted (PPGI/PPGL) and Cold Rolled (CRC) steel coils. ASTM A653 / JIS G3302 / EN 10346 certified. Factory direct pricing, global shipping from Shandong, China.`
             }
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` }
             ] })
             extraSchemas += jsonLd({
               '@context': 'https://schema.org', '@type': 'WebSite',
-              name: companyName, url: `${siteUrl}/${lang}`,
+              name: companyNameTranslated, url: `${siteUrl}/${lang}`,
               potentialAction: { '@type': 'SearchAction', target: `${siteUrl}/${lang}/products?search={search_term_string}`, 'query-input': 'required name=search_term_string' }
             })
             // SSR home content: company intro + top products
             const homeProducts = getAll('SELECT id, slug, name_en, name FROM products WHERE status=1 ORDER BY sort_order, id LIMIT 8')
-            const companyDesc = esc(company.description_en || company.description || '')
-            const homeProductList = homeProducts.map(p => `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a></li>`).join('')
-            ssrContent = `<section id="ssr-home"><h1>${esc(companyName)}</h1><p>${companyDesc}</p><h2>Main Products</h2><ul>${homeProductList}</ul></section>`
+            const companyDesc = esc(companyDescTranslated)
+            const homeProductList = homeProducts.map(p => {
+               const trName = getTrans('product', p.id, 'name_en', p.name_en || p.name)
+               return `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(trName)}</a></li>`
+            }).join('')
+            ssrContent = `<section id="ssr-home"><h1>${esc(companyNameTranslated)}</h1><p>${companyDesc}</p><h2>Main Products</h2><ul>${homeProductList}</ul></section>`
           }
 
           // ── Catch-all for invalid routes ──
