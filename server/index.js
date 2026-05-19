@@ -1,4 +1,5 @@
 import express from 'express'
+import 'express-async-errors'
 import cors from 'cors'
 import compression from 'compression'
 import { fileURLToPath } from 'url'
@@ -169,7 +170,13 @@ async function startServer() {
     // 静态文件
     app.use('/uploads', express.static(join(__dirname, '..', 'uploads'), {
       maxAge: '1y',
-      etag: true
+      etag: true,
+      setHeaders: (res, path) => {
+        // Security: Prevent Stored XSS by forcing non-image files to download instead of executing in-browser
+        if (!/\\.(jpg|jpeg|png|webp|gif|svg|ico)$/i.test(path)) {
+          res.setHeader('Content-Disposition', 'attachment')
+        }
+      }
     }))
 
     // 生产环境静态文件
