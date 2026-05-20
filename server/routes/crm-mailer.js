@@ -152,7 +152,11 @@ router.post('/send', dualAuth, async (req, res) => {
   const finalBody = html_body || tpl?.html_body || ''
   if (!finalBody.trim()) return res.status(400).json({ error: '邮件内容不能为空' })
 
-  const customers = (customer_ids || []).map(id => getOne('SELECT * FROM crm_customers WHERE id=?', [id])).filter(c => c?.email)
+  let customers = []
+  if (customer_ids?.length) {
+    const placeholders = customer_ids.map(() => '?').join(',')
+    customers = getAll(`SELECT * FROM crm_customers WHERE id IN (${placeholders})`, customer_ids).filter(c => c?.email)
+  }
   if (!customers.length) return res.status(400).json({ error: '没有有效的收件人' })
 
   const taskResult = run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',

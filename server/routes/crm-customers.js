@@ -4,7 +4,7 @@ import { getAll, getOne, run } from '../db.js'
 import { replaceCustomVars } from './mailer.js'
 import archiver from 'archiver'
 import AdmZip from 'adm-zip'
-import { join, basename, dirname } from 'path'
+import { join, basename, dirname, resolve } from 'path'
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -1218,8 +1218,12 @@ router.post('/import/zip', dualAuth, (req, res) => {
     for (const entry of entries) {
       if (entry.isDirectory) continue
       if (entry.entryName === 'data.json' || entry.entryName === 'index.html') continue
-      const targetPath = join(UPLOADS_DIR, '..', entry.entryName)
-      const targetDir = join(targetPath, '..')
+      const targetPath = resolve(UPLOADS_DIR, '..', entry.entryName)
+      if (!targetPath.startsWith(resolve(UPLOADS_DIR))) {
+        console.warn(`[Security] Blocked zip slip attempt: ${entry.entryName}`)
+        continue
+      }
+      const targetDir = dirname(targetPath)
       if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
       writeFileSync(targetPath, entry.getData())
       filesCopied++
