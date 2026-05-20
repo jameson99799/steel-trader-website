@@ -144,7 +144,10 @@ async function startServer() {
 
     const loginLimiter = rateLimit({
       windowMs: 15 * 60 * 1000,
-      max: 5,
+      max: (req, res) => {
+        const settings = getOne('SELECT login_max_attempts FROM security_settings WHERE id = 1')
+        return settings ? settings.login_max_attempts : 5
+      },
       handler: (req, res) => {
         const settings = getOne('SELECT login_block_minutes FROM security_settings WHERE id = 1') || { login_block_minutes: 15 }
         run("INSERT OR REPLACE INTO blocked_ips (ip, reason, blocked_until) VALUES (?, ?, datetime('now', '+' || ? || ' minutes'))", [req.ip, 'Too many failed login attempts', settings.login_block_minutes])
@@ -152,28 +155,20 @@ async function startServer() {
       }
     })
     
-    app.use('/api/admin/login', (req, res, next) => {
-      const settings = getOne('SELECT login_max_attempts FROM security_settings WHERE id = 1')
-      if(settings) loginLimiter.max = settings.login_max_attempts
-      loginLimiter(req, res, next)
-    })
-
-    app.use('/api/crm/auth/login', (req, res, next) => {
-      const settings = getOne('SELECT login_max_attempts FROM security_settings WHERE id = 1')
-      if(settings) loginLimiter.max = settings.login_max_attempts
-      loginLimiter(req, res, next)
-    })
+    app.use('/api/admin/login', loginLimiter)
+    app.use('/api/crm/auth/login', loginLimiter)
 
     const inquiryLimiter = rateLimit({
       windowMs: 60 * 60 * 1000,
-      max: 10,
+      max: (req, res) => {
+        const settings = getOne('SELECT inquiry_max_per_hour FROM security_settings WHERE id = 1')
+        return settings ? settings.inquiry_max_per_hour : 10
+      },
       handler: (req, res) => res.status(429).json({ error: 'Too many inquiries per hour.' })
     })
 
     app.use('/api/inquiries', (req, res, next) => {
       if (req.method === 'POST') {
-        const settings = getOne('SELECT inquiry_max_per_hour FROM security_settings WHERE id = 1')
-        if(settings) inquiryLimiter.max = settings.inquiry_max_per_hour
         return inquiryLimiter(req, res, next)
       }
       next()
