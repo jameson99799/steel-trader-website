@@ -386,7 +386,7 @@ async function startServer() {
       const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
       // Helper: build JSON-LD script tag
-      const jsonLd = (obj) => `<script type="application/ld+json">${JSON.stringify(obj)}</script>`
+      const jsonLd = (obj) => `<script type="application/ld+json">${JSON.stringify(obj).replace(/</g, '\\u003c')}</script>`
 
       // Ensure robots.txt always serves text/plain, even if dist/robots.txt is missing
       app.get('/robots.txt', (req, res) => {
@@ -1019,7 +1019,7 @@ async function startServer() {
           company: company,
           pageTexts: getOne('SELECT * FROM page_texts WHERE id = 1') || {}
         }
-        const stateTag = `<script>window.__INITIAL_STATE__ = ${JSON.stringify(initialState)}</script>`
+        const stateTag = `<script>window.__INITIAL_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')}</script>`
         html = html.replace('</head>', `${canonicalTag}\n  ${extraMeta}\n  ${extraSchemas}\n  ${stateTag}\n</head>`)
 
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
