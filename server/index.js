@@ -433,8 +433,14 @@ async function startServer() {
         function getSeoTrans(type, id, lang) {
           if (lang === 'en') return {}
           try {
-            const row = getOne('SELECT translated_text FROM translations WHERE content_type=? AND content_id=? AND content_field=? AND language_code=?', [type, id, 'seo_combined', lang])
-            if (row && row.translated_text) return JSON.parse(row.translated_text)
+            const rowTitle = getOne('SELECT translated_text FROM translations WHERE content_type=? AND content_id=? AND content_field=? AND language_code=?', [type, id, 'seo_title', lang])
+            const rowDesc = getOne('SELECT translated_text FROM translations WHERE content_type=? AND content_id=? AND content_field=? AND language_code=?', [type, id, 'seo_description', lang])
+            const rowKeywords = getOne('SELECT translated_text FROM translations WHERE content_type=? AND content_id=? AND content_field=? AND language_code=?', [type, id, 'seo_keywords', lang])
+            return {
+              seo_title: rowTitle ? rowTitle.translated_text : null,
+              seo_description: rowDesc ? rowDesc.translated_text : null,
+              seo_keywords: rowKeywords ? rowKeywords.translated_text : null
+            }
           } catch(e) {}
           return {}
         }
