@@ -438,6 +438,21 @@ async function startServer() {
           translateCompany(company, tMap, lang)
         }
         
+        function formatSsrMailtoLinks(html, defaultEmail) {
+          if (!html) return html
+          return html.replace(/href=(['"])([^'"]+)\1/gi, (match, quote, href) => {
+            let email = ''
+            if (href.startsWith('mailto:')) {
+              return match
+            } else if (href.includes('@') && !href.includes('/') && !href.toLowerCase().startsWith('http')) {
+              email = href.trim()
+            } else {
+              return match
+            }
+            return `href=${quote}mailto:${email}${quote}`
+          })
+        }
+        
         function getSeoTrans(type, id, lang) {
           if (lang === 'en') return {}
           try {
@@ -585,7 +600,7 @@ async function startServer() {
               }
               const waLink = company.whatsapp ? `https://api.whatsapp.com/send?phone=${company.whatsapp.replace(/[^0-9]/g, '')}` : '#'
               const rawDetail = product[`detail_content_${lang}`] || product.detail_content || ''
-              const detailHtml = rawDetail
+              let detailHtml = rawDetail
                 .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
                 .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
                 .replace(/\{\{email\}\}/g, company.email || '')
@@ -593,6 +608,7 @@ async function startServer() {
                 .replace(/\{\{whatsapp\}\}/g, company.whatsapp || '')
                 .replace(/\{\{whatsapp_link\}\}/g, waLink)
                 .replace(/\{\{company_name\}\}/g, companyNameTranslated)
+              detailHtml = formatSsrMailtoLinks(detailHtml, company.email || '')
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
               const hasFaqInDetail = /frequently asked|<h[23][^>]*>\s*faq/i.test(detailHtml)
               ssrContent = `<article id="ssr-product"><h1>${escPName}</h1><p>${escPDesc}</p>${specsHtml}${detailHtml}${hasFaqInDetail ? '' : faqHtml}</article>`
@@ -665,6 +681,8 @@ async function startServer() {
                 .replace(/\{\{whatsapp_link\}\}/g, whatsappLink)
                 .replace(/\{\{whatsapp\}\}/g, company.whatsapp || '')
                 .replace(/\{\{company_name\}\}/g, companyNameTranslated)
+              
+              articleBody = formatSsrMailtoLinks(articleBody, company.email || '')
 
               // ── FAQPage schema for news articles (GEO: used by Google SGE, ChatGPT, Perplexity) ──
               let newsFaqHtml = ''

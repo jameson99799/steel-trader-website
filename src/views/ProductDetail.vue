@@ -354,6 +354,26 @@ const sanitizedDetailContent = computed(() => {
     .replace(/\{\{whatsapp_link\}\}/g,  whatsappLink)
     .replace(/\{\{company_name\}\}/g,   companyName)
 
+  // Format mailto links to include product title and url as subject and body
+  const productName = localizedValue(product.value, 'name') || ''
+  const productUrl = window.location.origin + route.fullPath
+  const subject = `Product Inquiry: ${productName}`
+  const mailBody = `Hi,\n\nI am interested in your product: "${productName}"\nSource Link: ${productUrl}\n\nPlease provide more information.`
+  const query = `?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mailBody)}`
+  
+  html = html.replace(/href=(['"])([^'"]+)\1/gi, (match, quote, href) => {
+    let mailtoEmail = ''
+    if (href.startsWith('mailto:')) {
+      const emailPart = href.slice(7).split('?')[0].trim()
+      mailtoEmail = (emailPart && emailPart !== '{{email}}') ? emailPart : (email || 'jameson@sunseasteel.com')
+    } else if (href.includes('@') && !href.includes('/') && !href.toLowerCase().startsWith('http')) {
+      mailtoEmail = href.trim()
+    } else {
+      return match
+    }
+    return `href=${quote}mailto:${mailtoEmail}${query}${quote}`
+  })
+
   // Strip <script> tags for security
   html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
 
