@@ -113,15 +113,36 @@ const searchQuery = ref('')
 const detail   = ref(null)
 
 function filterColors() {
-  const q = searchQuery.value.trim().toLowerCase()
-  if (!q) { filtered.value = colors.value; return }
-  filtered.value = colors.value.filter(c =>
-    c.code.includes(q) ||
-    c.name.toLowerCase().includes(q) ||
-    c.name_en.toLowerCase().includes(q) ||
-    c.name_zh.toLowerCase().includes(q) ||
-    c.hex.toLowerCase().replace('#','').includes(q.replace('#',''))
-  )
+  const rawQ = searchQuery.value.trim().toLowerCase()
+  if (!rawQ) { filtered.value = colors.value; return }
+  
+  // Normalize the query: remove 'ral' and any spaces/dashes prefix
+  let codeQ = rawQ
+  if (codeQ.startsWith('ral')) {
+    codeQ = codeQ.replace(/^ral[\s-]?/, '')
+  }
+
+  filtered.value = colors.value.filter(c => {
+    // If the query is just "ral", show all colors (as they are all RAL colors)
+    if (rawQ === 'ral') return true
+
+    const code = (c.code || '').toLowerCase()
+    const name = (c.name || '').toLowerCase()
+    const nameEn = (c.name_en || '').toLowerCase()
+    const nameZh = (c.name_zh || '').toLowerCase()
+    const hex = (c.hex || '').toLowerCase().replace('#', '')
+    const cleanQ = rawQ.replace('#', '')
+
+    const codeMatch = codeQ && code.includes(codeQ)
+
+    return (
+      codeMatch ||
+      name.includes(rawQ) ||
+      nameEn.includes(rawQ) ||
+      nameZh.includes(rawQ) ||
+      hex.includes(cleanQ)
+    )
+  })
 }
 
 function openDetail(color) {
