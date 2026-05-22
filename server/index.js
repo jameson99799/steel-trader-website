@@ -10,6 +10,7 @@ import { readFileSync, existsSync, unlinkSync, readdirSync } from 'fs'
 import sharp from 'sharp'
 
 import { initDb, getAll, getOne, run } from './db.js'
+import { loadTranslationsForLang, translateProduct, translateNews, translateCompany } from './helpers/translate.js'
 import authRoutes from './routes/auth.js'
 import securityRoutes from './routes/security.js'
 import categoriesRoutes from './routes/categories.js'
@@ -424,13 +425,11 @@ async function startServer() {
         const companyName = company.name_en || company.name || 'Shandong Sunsea Steel Co., Ltd'
         
         // Translation helpers for SSR GEO SEO
-        function getTrans(type, id, field, fallback) {
-          if (lang === 'en') return fallback
-          try {
-            const row = getOne('SELECT translated_text FROM translations WHERE content_type=? AND content_id=? AND content_field=? AND language_code=?', [type, id, field, lang])
-            return row && row.translated_text ? row.translated_text : fallback
-          } catch(e) { return fallback }
+        const tMap = lang !== 'en' ? loadTranslationsForLang(lang) : null
+        if (company && tMap) {
+          translateCompany(company, tMap, lang)
         }
+        
         function getSeoTrans(type, id, lang) {
           if (lang === 'en') return {}
           try {
@@ -439,8 +438,8 @@ async function startServer() {
           } catch(e) {}
           return {}
         }
-        const companyNameTranslated = getTrans('company', 1, 'name_en', companyName)
-        const companyDescTranslated = getTrans('company', 1, 'description_en', company.description_en || company.description || '')
+        const companyNameTranslated = company.name || companyName
+        const companyDescTranslated = company[`description_${lang}`] || company.description_en || company.description || ''
 
         let pageTitle = seoSettings.site_title || 'Shandong Sunsea Steel Co., Ltd'
         let pageDesc = seoSettings.site_description || ''
@@ -466,16 +465,19 @@ async function startServer() {
               if (idMatch) product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.id=? AND p.status=1', [idMatch[1]])
             }
             if (product) {
+              if (tMap) {
+                translateProduct(product, tMap, lang)
+              }
               const seoT = getSeoTrans('product', product.id, lang)
-              const pName = getTrans('product', product.id, 'name_en', product.name_en || product.name || '')
-              const pDesc = getTrans('product', product.id, 'description_en', product.description_en || product.description || '')
+              const pName = product[`name_${lang}`] || product.name_en || product.name || ''
+              const pDesc = product[`description_${lang}`] || product.description_en || product.description || ''
 
               const baseProductTitle = seoT.seo_title || product.seo_title || pName || pageTitle
               pageTitle = baseProductTitle.includes(companyNameTranslated) ? baseProductTitle : `${baseProductTitle} | ${companyNameTranslated}`
               pageDesc = seoT.seo_description || product.seo_description || pDesc || pageDesc
               // Always ensure a meaningful description for product pages
               if (!pageDesc) {
-                const catName = getTrans('category', product.category_id, 'name_en', product.category_name_en || product.category_name || 'steel coil')
+                const catName = product[`category_name_${lang}`] || product.category_name_en || product.category_name || 'steel coil'
                 pageDesc = `${pName} — Professional ${catName} manufacturer and exporter. Factory direct supply from Shandong, China. ASTM/JIS/EN certified. Contact ${companyNameTranslated} for competitive pricing.`
               }
               pageKeywords = seoT.seo_keywords || product.seo_keywords || pageKeywords
@@ -529,17 +531,19 @@ async function startServer() {
                 }]
               }
               if (productImages.length) productSchema.image = productImages
-              if (product.category_name_en) productSchema.category = product.category_name_en
-              if (product.specs) {
+              if (product.category_name_en) productSchema.category = product[`category_name_${lang}`] || product.category_name_en
+              const specsJson = product[`specs_${lang}`] || product.specs
+              if (specsJson) {
                 try {
-                  const specsList = JSON.parse(product.specs)
+                  const specsList = JSON.parse(specsJson)
                   if (specsList.length) productSchema.additionalProperty = specsList.map(s => ({ '@type': 'PropertyValue', name: s.name, value: s.value }))
                 } catch (e) {}
               }
               extraSchemas += jsonLd(productSchema)
-              if (product.faq_items) {
+              const faqJson = product[`faq_items_${lang}`] || product.faq_items
+              if (faqJson) {
                 try {
-                  const faqs = JSON.parse(product.faq_items)
+                  const faqs = JSON.parse(faqJson)
                   if (faqs.length) extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faqs.map(f => ({ '@type': 'Question', name: f.question, acceptedAnswer: { '@type': 'Answer', text: f.answer } })) })
                 } catch (e) {}
               }
@@ -552,21 +556,22 @@ async function startServer() {
               const escPName = esc(pName)
               const escPDesc = esc(pDesc)
               let specsHtml = ''
-              if (product.specs) {
+              if (specsJson) {
                 try {
-                  const sl = JSON.parse(product.specs)
+                  const sl = JSON.parse(specsJson)
                   if (sl.length) specsHtml = '<table>' + sl.map(s => `<tr><td>${esc(s.name)}</td><td>${esc(s.value)}</td></tr>`).join('') + '</table>'
                 } catch (e) {}
               }
               let faqHtml = ''
-              if (product.faq_items) {
+              if (faqJson) {
                 try {
-                  const fl = JSON.parse(product.faq_items)
+                  const fl = JSON.parse(faqJson)
                   if (fl.length) faqHtml = '<h2>Frequently Asked Questions</h2>' + fl.map(f => `<h3>${esc(f.question)}</h3><p>${esc(f.answer)}</p>`).join('')
                 } catch (e) {}
               }
               const waLink = company.whatsapp ? `https://api.whatsapp.com/send?phone=${company.whatsapp.replace(/[^0-9]/g, '')}` : '#'
-              const detailHtml = product.detail_content ? product.detail_content
+              const rawDetail = product[`detail_content_${lang}`] || product.detail_content || ''
+              const detailHtml = rawDetail
                 .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
                 .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
                 .replace(/\{\{email\}\}/g, company.email || '')
@@ -574,7 +579,6 @@ async function startServer() {
                 .replace(/\{\{whatsapp\}\}/g, company.whatsapp || '')
                 .replace(/\{\{whatsapp_link\}\}/g, waLink)
                 .replace(/\{\{company_name\}\}/g, companyNameTranslated)
-                : ''
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
               const hasFaqInDetail = /frequently asked|<h[23][^>]*>\s*faq/i.test(detailHtml)
               ssrContent = `<article id="ssr-product"><h1>${escPName}</h1><p>${escPDesc}</p>${specsHtml}${detailHtml}${hasFaqInDetail ? '' : faqHtml}</article>`
@@ -597,9 +601,12 @@ async function startServer() {
               if (idMatch) article = getOne('SELECT * FROM news WHERE id=? AND status=1', [idMatch[1]])
             }
             if (article) {
+              if (tMap) {
+                translateNews(article, tMap, lang)
+              }
               const seoT = getSeoTrans('news', article.id, lang)
-              const aTitle = getTrans('news', article.id, 'title_en', article.title_en || article.title || '')
-              const aSummary = getTrans('news', article.id, 'summary_en', article.summary_en || article.summary || '')
+              const aTitle = article[`title_${lang}`] || article.title_en || article.title || ''
+              const aSummary = article[`summary_${lang}`] || article.summary_en || article.summary || ''
 
               const baseArticleTitle = seoT.seo_title || article.seo_title || aTitle || pageTitle
               pageTitle = baseArticleTitle.includes(companyNameTranslated) ? baseArticleTitle : `${baseArticleTitle} | ${companyNameTranslated}`
@@ -635,22 +642,22 @@ async function startServer() {
               const escASummary = esc(aSummary)
               // Replace template placeholders with real company data
               const whatsappLink = company.whatsapp ? `https://wa.me/${company.whatsapp.replace(/[^0-9]/g, '')}` : '#'
-              let articleBody = article.content
-                ? article.content
-                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-                    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-                    .replace(/\{\{email\}\}/g, company.email || '')
-                    .replace(/\{\{phone\}\}/g, company.phone || company.whatsapp || '')
-                    .replace(/\{\{whatsapp_link\}\}/g, whatsappLink)
-                    .replace(/\{\{whatsapp\}\}/g, company.whatsapp || '')
-                    .replace(/\{\{company_name\}\}/g, companyNameTranslated)
-                : ''
+              const rawContent = article[`content_${lang}`] || article.content || ''
+              let articleBody = rawContent
+                .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                .replace(/\{\{email\}\}/g, company.email || '')
+                .replace(/\{\{phone\}\}/g, company.phone || company.whatsapp || '')
+                .replace(/\{\{whatsapp_link\}\}/g, whatsappLink)
+                .replace(/\{\{whatsapp\}\}/g, company.whatsapp || '')
+                .replace(/\{\{company_name\}\}/g, companyNameTranslated)
 
               // ── FAQPage schema for news articles (GEO: used by Google SGE, ChatGPT, Perplexity) ──
               let newsFaqHtml = ''
-              if (article.faq_items) {
+              const faqJson = article[`faq_items_${lang}`] || article.faq_items
+              if (faqJson) {
                 try {
-                  const faqList = JSON.parse(article.faq_items)
+                  const faqList = JSON.parse(faqJson)
                   if (Array.isArray(faqList) && faqList.length > 0) {
                     extraSchemas += jsonLd({
                       '@context': 'https://schema.org', '@type': 'FAQPage',
@@ -874,8 +881,9 @@ async function startServer() {
             const homeProducts = getAll('SELECT id, slug, name_en, name FROM products WHERE status=1 ORDER BY sort_order, id LIMIT 8')
             const companyDesc = esc(companyDescTranslated)
             const homeProductList = homeProducts.map(p => {
-               const trName = getTrans('product', p.id, 'name_en', p.name_en || p.name)
-               return `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(trName)}</a></li>`
+              if (tMap) translateProduct(p, tMap, lang)
+              const trName = p[`name_${lang}`] || p.name_en || p.name
+              return `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(trName)}</a></li>`
             }).join('')
             ssrContent = `<section id="ssr-home"><h1>${esc(companyNameTranslated)}</h1><p>${companyDesc}</p><h2>Main Products</h2><ul>${homeProductList}</ul></section>`
           }
