@@ -180,6 +180,75 @@
                 <span :class="['mode-tab', newsEditorMode === 'preview' ? 'active' : '']" @click="switchNewsMode('preview')">👁 预览</span>
               </div>
               <div class="editor-actions">
+                <!-- Custom Hyperlink Dropdown -->
+                <div class="editor-dropdown-wrapper" ref="linkSwitcherRef" style="position:relative;display:inline-block;">
+                  <button type="button" class="editor-btn" @mousedown.prevent="linkDropOpen = !linkDropOpen">🔗 超链接 ▼</button>
+                  <div class="link-dropdown-menu shadow" v-show="linkDropOpen" @mousedown.stop>
+                    <!-- List Mode -->
+                    <div class="link-list-container" v-if="!editingLinkIndex && !isAddingLink">
+                      <div class="link-list-header">自定义超链接列表</div>
+                      <div class="link-items-scroll">
+                        <div 
+                          v-for="(item, idx) in customLinks" 
+                          :key="idx" 
+                          class="link-item"
+                          @mousedown.prevent="applyHyperlink(item.url)"
+                          @touchstart="startPress(item, idx)"
+                          @touchend="cancelPress"
+                          @touchmove="cancelPress"
+                          @dblclick="editLink(item, idx)"
+                        >
+                          <div class="link-info">
+                            <span class="link-name" title="双击/长按可编辑">{{ item.name }}</span>
+                            <span class="link-url">{{ item.url }}</span>
+                          </div>
+                          <div class="link-item-actions">
+                            <button type="button" class="link-action-btn edit" title="编辑" @mousedown.prevent.stop="editLink(item, idx)">✏️</button>
+                            <button type="button" class="link-action-btn delete" title="删除" @mousedown.prevent.stop="deleteCustomLink(idx)">🗑️</button>
+                          </div>
+                        </div>
+                      </div>
+                      <div v-if="!customLinks.length" class="empty-links">暂无保存的链接</div>
+                      <button type="button" class="add-link-trigger" @click="isAddingLink = true">+ 新增超链接</button>
+                    </div>
+
+                    <!-- Add Link Form -->
+                    <div class="link-form" v-if="isAddingLink">
+                      <h4>新增自定义超链接</h4>
+                      <div class="form-group-sm">
+                        <label>名称备注</label>
+                        <input v-model="newLinkName" placeholder="例如: 官方网站 或 WhatsApp" class="form-control-sm" />
+                      </div>
+                      <div class="form-group-sm">
+                        <label>链接地址</label>
+                        <input v-model="newLinkUrl" placeholder="例如: https://... 或 mailto:..." class="form-control-sm" />
+                      </div>
+                      <div class="form-actions-sm">
+                        <button type="button" class="btn btn-xs btn-primary" @click="addCustomLink" :disabled="!newLinkName.trim() || !newLinkUrl.trim()">保存</button>
+                        <button type="button" class="btn btn-xs btn-outline" @click="cancelLinkForm">取消</button>
+                      </div>
+                    </div>
+
+                    <!-- Edit Link Form -->
+                    <div class="link-form" v-if="editingLinkIndex !== null">
+                      <h4>编辑自定义超链接</h4>
+                      <div class="form-group-sm">
+                        <label>名称备注</label>
+                        <input v-model="editLinkName" placeholder="名称备注" class="form-control-sm" />
+                      </div>
+                      <div class="form-group-sm">
+                        <label>链接地址</label>
+                        <input v-model="editLinkUrl" placeholder="链接地址" class="form-control-sm" />
+                      </div>
+                      <div class="form-actions-sm">
+                        <button type="button" class="btn btn-xs btn-primary" @click="saveEditLink" :disabled="!editLinkName.trim() || !editLinkUrl.trim()">保存</button>
+                        <button type="button" class="btn btn-xs btn-danger" @click="deleteCustomLink(editingLinkIndex)">删除</button>
+                        <button type="button" class="btn btn-xs btn-outline" @click="cancelLinkForm">取消</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <button type="button" class="editor-btn" @click="insertNewsImage">📷 插入图片</button>
                 <button type="button" class="fullscreen-btn" @click="isFullscreen = !isFullscreen">
                   {{ isFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
@@ -335,7 +404,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import api from '../../api'
 
 const newsList = ref([])
@@ -404,6 +473,146 @@ async function batchMove() {
 const activeTranslateMenu = ref(null)
 const translatingItemLog = ref(null)
 
+// ─── Hyperlink Dropdown state ──────────────────────────────
+const linkDropOpen = ref(false)
+const linkSwitcherRef = ref(null)
+const customLinks = ref([])
+
+const isAddingLink = ref(false)
+const newLinkName = ref('')
+const newLinkUrl = ref('')
+
+const editingLinkIndex = ref(null)
+const editLinkName = ref('')
+const editLinkUrl = ref('')
+
+let pressTimer = null
+
+function saveCustomLinksToStorage() {
+  localStorage.setItem('news_custom_links', JSON.stringify(customLinks.value))
+}
+
+function loadCustomLinks() {
+  const stored = localStorage.getItem('news_custom_links')
+  if (stored) {
+    try {
+      customLinks.value = JSON.parse(stored)
+    } catch (e) {
+      console.error(e)
+    }
+  } else {
+    // defaults
+    customLinks.value = [
+      { name: 'Sunsea Website', url: 'https://www.sunseasteel.com' },
+      { name: 'Jameson WhatsApp', url: 'https://wa.me/8615265552259' },
+      { name: 'Jameson Email', url: 'mailto:jameson@sunseasteel.com' }
+    ]
+    saveCustomLinksToStorage()
+  }
+}
+
+function addCustomLink() {
+  if (!newLinkName.value.trim() || !newLinkUrl.value.trim()) return
+  customLinks.value.push({
+    name: newLinkName.value.trim(),
+    url: newLinkUrl.value.trim()
+  })
+  saveCustomLinksToStorage()
+  cancelLinkForm()
+}
+
+function editLink(item, index) {
+  editingLinkIndex.value = index
+  editLinkName.value = item.name
+  editLinkUrl.value = item.url
+  isAddingLink.value = false
+}
+
+function saveEditLink() {
+  if (editingLinkIndex.value === null) return
+  if (!editLinkName.value.trim() || !editLinkUrl.value.trim()) return
+  customLinks.value[editingLinkIndex.value] = {
+    name: editLinkName.value.trim(),
+    url: editLinkUrl.value.trim()
+  }
+  saveCustomLinksToStorage()
+  cancelLinkForm()
+}
+
+function deleteCustomLink(index) {
+  if (!confirm('确认删除这个自定义超链接吗？')) return
+  customLinks.value.splice(index, 1)
+  saveCustomLinksToStorage()
+  cancelLinkForm()
+}
+
+function cancelLinkForm() {
+  isAddingLink.value = false
+  editingLinkIndex.value = null
+  newLinkName.value = ''
+  newLinkUrl.value = ''
+  editLinkName.value = ''
+  editLinkUrl.value = ''
+}
+
+function startPress(item, index) {
+  pressTimer = setTimeout(() => {
+    editLink(item, index)
+  }, 800)
+}
+
+function cancelPress() {
+  clearTimeout(pressTimer)
+}
+
+function applyHyperlink(url) {
+  if (newsEditorMode.value !== 'visual') {
+    alert('请先切换到 "可视化编辑" 模式！')
+    return
+  }
+
+  // Focus the visual editor first
+  if (newsVisualEl.value) {
+    newsVisualEl.value.focus()
+  }
+
+  const selection = window.getSelection()
+  if (!selection.rangeCount || selection.isCollapsed || selection.toString().trim() === '') {
+    alert('请先在内容编辑区划选文字，然后点击链接应用！')
+    return
+  }
+
+  // Create the link
+  document.execCommand('createLink', false, url)
+
+  // Ensure target="_blank" is set for all custom links
+  const parent = selection.anchorNode?.parentElement
+  if (parent && parent.tagName === 'A') {
+    parent.setAttribute('target', '_blank')
+    parent.setAttribute('rel', 'noopener noreferrer')
+  } else {
+    if (newsVisualEl.value) {
+      const links = newsVisualEl.value.querySelectorAll('a')
+      links.forEach(a => {
+        if (a.getAttribute('href') === url) {
+          a.setAttribute('target', '_blank')
+          a.setAttribute('rel', 'noopener noreferrer')
+        }
+      })
+    }
+  }
+
+  syncNewsFromVisual()
+  linkDropOpen.value = false
+}
+
+// Click outside handler
+const handleClickOutside = (e) => {
+  if (linkSwitcherRef.value && !linkSwitcherRef.value.contains(e.target)) {
+    linkDropOpen.value = false
+  }
+}
+
 const defaultAuthor = ref('Jameson-SUNSEA STEEL')
 
 // Close menu when clicking outside
@@ -411,6 +620,8 @@ onMounted(async () => {
   document.addEventListener('click', () => {
     activeTranslateMenu.value = null
   })
+  document.addEventListener('mousedown', handleClickOutside)
+  loadCustomLinks()
   loadCategories()
   loadNews()
   try {
@@ -421,6 +632,10 @@ onMounted(async () => {
   } catch (e) {
     console.error('Failed to load author', e)
   }
+})
+
+onUnmounted(() => {
+  document.removeEventListener('mousedown', handleClickOutside)
 })
 
 async function saveAuthor() {
@@ -1227,4 +1442,182 @@ onMounted(() => {
 .news-media-item:hover { border-color: #16a34a; transform: scale(1.02); }
 .news-media-item img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
 .news-media-name { font-size: 10px; padding: 4px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #475569; text-align: center; }
+
+/* ── Hyperlink Dropdown Styling ───────────────────────────── */
+.editor-dropdown-wrapper {
+  position: relative;
+}
+
+.link-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 280px;
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 12px;
+  z-index: 1000;
+  text-align: left;
+}
+
+.link-list-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 8px;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 6px;
+}
+
+.link-items-scroll {
+  max-height: 180px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.link-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border: 1px solid transparent;
+  user-select: none;
+}
+
+.link-item:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.link-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.link-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-url {
+  font-size: 11px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-item-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.link-item:hover .link-item-actions {
+  opacity: 1;
+}
+
+.link-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.link-action-btn:hover {
+  background: #e2e8f0;
+}
+
+.empty-links {
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+  padding: 12px 0;
+}
+
+.add-link-trigger {
+  width: 100%;
+  padding: 6px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.add-link-trigger:hover {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #3b82f6;
+}
+
+.link-form h4 {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 10px;
+}
+
+.form-group-sm {
+  margin-bottom: 8px;
+}
+
+.form-group-sm label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.form-control-sm {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: white;
+  color: #0f172a;
+}
+
+.form-control-sm:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.form-actions-sm {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 10px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 8px;
+}
+
+.btn-xs {
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+}
 </style>
