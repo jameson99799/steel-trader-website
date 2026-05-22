@@ -2050,6 +2050,50 @@ function replaceTextOutsideTags(html, targetText, linkHtml) {
     });
 }
 
+// Helper to match translation link to the most relevant base link based on exact match, scheme, domain, or text
+function findMatchingBaseLink(transHref, transText, baseLinks, langCode) {
+    if (!baseLinks || baseLinks.length === 0) return null;
+
+    // 1. Exact href match (already correct)
+    const exactMatch = baseLinks.find(b => b.href === transHref);
+    if (exactMatch) return exactMatch;
+
+    // Helper to get link type/domain
+    const getLinkType = (url) => {
+        const u = url.toLowerCase();
+        if (u.startsWith('mailto:')) return 'email';
+        if (u.startsWith('tel:')) return 'tel';
+        if (u.includes('wa.me') || u.includes('whatsapp.com')) return 'whatsapp';
+        if (u.includes('facebook.com')) return 'facebook';
+        if (u.includes('linkedin.com')) return 'linkedin';
+        if (u.includes('tiktok.com')) return 'tiktok';
+        if (u.includes('youtube.com') || u.includes('youtu.be')) return 'youtube';
+        if (u.includes('instagram.com')) return 'instagram';
+        
+        try {
+            const match = url.match(/^(?:https?:\/\/)?(?:www\.)?([^\/]+)/i);
+            if (match) return match[1].toLowerCase();
+        } catch (e) {}
+        return 'other';
+    };
+
+    const transType = getLinkType(transHref);
+
+    // 2. Find a base link with the same type/domain
+    const typeMatch = baseLinks.find(b => getLinkType(b.href) === transType);
+    if (typeMatch) return typeMatch;
+
+    // 3. Find by text matching (if the translation link text matches search texts of a base link)
+    for (const baseLink of baseLinks) {
+        const searchTexts = getSearchTextsForLink(baseLink.href, baseLink.text, langCode);
+        if (searchTexts.some(s => s.toLowerCase() === transText.trim().toLowerCase())) {
+            return baseLink;
+        }
+    }
+
+    return null;
+}
+
 // Helper to synchronize hyperlinks from base content to translated content
 function syncHyperlinks(baseHtml, translatedHtml, langCode) {
     if (!baseHtml || !translatedHtml) return translatedHtml;
@@ -2063,19 +2107,16 @@ function syncHyperlinks(baseHtml, translatedHtml, langCode) {
 
     let updatedHtml = translatedHtml;
 
-    // 2. Positional synchronization of existing <a> tags in translation
-    const baseHrefs = baseLinks.map(l => l.href);
-    let aIdx = 0;
+    // 2. Synchronization of existing <a> tags in translation based on type/text matching
     updatedHtml = updatedHtml.replace(
-        /<a\b([^>]*?)href\s*=\s*(["'])([^"']*?)\2([^>]*?)>/gi,
-        (match, before, quote, oldHref, after) => {
-            if (aIdx < baseHrefs.length) {
-                const newHref = baseHrefs[aIdx];
-                aIdx++;
-                if (newHref === oldHref) return match;
-                return `<a${before}href=${quote}${newHref}${quote}${after}>`;
+        /<a\b([^>]*?)href\s*=\s*(["'])([^"']*?)\2([^>]*?)>([\s\S]*?)<\/a>/gi,
+        (match, before, quote, oldHref, after, text) => {
+            const rawText = text.replace(/<[^>]+>/g, '').trim();
+            const matchedBase = findMatchingBaseLink(oldHref, rawText, baseLinks, langCode);
+            if (matchedBase) {
+                if (matchedBase.href === oldHref) return match;
+                return `<a${before}href=${quote}${matchedBase.href}${quote}${after}>${text}</a>`;
             }
-            aIdx++;
             return match;
         }
     );
