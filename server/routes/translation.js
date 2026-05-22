@@ -1945,8 +1945,77 @@ function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+const EMAIL_KEYWORDS = {
+    en: ['send email', 'email us', 'contact email', 'email', 'e-mail'],
+    es: ['enviar correo', 'correo electrónico', 'correo', 'email'],
+    fr: ['envoyer un e-mail', 'courriel', 'e-mail', 'email'],
+    de: ['e-mail senden', 'e-mail', 'email', 'kontakt per e-mail'],
+    ru: ['отправить email', 'электронная почта', 'email'],
+    pt: ['enviar e-mail', 'e-mail', 'email', 'correo'],
+    it: ['invia e-mail', 'e-mail', 'email'],
+    ja: ['メール送信', 'メール', 'eメール'],
+    ko: ['이메일 보내기', '이메일', '메일'],
+    ar: ['البريد الإلكتروني', 'إرسال بريد', 'إيميل']
+};
+
+// Function to generate potential search texts in the translated content for a given link
+function getSearchTextsForLink(href, linkText, langCode) {
+    const list = [];
+    
+    // 1. Add the original link text (if valid)
+    if (linkText && linkText.trim().length >= 2) {
+        list.push(linkText.trim());
+    }
+
+    // 2. If it's a mailto link
+    if (href.startsWith('mailto:')) {
+        const emailPart = href.slice(7).split('?')[0].trim();
+        if (emailPart) {
+            list.push(emailPart);
+        }
+        
+        // Add language-specific email keywords
+        const langKeywords = EMAIL_KEYWORDS[langCode] || [];
+        for (const kw of langKeywords) {
+            list.push(kw);
+        }
+        // Add English fallback email keywords
+        const enKeywords = EMAIL_KEYWORDS['en'] || [];
+        for (const kw of enKeywords) {
+            if (!list.includes(kw)) {
+                list.push(kw);
+            }
+        }
+    }
+
+    // 3. Extract social media brand names from the URL
+    const lowercaseHref = href.toLowerCase();
+    const socialBrands = [
+        { domain: 'facebook.com', brand: 'facebook' },
+        { domain: 'linkedin.com', brand: 'linkedin' },
+        { domain: 'tiktok.com', brand: 'tiktok' },
+        { domain: 'youtube.com', brand: 'youtube' },
+        { domain: 'youtu.be', brand: 'youtube' },
+        { domain: 'instagram.com', brand: 'instagram' },
+        { domain: 'twitter.com', brand: 'twitter' },
+        { domain: 'x.com', brand: 'twitter' },
+        { domain: 'wa.me', brand: 'whatsapp' },
+        { domain: 'whatsapp.com', brand: 'whatsapp' }
+    ];
+
+    for (const item of socialBrands) {
+        if (lowercaseHref.includes(item.domain)) {
+            if (!list.includes(item.brand)) {
+                list.push(item.brand);
+            }
+        }
+    }
+
+    return list;
+}
+
 // Helper to synchronize hyperlinks from base content to translated content
-function syncHyperlinks(baseHtml, translatedHtml) {
+function syncHyperlinks(baseHtml, translatedHtml, langCode) {
     if (!baseHtml || !translatedHtml) return translatedHtml;
 
     // 1. Extract all <a> tags from baseHtml
@@ -1977,19 +2046,24 @@ function syncHyperlinks(baseHtml, translatedHtml) {
 
     // 3. Text-matching insertion for links whose text matches in the translation
     for (const item of baseLinks) {
-        const linkText = item.text;
-        if (!linkText || linkText.length < 2) continue; // Skip single characters or empty text
-
         // Check if the exact href is already present anywhere in updatedHtml
         if (updatedHtml.includes(item.href)) continue;
 
-        try {
-            // Match the linkText only if it is outside HTML tags
-            const escapedText = escapeRegExp(linkText);
-            const regex = new RegExp('(?![^<]*>)(' + escapedText + ')', 'i');
-            updatedHtml = updatedHtml.replace(regex, `<a href="${item.href}" target="_blank" rel="noopener noreferrer">$1</a>`);
-        } catch (e) {
-            console.error('Error in regex replacement during link sync:', e);
+        const searchTexts = getSearchTextsForLink(item.href, item.text, langCode);
+        
+        for (const textToSearch of searchTexts) {
+            if (!updatedHtml.includes(item.href)) {
+                try {
+                    const escapedText = escapeRegExp(textToSearch);
+                    const regex = new RegExp('(?![^<]*>)(' + escapedText + ')', 'i');
+                    if (regex.test(updatedHtml)) {
+                        updatedHtml = updatedHtml.replace(regex, `<a href="${item.href}" target="_blank" rel="noopener noreferrer">$1</a>`);
+                        break; // Only wrap the first found matching text
+                    }
+                } catch (e) {
+                    console.error('Error in regex replacement during link sync:', e);
+                }
+            }
         }
     }
 
@@ -2059,7 +2133,7 @@ router.post('/sync-images', authMiddleware, (req, res) => {
             }
 
             // --- 2. Sync Hyperlinks ---
-            updatedHtml = syncHyperlinks(product.detail_content, updatedHtml)
+            updatedHtml = syncHyperlinks(product.detail_content, updatedHtml, trans.language_code)
 
             if (updatedHtml !== originalHtml) {
                 run('UPDATE translations SET translated_text=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', [updatedHtml, trans.id])
@@ -2119,7 +2193,7 @@ router.post('/sync-images', authMiddleware, (req, res) => {
             }
 
             // --- 2. Sync Hyperlinks ---
-            updatedHtml = syncHyperlinks(article.content, updatedHtml)
+            updatedHtml = syncHyperlinks(article.content, updatedHtml, trans.language_code)
 
             if (updatedHtml !== originalHtml) {
                 run('UPDATE translations SET translated_text=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', [updatedHtml, trans.id])

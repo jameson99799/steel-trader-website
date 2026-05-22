@@ -169,12 +169,42 @@ function resolveTemplateVars(html) {
     .replace(/\{\{company_name\}\}/g,   companyName)
 }
 
+// Helper to format email hyperlinks with pre-filled subject and body
+function formatMailtoLinks(html) {
+  if (!html) return html
+  
+  const articleTitle = localizedValue(article.value, 'title') || ''
+  const articleUrl = window.location.origin + route.fullPath
+  const companyEmail = company.value?.email || 'jameson@sunseasteel.com'
+  
+  const subject = `Article Inquiry: ${articleTitle}`
+  const body = `Hi,\n\nI am interested in your article: "${articleTitle}"\nSource Link: ${articleUrl}\n\nPlease provide more information.`
+  const query = `?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  
+  return html.replace(/href=(['"])([^'"]+)\1/gi, (match, quote, href) => {
+    let email = ''
+    if (href.startsWith('mailto:')) {
+      const emailPart = href.slice(7).split('?')[0].trim()
+      email = (emailPart && emailPart !== '{{email}}') ? emailPart : companyEmail
+    } else if (href === '{{email}}') {
+      email = companyEmail
+    } else if (href.includes('@') && !href.includes('/') && !href.toLowerCase().startsWith('http')) {
+      email = href.trim()
+    } else {
+      return match
+    }
+    return `href=${quote}mailto:${email}${query}${quote}`
+  })
+}
+
 // Build iframe srcdoc — isolates all article HTML styles from main page
 const iframeContent = computed(() => {
   const raw = localizedHtml(article.value, 'content') || ''
   if (!raw) return ''
   let html = resolveTemplateVars(raw)
   html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+  html = formatMailtoLinks(html)
+  
   // CSS fix for full-HTML documents: prevent image overflow + consistent table styling
   const fixCss = `<style>
     .replace-tip{display:none!important}
@@ -196,6 +226,7 @@ const sanitizedContent = computed(() => {
   const raw = localizedHtml(article.value, 'content') || ''
   if (!raw) return ''
   let html = resolveTemplateVars(raw)
+  html = formatMailtoLinks(html)
   return html
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -211,6 +242,8 @@ function handleMailtoClick(href, event) {
     if (match) {
       targetEmail = match[1].trim()
     }
+  } else if (href && href.includes('@') && !href.includes('/') && !href.toLowerCase().startsWith('http') && href !== '{{email}}') {
+    targetEmail = href.trim()
   }
 
   const articleTitle = localizedValue(article.value, 'title') || ''
@@ -227,7 +260,7 @@ function handleBodyClick(e) {
   if (!anchor) return
 
   const href = anchor.getAttribute('href') || ''
-  if (href.startsWith('mailto:') || href === '{{email}}') {
+  if (href.startsWith('mailto:') || href === '{{email}}' || (href.includes('@') && !href.includes('/') && !href.toLowerCase().startsWith('http'))) {
     handleMailtoClick(href, e)
   }
 }
@@ -239,7 +272,7 @@ function setupIframeMailtoInterception(doc) {
     if (!anchor) return
 
     const href = anchor.getAttribute('href') || ''
-    if (href.startsWith('mailto:') || href === '{{email}}') {
+    if (href.startsWith('mailto:') || href === '{{email}}' || (href.includes('@') && !href.includes('/') && !href.toLowerCase().startsWith('http'))) {
       handleMailtoClick(href, e)
     }
   })
