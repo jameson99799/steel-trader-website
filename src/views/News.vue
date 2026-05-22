@@ -11,9 +11,25 @@
               <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
               <span class="breadcrumb-current">{{ localizedValue(activeCategory, 'name') }}</span>
             </template>
+            <template v-else-if="route.name === 'NewsRalColors'">
+              <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+              <span class="breadcrumb-current">{{ t('ralColorChart') }}</span>
+            </template>
+            <template v-else-if="route.name === 'NewsRoofingProfiles'">
+              <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+              <span class="breadcrumb-current">{{ t('roofingTitle') }}</span>
+            </template>
           </nav>
-          <h1 class="page-title">{{ activeCategory ? localizedValue(activeCategory, 'name') : t('newsUpdates') }}</h1>
-          <p class="page-subtitle">{{ activeCategory ? t('browseArticlesIn') + ' ' + localizedValue(activeCategory, 'name') : t('newsSubtitle') }}</p>
+          <h1 class="page-title">
+            <template v-if="route.name === 'NewsRalColors'">🎨 {{ t('ralColorChart') }}</template>
+            <template v-else-if="route.name === 'NewsRoofingProfiles'">📐 {{ t('roofingTitle') }}</template>
+            <template v-else>{{ activeCategory ? localizedValue(activeCategory, 'name') : t('newsUpdates') }}</template>
+          </h1>
+          <p class="page-subtitle">
+            <template v-if="route.name === 'NewsRalColors'">{{ t('ralDesc') }}</template>
+            <template v-else-if="route.name === 'NewsRoofingProfiles'">{{ t('roofingProfilesDesc') }}</template>
+            <template v-else>{{ activeCategory ? t('browseArticlesIn') + ' ' + localizedValue(activeCategory, 'name') : t('newsSubtitle') }}</template>
+          </p>
 
           <!-- Category buttons + RAL Color button -->
           <div class="cat-buttons">
@@ -23,10 +39,16 @@
               :to="langPath(`/news/category/${c.slug}`)"
               :class="['cat-btn', activeCatSlug === c.slug ? 'active' : '']"
             >{{ localizedValue(c, 'name') }}</router-link>
-            <router-link :to="langPath('/ral-colors')" class="cat-btn ral-btn">
+            <router-link 
+              :to="langPath('/news/ral-colors')" 
+              :class="['cat-btn', 'ral-btn', route.name === 'NewsRalColors' ? 'active' : '']"
+            >
               <span class="ral-icon">🎨</span> {{ t('ralColorBtn') }}
             </router-link>
-            <router-link :to="langPath('/roofing-profiles')" class="cat-btn profile-btn">
+            <router-link 
+              :to="langPath('/news/roofing-profiles')" 
+              :class="['cat-btn', 'profile-btn', route.name === 'NewsRoofingProfiles' ? 'active' : '']"
+            >
               <span class="ral-icon">📐</span> {{ t('roofingProfilesBtn') }}
             </router-link>
           </div>
@@ -36,38 +58,46 @@
 
     <div class="page-content">
       <div class="container">
-        <div v-if="loading" class="loading-state">
-          <div class="spinner"></div>
-          <p>{{ t('loadingNews') }}</p>
-        </div>
-        <div v-else-if="news.length === 0" class="empty-state">
-          <p>{{ t('noNewsYet') }}</p>
-        </div>
-        <div v-else class="news-grid">
-          <article v-for="item in news" :key="item.id" class="news-card" @click="goToArticle(item)">
-            <div class="card-image" v-if="item.cover_image">
-              <img :src="item.cover_image" :alt="localizedValue(item, 'title')" loading="lazy" />
-            </div>
-            <div class="card-image card-image-placeholder" v-else>
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8.5 3.5c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm7 13H6.5v-.75c0-2.33 4.67-3.5 7-3.5s7 1.17 7 3.5V19.5z"/></svg>
-            </div>
-            <div class="card-body">
-              <h2 class="card-title">{{ localizedValue(item, 'title') }}</h2>
-              <p class="card-summary" v-if="localizedValue(item, 'summary')">{{ localizedValue(item, 'summary') }}</p>
-              <div class="card-meta">
-                <span class="card-date">{{ formatDate(item.created_at) }}</span>
-                <span class="read-more">{{ t('readMore') }}</span>
+        <template v-if="route.name === 'NewsRalColors'">
+          <RalColors hideHeader />
+        </template>
+        <template v-else-if="route.name === 'NewsRoofingProfiles'">
+          <RoofingProfiles hideHeader />
+        </template>
+        <template v-else>
+          <div v-if="loading" class="loading-state">
+            <div class="spinner"></div>
+            <p>{{ t('loadingNews') }}</p>
+          </div>
+          <div v-else-if="news.length === 0" class="empty-state">
+            <p>{{ t('noNewsYet') }}</p>
+          </div>
+          <div v-else class="news-grid">
+            <article v-for="item in news" :key="item.id" class="news-card" @click="goToArticle(item)">
+              <div class="card-image" v-if="item.cover_image">
+                <img :src="item.cover_image" :alt="localizedValue(item, 'title')" loading="lazy" />
               </div>
-            </div>
-          </article>
-        </div>
+              <div class="card-image card-image-placeholder" v-else>
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8.5 3.5c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm7 13H6.5v-.75c0-2.33 4.67-3.5 7-3.5s7 1.17 7 3.5V19.5z"/></svg>
+              </div>
+              <div class="card-body">
+                <h2 class="card-title">{{ localizedValue(item, 'title') }}</h2>
+                <p class="card-summary" v-if="localizedValue(item, 'summary')">{{ localizedValue(item, 'summary') }}</p>
+                <div class="card-meta">
+                  <span class="card-date">{{ formatDate(item.created_at) }}</span>
+                  <span class="read-more">{{ t('readMore') }}</span>
+                </div>
+              </div>
+            </article>
+          </div>
 
-        <!-- Pagination -->
-        <div class="pagination" v-if="total > limit">
-          <button class="page-btn" :disabled="page <= 1" @click="changePage(page - 1)">{{ t('prevPage') }}</button>
-          <span class="page-info">{{ t('pageOf') }} {{ page }} / {{ Math.ceil(total / limit) }}</span>
-          <button class="page-btn" :disabled="page >= Math.ceil(total / limit)" @click="changePage(page + 1)">{{ t('nextPage') }}</button>
-        </div>
+          <!-- Pagination -->
+          <div class="pagination" v-if="total > limit">
+            <button class="page-btn" :disabled="page <= 1" @click="changePage(page - 1)">{{ t('prevPage') }}</button>
+            <span class="page-info">{{ t('pageOf') }} {{ page }} / {{ Math.ceil(total / limit) }}</span>
+            <button class="page-btn" :disabled="page >= Math.ceil(total / limit)" @click="changePage(page + 1)">{{ t('nextPage') }}</button>
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -78,6 +108,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
+import RalColors from './RalColors.vue'
+import RoofingProfiles from './RoofingProfiles.vue'
 
 const { t, localizedValue, langPath } = useLang()
 const router = useRouter()
@@ -109,6 +141,10 @@ async function loadCategories() {
 }
 
 async function loadNews() {
+  if (route.name === 'NewsRalColors' || route.name === 'NewsRoofingProfiles') {
+    loading.value = false
+    return
+  }
   loading.value = true
   try {
     const params = { page: page.value, limit }
@@ -126,7 +162,7 @@ function changePage(p) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-watch(() => route.params.catSlug, () => { page.value = 1; loadNews() })
+watch(() => route.path, () => { page.value = 1; loadNews() })
 
 onMounted(() => { loadCategories(); loadNews() })
 </script>
@@ -185,6 +221,11 @@ onMounted(() => { loadCategories(); loadNews() })
     linear-gradient(135deg, #e74c3c, #e67e22, #f1c40f, #2ecc71, #3498db, #9b59b6) border-box;
   color: #555;
 }
+.ral-btn.active {
+  background: var(--primary, #1a56db);
+  color: #fff;
+  border-color: var(--primary, #1a56db);
+}
 .ral-btn:hover {
   background:
     linear-gradient(135deg, rgba(231,76,60,.06), rgba(52,152,219,.06)) padding-box,
@@ -201,6 +242,11 @@ onMounted(() => { loadCategories(); loadNews() })
     linear-gradient(var(--white, #fff), var(--white, #fff)) padding-box,
     linear-gradient(135deg, #3498db, #2c3e50) border-box;
   color: #34495e;
+}
+.profile-btn.active {
+  background: var(--primary, #1a56db);
+  color: #fff;
+  border-color: var(--primary, #1a56db);
 }
 .profile-btn:hover {
   background:

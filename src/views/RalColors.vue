@@ -2,7 +2,7 @@
   <div class="ral-page">
 
     <!-- Page Header -->
-    <div class="page-header">
+    <div class="page-header" v-if="!hideHeader">
       <div class="container">
         <div class="header-content">
           <nav class="breadcrumb">
@@ -28,6 +28,19 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Search (rendered only when header is hidden) -->
+    <div class="search-wrap-embedded" v-if="hideHeader" style="max-width: 520px; margin: 0 auto 32px; position: relative;">
+      <span class="search-icon" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); font-size: 16px; pointer-events: none;">🔍</span>
+      <input
+        v-model="searchQuery"
+        class="search-input"
+        :placeholder="t('ralSearchPlaceholder')"
+        @input="filterColors"
+        style="width: 100%; padding: 13px 44px 13px 46px; border: 2px solid #e5e7eb; border-radius: 12px; font-size: 15px; outline: none; background: #fff; box-sizing: border-box;"
+      />
+      <button v-if="searchQuery" class="search-clear" @click="searchQuery=''; filterColors()" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #9ca3af; font-size: 16px; cursor: pointer; padding: 4px;">✕</button>
     </div>
 
     <!-- Color Grid -->
@@ -85,6 +98,13 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const { t, langPath } = useLang()
+
+defineProps({
+  hideHeader: {
+    type: Boolean,
+    default: false
+  }
+})
 
 const colors   = ref([])
 const filtered = ref([])

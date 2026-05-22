@@ -8,12 +8,14 @@ const publicRoutes = [
   { path: 'products/:slug', name: 'ProductDetail', component: () => import('../views/ProductDetail.vue') },
   { path: 'news', name: 'News', component: () => import('../views/News.vue') },
   { path: 'news/category/:catSlug', name: 'NewsCategory', component: () => import('../views/News.vue') },
+  { path: 'news/ral-colors', name: 'NewsRalColors', component: () => import('../views/News.vue') },
+  { path: 'news/roofing-profiles', name: 'NewsRoofingProfiles', component: () => import('../views/News.vue') },
   { path: 'news/:slug', name: 'NewsDetail', component: () => import('../views/NewsDetail.vue') },
   { path: 'about', name: 'About', component: () => import('../views/About.vue') },
   { path: 'contact', name: 'Contact', component: () => import('../views/Contact.vue') },
   { path: 'factory', name: 'Factory', component: () => import('../views/Factory.vue') },
-  { path: 'ral-colors', name: 'RalColors', component: () => import('../views/RalColors.vue') },
-  { path: 'roofing-profiles', name: 'RoofingProfiles', component: () => import('../views/RoofingProfiles.vue') }
+  { path: 'ral-colors', name: 'RalColors', redirect: to => `/${to.params.lang || 'en'}/news/ral-colors` },
+  { path: 'roofing-profiles', name: 'RoofingProfiles', redirect: to => `/${to.params.lang || 'en'}/news/roofing-profiles` }
 ]
 
 const routes = [
@@ -39,8 +41,8 @@ const routes = [
   { path: '/about', redirect: '/en/about' },
   { path: '/contact', redirect: '/en/contact' },
   { path: '/factory', redirect: '/en/factory' },
-  { path: '/ral-colors', redirect: '/en/ral-colors' },
-  { path: '/roofing-profiles', redirect: '/en/roofing-profiles' },
+  { path: '/ral-colors', redirect: '/en/news/ral-colors' },
+  { path: '/roofing-profiles', redirect: '/en/news/roofing-profiles' },
   {
     path: '/admin/login',
     name: 'AdminLogin',
@@ -164,6 +166,8 @@ router.afterEach((to) => {
     'ProductsCategory': t('products'),
     'News': t('news'),
     'NewsCategory': t('news'),
+    'NewsRalColors': t('ralColorChart'),
+    'NewsRoofingProfiles': t('roofingTitle'),
     'About': t('aboutUs'),
     'Contact': t('contactUs'),
     'Factory': t('factoryTour'),

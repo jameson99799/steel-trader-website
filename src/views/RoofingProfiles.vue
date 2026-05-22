@@ -1,6 +1,6 @@
 <template>
   <div class="profiles-page">
-    <div class="page-header">
+    <div class="page-header" v-if="!hideHeader">
       <div class="container">
         <div class="header-content">
           <nav class="breadcrumb">
@@ -33,6 +33,26 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Category Filter Buttons (rendered outside when header is hidden) -->
+    <div class="category-filters-embedded" v-if="hideHeader && categories.length > 0" style="margin-bottom: 32px;">
+      <div class="filter-buttons" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;">
+        <button 
+          :class="['filter-btn', activeCategory === 0 ? 'active' : '']" 
+          @click="activeCategory = 0"
+        >
+          {{ t('allProfiles') }}
+        </button>
+        <button 
+          v-for="cat in categories" 
+          :key="cat.id" 
+          :class="['filter-btn', activeCategory === cat.id ? 'active' : '']" 
+          @click="activeCategory = cat.id"
+        >
+          {{ getCategoryLabel(cat) }}
+        </button>
       </div>
     </div>
 
@@ -173,6 +193,13 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const { t, localizedValue, langPath } = useLang()
+
+defineProps({
+  hideHeader: {
+    type: Boolean,
+    default: false
+  }
+})
 
 const profiles = ref([])
 const categories = ref([])

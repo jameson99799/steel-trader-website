@@ -418,6 +418,14 @@ async function startServer() {
         const lang = langMatch ? langMatch[1] : 'en'
         const subPath = langMatch ? (langMatch[2] || '') : url
 
+        // 301 Redirect old standalone paths to tabbed /news/ paths
+        if (subPath === '/ral-colors' || subPath === '/ral-colors/') {
+          return res.redirect(301, `/${lang}/news/ral-colors`)
+        }
+        if (subPath === '/roofing-profiles' || subPath === '/roofing-profiles/') {
+          return res.redirect(301, `/${lang}/news/roofing-profiles`)
+        }
+
         // Default SEO values from seo_settings table
         const seoSettings = getOne('SELECT * FROM seo_settings WHERE id = 1') || {}
         const company = getOne('SELECT * FROM company WHERE id = 1') || {}
@@ -845,21 +853,23 @@ async function startServer() {
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: 'Factory', item: pageCanonical }
             ] })
-          } else if (subPath === '/ral-colors' || subPath === '/ral-colors/') {
+          } else if (subPath === '/news/ral-colors' || subPath === '/news/ral-colors/') {
             matchedRoute = true
-            pageTitle = `RAL Color Chart for PPGI & PPGL | ${companyName}`
+            pageTitle = `RAL Color Chart for PPGI & PPGL | ${companyNameTranslated}`
             pageDesc = `Explore the full RAL color chart for our prepainted galvanized (PPGI) and galvalume (PPGL) steel coils. Custom colors available upon request.`
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
-              { '@type': 'ListItem', position: 2, name: 'RAL Colors', item: pageCanonical }
+              { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
+              { '@type': 'ListItem', position: 3, name: 'RAL Colors', item: pageCanonical }
             ] })
-          } else if (subPath === '/roofing-profiles' || subPath === '/roofing-profiles/') {
+          } else if (subPath === '/news/roofing-profiles' || subPath === '/news/roofing-profiles/') {
             matchedRoute = true
-            pageTitle = `Roofing Sheet Profiles & Corrugated Steel | ${companyName}`
+            pageTitle = `Roofing Sheet Profiles & Corrugated Steel | ${companyNameTranslated}`
             pageDesc = `View our catalog of steel roofing sheet profiles. We manufacture corrugated, trapezoidal, and glazed tile roofing sheets in various dimensions and colors.`
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
-              { '@type': 'ListItem', position: 2, name: 'Roofing Profiles', item: pageCanonical }
+              { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
+              { '@type': 'ListItem', position: 3, name: 'Roofing Profiles', item: pageCanonical }
             ] })
           }
 
