@@ -101,7 +101,7 @@
               </div>
             </div>
 
-            <router-link :to="langPath('/')" @click="menuOpen = false" class="nav-link">
+            <router-link :to="langPath('/')" @click="menuOpen = false" class="nav-link home-link">
               {{ t('home') }}
             </router-link>
 
@@ -570,13 +570,20 @@ onUnmounted(() => {
 }
 
 .nav-link:hover,
-.nav-link.router-link-active {
+.nav-link:not(.home-link).router-link-active,
+.nav-link.home-link.router-link-exact-active {
   color: var(--primary);
 }
 
 .nav-link:hover::after,
-.nav-link.router-link-active::after {
+.nav-link:not(.home-link).router-link-active::after,
+.nav-link.home-link.router-link-exact-active::after {
   width: 100%;
+}
+
+.nav-link:focus,
+.nav-dropdown-item:focus {
+  outline: none;
 }
 
 /* Nav Dropdown */

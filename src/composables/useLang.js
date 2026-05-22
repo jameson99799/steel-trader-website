@@ -358,8 +358,9 @@ export function useLang() {
 
   // Get language-prefixed path for router-links
   const langPath = (path) => {
-    if (lang.value === 'en') return path
-    return `/${lang.value}${path}`
+    const code = lang.value || 'en'
+    const cleanPath = path === '/' ? '' : path
+    return `/${code}${cleanPath}`
   }
 
   const initLang = () => {
