@@ -32,7 +32,7 @@
           </p>
 
           <!-- Category buttons + RAL Color button -->
-          <div class="cat-buttons">
+          <div class="cat-buttons" v-if="!loadingCats">
             <router-link
               v-for="c in categories"
               :key="c.id"
@@ -121,6 +121,7 @@ const total = ref(0)
 const page = ref(1)
 const limit = 12
 const categories = ref([])
+const loadingCats = ref(true)
 
 const activeCatSlug = computed(() => route.params.catSlug || null)
 const activeCategory = computed(() =>
@@ -137,7 +138,13 @@ function goToArticle(item) {
 }
 
 async function loadCategories() {
-  try { categories.value = await api.getNewsCategories() } catch (e) { console.error(e) }
+  try { 
+    categories.value = await api.getNewsCategories() 
+  } catch (e) { 
+    console.error(e) 
+  } finally {
+    loadingCats.value = false
+  }
 }
 
 async function loadNews() {

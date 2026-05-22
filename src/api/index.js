@@ -5,7 +5,7 @@ const getToken = () => localStorage.getItem('token')
 // ─── Cache layer ──────────────────────────────────────────────────────────────
 // Public GET endpoints that are safe to cache (non-admin, read-only)
 const CACHEABLE = ['/company', '/hero', '/pagetexts', '/categories', '/categories/tree',
-  '/languages/active', '/translation/multilingual-status']
+  '/languages/active', '/translation/multilingual-status', '/news-categories']
 const CACHE_TTL = 5 * 60 * 1000  // 5 minutes
 
 function cacheKey(url) { return `_api_cache_${url}` }
@@ -186,10 +186,19 @@ export const api = {
   deleteNews: (id) => request(`/news/${id}`, { method: 'DELETE' }),
 
   // News Categories
-  getNewsCategories: () => request('/news-categories'),
-  createNewsCategory: (data) => request('/news-categories', { method: 'POST', body: JSON.stringify(data) }),
-  updateNewsCategory: (id, data) => request(`/news-categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteNewsCategory: (id, moveToId) => request(`/news-categories/${id}${moveToId ? `?move_to=${moveToId}` : ''}`, { method: 'DELETE' }),
+  getNewsCategories: () => cachedGet('/news-categories'),
+  createNewsCategory: (data) => {
+    localStorage.removeItem(cacheKey('/news-categories'))
+    return request('/news-categories', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateNewsCategory: (id, data) => {
+    localStorage.removeItem(cacheKey('/news-categories'))
+    return request(`/news-categories/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+  },
+  deleteNewsCategory: (id, moveToId) => {
+    localStorage.removeItem(cacheKey('/news-categories'))
+    return request(`/news-categories/${id}${moveToId ? `?move_to=${moveToId}` : ''}`, { method: 'DELETE' })
+  },
   moveArticles: (article_ids, category_id) => request('/news-categories/move', { method: 'POST', body: JSON.stringify({ article_ids, category_id }) }),
 
   // RAL Color Chart
