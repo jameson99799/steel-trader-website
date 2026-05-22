@@ -7,6 +7,9 @@
           <span style="font-size:13px;color:#64748b;margin-right:6px;">文章作者:</span>
           <input v-model="defaultAuthor" @blur="saveAuthor" class="form-control" style="width:180px;height:28px;padding:2px 8px;font-size:13px;" placeholder="全局作者名称" />
         </div>
+        <button class="btn btn-outline" style="color:#059669;border-color:#059669;" @click="syncImagesAndLinks" :disabled="syncing">
+          {{ syncing ? '⏳ 同步中...' : '🔄 同步图片与超链接' }}
+        </button>
         <button class="btn btn-outline" @click="showCatModal = true" style="color:#7c3aed;border-color:#c4b5fd;">📂 分组管理</button>
         <button class="btn btn-primary" @click="openCreate">+ 新建文章</button>
       </div>
@@ -410,6 +413,31 @@ import api from '../../api'
 const newsList = ref([])
 const showModal = ref(false)
 const editId = ref(null)
+const syncing = ref(false)
+
+async function syncImagesAndLinks() {
+  if (syncing.value) return
+  syncing.value = true
+  try {
+    const res = await fetch((import.meta.env.VITE_API_BASE || '') + '/api/translation/sync-images', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + localStorage.getItem('token')
+      }
+    })
+    const data = await res.json()
+    if (res.ok) {
+      alert(`✅ 同步完成！\n产品详情：${data.productsSynced} 个已更新\n新闻文章：${data.newsSynced} 个已更新`)
+    } else {
+      alert('❌ 同步失败: ' + (data.error || '未知错误'))
+    }
+  } catch (e) {
+    alert('❌ 同步失败: ' + e.message)
+  } finally {
+    syncing.value = false
+  }
+}
 const saving = ref(false)
 const activeTab = ref('basic')
 const isFullscreen = ref(false)

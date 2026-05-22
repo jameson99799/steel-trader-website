@@ -4,7 +4,7 @@
       <h1>商品管理</h1>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-sm btn-outline" style="color:#059669;border-color:#059669;" @click="syncImages" :disabled="syncingImages">
-          {{ syncingImages ? '⏳ 同步中...' : '🔄 同步图片到所有语言' }}
+          {{ syncingImages ? '⏳ 同步中...' : '🔄 同步图片与超链接到所有语言' }}
         </button>
         <button class="btn btn-primary" style="background:#7c3aed;border-color:#7c3aed;" @click="showAICreate = true">🤖 AI 创建商品</button>
         <button class="btn btn-primary" @click="openModal()">添加商品</button>
