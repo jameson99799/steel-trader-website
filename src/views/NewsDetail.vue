@@ -48,7 +48,7 @@
           </div>
 
           <!-- direct mode: v-html (better SEO, strips only <style>/<script> tags) -->
-          <div class="article-body article-body-direct" v-else-if="article.content" v-html="sanitizedContent"></div>
+          <div class="article-body article-body-direct" v-else-if="article.content" v-html="sanitizedContent" @click="handleBodyClick"></div>
 
           <div class="article-footer">
             <router-link :to="langPath('/news')" class="back-link">
@@ -202,6 +202,49 @@ const sanitizedContent = computed(() => {
     .replace(/<span\s+class=["']replace-tip["'][^>]*>.*?<\/span>/gi, '')
 })
 
+function handleMailtoClick(href, event) {
+  if (event) event.preventDefault()
+
+  let targetEmail = company.value?.email || 'jameson@sunseasteel.com'
+  if (href && href.startsWith('mailto:')) {
+    const match = href.match(/^mailto:([^?#]+)/)
+    if (match) {
+      targetEmail = match[1].trim()
+    }
+  }
+
+  const articleTitle = localizedValue(article.value, 'title') || ''
+  const articleUrl = window.location.href
+
+  const subject = `Article Inquiry: ${articleTitle}`
+  const body = `Hi,\n\nI am interested in your article: "${articleTitle}"\nSource Link: ${articleUrl}\n\nPlease provide more information.`
+
+  window.location.href = `mailto:${targetEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+}
+
+function handleBodyClick(e) {
+  const anchor = e.target.closest('a')
+  if (!anchor) return
+
+  const href = anchor.getAttribute('href') || ''
+  if (href.startsWith('mailto:') || href === '{{email}}') {
+    handleMailtoClick(href, e)
+  }
+}
+
+function setupIframeMailtoInterception(doc) {
+  if (!doc) return
+  doc.addEventListener('click', (e) => {
+    const anchor = e.target.closest('a')
+    if (!anchor) return
+
+    const href = anchor.getAttribute('href') || ''
+    if (href.startsWith('mailto:') || href === '{{email}}') {
+      handleMailtoClick(href, e)
+    }
+  })
+}
+
 function resizeIframe() {
   const iframe = articleIframe.value
   if (!iframe) return
@@ -214,6 +257,7 @@ function resizeIframe() {
           iframe.style.height = doc.documentElement.scrollHeight + 'px'
         })
       })
+      setupIframeMailtoInterception(doc)
     }
   } catch (e) { /* srcdoc won't have cross-origin issues */ }
 }
