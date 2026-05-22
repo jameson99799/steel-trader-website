@@ -6,7 +6,8 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
-import { readFileSync, existsSync, unlinkSync } from 'fs'
+import { readFileSync, existsSync, unlinkSync, readdirSync } from 'fs'
+import sharp from 'sharp'
 
 import { initDb, getAll, getOne, run } from './db.js'
 import authRoutes from './routes/auth.js'
@@ -214,6 +215,60 @@ async function startServer() {
       res.setHeader('X-Frame-Options', 'DENY')
       res.setHeader('X-XSS-Protection', '1; mode=block')
       next()
+    })
+
+    // Dynamic favicon serving to auto-generate and serve favicon files from company database settings
+    const FAVICON_SIZES = {
+      'favicon.ico': 32,
+      'favicon-32.png': 32,
+      'favicon-16.png': 16,
+      'favicon-192.png': 192,
+      'apple-touch-icon.png': 180
+    }
+    app.get('/:file(favicon\\.ico|favicon-32\\.png|favicon-16\\.png|favicon-192\\.png|apple-touch-icon\\.png)', async (req, res) => {
+      const filename = req.params.file
+      const size = FAVICON_SIZES[filename]
+      
+      try {
+        const company = getOne('SELECT favicon, logo FROM company WHERE id = 1')
+        let sourcePath = ''
+        if (company) {
+          const faviconPath = company.favicon || company.logo
+          if (faviconPath) {
+            const cleanPath = join(__dirname, '..', faviconPath.replace(/^\//, ''))
+            if (existsSync(cleanPath)) {
+              sourcePath = cleanPath
+            }
+          }
+        }
+        
+        // Fallback: search uploads/ for any image
+        if (!sourcePath) {
+          const uploadsDir = join(__dirname, '..', 'uploads')
+          if (existsSync(uploadsDir)) {
+            const files = readdirSync(uploadsDir).filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f))
+            if (files.length) {
+              sourcePath = join(uploadsDir, files[0])
+            }
+          }
+        }
+        
+        if (!sourcePath) {
+          return res.status(404).send('Not Found')
+        }
+        
+        res.setHeader('Content-Type', filename.endsWith('.ico') ? 'image/x-icon' : 'image/png')
+        res.setHeader('Cache-Control', 'public, max-age=86400') // Cache for 1 day
+        
+        const buffer = await sharp(sourcePath)
+          .resize(size, size, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+          .png()
+          .toBuffer()
+        return res.send(buffer)
+      } catch (e) {
+        console.error('Favicon serving error:', e)
+        return res.status(404).send('Not Found')
+      }
     })
 
     // 静态文件
