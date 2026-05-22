@@ -2022,8 +2022,8 @@ function replaceTextOutsideTags(html, targetText, linkHtml) {
     const endsWithWordChar = /[A-Za-z0-9]$/.test(targetText);
 
     let pattern = escapedText;
-    if (startsWithWordChar) pattern = '\\b' + pattern;
-    if (endsWithWordChar) pattern = pattern + '\\b';
+    if (startsWithWordChar) pattern = '(?<!\\w)' + pattern;
+    if (endsWithWordChar) pattern = pattern + '(?!\\w)';
 
     // Match HTML tags or target pattern
     const regex = new RegExp('<[^>]+>|' + pattern, 'gi');
@@ -2054,7 +2054,15 @@ function replaceTextOutsideTags(html, targetText, linkHtml) {
 function findMatchingBaseLink(transHref, transText, baseLinks, langCode) {
     if (!baseLinks || baseLinks.length === 0) return null;
 
-    // 1. Exact href match (already correct)
+    // 1. Text matching: highest priority for identifying the true intent of the link
+    for (const baseLink of baseLinks) {
+        const searchTexts = getSearchTextsForLink(baseLink.href, baseLink.text, langCode);
+        if (searchTexts.some(s => s.toLowerCase() === transText.trim().toLowerCase())) {
+            return baseLink;
+        }
+    }
+
+    // 2. Exact href match
     const exactMatch = baseLinks.find(b => b.href === transHref);
     if (exactMatch) return exactMatch;
 
@@ -2079,16 +2087,10 @@ function findMatchingBaseLink(transHref, transText, baseLinks, langCode) {
 
     const transType = getLinkType(transHref);
 
-    // 2. Find a base link with the same type/domain
-    const typeMatch = baseLinks.find(b => getLinkType(b.href) === transType);
-    if (typeMatch) return typeMatch;
-
-    // 3. Find by text matching (if the translation link text matches search texts of a base link)
-    for (const baseLink of baseLinks) {
-        const searchTexts = getSearchTextsForLink(baseLink.href, baseLink.text, langCode);
-        if (searchTexts.some(s => s.toLowerCase() === transText.trim().toLowerCase())) {
-            return baseLink;
-        }
+    // 3. Find a base link with the same type/domain (only if not 'other' to prevent blind overwrites)
+    if (transType !== 'other') {
+        const typeMatch = baseLinks.find(b => getLinkType(b.href) === transType);
+        if (typeMatch) return typeMatch;
     }
 
     return null;
