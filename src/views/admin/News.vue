@@ -1261,6 +1261,9 @@ onMounted(() => {
   background: #f8fafc; border: 1px solid var(--border);
   border-radius: 8px 8px 0 0; padding: 8px 12px;
   margin-bottom: 0;
+  position: sticky;
+  top: -24px;
+  z-index: 100;
 }
 
 .mode-tabs { display: flex; gap: 4px; }
