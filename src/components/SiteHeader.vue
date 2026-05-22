@@ -33,7 +33,7 @@
                   <circle cx="12" cy="12" r="10"/>
                   <path d="M12 2a14.5 14.5 0 0 1 0 20M12 2a14.5 14.5 0 0 0 0 20M2 12h20"/>
                 </svg>
-                <span>{{ t('language') }}</span>
+                <span>Language</span>
                 <svg class="chevron" :class="{open: langDropOpen}" viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px">
                   <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
                 </svg>
