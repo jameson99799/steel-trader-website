@@ -2014,6 +2014,42 @@ function getSearchTextsForLink(href, linkText, langCode) {
     return list;
 }
 
+// Helper to replace text outside HTML tags and existing anchors
+function replaceTextOutsideTags(html, targetText, linkHtml) {
+    if (!html || !targetText) return html;
+    const escapedText = escapeRegExp(targetText);
+    const startsWithWordChar = /^[A-Za-z0-9]/.test(targetText);
+    const endsWithWordChar = /[A-Za-z0-9]$/.test(targetText);
+
+    let pattern = escapedText;
+    if (startsWithWordChar) pattern = '\\b' + pattern;
+    if (endsWithWordChar) pattern = pattern + '\\b';
+
+    // Match HTML tags or target pattern
+    const regex = new RegExp('<[^>]+>|' + pattern, 'gi');
+
+    let insideAnchor = false;
+    let replaced = false;
+
+    return html.replace(regex, (match) => {
+        if (match.startsWith('<')) {
+            if (/<a\b/i.test(match)) {
+                insideAnchor = true;
+            } else if (/<\/a>/i.test(match)) {
+                insideAnchor = false;
+            }
+            return match;
+        }
+        
+        if (!insideAnchor && !replaced) {
+            replaced = true;
+            return linkHtml;
+        }
+        
+        return match;
+    });
+}
+
 // Helper to synchronize hyperlinks from base content to translated content
 function syncHyperlinks(baseHtml, translatedHtml, langCode) {
     if (!baseHtml || !translatedHtml) return translatedHtml;
@@ -2053,15 +2089,12 @@ function syncHyperlinks(baseHtml, translatedHtml, langCode) {
         
         for (const textToSearch of searchTexts) {
             if (!updatedHtml.includes(item.href)) {
-                try {
-                    const escapedText = escapeRegExp(textToSearch);
-                    const regex = new RegExp('(?![^<]*>)(' + escapedText + ')', 'i');
-                    if (regex.test(updatedHtml)) {
-                        updatedHtml = updatedHtml.replace(regex, `<a href="${item.href}" target="_blank" rel="noopener noreferrer">$1</a>`);
-                        break; // Only wrap the first found matching text
-                    }
-                } catch (e) {
-                    console.error('Error in regex replacement during link sync:', e);
+                const beforeReplace = updatedHtml;
+                const linkHtml = `<a href="${item.href}" target="_blank" rel="noopener noreferrer">${textToSearch}</a>`;
+                updatedHtml = replaceTextOutsideTags(updatedHtml, textToSearch, linkHtml);
+                // If it changed, we successfully added the link, so break to the next link
+                if (updatedHtml !== beforeReplace) {
+                    break;
                 }
             }
         }
