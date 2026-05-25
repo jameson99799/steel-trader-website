@@ -378,7 +378,8 @@ const loadMediaPicker = async () => {
     const res = await fetch(`/api/media?search=${encodeURIComponent(mediaPickerSearch.value)}&group_id=${mediaPickerGroup.value}`, {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
     })
-    mediaPickerItems.value = await res.json()
+    const data = await res.json()
+    mediaPickerItems.value = data.items || []
   } catch (e) { console.error(e) }
 }
 

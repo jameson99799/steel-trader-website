@@ -256,7 +256,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import api from '../../api'
 
 const loading = ref(false)
