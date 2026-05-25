@@ -76,6 +76,9 @@
           <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
         </select>
         <button class="btn btn-sm btn-primary" @click="batchMove" :disabled="!batchGroupTarget">移动</button>
+        <button class="btn btn-sm btn-outline" style="border-color:#eab308; color:#eab308;" @click="batchRename" :disabled="isBatchRenaming">
+          {{ isBatchRenaming ? '处理中...' : '✏️ 重命名' }}
+        </button>
         <button class="btn btn-sm btn-danger" @click="batchDelete">删除</button>
       </div>
       <div class="filter-count">共 {{ total }} 张图片</div>
@@ -213,6 +216,8 @@ const replaceInput = ref(null)
 const renamingId = ref(null)
 const renameValue = ref('')
 const renameInput = ref(null)
+
+const isBatchRenaming = ref(false)
 
 const optimizing = ref(false)
 const optimizeResult = ref(null)
@@ -360,6 +365,34 @@ async function batchDelete() {
   const data = await res.json()
   if (res.ok) { selectedIds.value = []; loadMedia(); loadGroups() }
   else alert(data.error)
+}
+
+async function batchRename() {
+  if (!selectedIds.value.length) return
+  const prefix = prompt(`正在为选中的 ${selectedIds.value.length} 张图片批量重命名。\n请输入英文前缀 (例如: GI coil):`)
+  if (!prefix) return
+  
+  isBatchRenaming.value = true
+  try {
+    const res = await fetch('/api/media/batch-rename', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ ids: selectedIds.value, prefix })
+    })
+    const data = await res.json()
+    if (res.ok) {
+      alert(`批量重命名成功！\n成功: ${data.successCount} 个\n失败: ${data.errorCount} 个`)
+      selectedIds.value = []
+      loadMedia()
+      loadGroups()
+    } else {
+      alert('重命名失败: ' + (data.error || '未知错误'))
+    }
+  } catch (e) {
+    alert('重命名失败: ' + e.message)
+  } finally {
+    isBatchRenaming.value = false
+  }
 }
 
 // Groups
