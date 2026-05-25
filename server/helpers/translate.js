@@ -90,6 +90,20 @@ export function translateNews(article, map, langCode) {
     if (t.seo_description) article[`seo_description_${langCode}`] = t.seo_description
     if (t.seo_keywords) article[`seo_keywords_${langCode}`] = t.seo_keywords
 
+    // Translate FAQs JSON
+    if (article.faq_items) {
+        try {
+            const origFaqs = JSON.parse(article.faq_items)
+            if (Array.isArray(origFaqs) && origFaqs.length > 0) {
+                const translatedFaqs = origFaqs.map((faq, idx) => ({
+                    question: t[`faq_q_${idx}`] || faq.question,
+                    answer: t[`faq_a_${idx}`] || faq.answer
+                }))
+                article[`faq_items_${langCode}`] = JSON.stringify(translatedFaqs)
+            }
+        } catch (e) { /* ignore parse errors */ }
+    }
+
     return article
 }
 
