@@ -149,20 +149,49 @@ async function executeGeneration(isTest = false) {
   }
 
   // Step 2: Fetch Cover Image
-  // Use | logic to search media library
+  // Use product terms to match media_groups
   let coverImage = ''
   let fetchedMediaList = []
   if (product) {
     const terms = product.split('|').map(s => s.trim()).filter(Boolean)
+    const allGroups = getAll('SELECT id, name FROM media_groups')
+    const matchedGroupIds = new Set()
+
+    terms.forEach(term => {
+      const t = term.toLowerCase()
+      allGroups.forEach(g => {
+        const gName = g.name.toLowerCase()
+        if (t === gName) {
+          matchedGroupIds.add(g.id)
+        } else {
+          try {
+            // Use word boundary to ensure "GI" doesn't match inside "PPGI"
+            const regex = new RegExp(`\\b${gName}\\b`, 'i')
+            if (regex.test(t)) {
+              matchedGroupIds.add(g.id)
+            }
+          } catch(e){} // Ignore regex errors for special chars
+        }
+      })
+    })
+
     let where = "WHERE status=1 AND mimetype LIKE 'image/%'"
     const params = []
-    if (terms.length > 0) {
+    
+    if (matchedGroupIds.size > 0) {
+      const ids = Array.from(matchedGroupIds)
+      const placeholders = ids.map(() => '?').join(',')
+      where += ` AND group_id IN (${placeholders})`
+      params.push(...ids)
+    } else if (terms.length > 0) {
+      // Fallback: if no group matched, search filename with exact word match trick
       const ors = terms.map(() => '(original_filename LIKE ? OR alt LIKE ?)').join(' OR ')
       where += ` AND (${ors})`
       terms.forEach(term => {
         params.push(`%${term}%`, `%${term}%`)
       })
     }
+
     // Fetch up to 4 random images
     const mediaList = getAll(`SELECT * FROM media ${where} ORDER BY RANDOM() LIMIT 4`, params)
     logMsg(`Fetched ${mediaList?.length || 0} images for product from media library.`)
