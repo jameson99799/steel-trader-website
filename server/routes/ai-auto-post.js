@@ -142,7 +142,9 @@ async function executeGeneration(isTest = false) {
   logMsg(`Selected product: ${product}`)
 
   // Step 1: Generate Metadata
-  const userPrompt = `Product: ${product}`
+  const recentNews = getAll("SELECT title, title_en FROM news ORDER BY id DESC LIMIT 25") || []
+  const existingTitles = recentNews.map(n => n.title_en || n.title).filter(Boolean).join('; ')
+  const userPrompt = `Product: ${product}\nExisting articles in our news section: ${existingTitles}\nRequirement: Do NOT write duplicate topics. Please choose a fresh, unique, and highly specific angle or topic (e.g., specific application, comparative analysis, spec details, etc.) that hasn't been covered in the existing articles.`
   logMsg(`Generating metadata...`)
   const rawMetadata = await callAi(channel, null, metadataPromptRow.content.replace('{product}', product), userPrompt)
   logMsg(`Metadata AI Response received.`)
