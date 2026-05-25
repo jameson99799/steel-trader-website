@@ -129,10 +129,14 @@ async function executeGeneration(isTest = false) {
 
   let products = []
   try { products = JSON.parse(settings.products_json || '[]') } catch(e) {}
+  console.log('[DEBUG] executeGeneration raw products_json:', settings.products_json)
+  console.log('[DEBUG] executeGeneration parsed products:', products)
+  console.log('[DEBUG] executeGeneration current_product_index:', settings.current_product_index)
   if (!products.length) throw new Error('No products selected for generation')
 
   const product = products[settings.current_product_index % products.length]
   const nextIndex = (settings.current_product_index + 1) % products.length
+  console.log('[DEBUG] executeGeneration chosen product:', product)
   logMsg(`Selected product: ${product}`)
 
   // Step 1: Generate Metadata
@@ -240,25 +244,19 @@ async function executeGeneration(isTest = false) {
   const slug = (metadata.title || product || `post-${Date.now()}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 60) + '-' + Date.now()
 
   // Step 4: Insert News Post
+  const catId = settings.category_id || 1
   const result = run(`
-    INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status, category_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
   `, [
     metadata.title || product, metadata.title || product, slug,
     metadata.summary || '', metadata.summary || '',
     bodyContent, coverImage,
-    metadata.seo_title || '', metadata.seo_description || '', metadata.seo_keywords || ''
+    metadata.seo_title || '', metadata.seo_description || '', metadata.seo_keywords || '',
+    catId
   ])
 
   const newId = result.lastInsertRowid
-
-  // Step 4.5: Link to Category
-  const catId = settings.category_id || 1
-  try {
-    run('INSERT INTO news_category_links (news_id, category_id) VALUES (?, ?)', [newId, catId])
-  } catch(e) {
-    logMsg(`Warning: Failed to link news to category ${catId}: ${e.message}`)
-  }
 
   // Step 5: Queue Translation if needed
   if (settings.translate_all === 1) {
@@ -323,6 +321,7 @@ router.get('/settings', authMiddleware, (req, res) => {
 
 router.post('/settings', authMiddleware, (req, res) => {
   const { frequency_days, articles_per_run, products_json, translate_all, apply_watermark, channel_id, metadata_prompt_id, body_prompt_id, category_id } = req.body
+  console.log('[DEBUG] POST /settings body received:', req.body)
   run(`
     UPDATE ai_post_settings 
     SET frequency_days=?, articles_per_run=?, products_json=?, translate_all=?, apply_watermark=?, channel_id=?, metadata_prompt_id=?, body_prompt_id=?, category_id=?, updated_at=CURRENT_TIMESTAMP
