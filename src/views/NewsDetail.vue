@@ -351,9 +351,10 @@ async function loadArticle(slug) {
       document.head.appendChild(script)
 
       // FAQ schema (if article has faq_items)
-      if (a.faq_items) {
+      const faqJson = localizedValue(a, 'faq_items') || a.faq_items
+      if (faqJson) {
         try {
-          const faqs = JSON.parse(a.faq_items)
+          const faqs = JSON.parse(faqJson)
           if (faqs.length) {
             const faqSchema = {
               '@context': 'https://schema.org',

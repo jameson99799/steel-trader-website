@@ -602,9 +602,10 @@ onMounted(async () => {
       document.head.appendChild(script)
 
       // FAQ schema (if product has faq_items)
-      if (p.faq_items) {
+      const faqJson = localizedValue(p, 'faq_items') || p.faq_items
+      if (faqJson) {
         try {
-          const faqs = JSON.parse(p.faq_items)
+          const faqs = JSON.parse(faqJson)
           if (faqs.length) {
             const faqSchema = {
               '@context': 'https://schema.org',
