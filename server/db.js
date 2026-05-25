@@ -415,7 +415,7 @@ async function initDb() {
 
   // Migration: FORCE update default AI prompts to the new English versions
   try {
-    const metaRow = db.prepare('SELECT id FROM ai_post_prompts WHERE type = "metadata" AND is_default = 1').get()
+    const metaRow = db.prepare("SELECT id FROM ai_post_prompts WHERE type = 'metadata' AND is_default = 1").get()
     if (metaRow) {
       db.prepare(`UPDATE ai_post_prompts SET content = ? WHERE id = ?`).run(
         'You are a professional steel foreign trade SEO expert. Please generate metadata for the product {product}.\nRequirements:\n1. The title MUST be in ENGLISH and use an attractive Q&A format, e.g., What is {product}? What are the applications of {product}? How to get factory prices for {product}?\n2. The summary MUST be in ENGLISH and directly highlight selling points: Professional manufacturer of {product}, source factory, providing high quality and competitive prices, welcome to inquire.\n3. Return a valid JSON format containing:\n{\n  "title": "Q&A style English title",\n  "summary": "1-2 sentences attractive English summary",\n  "seo_title": "SEO optimized English title",\n  "seo_description": "SEO English description containing keywords",\n  "seo_keywords": "comma-separated English keywords"\n}',
@@ -424,7 +424,7 @@ async function initDb() {
       console.log('[db] Force migrated default metadata AI prompt to English version.')
     }
 
-    const bodyRow = db.prepare('SELECT id FROM ai_post_prompts WHERE type = "body" AND is_default = 1').get()
+    const bodyRow = db.prepare("SELECT id FROM ai_post_prompts WHERE type = 'body' AND is_default = 1").get()
     if (bodyRow) {
       db.prepare(`UPDATE ai_post_prompts SET content = ? WHERE id = ?`).run(
         'You are a sales expert who understands the psychology of steel foreign trade customers. Write a professional foreign trade marketing long article in ENGLISH for the product: {product}.\nRequirements:\n1. The article MUST be written entirely in ENGLISH and use standard HTML tags (<h2>, <h3>, <p>, <ul>, <li>) for formatting. DO NOT use markdown. Output raw HTML directly.\n2. The structure MUST follow this exact format:\n   - A short introductory paragraph explaining what the product is.\n   - <h2>[Topic 1]</h2> (e.g., Overview or Features)\n   - <h2>[Topic 2]</h2> (e.g., Applications or When to Use)\n   - <h2>[Topic 3]</h2> (e.g., Cost vs Lifecycle Analysis or Market Trends)\n   - <h3>📌 Key Takeaways</h3> (MUST include a bulleted list of 3-4 key points)\n   - <h2>Conclusion</h2>\n   - <h2>💬 Need Expert Advice?</h2>\n3. Under the "💬 Need Expert Advice?" section, you MUST strictly include this exact contact information block:\n   <p>Our steel specialists are ready to help with product selection, technical questions, and competitive pricing.</p>\n   <p>✉️ Email: jameson@sunseasteel.com</p>\n   <p>💬 WhatsApp: +86 155 5347 8959</p>\n4. The tone must be extremely professional and sincere, emphasizing that we are a source factory with reliable quality and competitive prices.\n5. You MUST insert exactly the requested number of image placeholders (e.g. [IMAGE_1], [IMAGE_2]) into the HTML body organically between paragraphs.',
