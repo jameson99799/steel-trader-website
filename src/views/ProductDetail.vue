@@ -1609,10 +1609,10 @@ onMounted(async () => {
 
 @media (max-width: 1024px) {
   .categories-grid { grid-template-columns: repeat(3, 1fr); }
+  .fixed-contact-panel { display: none; }
 }
 
 @media (max-width: 768px) {
-  .fixed-contact-panel { display: none; }
   .categories-grid { grid-template-columns: repeat(2, 1fr); }
 
   /* Horizontal scroll for specs table on mobile */
