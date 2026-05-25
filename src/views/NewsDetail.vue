@@ -445,11 +445,13 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
 }
 
 .article-cover {
-  width: 100%; max-height: 480px; overflow: hidden;
+  width: 100%; overflow: hidden;
+  background-color: #f8f9fa;
+  text-align: center;
 }
 
 .article-cover img {
-  width: 100%; height: 100%; object-fit: cover;
+  max-width: 100%; max-height: 600px; height: auto; object-fit: contain; display: block; margin: 0 auto;
 }
 
 .article-body {
