@@ -135,6 +135,14 @@
                 <h3 class="card-title">
                   <span style="color: #f97316;">✨</span> 生成后处理
                 </h3>
+                
+                <div class="input-group">
+                  <label>目标文章分组</label>
+                  <select v-model="settings.category_id" class="input-modern select-highlight">
+                    <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+                  </select>
+                </div>
+
                 <div class="options-list">
                   <label class="option-checkbox">
                     <input type="checkbox" v-model="settings.translate_all" :true-value="1" :false-value="0" />
@@ -300,6 +308,7 @@ const selectedProducts = ref([])
 
 const channels = ref([])
 const prompts = ref([])
+const categories = ref([])
 
 const metadataPrompts = computed(() => prompts.value.filter(p => p.type === 'metadata'))
 const bodyPrompts = computed(() => prompts.value.filter(p => p.type === 'body'))
@@ -324,12 +333,14 @@ const fetchSettings = async () => {
 
 const fetchDependencies = async () => {
   try {
-    const [chRes, pRes] = await Promise.all([
+    const [chRes, pRes, catRes] = await Promise.all([
       api.request('/ai/channels'),
-      api.request('/ai-auto-post/prompts')
+      api.request('/ai-auto-post/prompts'),
+      api.request('/categories')
     ])
     channels.value = chRes
     prompts.value = pRes
+    categories.value = catRes
 
     if (!settings.value.channel_id && channels.value.length > 0) {
       const def = channels.value.find(c => c.is_default) || channels.value[0]
@@ -342,6 +353,9 @@ const fetchDependencies = async () => {
     if (!settings.value.body_prompt_id && bodyPrompts.value.length > 0) {
       const def = bodyPrompts.value.find(p => p.is_default) || bodyPrompts.value[0]
       settings.value.body_prompt_id = def.id
+    }
+    if (!settings.value.category_id && categories.value.length > 0) {
+      settings.value.category_id = categories.value[0].id
     }
   } catch (e) {
     console.error('Failed to load dependencies', e)
@@ -368,6 +382,7 @@ const saveSettings = async (silent = false) => {
         channel_id: settings.value.channel_id || null,
         metadata_prompt_id: settings.value.metadata_prompt_id || null,
         body_prompt_id: settings.value.body_prompt_id || null,
+        category_id: settings.value.category_id || 1,
         products_json: JSON.stringify(selectedProducts.value)
       })
     })

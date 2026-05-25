@@ -252,6 +252,14 @@ async function executeGeneration(isTest = false) {
 
   const newId = result.lastInsertRowid
 
+  // Step 4.5: Link to Category
+  const catId = settings.category_id || 1
+  try {
+    run('INSERT INTO news_category_links (news_id, category_id) VALUES (?, ?)', [newId, catId])
+  } catch(e) {
+    logMsg(`Warning: Failed to link news to category ${catId}: ${e.message}`)
+  }
+
   // Step 5: Queue Translation if needed
   if (settings.translate_all === 1) {
     const langs = getAll("SELECT code FROM languages WHERE code != 'en' AND status = 1")
@@ -314,12 +322,12 @@ router.get('/settings', authMiddleware, (req, res) => {
 })
 
 router.post('/settings', authMiddleware, (req, res) => {
-  const { frequency_days, articles_per_run, products_json, translate_all, apply_watermark, channel_id, metadata_prompt_id, body_prompt_id } = req.body
+  const { frequency_days, articles_per_run, products_json, translate_all, apply_watermark, channel_id, metadata_prompt_id, body_prompt_id, category_id } = req.body
   run(`
     UPDATE ai_post_settings 
-    SET frequency_days=?, articles_per_run=?, products_json=?, translate_all=?, apply_watermark=?, channel_id=?, metadata_prompt_id=?, body_prompt_id=?, updated_at=CURRENT_TIMESTAMP
+    SET frequency_days=?, articles_per_run=?, products_json=?, translate_all=?, apply_watermark=?, channel_id=?, metadata_prompt_id=?, body_prompt_id=?, category_id=?, updated_at=CURRENT_TIMESTAMP
     WHERE id=1
-  `, [frequency_days, articles_per_run, products_json, translate_all ? 1 : 0, apply_watermark ? 1 : 0, channel_id, metadata_prompt_id, body_prompt_id])
+  `, [frequency_days, articles_per_run, products_json, translate_all ? 1 : 0, apply_watermark ? 1 : 0, channel_id, metadata_prompt_id, body_prompt_id, category_id || 1])
   res.json({ success: true })
 })
 
