@@ -283,7 +283,6 @@ const adminPreviewGroup = ref(null)
 const adminPreviewIndex = ref(-1)
 
 const token = () => localStorage.getItem('token')
-const globalProcessing = ref(false)
 
 const loadData = async () => {
   try {
