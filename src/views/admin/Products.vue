@@ -443,7 +443,7 @@
           <button class="modal-close" @click="showMediaPicker=false">&times;</button>
         </div>
         <div class="modal-body">
-          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
             <input v-model="mediaPickerSearch" class="form-control" placeholder="搜索文件名..." @input="loadMediaPicker" style="max-width:200px;" />
             <select v-model="mediaPickerGroup" class="form-control" @change="loadMediaPicker" style="max-width:140px;">
               <option value="">全部分组</option>
@@ -453,6 +453,9 @@
               <option value="">不添加水印</option>
               <option v-for="t in watermarkTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
+            <button v-if="mediaPickerItems.length" type="button" class="btn btn-sm btn-outline" @click="mediaPickerSelected = mediaPickerSelected.length === mediaPickerItems.length ? [] : mediaPickerItems.map(i=>i.filepath)">
+              {{ mediaPickerSelected.length === mediaPickerItems.length ? '取消全选' : '全选图片' }}
+            </button>
           </div>
           <div v-if="mediaPickerItems.length" class="import-grid">
             <div v-for="item in mediaPickerItems" :key="item.id" :class="['import-item', { selected: mediaPickerSelected.includes(item.filepath) }]" @click="toggleMediaPickerSelect(item.filepath)">

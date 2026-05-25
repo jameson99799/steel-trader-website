@@ -107,7 +107,7 @@
           <button class="modal-close" @click="showMediaPicker=false">&times;</button>
         </div>
         <div class="modal-body">
-          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
             <input v-model="mediaPickerSearch" class="form-control" placeholder="搜索文件名..." @input="loadMediaPicker" style="max-width:200px;" />
             <select v-model="mediaPickerGroup" class="form-control" @change="loadMediaPicker" style="max-width:140px;">
               <option value="">全部分组</option>
@@ -117,6 +117,9 @@
               <option value="">不添加水印</option>
               <option v-for="t in watermarkTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
+            <button v-if="mediaPickerItems.length" type="button" class="btn btn-sm btn-outline" @click="mediaPickerSelected = mediaPickerSelected.length === mediaPickerItems.length ? [] : mediaPickerItems.map(i=>i.filepath)">
+              {{ mediaPickerSelected.length === mediaPickerItems.length ? '取消全选' : '全选图片' }}
+            </button>
           </div>
           <div v-if="mediaPickerItems.length" class="lib-grid">
             <div v-for="item in mediaPickerItems" :key="item.id" 
@@ -130,7 +133,7 @@
         </div>
         <div class="modal-footer" style="display:flex; justify-content:flex-end; align-items:center;">
           <div style="display:flex; gap:8px;">
-            <button v-if="mediaPickerSelected.length > 0" type="button" class="btn btn-outline" style="border-color:#eab308; color:#eab308;" @click="doBatchRename">✏️ 批量重命名</button>
+            <button v-if="mediaPickerSelected.length > 0" type="button" class="btn btn-outline" style="border-color:#eab308; color:#eab308;" @click="doBatchRename('media')">✏️ 批量重命名</button>
             <button type="button" class="btn btn-secondary" @click="showMediaPicker=false">取消</button>
             <button type="button" class="btn btn-primary" style="background:#7c3aed;" @click="doAddSelectedMedia" :disabled="!mediaPickerSelected.length">确认添加 ({{ mediaPickerSelected.length }})</button>
           </div>
@@ -206,11 +209,14 @@
           </div>
           <p v-else style="color:#94a3b8;text-align:center;padding:20px;">当前分组下没有可用的照片</p>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="showBatchWatermark=false">取消</button>
-          <button type="button" class="btn btn-primary" style="background:#2563eb;" @click="doBatchWatermark" :disabled="!batchWatermarkSelected.length || isBatchWatermarking">
-            {{ isBatchWatermarking ? '处理中...' : `对选中的 ${batchWatermarkSelected.length} 张图执行水印` }}
-          </button>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; align-items:center;">
+          <div style="display:flex; gap:8px;">
+            <button v-if="batchWatermarkSelected.length > 0" type="button" class="btn btn-outline" style="border-color:#eab308; color:#eab308;" @click="doBatchRename('batch')">✏️ 批量重命名</button>
+            <button type="button" class="btn btn-secondary" @click="showBatchWatermark=false">取消</button>
+            <button type="button" class="btn btn-primary" style="background:#2563eb;" @click="doBatchWatermark" :disabled="!batchWatermarkSelected.length || isBatchWatermarking">
+              {{ isBatchWatermarking ? '处理中...' : `对选中的 ${batchWatermarkSelected.length} 张图加水印` }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -526,8 +532,13 @@ const doAddSelectedMedia = async () => {
 }
 
 // ─── Batch Rename ───────────────────────────────────────────────────────────
-async function doBatchRename() {
-  let ids = mediaPickerItems.value.filter(i => mediaPickerSelected.value.includes(i.filepath)).map(i => i.id)
+async function doBatchRename(type) {
+  let ids = []
+  if (type === 'media') {
+    ids = mediaPickerItems.value.filter(i => mediaPickerSelected.value.includes(i.filepath)).map(i => i.id)
+  } else if (type === 'batch') {
+    ids = batchWatermarkSelected.value
+  }
   if (!ids.length) return
   
   const prefix = prompt(`正在为选中的 ${ids.length} 张图片批量重命名。\n请输入英文前缀 (例如: GI coil):`)
@@ -543,8 +554,13 @@ async function doBatchRename() {
     const data = await res.json()
     if (res.ok) {
       alert(`批量重命名成功！\n成功: ${data.successCount} 个\n失败: ${data.errorCount} 个`)
-      mediaPickerSelected.value = []
-      await loadMediaPicker()
+      if (type === 'media') {
+        mediaPickerSelected.value = []
+        await loadMediaPicker()
+      } else if (type === 'batch') {
+        batchWatermarkSelected.value = []
+        showBatchWatermark.value = false
+      }
       await loadData()
     } else {
       alert('重命名失败: ' + (data.error || '未知错误'))
