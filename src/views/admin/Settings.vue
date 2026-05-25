@@ -204,6 +204,27 @@
       </div>
     </div>
 
+    <!-- System Migration & Backup -->
+    <div class="card ssl-card">
+      <div class="card-header">📦 全站数据迁移与备份</div>
+      <div class="card-body">
+        <div class="ssl-info">
+          <h4>📋 说明：</h4>
+          <p>一键导出全站数据（包括数据库、多语言翻译、CRM记录、上传的所有图片附件等）。你可以用它来备份网站，或者无损迁移到其他服务器。</p>
+          <p><strong>注意：</strong>导入数据会覆盖当前网站的所有数据并自动重启服务器。</p>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:16px;">
+          <button class="btn btn-primary" @click="exportBackup" :disabled="isExporting">
+            {{ isExporting ? '打包导出中请稍候...' : '⬇️ 导出全站备份 (ZIP)' }}
+          </button>
+          <button class="btn btn-outline" style="color:#dc2626;border-color:#dc2626;" @click="triggerImport" :disabled="isImporting">
+            {{ isImporting ? '恢复中，请勿关闭页面...' : '⬆️ 导入备份并覆盖全站' }}
+          </button>
+          <input type="file" ref="fileInputRef" style="display:none" accept=".zip" @change="handleImport" />
+        </div>
+      </div>
+    </div>
+
     <!-- Media Library Picker -->
     <div v-if="showMediaPicker" class="modal-overlay" @click.self="showMediaPicker=false" style="z-index: 1010;">
       <div class="modal" style="max-width:700px;">
@@ -503,6 +524,73 @@ const generateApiKey = async () => {
 const copyApiKey = () => {
   navigator.clipboard.writeText(externalApiKey.value)
   alert('API Key 已复制到剪贴板')
+}
+
+// Backup & Restore
+const isExporting = ref(false)
+const isImporting = ref(false)
+const fileInputRef = ref(null)
+
+const exportBackup = async () => {
+  isExporting.value = true
+  try {
+    const token = localStorage.getItem('token')
+    const res = await fetch('/api/backup/export', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (!res.ok) throw new Error('Export failed')
+    
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `site-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (e) {
+    alert(e.message)
+  } finally {
+    isExporting.value = false
+  }
+}
+
+const triggerImport = () => {
+  if (confirm('警告：导入全站备份将覆盖当前的所有数据库、图片和设置！请确保你上传的是正确的 ZIP 备份包。\n\n确定要继续吗？')) {
+    fileInputRef.value.click()
+  }
+}
+
+const handleImport = async (e) => {
+  const file = e.target.files[0]
+  if (!file) return
+  
+  isImporting.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const token = localStorage.getItem('token')
+    const res = await fetch('/api/backup/import', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData
+    })
+    
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Import failed')
+    
+    alert('恢复成功！服务器正在重启，请等待几秒后点击确定刷新页面。')
+    setTimeout(() => {
+      window.location.reload()
+    }, 3000)
+  } catch (err) {
+    alert('恢复失败: ' + err.message)
+  } finally {
+    isImporting.value = false
+    e.target.value = ''
+  }
 }
 </script>
 

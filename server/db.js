@@ -1489,5 +1489,18 @@ function run(sql, params = []) {
 // saveDb is a no-op for better-sqlite3 (writes are direct to file)
 function saveDb() { }
 
-export { initDb, getAll, getOne, run, saveDb }
-export default { initDb, getAll, getOne, run, saveDb }
+function closeDb() {
+  if (db) {
+    db.close()
+    db = null
+  }
+}
+
+async function backupDb(destPath) {
+  if (db) {
+    await db.backup(destPath)
+  }
+}
+
+export { initDb, getAll, getOne, run, saveDb, closeDb, backupDb }
+export default { initDb, getAll, getOne, run, saveDb, closeDb, backupDb }

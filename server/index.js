@@ -35,6 +35,7 @@ import aiRoutes from './routes/ai.js'
 import aiAutoPostRoutes from './routes/ai-auto-post.js'
 import mailerRoutes from './routes/mailer.js'
 import externalApiRoutes from './routes/external-api.js'
+import backupRoutes from './routes/backup.js'
 import mediaRoutes from './routes/media.js'
 import crmAuthRoutes from './routes/crm-auth.js'
 import crmUsersRoutes from './routes/crm-users.js'
@@ -336,6 +337,7 @@ async function startServer() {
     app.use('/api/ai-auto-post', aiAutoPostRoutes)
     app.use('/api/mailer', mailerRoutes)
     app.use('/api/external', externalApiRoutes)
+    app.use('/api/backup', backupRoutes)
     app.use('/api/crm/auth', crmAuthRoutes)
     app.use('/api/crm/users', crmUsersRoutes)
     app.use('/api/crm/customers', crmCustomersRoutes)
