@@ -2,13 +2,19 @@ import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import fs from 'fs'
-import { join } from 'path'
+import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { dirname } from 'path'
 import { applyWatermark } from '../utils/watermark.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
+const ROOT_DIR = join(__dirname, '../../')
+
+function logMsg(msg) {
+  try {
+    fs.appendFileSync(join(ROOT_DIR, 'data/ai-post.log'), `[${new Date().toISOString()}] ${msg}\n`)
+  } catch(e){}
+}
 
 const router = Router()
 
@@ -69,6 +75,7 @@ function cleanJsonString(str) {
 let workerRunning = false
 
 async function executeGeneration(isTest = false) {
+  logMsg(`--- Starting executeGeneration(isTest=${isTest}) ---`)
   const settings = getOne('SELECT * FROM ai_post_settings WHERE id = 1')
   if (!settings) throw new Error('Settings not found')
 
@@ -86,10 +93,13 @@ async function executeGeneration(isTest = false) {
 
   const product = products[settings.current_product_index % products.length]
   const nextIndex = (settings.current_product_index + 1) % products.length
+  logMsg(`Selected product: ${product}`)
 
   // Step 1: Generate Metadata
   const userPrompt = `Product: ${product}`
+  logMsg(`Generating metadata...`)
   const rawMetadata = await callAi(channel, null, metadataPromptRow.content.replace('{product}', product), userPrompt)
+  logMsg(`Metadata AI Response received.`)
   
   let metadata
   try {
@@ -104,7 +114,7 @@ async function executeGeneration(isTest = false) {
   let fetchedMediaList = []
   if (product) {
     const terms = product.split('|').map(s => s.trim()).filter(Boolean)
-    let where = 'WHERE status=1 AND mimetype LIKE "image/%"'
+    let where = "WHERE status=1 AND mimetype LIKE 'image/%'"
     const params = []
     if (terms.length > 0) {
       const ors = terms.map(() => '(original_filename LIKE ? OR alt LIKE ?)').join(' OR ')
@@ -115,6 +125,7 @@ async function executeGeneration(isTest = false) {
     }
     // Fetch up to 4 random images
     const mediaList = getAll(`SELECT * FROM media ${where} ORDER BY RANDOM() LIMIT 4`, params)
+    logMsg(`Fetched ${mediaList?.length || 0} images for product from media library.`)
     if (mediaList && mediaList.length > 0) {
       coverImage = settings.apply_watermark ? await applyWatermark(mediaList[0].filepath) : mediaList[0].filepath
     }
@@ -136,7 +147,9 @@ async function executeGeneration(isTest = false) {
     .replace('{title}', metadata.title || '')
     .replace('{summary}', metadata.summary || '') + imageInstruction
   
+  logMsg(`Generating article body...`)
   let bodyContent = await callAi(channel, null, bodySysPrompt, `Please write the article now.`)
+  logMsg(`Body AI Response received.`)
   if (bodyContent.startsWith('```html')) bodyContent = bodyContent.slice(7)
   else if (bodyContent.startsWith('```')) bodyContent = bodyContent.slice(3)
   if (bodyContent.endsWith('```')) bodyContent = bodyContent.slice(0, -3)
@@ -189,8 +202,10 @@ async function executeGeneration(isTest = false) {
     run('UPDATE ai_post_settings SET current_product_index = ?, next_run_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1', 
       [nextIndex, nextRun.toISOString()]
     )
+    logMsg(`Updated next_run_at to ${nextRun.toISOString()}`)
   }
 
+  logMsg(`Generation complete. Post ID: ${newId}`)
   return { id: newId, title: metadata.title, product, coverImage }
 }
 
