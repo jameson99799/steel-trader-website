@@ -19,8 +19,19 @@ async function callAi(channel, model, systemPrompt, userPrompt) {
       apiUrl = apiUrl.replace(/\/chat\/completions$/, '')
   }
   
+  let finalModel = model || channel.default_model
+  if (!finalModel && channel.models) {
+      try {
+          const modelsArray = JSON.parse(channel.models)
+          if (Array.isArray(modelsArray) && modelsArray.length > 0) {
+              finalModel = modelsArray[0]
+          }
+      } catch (e) {}
+  }
+  finalModel = finalModel || 'gpt-4o-mini'
+
   const payload = {
-      model: model || channel.default_model || 'gpt-4o-mini',
+      model: finalModel,
       messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
