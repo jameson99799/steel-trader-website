@@ -409,6 +409,27 @@ async function initDb() {
     }
   } catch (e) { }
 
+  // Migration: auto-update default AI prompts to new English versions if they are using the old Chinese prompts
+  try {
+    const metaRow = db.prepare('SELECT content FROM ai_post_prompts WHERE type = "metadata" AND is_default = 1').get()
+    if (metaRow && metaRow.content.includes('你是一个专业的钢铁外贸SEO专家')) {
+      db.prepare(`UPDATE ai_post_prompts SET content = ? WHERE type = "metadata" AND is_default = 1`).run(
+        'You are a professional steel foreign trade SEO expert. Please generate metadata for the product {product}.\nRequirements:\n1. The title MUST be in ENGLISH and use an attractive Q&A format, e.g., What is {product}? What are the applications of {product}? How to get factory prices for {product}?\n2. The summary MUST be in ENGLISH and directly highlight selling points: Professional manufacturer of {product}, source factory, providing high quality and competitive prices, welcome to inquire.\n3. Return a valid JSON format containing:\n{\n  "title": "Q&A style English title",\n  "summary": "1-2 sentences attractive English summary",\n  "seo_title": "SEO optimized English title",\n  "seo_description": "SEO English description containing keywords",\n  "seo_keywords": "comma-separated English keywords"\n}'
+      )
+      console.log('[db] Migrated default metadata AI prompt to English version.')
+    }
+
+    const bodyRow = db.prepare('SELECT content FROM ai_post_prompts WHERE type = "body" AND is_default = 1').get()
+    if (bodyRow && bodyRow.content.includes('你是一个深谙钢铁外贸客户心理的销售专家')) {
+      db.prepare(`UPDATE ai_post_prompts SET content = ? WHERE type = "body" AND is_default = 1`).run(
+        'You are a sales expert who understands the psychology of steel foreign trade customers. Based on the title "{title}" and summary "{summary}", write a professional foreign trade marketing long article in ENGLISH for the product {product}.\nRequirements:\n1. The article MUST be written entirely in ENGLISH.\n2. The article MUST use standard HTML tags (<h2>, <h3>, <p>, <ul>, <li>) for formatting. Do NOT use markdown. Do NOT wrap the output in ```html. Output raw HTML directly.\n3. Use a Q&A format. Include these topics (expand as needed):\n   - What is {product}? (Detailed professional explanation)\n   - What are the main uses and application fields of {product}?\n   - Why do prices vary greatly for different specifications/coatings of {product}? What makes up the price?\n   - What are the advantages of our factory?\n   - How to inquire about the latest Chinese factory prices from us?\n4. The tone must be extremely professional and sincere, emphasizing that we are a source factory with reliable quality and competitive prices.\n5. You MUST insert exactly the requested number of image placeholders (e.g. [IMAGE_1]) into the HTML body as instructed by the system. Use them organically between paragraphs.'
+      )
+      console.log('[db] Migrated default body AI prompt to English version.')
+    }
+  } catch (e) {
+    console.error('[db] Error auto-migrating AI prompts:', e)
+  }
+
   // Translation Prompts table for custom translation business rules
   db.exec(`
     CREATE TABLE IF NOT EXISTS translation_prompts (
