@@ -832,6 +832,7 @@ const showNewsImgChooser = ref(false)
 const showNewsMediaBrowser = ref(false)
 const newsMediaSearch = ref('')
 const newsMediaGroup = ref('')
+const newsMediaWatermark = ref('')
 const newsMediaItems = ref([])
 const newsMediaGroups = ref([])
 let newsImgChooserMode = 'content' // 'content' or 'cover'

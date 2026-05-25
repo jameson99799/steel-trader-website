@@ -270,6 +270,16 @@ const currentGroupIdForMedia = ref(null)
 
 const globalProcessing = ref(false)
 
+async function loadWatermarkTemplates() {
+  if (watermarkTemplates.value.length) return
+  try {
+    const res = await fetch('/api/media/watermark-templates', {
+      headers: { 'Authorization': `Bearer ${token()}` }
+    })
+    watermarkTemplates.value = await res.json()
+  } catch (e) { console.error(e) }
+}
+
 // Video Modal State
 const showVideoModal = ref(false)
 const videoUrlInput = ref('')
