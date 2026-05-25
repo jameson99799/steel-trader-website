@@ -320,9 +320,14 @@ const fetchSettings = async () => {
     if (res) {
       settings.value = res
       try {
-        selectedProducts.value = JSON.parse(res.products_json || '[]')
+        const loaded = JSON.parse(res.products_json || '[]')
+        selectedProducts.value = loaded.map(p => {
+          if (p.includes('|')) return p
+          const found = availableProducts.find(ap => ap.startsWith(p + ' |') || ap === p)
+          return found || p
+        })
       } catch (e) {
-        selectedProducts.value = ['GI']
+        selectedProducts.value = [availableProducts[0]]
       }
     }
   } catch (e) {
