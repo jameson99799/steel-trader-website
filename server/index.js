@@ -388,7 +388,7 @@ async function startServer() {
       const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
       // Helper: build JSON-LD script tag
-      const jsonLd = (obj) => `<script type="application/ld+json">${JSON.stringify(obj).replace(/</g, '\\u003c')}</script>`
+      const jsonLd = (obj, idStr = '') => `<script type="application/ld+json"${idStr ? ` id="${idStr}"` : ''}>${JSON.stringify(obj).replace(/</g, '\\u003c')}</script>`
 
       // Ensure robots.txt always serves text/plain, even if dist/robots.txt is missing
       app.get('/robots.txt', (req, res) => {
@@ -570,12 +570,12 @@ async function startServer() {
                   if (specsList.length) productSchema.additionalProperty = specsList.map(s => ({ '@type': 'PropertyValue', name: s.name, value: s.value }))
                 } catch (e) {}
               }
-              extraSchemas += jsonLd(productSchema)
+              extraSchemas += jsonLd(productSchema, 'product-jsonld')
               const faqJson = product[`faq_items_${lang}`] || product.faq_items
               if (faqJson) {
                 try {
                   const faqs = JSON.parse(faqJson)
-                  if (faqs.length) extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faqs.map(f => ({ '@type': 'Question', name: f.question, acceptedAnswer: { '@type': 'Answer', text: f.answer } })) })
+                  if (faqs.length) extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faqs.map(f => ({ '@type': 'Question', name: f.question, acceptedAnswer: { '@type': 'Answer', text: f.answer } })) }, 'faq-jsonld')
                 } catch (e) {}
               }
               extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
@@ -662,7 +662,7 @@ async function startServer() {
                 ...(seoSettings.default_news_author && { author: { '@type': 'Person', name: seoSettings.default_news_author } }),
                 publisher: { '@type': orgType, name: companyNameTranslated, logo: { '@type': 'ImageObject', url: `${siteUrl}/uploads/logo.png` } },
                 mainEntityOfPage: { '@type': 'WebPage', '@id': pageCanonical }
-              })
+              }, 'article-jsonld')
               extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
                 { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
                 { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
@@ -699,7 +699,7 @@ async function startServer() {
                         '@type': 'Question', name: f.question,
                         acceptedAnswer: { '@type': 'Answer', text: f.answer }
                       }))
-                    })
+                    }, 'faq-jsonld')
                     newsFaqHtml = '<h2>Frequently Asked Questions</h2>' +
                       faqList.map(f => `<h3>${esc(f.question)}</h3><p>${esc(f.answer)}</p>`).join('')
                   }
