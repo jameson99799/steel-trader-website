@@ -76,7 +76,9 @@
           <option value="">移动到分组...</option>
           <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
         </select>
-        <button class="btn btn-sm btn-primary" @click="batchMove" :disabled="!batchGroupTarget">移动</button>
+        <button class="btn btn-sm btn-primary" @click="batchMove" :disabled="!batchGroupTarget || isBatchMoving">
+          {{ isBatchMoving ? '移动中...' : '移动' }}
+        </button>
         <button class="btn btn-sm btn-outline" style="border-color:#eab308; color:#eab308;" @click="batchRename" :disabled="isBatchRenaming">
           {{ isBatchRenaming ? '处理中...' : '✏️ 重命名' }}
         </button>
@@ -221,6 +223,7 @@ const renameValue = ref('')
 const renameInput = ref(null)
 
 const isBatchRenaming = ref(false)
+const isBatchMoving = ref(false)
 
 const optimizing = ref(false)
 const optimizeResult = ref(null)
@@ -370,13 +373,26 @@ async function deleteImage(item) {
 
 // Batch
 async function batchMove() {
-  if (!selectedIds.value.length || !batchGroupTarget.value) return
-  await fetch('/api/media/batch-move', {
-    method: 'POST', headers: headers(),
-    body: JSON.stringify({ ids: selectedIds.value, group_id: batchGroupTarget.value })
-  })
-  selectedIds.value = []; batchGroupTarget.value = ''
-  loadMedia(); loadGroups()
+  if (!selectedIds.value.length || !batchGroupTarget.value || isBatchMoving.value) return
+  isBatchMoving.value = true
+  try {
+    const res = await fetch('/api/media/batch-move', {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ ids: selectedIds.value, group_id: Number(batchGroupTarget.value) })
+    })
+    const data = await res.json()
+    if (res.ok) {
+      selectedIds.value = []; batchGroupTarget.value = ''
+      loadMedia()
+      loadGroups()
+    } else {
+      alert('移动失败: ' + (data.error || '未知错误'))
+    }
+  } catch(e) {
+    alert('移动失败: ' + e.message)
+  } finally {
+    isBatchMoving.value = false
+  }
 }
 
 async function batchDelete() {

@@ -147,6 +147,7 @@ router.post('/upload', authMiddleware, upload.array('files', 50), async (req, re
         const newFilename = filename.replace(/\.[^.]+$/, '.webp')
         const newPath = join(uploadDir, newFilename)
         const meta = await sharp(file.path)
+          .rotate() // Auto-orient based on EXIF
           .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
           .webp({ quality: 82, effort: 4 })
           .toFile(newPath)
@@ -159,7 +160,7 @@ router.post('/upload', authMiddleware, upload.array('files', 50), async (req, re
       } catch (e) {
         // Use original on failure
         try {
-          const meta = await sharp(file.path).metadata()
+          const meta = await sharp(file.path).rotate().metadata()
           width = meta.width || 0; height = meta.height || 0
         } catch {}
       }
@@ -271,6 +272,7 @@ router.post('/:id/replace', authMiddleware, upload.single('file'), async (req, r
         const newFilename = filename.replace(/\.[^.]+$/, '.webp')
         const newPath = join(uploadDir, newFilename)
         const meta = await sharp(req.file.path)
+          .rotate() // Auto-orient based on EXIF
           .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
           .webp({ quality: 82, effort: 4 })
           .toFile(newPath)
@@ -458,6 +460,7 @@ router.post('/optimize-all', authMiddleware, async (req, res) => {
 
     try {
       const meta = await sharp(oldPath)
+        .rotate() // Auto-orient based on EXIF
         .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
         .webp({ quality: 85, effort: 4 })
         .toFile(newPath)
