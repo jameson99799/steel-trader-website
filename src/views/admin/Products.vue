@@ -443,11 +443,15 @@
           <button class="modal-close" @click="showMediaPicker=false">&times;</button>
         </div>
         <div class="modal-body">
-          <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
             <input v-model="mediaPickerSearch" class="form-control" placeholder="搜索文件名..." @input="loadMediaPicker" style="max-width:200px;" />
             <select v-model="mediaPickerGroup" class="form-control" @change="loadMediaPicker" style="max-width:140px;">
               <option value="">全部分组</option>
               <option v-for="g in mediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            </select>
+            <select v-model="mediaPickerWatermark" class="form-control" style="max-width:140px;">
+              <option value="">不添加水印</option>
+              <option v-for="t in watermarkTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
           </div>
           <div v-if="mediaPickerItems.length" class="import-grid">
@@ -503,6 +507,10 @@
               <option value="">全部分组</option>
               <option v-for="g in detailMediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
             </select>
+            <select v-model="detailMediaWatermark" class="form-control" style="max-width:140px;">
+              <option value="">不添加水印</option>
+              <option v-for="t in watermarkTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+            </select>
           </div>
           <div v-if="detailMediaItems.length" class="import-grid" style="max-height:450px;">
             <div v-for="item in detailMediaItems" :key="item.id" class="import-item" style="cursor:pointer;" @click="selectDetailMediaImage(item)">
@@ -554,6 +562,11 @@
         </div>
       </div>
     </div>
+    <!-- Global Loading Overlay -->
+    <div v-if="globalProcessing" class="loading-overlay">
+      <div class="loader"></div>
+      <div style="margin-top:16px;color:white;">系统处理中，请稍候...</div>
+    </div>
   </div>
 </template>
 
@@ -583,11 +596,25 @@ const showImgChooser = ref(false)
 const showDetailMediaBrowser = ref(false)
 const detailMediaSearch = ref('')
 const detailMediaGroup = ref('')
+const detailMediaWatermark = ref('')
 const detailMediaItems = ref([])
 const detailMediaGroups = ref([])
 const faqItems = ref([])
 let replacingImg = null  // track image being replaced
 const translatingId = ref(null)
+
+const watermarkTemplates = ref([])
+const globalProcessing = ref(false)
+
+async function loadWatermarkTemplates() {
+  if (watermarkTemplates.value.length) return
+  try {
+    const res = await fetch('/api/media/watermark-templates', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    })
+    watermarkTemplates.value = await res.json()
+  } catch (e) { console.error(e) }
+}
 
 // Search / Filter / Pagination
 const searchQuery = ref('')
@@ -725,6 +752,7 @@ function doImportFromProduct() {
 const showMediaPicker = ref(false)
 const mediaPickerSearch = ref('')
 const mediaPickerGroup = ref('')
+const mediaPickerWatermark = ref('')
 const mediaPickerItems = ref([])
 const mediaPickerSelected = ref([])
 const mediaGroups = ref([])
@@ -757,8 +785,26 @@ function toggleMediaPickerSelect(fp) {
   else mediaPickerSelected.value.push(fp)
 }
 
-function doImportFromMedia() {
-  for (const fp of mediaPickerSelected.value) {
+async function doImportFromMedia() {
+  if (!mediaPickerSelected.value.length) return
+  
+  let urlsToAdd = mediaPickerSelected.value
+  
+  if (mediaPickerWatermark.value) {
+    globalProcessing.value = true
+    try {
+      const res = await fetch('/api/media/apply-watermark-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        body: JSON.stringify({ urls: urlsToAdd, template_id: mediaPickerWatermark.value })
+      })
+      const data = await res.json()
+      if (res.ok) urlsToAdd = data.urls || []
+    } catch (e) { console.error(e) }
+    globalProcessing.value = false
+  }
+
+  for (const fp of urlsToAdd) {
     if (!existingImages.value.includes(fp)) existingImages.value.push(fp)
   }
   showMediaPicker.value = false
@@ -769,7 +815,9 @@ function doImportFromMedia() {
 watch(showMediaPicker, (v) => {
   if (v) {
     loadMediaGroups()
+    loadWatermarkTemplates()
     mediaPickerGroup.value = localStorage.getItem('_lastMediaGroup') || ''
+    mediaPickerWatermark.value = ''
     loadMediaPicker()
     mediaPickerSelected.value = []
   }
@@ -1252,16 +1300,33 @@ function pickFromMediaLib() {
   showImgChooser.value = false
   detailMediaSearch.value = ''
   detailMediaGroup.value = localStorage.getItem('_lastMediaGroup') || ''
+  detailMediaWatermark.value = ''
   loadDetailMediaGroups()
+  loadWatermarkTemplates()
   loadDetailMedia()
   showDetailMediaBrowser.value = true
 }
 // Remember selected group for detail media browser
 watch(detailMediaGroup, v => { if (v) localStorage.setItem('_lastMediaGroup', v) })
 
-function selectDetailMediaImage(item) {
-  const url = item.filepath
+async function selectDetailMediaImage(item) {
+  let url = item.filepath
   showDetailMediaBrowser.value = false
+  
+  if (detailMediaWatermark.value) {
+    globalProcessing.value = true
+    try {
+      const res = await fetch('/api/media/apply-watermark-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        body: JSON.stringify({ urls: [url], template_id: detailMediaWatermark.value })
+      })
+      const data = await res.json()
+      if (res.ok && data.urls?.length) url = data.urls[0]
+    } catch (e) { console.error(e) }
+    globalProcessing.value = false
+  }
+
   if (replacingImg && replacingImg.parentElement) {
     replacingImg.src = url
     replacingImg.style.outline = ''
@@ -2062,8 +2127,39 @@ onMounted(() => {
 .action-grid .btn { font-size: 12px; padding: 3px 6px; white-space: nowrap; }
 
 /* Pagination */
-.pagination { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 16px 0; }
-.page-info { font-size: 13px; color: #64748b; }
+.pagination {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  align-items: center;
+  margin-top: 20px;
+}
+.page-info { font-size: 14px; color: #64748b; }
+
+.loading-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.loader {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #7c3aed;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 
 /* Import image picker grid */
 .import-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; max-height: 400px; overflow-y: auto; }

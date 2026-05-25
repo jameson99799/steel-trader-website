@@ -107,11 +107,15 @@
           <button class="modal-close" @click="showMediaPicker=false">&times;</button>
         </div>
         <div class="modal-body">
-          <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
             <input v-model="mediaPickerSearch" class="form-control" placeholder="搜索文件名..." @input="loadMediaPicker" style="max-width:200px;" />
             <select v-model="mediaPickerGroup" class="form-control" @change="loadMediaPicker" style="max-width:140px;">
               <option value="">全部分组</option>
               <option v-for="g in mediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            </select>
+            <select v-model="mediaPickerWatermark" class="form-control" style="max-width:140px;">
+              <option value="">不添加水印</option>
+              <option v-for="t in watermarkTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
           </div>
           <div v-if="mediaPickerItems.length" class="lib-grid">
@@ -124,14 +128,7 @@
           </div>
           <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
         </div>
-        <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <label class="checkbox-label" style="margin:0;">
-              <input type="checkbox" v-model="applyWatermark" />
-              💦 添加水印
-            </label>
-            <span class="form-hint" style="margin:0; font-size:12px;">(可在系统设置中配置水印)</span>
-          </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; align-items:center;">
           <div style="display:flex; gap:8px;">
             <button type="button" class="btn btn-secondary" @click="showMediaPicker=false">取消</button>
             <button type="button" class="btn btn-primary" style="background:#7c3aed;" @click="doAddSelectedMedia" :disabled="!mediaPickerSelected.length">确认添加 ({{ mediaPickerSelected.length }})</button>
@@ -247,6 +244,11 @@
       </div>
     </div>
 
+    <!-- Global Loading Overlay -->
+    <div v-if="globalProcessing" class="loading-overlay">
+      <div class="loader"></div>
+      <div style="margin-top:16px;color:white;">系统处理中，请稍候...</div>
+    </div>
   </div>
 </template>
 
@@ -260,11 +262,13 @@ const groups = ref([])
 const showMediaPicker = ref(false)
 const mediaPickerSearch = ref('')
 const mediaPickerGroup = ref('')
+const mediaPickerWatermark = ref('')
 const mediaPickerItems = ref([])
-const mediaGroups = ref([])
 const mediaPickerSelected = ref([])
-const applyWatermark = ref(false)
+const mediaGroups = ref([])
 const currentGroupIdForMedia = ref(null)
+
+const globalProcessing = ref(false)
 
 // Video Modal State
 const showVideoModal = ref(false)
@@ -440,8 +444,10 @@ const getYoutubeEmbedUrl = (url) => {
 const openMediaPicker = (groupId) => {
   currentGroupIdForMedia.value = groupId
   mediaPickerSelected.value = []
+  mediaPickerWatermark.value = ''
   showMediaPicker.value = true
   loadMediaGroups()
+  loadWatermarkTemplates()
   loadMediaPicker()
 }
 
@@ -476,7 +482,23 @@ const toggleMediaSelect = (url) => {
 const doAddSelectedMedia = async () => {
   if (!mediaPickerSelected.value.length || !currentGroupIdForMedia.value) return
   
-  for (const url of mediaPickerSelected.value) {
+  let urlsToAdd = mediaPickerSelected.value
+
+  if (mediaPickerWatermark.value) {
+    globalProcessing.value = true
+    try {
+      const res = await fetch('/api/media/apply-watermark-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
+        body: JSON.stringify({ urls: urlsToAdd, template_id: mediaPickerWatermark.value })
+      })
+      const data = await res.json()
+      if (res.ok && data.urls) urlsToAdd = data.urls
+    } catch (e) { console.error(e) }
+    globalProcessing.value = false
+  }
+
+  for (const url of urlsToAdd) {
     await fetch('/api/factory/media', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
@@ -484,7 +506,7 @@ const doAddSelectedMedia = async () => {
         group_id: currentGroupIdForMedia.value,
         type: 'image',
         media_url: url,
-        apply_watermark: applyWatermark.value
+        apply_watermark: false
       })
     })
   }
@@ -664,6 +686,19 @@ onMounted(() => {
 .loader {
   border: 4px solid #f3f3f3;
   border-top: 4px solid #2563eb;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.loader {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #7c3aed;
   border-radius: 50%;
   width: 40px;
   height: 40px;

@@ -386,6 +386,10 @@
               <option value="">全部分组</option>
               <option v-for="g in newsMediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
             </select>
+            <select v-model="newsMediaWatermark" class="form-control" style="max-width:140px;">
+              <option value="">不添加水印</option>
+              <option v-for="t in watermarkTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+            </select>
           </div>
           <div v-if="newsMediaItems.length" class="news-media-grid">
             <div v-for="item in newsMediaItems" :key="item.id" class="news-media-item" @click="selectNewsMediaImage(item)">
@@ -403,6 +407,11 @@
     
     
 
+    <!-- Global Loading Overlay -->
+    <div v-if="globalProcessing" class="loading-overlay">
+      <div class="loader"></div>
+      <div style="margin-top:16px;color:white;">系统处理中，请稍候...</div>
+    </div>
   </div>
 </template>
 
@@ -442,6 +451,19 @@ const saving = ref(false)
 const activeTab = ref('basic')
 const isFullscreen = ref(false)
 const translatingId = ref(null)
+
+const globalProcessing = ref(false)
+const watermarkTemplates = ref([])
+
+async function loadWatermarkTemplates() {
+  if (watermarkTemplates.value.length) return
+  try {
+    const res = await fetch('/api/media/watermark-templates', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    })
+    watermarkTemplates.value = await res.json()
+  } catch (e) { console.error(e) }
+}
 
 // ─── Category state ──────────────────────────────────────────────────────────
 const categories = ref([])
@@ -974,16 +996,32 @@ function newsPickFromMediaLib() {
   showNewsImgChooser.value = false
   newsMediaSearch.value = ''
   newsMediaGroup.value = localStorage.getItem('_lastMediaGroup') || ''
+  newsMediaWatermark.value = ''
   loadNewsMediaGroups()
+  loadWatermarkTemplates()
   loadNewsMedia()
   showNewsMediaBrowser.value = true
 }
 // Remember selected group
 watch(newsMediaGroup, v => { if (v) localStorage.setItem('_lastMediaGroup', v) })
 
-function selectNewsMediaImage(item) {
-  const url = item.filepath
+async function selectNewsMediaImage(item) {
+  let url = item.filepath
   showNewsMediaBrowser.value = false
+
+  if (newsMediaWatermark.value) {
+    globalProcessing.value = true
+    try {
+      const res = await fetch('/api/media/apply-watermark-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        body: JSON.stringify({ urls: [url], template_id: newsMediaWatermark.value })
+      })
+      const data = await res.json()
+      if (res.ok && data.urls?.length) url = data.urls[0]
+    } catch (e) { console.error(e) }
+    globalProcessing.value = false
+  }
 
   if (newsImgChooserMode === 'cover') {
     form.value.cover_preview = url

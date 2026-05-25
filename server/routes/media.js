@@ -2,6 +2,7 @@ import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 import { getAll, getOne, run } from '../db.js'
 import { upload, compressImage } from '../middleware/upload.js'
+import { applyWatermark } from '../utils/watermark.js'
 import fs from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
@@ -209,6 +210,27 @@ router.delete('/:id', authMiddleware, (req, res) => {
 })
 
 // ─── Batch Operations ───────────────────────────────────────────────────────
+router.post('/apply-watermark-batch', authMiddleware, async (req, res) => {
+  const { urls, template_id } = req.body
+  if (!urls || !Array.isArray(urls)) return res.status(400).json({ error: '请提供图片URL数组' })
+  
+  try {
+    const results = []
+    for (const url of urls) {
+      if (template_id) {
+        // applyWatermark automatically ignores non-images and returns the new url
+        const finalUrl = await applyWatermark(url, template_id)
+        results.push(finalUrl)
+      } else {
+        results.push(url)
+      }
+    }
+    res.json({ urls: results })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 router.post('/batch-move', authMiddleware, (req, res) => {
   const { ids, group_id } = req.body
   if (!ids?.length) return res.status(400).json({ error: '请选择图片' })

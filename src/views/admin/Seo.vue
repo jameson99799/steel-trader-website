@@ -215,11 +215,15 @@
           <button class="modal-close" @click="showMediaPicker=false">&times;</button>
         </div>
         <div class="modal-body">
-          <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
             <input v-model="mediaPickerSearch" class="form-control" placeholder="搜索文件名..." @input="loadMediaPicker" style="max-width:200px;" />
             <select v-model="mediaPickerGroup" class="form-control" @change="loadMediaPicker" style="max-width:140px;">
               <option value="">全部分组</option>
               <option v-for="g in mediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            </select>
+            <select v-model="mediaPickerWatermark" class="form-control" style="max-width:140px;">
+              <option value="">不添加水印</option>
+              <option v-for="t in watermarkTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
           </div>
           <div v-if="mediaPickerItems.length" class="lib-grid">
@@ -234,6 +238,11 @@
       </div>
     </div>
 
+    <!-- Global Loading Overlay -->
+    <div v-if="globalProcessing" class="loading-overlay">
+      <div class="loader"></div>
+      <div style="margin-top:16px;color:white;">系统处理中，请稍候...</div>
+    </div>
   </div>
 </template>
 
@@ -252,8 +261,22 @@ const auditResult = ref(null)
 const showMediaPicker = ref(false)
 const mediaPickerSearch = ref('')
 const mediaPickerGroup = ref('')
+const mediaPickerWatermark = ref('')
 const mediaPickerItems = ref([])
 const mediaGroups = ref([])
+
+const globalProcessing = ref(false)
+const watermarkTemplates = ref([])
+
+async function loadWatermarkTemplates() {
+  if (watermarkTemplates.value.length) return
+  try {
+    const res = await fetch('/api/media/watermark-templates', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    })
+    watermarkTemplates.value = await res.json()
+  } catch (e) { console.error(e) }
+}
 
 const form = ref({
   site_title: '',
@@ -359,9 +382,25 @@ const loadMediaGroups = async () => {
   } catch (e) { console.error(e) }
 }
 
-const selectMediaFromLibrary = (filepath) => {
+const selectMediaFromLibrary = async (filepath) => {
+  let url = filepath
+  
+  if (mediaPickerWatermark.value) {
+    globalProcessing.value = true
+    try {
+      const res = await fetch('/api/media/apply-watermark-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        body: JSON.stringify({ urls: [url], template_id: mediaPickerWatermark.value })
+      })
+      const data = await res.json()
+      if (res.ok && data.urls?.length) url = data.urls[0]
+    } catch (e) { console.error(e) }
+    globalProcessing.value = false
+  }
+
   ogFile.value = null // clear file
-  ogPreview.value = filepath // set to url
+  ogPreview.value = url // set to url
   showMediaPicker.value = false
 }
 
@@ -395,6 +434,7 @@ async function triggerRefresh() {
 onMounted(() => {
   load()
   loadMediaGroups()
+  loadWatermarkTemplates()
   loadMediaPicker()
 })
 </script>
@@ -549,4 +589,28 @@ onMounted(() => {
 .lib-item:hover { border-color: #cbd5e1; transform: translateY(-2px); }
 .lib-item img { width: 100%; height: 100%; object-fit: cover; }
 
+.loading-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.loader {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #7c3aed;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 </style>
