@@ -42,7 +42,8 @@ async function callAi(channel, model, systemPrompt, userPrompt) {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
       ],
-      temperature: 0.7
+      temperature: 0.7,
+      stream: true
   }
 
   const response = await fetch(`${apiUrl}/chat/completions`, {
@@ -59,8 +60,27 @@ async function callAi(channel, model, systemPrompt, userPrompt) {
       throw new Error(`AI API Error: ${response.status} ${errorText}`)
   }
 
-  const data = await response.json()
-  return data.choices?.[0]?.message?.content || ''
+  let fullText = "";
+  let buffer = "";
+  for await (const chunk of response.body) {
+      buffer += chunk.toString();
+      let lines = buffer.split('\n');
+      buffer = lines.pop(); // keep the last partial line in buffer
+      for (const line of lines) {
+          const tLine = line.trim();
+          if (tLine.startsWith('data: ') && tLine !== 'data: [DONE]') {
+              try {
+                  const data = JSON.parse(tLine.slice(6));
+                  if (data.choices && data.choices[0].delta && data.choices[0].delta.content) {
+                      fullText += data.choices[0].delta.content;
+                  }
+              } catch (e) {
+                  // ignore
+              }
+          }
+      }
+  }
+  return fullText || '';
 }
 
 function cleanJsonString(str) {
