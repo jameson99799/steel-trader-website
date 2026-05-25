@@ -60,10 +60,17 @@ async function callAi(channel, model, systemPrompt, userPrompt) {
       throw new Error(`AI API Error: ${response.status} ${errorText}`)
   }
 
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content || '';
+  }
+
+  const decoder = new TextDecoder("utf-8");
   let fullText = "";
   let buffer = "";
   for await (const chunk of response.body) {
-      buffer += chunk.toString();
+      buffer += decoder.decode(chunk, { stream: true });
       let lines = buffer.split('\n');
       buffer = lines.pop(); // keep the last partial line in buffer
       for (const line of lines) {
@@ -79,6 +86,19 @@ async function callAi(channel, model, systemPrompt, userPrompt) {
               }
           }
       }
+  }
+  // catch any remaining data in buffer
+  if (buffer.trim().startsWith('data: ') && buffer.trim() !== 'data: [DONE]') {
+      try {
+          const data = JSON.parse(buffer.trim().slice(6));
+          if (data.choices && data.choices[0].delta && data.choices[0].delta.content) {
+              fullText += data.choices[0].delta.content;
+          }
+      } catch (e) {}
+  }
+
+  if (!fullText) {
+      logMsg(`Warning: Stream parsing resulted in empty string. Content-Type was ${contentType}`);
   }
   return fullText || '';
 }
