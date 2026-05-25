@@ -58,7 +58,16 @@ router.get('/', authMiddleware, (req, res) => {
   let where = 'WHERE m.status=1'
   const params = []
   if (group_id) { where += ' AND m.group_id=?'; params.push(group_id) }
-  if (search) { where += ' AND (m.original_filename LIKE ? OR m.alt LIKE ?)'; params.push(`%${search}%`, `%${search}%`) }
+  if (search) {
+    const terms = search.split('|').map(s => s.trim()).filter(Boolean)
+    if (terms.length > 0) {
+      const ors = terms.map(() => '(m.original_filename LIKE ? OR m.alt LIKE ?)').join(' OR ')
+      where += ` AND (${ors})`
+      terms.forEach(term => {
+        params.push(`%${term}%`, `%${term}%`)
+      })
+    }
+  }
 
   const total = getOne(`SELECT COUNT(*) as c FROM media m ${where}`, params)
   const offset = (parseInt(page) - 1) * parseInt(per_page)

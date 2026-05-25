@@ -10,7 +10,8 @@
         <button class="btn btn-outline" style="color:#059669;border-color:#059669;" @click="syncImagesAndLinks" :disabled="syncing">
           {{ syncing ? '⏳ 同步中...' : '🔄 同步图片与超链接' }}
         </button>
-        <button class="btn btn-outline" @click="showCatModal = true" style="color:#7c3aed;border-color:#c4b5fd;">📂 分组管理</button>
+        <button class="btn btn-outline" @click="showCatModal = true" style="color:#7c3aed;border-color:#c4b5fd;">类别管理</button>
+        <button class="btn btn-primary" @click="showAiAutoPostConfig = true" style="background-color: #10b981; border-color: #10b981;">🤖 AI 自动发帖</button>
         <button class="btn btn-primary" @click="openCreate">+ 新建文章</button>
       </div>
     </div>
@@ -413,14 +414,18 @@
       <div style="margin-top:16px;color:white;">系统处理中，请稍候...</div>
     </div>
   </div>
+
+  <AiAutoPostConfig v-if="showAiAutoPostConfig" @close="showAiAutoPostConfig = false" @refresh="fetchNews" />
 </template>
 
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import api from '../../api'
+import AiAutoPostConfig from '../../components/AiAutoPostConfig.vue'
 
 const newsList = ref([])
 const showModal = ref(false)
+const showAiAutoPostConfig = ref(false)
 const editId = ref(null)
 const syncing = ref(false)
 

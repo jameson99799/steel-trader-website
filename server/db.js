@@ -343,6 +343,67 @@ async function initDb() {
     )
   `)
 
+  // AI Auto-Post Configuration table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_post_settings (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      status TEXT DEFAULT 'paused',
+      frequency_days INTEGER DEFAULT 1,
+      articles_per_run INTEGER DEFAULT 1,
+      products_json TEXT DEFAULT '["GI"]',
+      translate_all INTEGER DEFAULT 0,
+      channel_id INTEGER,
+      metadata_prompt_id INTEGER,
+      body_prompt_id INTEGER,
+      current_product_index INTEGER DEFAULT 0,
+      next_run_at DATETIME,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // AI Auto-Post Prompts table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_post_prompts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      content TEXT NOT NULL,
+      type TEXT NOT NULL,
+      is_default INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // On boot: auto-pause running task to prevent ghost processes and corrupted data
+  try {
+    db.exec("UPDATE ai_post_settings SET status = 'paused' WHERE status = 'running'")
+  } catch (e) {}
+
+  // Seed default AI Auto-Post Settings if empty
+  try {
+    const hasAiPostSettings = db.prepare('SELECT id FROM ai_post_settings WHERE id = 1').get()
+    if (!hasAiPostSettings) {
+      db.prepare('INSERT INTO ai_post_settings (id) VALUES (1)').run()
+    }
+  } catch (e) { }
+
+  // Seed default AI Prompts if empty
+  try {
+    const hasMetadataPrompt = db.prepare('SELECT id FROM ai_post_prompts WHERE type = "metadata" LIMIT 1').get()
+    if (!hasMetadataPrompt) {
+      db.prepare(`INSERT INTO ai_post_prompts (name, content, type, is_default) VALUES (?, ?, 'metadata', 1)`).run(
+        '默认元数据生成规则',
+        'You are an expert SEO content strategist. Generate metadata for a blog post about the product: {product}. Return ONLY valid JSON format without markdown blocks: {"title": "Catchy Title", "summary": "100 word summary", "seo_title": "SEO Optimized Title", "seo_description": "SEO description under 160 chars", "seo_keywords": "keyword1, keyword2, keyword3"}'
+      )
+    }
+    const hasBodyPrompt = db.prepare('SELECT id FROM ai_post_prompts WHERE type = "body" LIMIT 1').get()
+    if (!hasBodyPrompt) {
+      db.prepare(`INSERT INTO ai_post_prompts (name, content, type, is_default) VALUES (?, ?, 'body', 1)`).run(
+        '默认正文生成规则',
+        'You are a professional B2B steel industry writer. Write a comprehensive, highly-professional, SEO-optimized blog post in HTML format. Title: {title}. Summary: {summary}. Product: {product}. Include at least 3 FAQ items using <details> and <summary> tags. Include professional tables or lists. Use proper <h2> and <h3> tags. DO NOT include ```html markdown wrappers, output raw HTML only.'
+      )
+    }
+  } catch (e) { }
+
   // Translation Prompts table for custom translation business rules
   db.exec(`
     CREATE TABLE IF NOT EXISTS translation_prompts (

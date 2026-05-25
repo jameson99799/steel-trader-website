@@ -32,6 +32,7 @@ import sslRoutes from './routes/ssl.js'
 import emailRoutes from './routes/email.js'
 import indexingRoutes, { startIndexingScheduler } from './routes/indexing.js'
 import aiRoutes from './routes/ai.js'
+import aiAutoPostRoutes from './routes/ai-auto-post.js'
 import mailerRoutes from './routes/mailer.js'
 import externalApiRoutes from './routes/external-api.js'
 import mediaRoutes from './routes/media.js'
@@ -332,6 +333,7 @@ async function startServer() {
     app.use('/api/email', emailRoutes)
     app.use('/api/indexing', indexingRoutes)
     app.use('/api/ai', aiRoutes)
+    app.use('/api/ai-auto-post', aiAutoPostRoutes)
     app.use('/api/mailer', mailerRoutes)
     app.use('/api/external', externalApiRoutes)
     app.use('/api/crm/auth', crmAuthRoutes)
