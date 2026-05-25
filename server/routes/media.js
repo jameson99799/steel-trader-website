@@ -410,7 +410,7 @@ router.post('/batch-rename', authMiddleware, async (req, res) => {
         for (const col of t.columns) {
           try {
             run(`UPDATE ${t.table} SET ${col}=REPLACE(${col}, ?, ?) WHERE ${col} LIKE ?`,
-              [oldFilepath, newFilepath, \`%\${oldFilepath}%\`])
+              [oldFilepath, newFilepath, `%${oldFilepath}%`])
           } catch (e) { } // ignore missing columns
         }
       }
