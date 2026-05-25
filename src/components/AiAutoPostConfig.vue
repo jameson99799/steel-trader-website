@@ -216,7 +216,9 @@
           <button @click="showLogViewer = false" class="modal-close-btn">&times;</button>
         </div>
         <div class="modal-body-premium" style="padding: 0;">
-          <div style="padding: 12px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: flex-end; background: #f9fafb;">
+          <div style="padding: 12px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 8px; background: #f9fafb;">
+            <span v-if="autoRefresh" style="font-size: 12px; color: #10b981; line-height: 26px; margin-right: auto;">● 自动刷新中 (每2秒)</span>
+            <button @click="clearLogs" class="btn-premium btn-outline-red" style="padding: 4px 12px; font-size: 12px; color: #dc2626; border-color: #fca5a5;">🗑 清空日志</button>
             <button @click="fetchLogs" class="btn-premium btn-outline-indigo" style="padding: 4px 12px; font-size: 12px;">🔄 刷新日志</button>
           </div>
           <pre style="margin: 0; padding: 16px; background: #1e1e1e; color: #d4d4d4; font-family: monospace; font-size: 13px; max-height: 60vh; overflow-y: auto; white-space: pre-wrap;">{{ logContent }}</pre>
@@ -239,19 +241,38 @@ const testError = ref(null)
 
 const showLogViewer = ref(false)
 const logContent = ref('加载中...')
+const autoRefresh = ref(false)
+let refreshInterval = null
 
-const fetchLogs = async () => {
-  logContent.value = '加载中...'
+const fetchLogs = async (isAuto = false) => {
+  if (!isAuto) logContent.value = '加载中...'
   try {
     const res = await api.request('/ai-auto-post/logs')
     logContent.value = res.logs || '暂无日志记录'
   } catch (e) {
-    logContent.value = '读取日志失败: ' + e.message
+    if (!isAuto) logContent.value = '读取日志失败: ' + e.message
+  }
+}
+
+const clearLogs = async () => {
+  if (!confirm('确定要清空日志吗？')) return
+  try {
+    await api.request('/ai-auto-post/logs', { method: 'DELETE' })
+    fetchLogs()
+  } catch (e) {
+    alert('清空失败: ' + e.message)
   }
 }
 
 watch(showLogViewer, (newVal) => {
-  if (newVal) fetchLogs()
+  if (newVal) {
+    fetchLogs()
+    autoRefresh.value = true
+    refreshInterval = setInterval(() => fetchLogs(true), 2000)
+  } else {
+    autoRefresh.value = false
+    if (refreshInterval) clearInterval(refreshInterval)
+  }
 })
 
 const settings = ref({

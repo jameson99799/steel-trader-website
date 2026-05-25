@@ -337,6 +337,18 @@ router.get('/logs', authMiddleware, (req, res) => {
   }
 })
 
+router.delete('/logs', authMiddleware, (req, res) => {
+  try {
+    const logPath = join(ROOT_DIR, 'data/ai-post.log')
+    if (fs.existsSync(logPath)) {
+      fs.writeFileSync(logPath, '') // Clear file content
+    }
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 // Prompts CRUD
 router.get('/prompts', authMiddleware, (req, res) => {
   const prompts = getAll('SELECT * FROM ai_post_prompts ORDER BY type, is_default DESC, id DESC')
