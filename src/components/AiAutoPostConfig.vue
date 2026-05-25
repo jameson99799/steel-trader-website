@@ -107,6 +107,10 @@
             <input type="checkbox" v-model="settings.translate_all" :true-value="1" :false-value="0" />
             <span>自动翻译为全站所有语言 (调用现有后台翻译队列)</span>
           </label>
+          <label class="flex items-center gap-2 cursor-pointer mb-2">
+            <input type="checkbox" v-model="settings.apply_watermark" :true-value="1" :false-value="0" />
+            <span>自动添加图片水印 (跟随图库默认水印设置)</span>
+          </label>
         </div>
 
         <div class="flex justify-end mt-6">
@@ -167,6 +171,7 @@ const settings = ref({
   articles_per_run: 1,
   products_json: '["GI"]',
   translate_all: 1,
+  apply_watermark: 0,
   channel_id: null,
   metadata_prompt_id: null,
   body_prompt_id: null,
@@ -188,17 +193,17 @@ const bodyPrompts = computed(() => prompts.value.filter(p => p.type === 'body'))
 const fetchSettings = async () => {
   loading.value = true
   try {
-    const res = await api.get('/ai-auto-post/settings')
-    if (res.data) {
-      settings.value = res.data
+    const res = await api.request('/ai-auto-post/settings')
+    if (res) {
+      settings.value = res
       try {
-        selectedProducts.value = JSON.parse(res.data.products_json || '[]')
+        selectedProducts.value = JSON.parse(res.products_json || '[]')
       } catch (e) {
         selectedProducts.value = ['GI']
       }
     }
   } catch (e) {
-    alert('加载配置失败: ' + (e.response?.data?.error || e.message))
+    alert('加载配置失败: ' + e.message)
   }
   loading.value = false
 }
@@ -206,11 +211,11 @@ const fetchSettings = async () => {
 const fetchDependencies = async () => {
   try {
     const [chRes, pRes] = await Promise.all([
-      api.get('/ai/channels'),
-      api.get('/ai-auto-post/prompts')
+      api.request('/ai/channels'),
+      api.request('/ai-auto-post/prompts')
     ])
-    channels.value = chRes.data
-    prompts.value = pRes.data
+    channels.value = chRes
+    prompts.value = pRes
 
     if (!settings.value.channel_id && channels.value.length > 0) {
       const def = channels.value.find(c => c.is_default) || channels.value[0]
@@ -240,14 +245,17 @@ const saveSettings = async () => {
   }
   loading.value = true
   try {
-    await api.post('/ai-auto-post/settings', {
-      ...settings.value,
-      products_json: JSON.stringify(selectedProducts.value)
+    await api.request('/ai-auto-post/settings', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...settings.value,
+        products_json: JSON.stringify(selectedProducts.value)
+      })
     })
     alert('配置保存成功！')
     await fetchSettings()
   } catch (e) {
-    alert('保存失败: ' + (e.response?.data?.error || e.message))
+    alert('保存失败: ' + e.message)
   }
   loading.value = false
 }
@@ -255,10 +263,10 @@ const saveSettings = async () => {
 const actionTask = async (action) => {
   loading.value = true
   try {
-    await api.post('/ai-auto-post/action', { action })
+    await api.request('/ai-auto-post/action', { method: 'POST', body: JSON.stringify({ action }) })
     await fetchSettings()
   } catch (e) {
-    alert('操作失败: ' + (e.response?.data?.error || e.message))
+    alert('操作失败: ' + e.message)
   }
   loading.value = false
 }
@@ -273,11 +281,11 @@ const testRun = async () => {
   testing.value = true
   testResult.value = null
   try {
-    const res = await api.post('/ai-auto-post/test-run')
-    testResult.value = res.data.result
+    const res = await api.request('/ai-auto-post/test-run', { method: 'POST' })
+    testResult.value = res.result
     emit('refresh') // Refresh news list in parent
   } catch (e) {
-    alert('测试生成失败: ' + (e.response?.data?.error || e.message))
+    alert('测试生成失败: ' + e.message)
   }
   testing.value = false
 }
@@ -304,29 +312,29 @@ const selectEditPrompt = (p) => {
 }
 
 const reloadPrompts = async () => {
-  const pRes = await api.get('/ai-auto-post/prompts')
-  prompts.value = pRes.data
+  const pRes = await api.request('/ai-auto-post/prompts')
+  prompts.value = pRes
 }
 
 const savePrompt = async () => {
   if (!promptForm.value.name || !promptForm.value.content) return alert('名称和内容不能为空')
   try {
     if (editingPromptId.value) {
-      await api.put(`/ai-auto-post/prompts/${editingPromptId.value}`, promptForm.value)
+      await api.request(`/ai-auto-post/prompts/${editingPromptId.value}`, { method: 'PUT', body: JSON.stringify(promptForm.value) })
     } else {
-      await api.post('/ai-auto-post/prompts', { ...promptForm.value, type: editingPromptType.value })
+      await api.request('/ai-auto-post/prompts', { method: 'POST', body: JSON.stringify({ ...promptForm.value, type: editingPromptType.value }) })
     }
     clearPromptForm()
     await reloadPrompts()
   } catch (e) {
-    alert('保存失败: ' + (e.response?.data?.error || e.message))
+    alert('保存失败: ' + e.message)
   }
 }
 
 const deletePrompt = async (id) => {
   if (!confirm('确定删除此提示词吗？')) return
   try {
-    await api.delete(`/ai-auto-post/prompts/${id}`)
+    await api.request(`/ai-auto-post/prompts/${id}`, { method: 'DELETE' })
     await reloadPrompts()
   } catch (e) {
     alert('删除失败')
@@ -335,7 +343,7 @@ const deletePrompt = async (id) => {
 
 const setDefaultPrompt = async (id) => {
   try {
-    await api.put(`/ai-auto-post/prompts/${id}/set-default`)
+    await api.request(`/ai-auto-post/prompts/${id}/set-default`, { method: 'PUT' })
     await reloadPrompts()
   } catch (e) {
     alert('设置失败')

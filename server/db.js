@@ -352,6 +352,7 @@ async function initDb() {
       articles_per_run INTEGER DEFAULT 1,
       products_json TEXT DEFAULT '["GI"]',
       translate_all INTEGER DEFAULT 0,
+      apply_watermark INTEGER DEFAULT 0,
       channel_id INTEGER,
       metadata_prompt_id INTEGER,
       body_prompt_id INTEGER,
@@ -376,6 +377,10 @@ async function initDb() {
   // On boot: auto-pause running task to prevent ghost processes and corrupted data
   try {
     db.exec("UPDATE ai_post_settings SET status = 'paused' WHERE status = 'running'")
+  } catch (e) {}
+
+  try {
+    db.exec("ALTER TABLE ai_post_settings ADD COLUMN apply_watermark INTEGER DEFAULT 0")
   } catch (e) {}
 
   // Seed default AI Auto-Post Settings if empty

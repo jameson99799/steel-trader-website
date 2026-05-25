@@ -90,6 +90,7 @@ async function executeGeneration(isTest = false) {
   // Step 2: Fetch Cover Image
   // Use | logic to search media library
   let coverImage = ''
+  let fetchedMediaList = []
   if (product) {
     const terms = product.split('|').map(s => s.trim()).filter(Boolean)
     let where = 'WHERE status=1 AND mimetype LIKE "image/%"'
@@ -101,24 +102,46 @@ async function executeGeneration(isTest = false) {
         params.push(`%${term}%`, `%${term}%`)
       })
     }
-    // Randomize selection
-    const media = getOne(`SELECT * FROM media ${where} ORDER BY RANDOM() LIMIT 1`, params)
-    if (media) {
-      coverImage = media.filepath
+    // Fetch up to 4 random images
+    const mediaList = getAll(`SELECT * FROM media ${where} ORDER BY RANDOM() LIMIT 4`, params)
+    if (mediaList && mediaList.length > 0) {
+      coverImage = settings.apply_watermark ? await applyWatermark(mediaList[0].filepath) : mediaList[0].filepath
     }
+    // Make mediaList available to next step
+    fetchedMediaList = mediaList || []
   }
 
   // Step 3: Generate Body
+  const mediaList = fetchedMediaList
+  const numBodyImages = Math.max(0, mediaList.length - 1)
+  let imageInstruction = ''
+  if (numBodyImages > 0) {
+    const placeholders = Array.from({ length: numBodyImages }, (_, i) => `[IMAGE_${i + 1}]`).join(', ')
+    imageInstruction = `\n\nIMPORTANT: You MUST insert exactly ${numBodyImages} image placeholders formatted exactly as ${placeholders} at appropriate semantic positions within the article body (e.g., evenly spaced between paragraphs). Do not use real <img> tags, only these exact text placeholders.`
+  }
+
   const bodySysPrompt = bodyPromptRow.content
     .replace('{product}', product)
     .replace('{title}', metadata.title || '')
-    .replace('{summary}', metadata.summary || '')
+    .replace('{summary}', metadata.summary || '') + imageInstruction
   
   let bodyContent = await callAi(channel, null, bodySysPrompt, `Please write the article now.`)
   if (bodyContent.startsWith('```html')) bodyContent = bodyContent.slice(7)
   else if (bodyContent.startsWith('```')) bodyContent = bodyContent.slice(3)
   if (bodyContent.endsWith('```')) bodyContent = bodyContent.slice(0, -3)
   bodyContent = bodyContent.trim()
+
+  // Replace placeholders with actual HTML image tags
+  for (let i = 1; i <= numBodyImages; i++) {
+    const m = mediaList[i]
+    if (m) {
+      const imgPath = settings.apply_watermark ? await applyWatermark(m.filepath) : m.filepath
+      const imgHtml = `<figure class="article-image" style="text-align: center; margin: 20px 0;"><img src="${imgPath}" alt="${metadata.title || product}" style="max-width: 100%; height: auto; border-radius: 8px;" /><figcaption style="color: #666; font-size: 14px; margin-top: 8px;">${metadata.title || product}</figcaption></figure>`
+      bodyContent = bodyContent.replace(`[IMAGE_${i}]`, imgHtml)
+    }
+  }
+  // Remove any leftover unused placeholders
+  bodyContent = bodyContent.replace(/\[IMAGE_\d+\]/g, '')
 
   // Generate slug
   const slug = (metadata.title || product || `post-${Date.now()}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 60) + '-' + Date.now()
@@ -196,12 +219,12 @@ router.get('/settings', authMiddleware, (req, res) => {
 })
 
 router.post('/settings', authMiddleware, (req, res) => {
-  const { frequency_days, articles_per_run, products_json, translate_all, channel_id, metadata_prompt_id, body_prompt_id } = req.body
+  const { frequency_days, articles_per_run, products_json, translate_all, apply_watermark, channel_id, metadata_prompt_id, body_prompt_id } = req.body
   run(`
     UPDATE ai_post_settings 
-    SET frequency_days=?, articles_per_run=?, products_json=?, translate_all=?, channel_id=?, metadata_prompt_id=?, body_prompt_id=?, updated_at=CURRENT_TIMESTAMP
+    SET frequency_days=?, articles_per_run=?, products_json=?, translate_all=?, apply_watermark=?, channel_id=?, metadata_prompt_id=?, body_prompt_id=?, updated_at=CURRENT_TIMESTAMP
     WHERE id=1
-  `, [frequency_days, articles_per_run, products_json, translate_all ? 1 : 0, channel_id, metadata_prompt_id, body_prompt_id])
+  `, [frequency_days, articles_per_run, products_json, translate_all ? 1 : 0, apply_watermark ? 1 : 0, channel_id, metadata_prompt_id, body_prompt_id])
   res.json({ success: true })
 })
 
