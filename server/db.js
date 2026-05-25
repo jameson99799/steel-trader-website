@@ -397,14 +397,14 @@ async function initDb() {
 
   // Seed default AI Prompts if empty
   try {
-    const hasMetadataPrompt = db.prepare('SELECT id FROM ai_post_prompts WHERE type = "metadata" LIMIT 1').get()
+    const hasMetadataPrompt = db.prepare("SELECT id FROM ai_post_prompts WHERE type = 'metadata' LIMIT 1").get()
     if (!hasMetadataPrompt) {
       db.prepare(`INSERT INTO ai_post_prompts (name, content, type, is_default) VALUES (?, ?, 'metadata', 1)`).run(
         '默认元数据生成规则',
         'You are an expert SEO content strategist. Generate metadata for a blog post about the product: {product}. Return ONLY valid JSON format without markdown blocks: {"title": "Catchy Title", "summary": "100 word summary", "seo_title": "SEO Optimized Title", "seo_description": "SEO description under 160 chars", "seo_keywords": "keyword1, keyword2, keyword3"}'
       )
     }
-    const hasBodyPrompt = db.prepare('SELECT id FROM ai_post_prompts WHERE type = "body" LIMIT 1').get()
+    const hasBodyPrompt = db.prepare("SELECT id FROM ai_post_prompts WHERE type = 'body' LIMIT 1").get()
     if (!hasBodyPrompt) {
       db.prepare(`INSERT INTO ai_post_prompts (name, content, type, is_default) VALUES (?, ?, 'body', 1)`).run(
         '默认正文生成规则',
