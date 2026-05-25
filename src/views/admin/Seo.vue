@@ -230,7 +230,7 @@
             <div v-for="item in mediaPickerItems" :key="item.id" 
                  class="lib-item"
                  @click="selectMediaFromLibrary(item.filepath)">
-              <img :src="item.filepath" />
+              <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
             </div>
           </div>
           <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
@@ -264,6 +264,15 @@ const mediaPickerGroup = ref('')
 const mediaPickerWatermark = ref('')
 const mediaPickerItems = ref([])
 const mediaGroups = ref([])
+
+watch(showMediaPicker, (v) => {
+  if (v) {
+    mediaPickerGroup.value = localStorage.getItem('_lastMediaGroup') || ''
+    mediaPickerWatermark.value = localStorage.getItem('_lastWatermarkTemplate') || ''
+  }
+})
+watch(mediaPickerGroup, v => { if (v !== undefined) localStorage.setItem('_lastMediaGroup', v) })
+watch(mediaPickerWatermark, v => { if (v !== undefined) localStorage.setItem('_lastWatermarkTemplate', v) })
 
 const globalProcessing = ref(false)
 const watermarkTemplates = ref([])
@@ -585,8 +594,8 @@ onMounted(() => {
 .btn-outline:hover { background: #f8fafc; border-color: #cbd5e1; }
 
 .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
-.lib-item { position: relative; border-radius: 8px; overflow: hidden; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; aspect-ratio: 1; background: #f8fafc; }
-.lib-item:hover { border-color: #cbd5e1; transform: translateY(-2px); }
+.lib-item { position: relative; border-radius: 8px; overflow: hidden; cursor: pointer; border: 2px solid transparent; box-sizing: border-box; transition: all 0.2s; aspect-ratio: 1; background: #f8fafc; }
+.lib-item:hover { border-color: #cbd5e1; }
 .lib-item img { width: 100%; height: 100%; object-fit: cover; }
 
 .loading-overlay {

@@ -393,7 +393,7 @@
           </div>
           <div v-if="newsMediaItems.length" class="news-media-grid">
             <div v-for="item in newsMediaItems" :key="item.id" class="news-media-item" @click="selectNewsMediaImage(item)">
-              <img :src="item.filepath" />
+              <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
               <div class="news-media-name">{{ item.original_filename || item.filename }}</div>
             </div>
           </div>
@@ -997,14 +997,15 @@ function newsPickFromMediaLib() {
   showNewsImgChooser.value = false
   newsMediaSearch.value = ''
   newsMediaGroup.value = localStorage.getItem('_lastMediaGroup') || ''
-  newsMediaWatermark.value = ''
+  newsMediaWatermark.value = localStorage.getItem('_lastWatermarkTemplate') || ''
   loadNewsMediaGroups()
   loadWatermarkTemplates()
   loadNewsMedia()
   showNewsMediaBrowser.value = true
 }
-// Remember selected group
-watch(newsMediaGroup, v => { if (v) localStorage.setItem('_lastMediaGroup', v) })
+// Remember selected group and watermark
+watch(newsMediaGroup, v => { if (v !== undefined) localStorage.setItem('_lastMediaGroup', v) })
+watch(newsMediaWatermark, v => { if (v !== undefined) localStorage.setItem('_lastWatermarkTemplate', v) })
 
 async function selectNewsMediaImage(item) {
   let url = item.filepath
@@ -1508,8 +1509,8 @@ onMounted(() => {
 
 /* News media library browser grid */
 .news-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; max-height: 450px; overflow-y: auto; }
-.news-media-item { border: 2px solid #e2e8f0; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.15s; }
-.news-media-item:hover { border-color: #16a34a; transform: scale(1.02); }
+.news-media-item { border: 2px solid transparent; box-sizing: border-box; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.15s; }
+.news-media-item:hover { border-color: #16a34a; }
 .news-media-item img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
 .news-media-name { font-size: 10px; padding: 4px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #475569; text-align: center; }
 

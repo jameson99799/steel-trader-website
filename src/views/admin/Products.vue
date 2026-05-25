@@ -456,15 +456,18 @@
           </div>
           <div v-if="mediaPickerItems.length" class="import-grid">
             <div v-for="item in mediaPickerItems" :key="item.id" :class="['import-item', { selected: mediaPickerSelected.includes(item.filepath) }]" @click="toggleMediaPickerSelect(item.filepath)">
-              <img :src="item.filepath" />
+              <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
               <div class="import-check">✓</div>
             </div>
           </div>
           <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="showMediaPicker=false">取消</button>
-          <button type="button" class="btn btn-primary" style="background:#7c3aed;" @click="doImportFromMedia" :disabled="!mediaPickerSelected.length">选择 {{ mediaPickerSelected.length }} 张</button>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; align-items:center;">
+          <div style="display:flex; gap:8px;">
+            <button v-if="mediaPickerSelected.length > 0" type="button" class="btn btn-outline" style="border-color:#eab308; color:#eab308;" @click="doBatchRename('media')">✏️ 批量重命名</button>
+            <button type="button" class="btn btn-secondary" @click="showMediaPicker=false">取消</button>
+            <button type="button" class="btn btn-primary" style="background:#7c3aed;" @click="doImportFromMedia" :disabled="!mediaPickerSelected.length">选择 {{ mediaPickerSelected.length }} 张</button>
+          </div>
         </div>
       </div>
     </div>
@@ -514,7 +517,7 @@
           </div>
           <div v-if="detailMediaItems.length" class="import-grid" style="max-height:450px;">
             <div v-for="item in detailMediaItems" :key="item.id" class="import-item" style="cursor:pointer;" @click="selectDetailMediaImage(item)">
-              <img :src="item.filepath" />
+              <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
             </div>
           </div>
           <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
@@ -817,11 +820,13 @@ watch(showMediaPicker, (v) => {
     loadMediaGroups()
     loadWatermarkTemplates()
     mediaPickerGroup.value = localStorage.getItem('_lastMediaGroup') || ''
-    mediaPickerWatermark.value = ''
+    mediaPickerWatermark.value = localStorage.getItem('_lastWatermarkTemplate') || ''
     loadMediaPicker()
     mediaPickerSelected.value = []
   }
 })
+watch(mediaPickerGroup, v => { if (v !== undefined) localStorage.setItem('_lastMediaGroup', v) })
+watch(mediaPickerWatermark, v => { if (v !== undefined) localStorage.setItem('_lastWatermarkTemplate', v) })
 // Remember selected group
 watch(mediaPickerGroup, v => { if (v) localStorage.setItem('_lastMediaGroup', v) })
 
@@ -1300,14 +1305,15 @@ function pickFromMediaLib() {
   showImgChooser.value = false
   detailMediaSearch.value = ''
   detailMediaGroup.value = localStorage.getItem('_lastMediaGroup') || ''
-  detailMediaWatermark.value = ''
+  detailMediaWatermark.value = localStorage.getItem('_lastWatermarkTemplate') || ''
   loadDetailMediaGroups()
   loadWatermarkTemplates()
   loadDetailMedia()
   showDetailMediaBrowser.value = true
 }
-// Remember selected group for detail media browser
-watch(detailMediaGroup, v => { if (v) localStorage.setItem('_lastMediaGroup', v) })
+// Remember selected group & watermark for detail media browser
+watch(detailMediaGroup, v => { if (v !== undefined) localStorage.setItem('_lastMediaGroup', v) })
+watch(detailMediaWatermark, v => { if (v !== undefined) localStorage.setItem('_lastWatermarkTemplate', v) })
 
 async function selectDetailMediaImage(item) {
   let url = item.filepath
@@ -2163,7 +2169,7 @@ onMounted(() => {
 
 /* Import image picker grid */
 .import-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; max-height: 400px; overflow-y: auto; }
-.import-item { position: relative; aspect-ratio: 1; border: 2px solid #e2e8f0; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.15s; }
+.import-item { position: relative; aspect-ratio: 1; border: 2px solid transparent; box-sizing: border-box; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.15s; }
 .import-item img { width: 100%; height: 100%; object-fit: cover; }
 .import-item:hover { border-color: #93c5fd; }
 .import-item.selected { border-color: #2563eb; }

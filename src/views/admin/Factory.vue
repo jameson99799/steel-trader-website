@@ -122,7 +122,7 @@
             <div v-for="item in mediaPickerItems" :key="item.id" 
                  :class="['lib-item', { selected: mediaPickerSelected.includes(item.filepath) }]" 
                  @click="toggleMediaSelect(item.filepath)">
-              <img :src="item.filepath" />
+              <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
               <div class="check-icon">✓</div>
             </div>
           </div>
@@ -130,6 +130,7 @@
         </div>
         <div class="modal-footer" style="display:flex; justify-content:flex-end; align-items:center;">
           <div style="display:flex; gap:8px;">
+            <button v-if="mediaPickerSelected.length > 0" type="button" class="btn btn-outline" style="border-color:#eab308; color:#eab308;" @click="doBatchRename">✏️ 批量重命名</button>
             <button type="button" class="btn btn-secondary" @click="showMediaPicker=false">取消</button>
             <button type="button" class="btn btn-primary" style="background:#7c3aed;" @click="doAddSelectedMedia" :disabled="!mediaPickerSelected.length">确认添加 ({{ mediaPickerSelected.length }})</button>
           </div>
@@ -453,12 +454,13 @@ const getYoutubeEmbedUrl = (url) => {
 const openMediaPicker = (groupId) => {
   currentGroupIdForMedia.value = groupId
   mediaPickerSelected.value = []
-  mediaPickerWatermark.value = ''
+  mediaPickerWatermark.value = localStorage.getItem('_lastWatermarkTemplate') || ''
   showMediaPicker.value = true
   loadMediaGroups()
   loadWatermarkTemplates()
   loadMediaPicker()
 }
+watch(mediaPickerWatermark, v => { if (v !== undefined) localStorage.setItem('_lastWatermarkTemplate', v) })
 
 const loadMediaPicker = async () => {
   const params = new URLSearchParams({ per_page: '50' })
@@ -521,6 +523,37 @@ const doAddSelectedMedia = async () => {
   }
   showMediaPicker.value = false
   loadData()
+}
+
+// ─── Batch Rename ───────────────────────────────────────────────────────────
+async function doBatchRename() {
+  let ids = mediaPickerItems.value.filter(i => mediaPickerSelected.value.includes(i.filepath)).map(i => i.id)
+  if (!ids.length) return
+  
+  const prefix = prompt(`正在为选中的 ${ids.length} 张图片批量重命名。\n请输入英文前缀 (例如: GI coil):`)
+  if (!prefix) return
+  
+  globalProcessing.value = true
+  try {
+    const res = await fetch('/api/media/batch-rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
+      body: JSON.stringify({ ids, prefix })
+    })
+    const data = await res.json()
+    if (res.ok) {
+      alert(`批量重命名成功！\n成功: ${data.successCount} 个\n失败: ${data.errorCount} 个`)
+      mediaPickerSelected.value = []
+      await loadMediaPicker()
+      await loadData()
+    } else {
+      alert('重命名失败: ' + (data.error || '未知错误'))
+    }
+  } catch (e) {
+    alert('重命名失败: ' + e.message)
+  } finally {
+    globalProcessing.value = false
+  }
 }
 
 // Batch Watermark
@@ -656,7 +689,8 @@ onMounted(() => {
 .empty-state { padding: 60px; text-align: center; color: #64748b; background: #fff; border-radius: 12px; border: 1px dashed #cbd5e1; }
 
 .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; max-height: 400px; overflow-y: auto; padding-right: 8px; }
-.lib-item { aspect-ratio: 1; border-radius: 8px; overflow: hidden; border: 2px solid transparent; cursor: pointer; position: relative; }
+.lib-item { aspect-ratio: 1; border-radius: 8px; overflow: hidden; border: 2px solid transparent; box-sizing: border-box; cursor: pointer; position: relative; transition: all 0.15s; }
+.lib-item:hover { border-color: #93c5fd; }
 .lib-item img { width: 100%; height: 100%; object-fit: cover; }
 .lib-item.selected { border-color: #7c3aed; }
 .check-icon { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; background: #7c3aed; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; opacity: 0; }

@@ -235,7 +235,7 @@
           </div>
           <div v-if="mediaPickerItems.length" class="media-grid">
             <div v-for="item in mediaPickerItems" :key="item.id" :class="['media-item', { selected: mediaPickerSelected === item.filepath }]" @click="mediaPickerSelected = item.filepath">
-              <img :src="item.filepath" />
+              <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
             </div>
           </div>
           <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
@@ -292,12 +292,13 @@ async function loadWatermarkTemplates() {
 const openMediaPicker = (target) => {
   mediaPickerTarget.value = target
   mediaPickerSelected.value = null
-  mediaPickerWatermark.value = ''
+  mediaPickerWatermark.value = localStorage.getItem('_lastWatermarkTemplate') || ''
   showMediaPicker.value = true
   loadMediaGroups()
   loadWatermarkTemplates()
   loadMediaPicker()
 }
+watch(mediaPickerWatermark, v => { if (v !== undefined) localStorage.setItem('_lastWatermarkTemplate', v) })
 
 const loadMediaPicker = async () => {
   const params = new URLSearchParams({ per_page: '50' })
@@ -503,6 +504,7 @@ onMounted(async () => {
   border-radius: 8px; 
   overflow: hidden; 
   border: 2px solid transparent; 
+  box-sizing: border-box;
   cursor: pointer; 
   position: relative; 
 }

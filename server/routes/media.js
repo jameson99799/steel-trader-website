@@ -332,6 +332,100 @@ router.post('/:id/replace', authMiddleware, upload.single('file'), async (req, r
   }
 })
 
+// ─── Batch Rename ───────────────────────────────────────────────────────────
+router.post('/batch-rename', authMiddleware, async (req, res) => {
+  const { ids, prefix } = req.body
+  if (!ids?.length) return res.status(400).json({ error: '请选择要重命名的图片' })
+  if (!prefix) return res.status(400).json({ error: '请输入重命名前缀' })
+
+  // Format prefix: lower case, replace non-alphanumeric with hyphen, remove consecutive hyphens
+  const baseName = prefix.toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  
+  if (!baseName) return res.status(400).json({ error: '前缀只包含无效字符' })
+
+  let successCount = 0
+  let errorCount = 0
+  const errors = []
+
+  // Global replace tables
+  const tablesToUpdate = [
+    { table: 'products', columns: ['detail_content', 'images'] },
+    { table: 'news', columns: ['content', 'cover_image'] },
+    { table: 'categories', columns: ['image'] },
+    { table: 'hero_slides', columns: ['image_url'] },
+    { table: 'company', columns: ['about_image', 'logo', 'favicon', 'whatsapp_qr', 'wechat_qr'] },
+    { table: 'banners', columns: ['image'] },
+    { table: 'seo_settings', columns: ['og_image'] }
+  ]
+
+  // Start renaming
+  for (let i = 0; i < ids.length; i++) {
+    const mediaId = ids[i]
+    const media = getOne('SELECT * FROM media WHERE id=?', [mediaId])
+    if (!media) {
+      errorCount++
+      errors.push({ id: mediaId, reason: '记录不存在' })
+      continue
+    }
+
+    const oldPath = join(uploadDir, media.filename)
+    if (!fs.existsSync(oldPath)) {
+      errorCount++
+      errors.push({ id: mediaId, reason: '物理文件丢失' })
+      continue
+    }
+
+    const ext = (media.filename.match(/\.[^.]+$/) || ['.jpg'])[0].toLowerCase()
+    
+    // Find next available filename
+    let counter = i + 1
+    let newFilename = `${baseName}-${counter}${ext}`
+    let newPath = join(uploadDir, newFilename)
+    
+    // Ensure filename is unique on disk AND in DB
+    while (fs.existsSync(newPath) || getOne('SELECT id FROM media WHERE filename=?', [newFilename])) {
+      counter++
+      newFilename = `${baseName}-${counter}${ext}`
+      newPath = join(uploadDir, newFilename)
+    }
+
+    try {
+      // 1. Rename physical file
+      fs.renameSync(oldPath, newPath)
+
+      const oldFilepath = media.filepath
+      const newFilepath = `/uploads/${newFilename}`
+
+      // 2. Update media table
+      run(`UPDATE media SET filename=?, filepath=?, updated_at=datetime('now') WHERE id=?`,
+        [newFilename, newFilepath, media.id])
+
+      // 3. Update product_images references
+      run('UPDATE product_images SET image_url=? WHERE image_url=?', [newFilepath, oldFilepath])
+
+      // 4. Update rich text globally
+      for (const t of tablesToUpdate) {
+        for (const col of t.columns) {
+          try {
+            run(`UPDATE ${t.table} SET ${col}=REPLACE(${col}, ?, ?) WHERE ${col} LIKE ?`,
+              [oldFilepath, newFilepath, \`%\${oldFilepath}%\`])
+          } catch (e) { } // ignore missing columns
+        }
+      }
+
+      successCount++
+    } catch (e) {
+      console.error('Rename error:', e)
+      errorCount++
+      errors.push({ id: mediaId, reason: e.message })
+    }
+  }
+
+  res.json({ message: '重命名完成', successCount, errorCount, errors })
+})
+
 // ─── Batch Optimize All Historical Images (Disk-based) ──────────────────────────
 router.post('/optimize-all', authMiddleware, async (req, res) => {
   let sharp = null
