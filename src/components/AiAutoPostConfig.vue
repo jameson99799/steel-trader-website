@@ -336,7 +336,7 @@ const fetchDependencies = async () => {
     const [chRes, pRes, catRes] = await Promise.all([
       api.request('/ai/channels'),
       api.request('/ai-auto-post/prompts'),
-      api.request('/categories')
+      api.request('/news-categories')
     ])
     channels.value = chRes
     prompts.value = pRes

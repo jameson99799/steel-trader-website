@@ -383,6 +383,10 @@ async function initDb() {
     db.exec("ALTER TABLE ai_post_settings ADD COLUMN apply_watermark INTEGER DEFAULT 0")
   } catch (e) {}
 
+  try {
+    db.exec("ALTER TABLE ai_post_settings ADD COLUMN category_id INTEGER DEFAULT 1")
+  } catch (e) {}
+
   // Seed default AI Auto-Post Settings if empty
   try {
     const hasAiPostSettings = db.prepare('SELECT id FROM ai_post_settings WHERE id = 1').get()
@@ -409,25 +413,27 @@ async function initDb() {
     }
   } catch (e) { }
 
-  // Migration: auto-update default AI prompts to new English versions if they are using the old Chinese prompts
+  // Migration: FORCE update default AI prompts to the new English versions
   try {
-    const metaRow = db.prepare('SELECT content FROM ai_post_prompts WHERE type = "metadata" AND is_default = 1').get()
-    if (metaRow && metaRow.content.includes('你是一个专业的钢铁外贸SEO专家')) {
-      db.prepare(`UPDATE ai_post_prompts SET content = ? WHERE type = "metadata" AND is_default = 1`).run(
-        'You are a professional steel foreign trade SEO expert. Please generate metadata for the product {product}.\nRequirements:\n1. The title MUST be in ENGLISH and use an attractive Q&A format, e.g., What is {product}? What are the applications of {product}? How to get factory prices for {product}?\n2. The summary MUST be in ENGLISH and directly highlight selling points: Professional manufacturer of {product}, source factory, providing high quality and competitive prices, welcome to inquire.\n3. Return a valid JSON format containing:\n{\n  "title": "Q&A style English title",\n  "summary": "1-2 sentences attractive English summary",\n  "seo_title": "SEO optimized English title",\n  "seo_description": "SEO English description containing keywords",\n  "seo_keywords": "comma-separated English keywords"\n}'
+    const metaRow = db.prepare('SELECT id FROM ai_post_prompts WHERE type = "metadata" AND is_default = 1').get()
+    if (metaRow) {
+      db.prepare(`UPDATE ai_post_prompts SET content = ? WHERE id = ?`).run(
+        'You are a professional steel foreign trade SEO expert. Please generate metadata for the product {product}.\nRequirements:\n1. The title MUST be in ENGLISH and use an attractive Q&A format, e.g., What is {product}? What are the applications of {product}? How to get factory prices for {product}?\n2. The summary MUST be in ENGLISH and directly highlight selling points: Professional manufacturer of {product}, source factory, providing high quality and competitive prices, welcome to inquire.\n3. Return a valid JSON format containing:\n{\n  "title": "Q&A style English title",\n  "summary": "1-2 sentences attractive English summary",\n  "seo_title": "SEO optimized English title",\n  "seo_description": "SEO English description containing keywords",\n  "seo_keywords": "comma-separated English keywords"\n}',
+        metaRow.id
       )
-      console.log('[db] Migrated default metadata AI prompt to English version.')
+      console.log('[db] Force migrated default metadata AI prompt to English version.')
     }
 
-    const bodyRow = db.prepare('SELECT content FROM ai_post_prompts WHERE type = "body" AND is_default = 1').get()
-    if (bodyRow && bodyRow.content.includes('你是一个深谙钢铁外贸客户心理的销售专家')) {
-      db.prepare(`UPDATE ai_post_prompts SET content = ? WHERE type = "body" AND is_default = 1`).run(
-        'You are a sales expert who understands the psychology of steel foreign trade customers. Based on the title "{title}" and summary "{summary}", write a professional foreign trade marketing long article in ENGLISH for the product {product}.\nRequirements:\n1. The article MUST be written entirely in ENGLISH.\n2. The article MUST use standard HTML tags (<h2>, <h3>, <p>, <ul>, <li>) for formatting. Do NOT use markdown. Do NOT wrap the output in ```html. Output raw HTML directly.\n3. Use a Q&A format. Include these topics (expand as needed):\n   - What is {product}? (Detailed professional explanation)\n   - What are the main uses and application fields of {product}?\n   - Why do prices vary greatly for different specifications/coatings of {product}? What makes up the price?\n   - What are the advantages of our factory?\n   - How to inquire about the latest Chinese factory prices from us?\n4. The tone must be extremely professional and sincere, emphasizing that we are a source factory with reliable quality and competitive prices.\n5. You MUST insert exactly the requested number of image placeholders (e.g. [IMAGE_1]) into the HTML body as instructed by the system. Use them organically between paragraphs.'
+    const bodyRow = db.prepare('SELECT id FROM ai_post_prompts WHERE type = "body" AND is_default = 1').get()
+    if (bodyRow) {
+      db.prepare(`UPDATE ai_post_prompts SET content = ? WHERE id = ?`).run(
+        'You are a sales expert who understands the psychology of steel foreign trade customers. Write a professional foreign trade marketing long article in ENGLISH for the product: {product}.\nRequirements:\n1. The article MUST be written entirely in ENGLISH and use standard HTML tags (<h2>, <h3>, <p>, <ul>, <li>) for formatting. DO NOT use markdown. Output raw HTML directly.\n2. The structure MUST follow this exact format:\n   - A short introductory paragraph explaining what the product is.\n   - <h2>[Topic 1]</h2> (e.g., Overview or Features)\n   - <h2>[Topic 2]</h2> (e.g., Applications or When to Use)\n   - <h2>[Topic 3]</h2> (e.g., Cost vs Lifecycle Analysis or Market Trends)\n   - <h3>📌 Key Takeaways</h3> (MUST include a bulleted list of 3-4 key points)\n   - <h2>Conclusion</h2>\n   - <h2>💬 Need Expert Advice?</h2>\n3. Under the "💬 Need Expert Advice?" section, you MUST strictly include this exact contact information block:\n   <p>Our steel specialists are ready to help with product selection, technical questions, and competitive pricing.</p>\n   <p>✉️ Email: info@sunseasteel.com</p>\n   <p>💬 WhatsApp: +86 152 6555 2259</p>\n4. The tone must be extremely professional and sincere, emphasizing that we are a source factory with reliable quality and competitive prices.\n5. You MUST insert exactly the requested number of image placeholders (e.g. [IMAGE_1], [IMAGE_2]) into the HTML body organically between paragraphs.',
+        bodyRow.id
       )
-      console.log('[db] Migrated default body AI prompt to English version.')
+      console.log('[db] Force migrated default body AI prompt to English version.')
     }
   } catch (e) {
-    console.error('[db] Error auto-migrating AI prompts:', e)
+    console.error('[db] Error force-migrating AI prompts:', e)
   }
 
   // Translation Prompts table for custom translation business rules
