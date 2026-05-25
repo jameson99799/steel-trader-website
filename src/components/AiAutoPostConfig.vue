@@ -5,6 +5,7 @@
       <div class="modal-header-premium">
         <h2>
           <span style="font-size: 24px; margin-right: 8px;">🤖</span> AI 自动发帖任务中心
+          <button @click="showLogViewer = true" class="btn-premium btn-ghost-border" style="margin-left: 16px; padding: 4px 12px; font-size: 12px;">📄 查看运行日志</button>
         </h2>
         <button @click="$emit('close')" class="modal-close-btn">&times;</button>
       </div>
@@ -47,6 +48,10 @@
             </div>
             <div v-if="testResult" class="test-success">
               ✅ 成功！生成产品: {{ testResult.product }}
+            </div>
+            <div v-if="testError" class="test-error" style="font-size: 12px; padding: 12px; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 6px; margin-top: 8px; max-height: 200px; overflow-y: auto;">
+              ❌ 测试生成失败：<br/>
+              <pre style="white-space: pre-wrap; font-family: monospace; margin-top: 4px; font-size: 11px;">{{ testError }}</pre>
             </div>
           </div>
         </div>
@@ -202,11 +207,27 @@
         </div>
       </div>
     </div>
+
+    <!-- Log Viewer Modal -->
+    <div v-if="showLogViewer" class="modal-backdrop z-top">
+      <div class="modal-content premium-modal scale-in" style="max-width: 800px;">
+        <div class="modal-header-premium">
+          <h2>📄 AI 生成运行日志</h2>
+          <button @click="showLogViewer = false" class="modal-close-btn">&times;</button>
+        </div>
+        <div class="modal-body-premium" style="padding: 0;">
+          <div style="padding: 12px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: flex-end; background: #f9fafb;">
+            <button @click="fetchLogs" class="btn-premium btn-outline-indigo" style="padding: 4px 12px; font-size: 12px;">🔄 刷新日志</button>
+          </div>
+          <pre style="margin: 0; padding: 16px; background: #1e1e1e; color: #d4d4d4; font-family: monospace; font-size: 13px; max-height: 60vh; overflow-y: auto; white-space: pre-wrap;">{{ logContent }}</pre>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import api from '../api'
 
 const emit = defineEmits(['close', 'refresh'])
@@ -214,6 +235,24 @@ const emit = defineEmits(['close', 'refresh'])
 const loading = ref(false)
 const testing = ref(false)
 const testResult = ref(null)
+const testError = ref(null)
+
+const showLogViewer = ref(false)
+const logContent = ref('加载中...')
+
+const fetchLogs = async () => {
+  logContent.value = '加载中...'
+  try {
+    const res = await api.request('/ai-auto-post/logs')
+    logContent.value = res.logs || '暂无日志记录'
+  } catch (e) {
+    logContent.value = '读取日志失败: ' + e.message
+  }
+}
+
+watch(showLogViewer, (newVal) => {
+  if (newVal) fetchLogs()
+})
 
 const settings = ref({
   status: 'paused',
@@ -334,12 +373,13 @@ const testRun = async () => {
   await saveSettings()
   testing.value = true
   testResult.value = null
+  testError.value = null
   try {
     const res = await api.request('/ai-auto-post/test-run', { method: 'POST' })
     testResult.value = res.result
     emit('refresh') // Refresh news list in parent
   } catch (e) {
-    alert('测试生成失败: ' + e.message)
+    testError.value = e.message
   }
   testing.value = false
 }
