@@ -557,14 +557,17 @@ const exportBackup = async () => {
 }
 
 const triggerImport = () => {
-  if (confirm('警告：导入全站备份将覆盖当前的所有数据库、图片和设置！请确保你上传的是正确的 ZIP 备份包。\n\n确定要继续吗？')) {
-    fileInputRef.value.click()
-  }
+  fileInputRef.value.click()
 }
 
 const handleImport = async (e) => {
   const file = e.target.files[0]
   if (!file) return
+  
+  if (!confirm(`警告：导入全站备份 [${file.name}] 将覆盖当前的所有数据库、图片和设置！请确保你上传的是正确的 ZIP 备份包。\n\n确定要继续恢复吗？`)) {
+    e.target.value = ''
+    return
+  }
   
   isImporting.value = true
   try {
