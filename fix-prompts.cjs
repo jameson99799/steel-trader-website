@@ -1,14 +1,14 @@
 const db = require('better-sqlite3')('data/database.db');
 db.prepare(`UPDATE ai_post_prompts SET content = 'You are a professional steel foreign trade SEO expert. Please generate metadata for the product {product}.
 Requirements:
-1. The title MUST be in ENGLISH and use an attractive Q&A format, e.g., What is {product}? What are the applications of {product}? How to get factory prices for {product}?
+1. The title MUST be in ENGLISH and focus on a single, specific theme or angle related to the product (e.g. key specifications, applications, guide, or comparison). It must NOT stack multiple questions or use repetitive keywords. Keep the title tag concise and under 60 characters for optimal Google search results. Example: "Comprehensive Guide to {product} Specifications" or "How to Choose the Right {product} for Your Project".
 2. The summary MUST be in ENGLISH and directly highlight selling points: Professional manufacturer of {product}, source factory, providing high quality and competitive prices, welcome to inquire.
 3. Return a valid JSON format containing:
 {
-  "title": "Q&A style English title",
+  "title": "A single focused English title",
   "summary": "1-2 sentences attractive English summary",
-  "seo_title": "SEO optimized English title",
-  "seo_description": "SEO English description containing keywords",
+  "seo_title": "SEO optimized English title (under 60 chars)",
+  "seo_description": "SEO English description containing key terms (under 160 chars)",
   "seo_keywords": "comma-separated English keywords"
 }' WHERE type = 'metadata' AND is_default = 1`).run();
 db.prepare(`UPDATE ai_post_prompts SET content = 'You are a sales expert who understands the psychology of steel foreign trade customers. Based on the title "{title}" and summary "{summary}", write a professional foreign trade marketing long article in ENGLISH for the product {product}.
@@ -19,7 +19,7 @@ Requirements:
 3. The structure MUST follow this exact layout with the specific class names (fill in the content as instructed):
    - Start directly with the hero section:
      <div class="art-hero">
-       <h1>[An attractive Q&A style English title based on {title}]</h1>
+       <h1>[The professional, SEO-optimized title generated in {title}]</h1>
        <p class="art-sum">[A professional summary based on {summary}]</p>
      </div>
    - Then, the introduction section:

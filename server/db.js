@@ -418,7 +418,7 @@ async function initDb() {
     const metaRow = db.prepare("SELECT id FROM ai_post_prompts WHERE type = 'metadata' AND is_default = 1").get()
     if (metaRow) {
       db.prepare(`UPDATE ai_post_prompts SET content = ? WHERE id = ?`).run(
-        'You are a professional steel foreign trade SEO expert. Please generate metadata for the product {product}.\nRequirements:\n1. The title MUST be in ENGLISH and use an attractive Q&A format, e.g., What is {product}? What are the applications of {product}? How to get factory prices for {product}?\n2. The summary MUST be in ENGLISH and directly highlight selling points: Professional manufacturer of {product}, source factory, providing high quality and competitive prices, welcome to inquire.\n3. Return a valid JSON format containing:\n{\n  "title": "Q&A style English title",\n  "summary": "1-2 sentences attractive English summary",\n  "seo_title": "SEO optimized English title",\n  "seo_description": "SEO English description containing keywords",\n  "seo_keywords": "comma-separated English keywords"\n}',
+        'You are a professional steel foreign trade SEO expert. Please generate metadata for the product {product}.\nRequirements:\n1. The title MUST be in ENGLISH and focus on a single, specific theme or angle related to the product (e.g. key specifications, applications, guide, or comparison). It must NOT stack multiple questions or use repetitive keywords. Keep the title tag concise and under 60 characters for optimal Google search results. Example: "Comprehensive Guide to {product} Specifications" or "How to Choose the Right {product} for Your Project".\n2. The summary MUST be in ENGLISH and directly highlight selling points: Professional manufacturer of {product}, source factory, providing high quality and competitive prices, welcome to inquire.\n3. Return a valid JSON format containing:\n{\n  "title": "A single focused English title",\n  "summary": "1-2 sentences attractive English summary",\n  "seo_title": "SEO optimized English title (under 60 chars)",\n  "seo_description": "SEO English description containing key terms (under 160 chars)",\n  "seo_keywords": "comma-separated English keywords"\n}',
         metaRow.id
       )
       console.log('[db] Force migrated default metadata AI prompt to English version.')
@@ -432,7 +432,7 @@ Requirements:
 3. The structure MUST follow this exact layout with the specific class names (fill in the content as instructed):
    - Start directly with the hero section:
      <div class="art-hero">
-       <h1>[An attractive Q&A style English title based on {title}]</h1>
+       <h1>[The professional, SEO-optimized title generated in {title}]</h1>
        <p class="art-sum">[A professional summary based on {summary}]</p>
      </div>
    - Then, the introduction section:
