@@ -1,15 +1,16 @@
 <template>
   <div class="media-page">
-    <div class="page-header">
-      <h1>📷 图库管理</h1>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-outline" @click="optimizeAllImages" :disabled="optimizing" style="color:#d97706;border-color:#d97706;">
-          {{ optimizing ? '正在压缩优化中...' : '🚀 一键优化所有旧图片 (WebP)' }}
-        </button>
-        <button class="btn btn-primary" @click="openUploadModal">📤 上传图片</button>
-        <button class="btn btn-secondary" @click="showGroupMgr = !showGroupMgr">📁 分组管理</button>
+    <div class="sticky-top">
+      <div class="page-header">
+        <h1>📷 图库管理</h1>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" @click="optimizeAllImages" :disabled="optimizing" style="color:#d97706;border-color:#d97706;">
+            {{ optimizing ? '正在压缩优化中...' : '🚀 一键优化所有旧图片 (WebP)' }}
+          </button>
+          <button class="btn btn-primary" @click="openUploadModal">📤 上传图片</button>
+          <button class="btn btn-secondary" @click="showGroupMgr = !showGroupMgr">📁 分组管理</button>
+        </div>
       </div>
-    </div>
 
     <!-- Optimization Progress Modal -->
     <div v-if="optimizing || optimizeResult" class="modal-overlay">
@@ -63,8 +64,8 @@
 
     <!-- Filter bar -->
     <div class="filter-bar">
-      <input v-model="search" class="form-control filter-search" placeholder="🔍 搜索文件名..." @input="loadMedia" />
-      <select v-model="filterGroup" class="form-control filter-select" @change="currentPage=1; loadMedia()">
+      <input v-model="search" class="form-control filter-search" placeholder="🔍 搜索文件名..." @input="loadMedia(false)" />
+      <select v-model="filterGroup" class="form-control filter-select" @change="currentPage=1; loadMedia(false)">
         <option value="">全部分组</option>
         <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }} ({{ g.image_count }})</option>
       </select>
@@ -82,6 +83,7 @@
         <button class="btn btn-sm btn-danger" @click="batchDelete">删除</button>
       </div>
       <div class="filter-count">共 {{ total }} 张图片</div>
+    </div>
     </div>
 
     <!-- Image grid -->
@@ -112,11 +114,12 @@
     </div>
     <p v-else class="empty">暂无图片</p>
 
-    <!-- Pagination -->
-    <div class="pagination" v-if="totalPages > 1">
-      <button class="btn btn-sm btn-outline" :disabled="currentPage<=1" @click="currentPage--; loadMedia()">‹ 上一页</button>
-      <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
-      <button class="btn btn-sm btn-outline" :disabled="currentPage>=totalPages" @click="currentPage++; loadMedia()">下一页 ›</button>
+    <!-- Loading More Indicator -->
+    <div v-if="loadingMore" style="text-align:center; padding: 20px; color:#64748b; font-size:14px;">
+      <span class="loader-inline"></span> 正在加载更多图片...
+    </div>
+    <div v-else-if="items.length && currentPage >= totalPages" style="text-align:center; padding: 20px; color:#94a3b8; font-size:13px;">
+      已经到底啦
     </div>
 
     <!-- Upload Modal -->
@@ -187,7 +190,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 
 const token = () => localStorage.getItem('token')
 const headers = () => ({ 'Authorization': `Bearer ${token()}`, 'Content-Type': 'application/json' })
@@ -222,16 +225,36 @@ const isBatchRenaming = ref(false)
 const optimizing = ref(false)
 const optimizeResult = ref(null)
 
+const loadingMore = ref(false)
+
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage)))
 
-async function loadMedia() {
+async function loadMedia(isLoadMore = false) {
+  if (!isLoadMore) {
+    currentPage.value = 1
+  }
   const params = new URLSearchParams({ page: currentPage.value, per_page: perPage })
   if (filterGroup.value) params.set('group_id', filterGroup.value)
   if (search.value) params.set('search', search.value)
   const res = await fetch(`/api/media?${params}`, { headers: headers() })
   const data = await res.json()
-  items.value = data.items || []
+  if (isLoadMore) {
+    items.value = [...items.value, ...(data.items || [])]
+  } else {
+    items.value = data.items || []
+  }
   total.value = data.total || 0
+}
+
+function handleScroll() {
+  const bottomOfWindow = document.documentElement.scrollTop + window.innerHeight >= document.documentElement.offsetHeight - 200
+  if (bottomOfWindow && !loadingMore.value && currentPage.value < totalPages.value) {
+    loadingMore.value = true
+    currentPage.value++
+    loadMedia(true).finally(() => {
+      loadingMore.value = false
+    })
+  }
 }
 
 async function loadGroups() {
@@ -474,12 +497,29 @@ function closeOptimizeResult() {
   loadMedia()
 }
 
-onMounted(() => { loadGroups(); loadMedia() })
+onMounted(() => {
+  loadGroups()
+  loadMedia()
+  window.addEventListener('scroll', handleScroll)
+})
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll)
+})
 </script>
 
 <style scoped>
 .media-page { padding: 0; }
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.sticky-top {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--light, #f8fafc);
+  padding: 16px 20px 10px;
+  margin: -20px -20px 16px -20px;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .page-header h1 { margin: 0; font-size: 24px; }
 
 /* Groups Panel */
@@ -493,7 +533,7 @@ onMounted(() => { loadGroups(); loadMedia() })
 .new-group-row input { font-size: 13px; }
 
 /* Filter bar */
-.filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .filter-search { max-width: 240px; }
 .filter-select { max-width: 160px; }
 .filter-count { margin-left: auto; font-size: 13px; color: #64748b; }
@@ -521,9 +561,19 @@ onMounted(() => { loadGroups(); loadMedia() })
 .media-actions { display: flex; gap: 4px; padding: 4px 8px 8px; }
 .media-actions .btn { font-size: 11px; padding: 2px 6px; }
 
-/* Pagination */
-.pagination { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 20px 0; }
-.page-info { font-size: 13px; color: #64748b; }
+/* Infinite Scroll loader */
+.loader-inline {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Upload */
 .upload-progress { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
