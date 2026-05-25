@@ -399,8 +399,8 @@ router.post('/batch-rename', authMiddleware, async (req, res) => {
       const newFilepath = `/uploads/${newFilename}`
 
       // 2. Update media table
-      run(`UPDATE media SET filename=?, filepath=?, updated_at=datetime('now') WHERE id=?`,
-        [newFilename, newFilepath, media.id])
+      run(`UPDATE media SET filename=?, original_filename=?, filepath=?, updated_at=datetime('now') WHERE id=?`,
+        [newFilename, newFilename, newFilepath, media.id])
 
       // 3. Update product_images references
       run('UPDATE product_images SET image_url=? WHERE image_url=?', [newFilepath, oldFilepath])
