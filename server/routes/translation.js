@@ -2490,4 +2490,5 @@ router.post('/batch-action', authMiddleware, (req, res) => {
 export default router
 
 // ── Named exports for background job system ──
-export { PAGES, translateBatch, enhanceWithDefaultChannel, upsertTranslation }
+export { PAGES, translateBatch, enhanceWithDefaultChannel, upsertTranslation, processTranslationQueue }
+

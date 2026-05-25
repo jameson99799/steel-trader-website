@@ -26,7 +26,7 @@ import newsEnhanceRoutes from './routes/news-enhance.js'
 import seoRoutes from './routes/seo.js'
 import sitemapRoutes from './routes/sitemap.js'
 import languagesRoutes from './routes/languages.js'
-import translationRoutes from './routes/translation.js'
+import translationRoutes, { processTranslationQueue } from './routes/translation.js'
 import translationJobsRoutes, { resetStaleJobs } from './routes/translation-jobs.js'
 import sslRoutes from './routes/ssl.js'
 import emailRoutes from './routes/email.js'
@@ -57,6 +57,12 @@ async function startServer() {
     await initDb()
     console.log('✓ Database initialized')
     resetStaleJobs() // Reset any translation jobs stuck in 'running' from previous crash
+    try {
+      processTranslationQueue()
+      console.log('✓ Background translation queue worker started')
+    } catch (e) {
+      console.error('Failed to start translation worker:', e)
+    }
 
     // Start Google Indexing background scheduler (survives pm2 restarts)
     if (NODE_ENV === 'production') {

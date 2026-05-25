@@ -5,6 +5,8 @@ import fs from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { applyWatermark } from '../utils/watermark.js'
+import { processTranslationQueue } from './translation.js'
+
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -269,7 +271,14 @@ async function executeGeneration(isTest = false) {
             [l.code, 'news', newId, metadata.title || `News_${newId}`])
       }
     }
+    try {
+      logMsg(`Triggering background translation queue...`)
+      processTranslationQueue()
+    } catch (e) {
+      logMsg(`Failed to trigger translation queue: ${e.message}`)
+    }
   }
+
 
   // If not test, update index and next run time
   if (!isTest) {
