@@ -283,6 +283,20 @@ router.post('/test-run', authMiddleware, async (req, res) => {
   }
 })
 
+router.get('/logs', authMiddleware, (req, res) => {
+  try {
+    const logPath = join(ROOT_DIR, 'data/ai-post.log')
+    if (fs.existsSync(logPath)) {
+      const logs = fs.readFileSync(logPath, 'utf8')
+      res.json({ logs })
+    } else {
+      res.json({ logs: '暂无日志记录 (No logs yet)' })
+    }
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 // Prompts CRUD
 router.get('/prompts', authMiddleware, (req, res) => {
   const prompts = getAll('SELECT * FROM ai_post_prompts ORDER BY type, is_default DESC, id DESC')
