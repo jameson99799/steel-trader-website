@@ -332,25 +332,32 @@ onMounted(async () => {
   await fetchDependencies()
 })
 
-const saveSettings = async () => {
+const saveSettings = async (silent = false) => {
   if (selectedProducts.value.length === 0) {
-    return alert('请至少选择一个产品！')
+    if (!silent) alert('请至少选择一个产品！')
+    return false
   }
   loading.value = true
+  let success = false
   try {
     await api.request('/ai-auto-post/settings', {
       method: 'POST',
       body: JSON.stringify({
         ...settings.value,
+        channel_id: settings.value.channel_id || null,
+        metadata_prompt_id: settings.value.metadata_prompt_id || null,
+        body_prompt_id: settings.value.body_prompt_id || null,
         products_json: JSON.stringify(selectedProducts.value)
       })
     })
-    alert('配置保存成功！')
+    if (!silent) alert('配置保存成功！')
     await fetchSettings()
+    success = true
   } catch (e) {
-    alert('保存失败: ' + e.message)
+    if (!silent) alert('保存失败: ' + e.message)
   }
   loading.value = false
+  return success
 }
 
 const actionTask = async (action) => {
@@ -369,8 +376,10 @@ const pauseTask = () => actionTask('pause')
 const stopTask = () => actionTask('stop')
 
 const testRun = async () => {
-  // Auto save settings first just in case
-  await saveSettings()
+  // Auto save settings silently first
+  const saved = await saveSettings(true)
+  if (!saved) return
+
   testing.value = true
   testResult.value = null
   testError.value = null
