@@ -228,11 +228,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
-const { t, localizedValue, langPath } = useLang()
+const { t, localizedValue, langPath, lang } = useLang()
 const hero = ref(window.__INITIAL_STATE__?.hero || {})
 const featuredProducts = ref([])
 const categories = ref([])
@@ -260,11 +260,10 @@ const getYoutubeEmbedUrl = (url, autoplay) => {
   return `https://www.youtube.com/embed/${videoId}?vq=hd1080${autoplay ? '&autoplay=1&mute=1' : ''}`;
 }
 
-onMounted(async () => {
+async function loadPageData() {
   try {
-    if (!window.__INITIAL_STATE__?.hero) {
-      hero.value = await api.getHero()
-    }
+    // Always fetch hero with ?lang= param so translated stat labels are applied
+    hero.value = await api.getHero()
     const productsRes = await api.getProducts({ featured: '1', limit: 12 })
     featuredProducts.value = productsRes.data
     const tree = await api.getCategoryTree()
@@ -278,7 +277,15 @@ onMounted(async () => {
   } catch (e) {
     console.error(e)
   }
+}
+
+onMounted(loadPageData)
+
+// Re-fetch hero when language changes so stat labels update immediately
+watch(lang, () => {
+  api.getHero().then(data => { hero.value = data }).catch(() => {})
 })
+
 </script>
 
 <style scoped>
