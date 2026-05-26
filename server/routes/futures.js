@@ -75,6 +75,125 @@ function getBaseCode(symbol) {
   return m ? m[1].toUpperCase() : symbol.toUpperCase()
 }
 
+// ── Global In-Memory Cache for Futures Data ─────────────────────────────────
+const CACHE = {
+  realtime: {}, // symbol -> realtime data object
+  minline: {},  // symbol -> minline array
+  kline: {}     // symbol -> daily kline array
+}
+
+// ── Background Polling Mechanism ──────────────────────────────────────────
+async function fetchRealtimeForSymbols(symbols) {
+  if (!symbols || symbols.length === 0) return
+  const queryList = symbols.map(s => s.startsWith('nf_') ? s : `nf_${s}`).join(',')
+  try {
+    const data = await new Promise((resolve, reject) => {
+      https.get(`https://hq.sinajs.cn/list=${queryList}`, {
+        headers: { 'Referer': 'https://finance.sina.com.cn', 'User-Agent': 'Mozilla/5.0' }
+      }, (response) => {
+        const chunks = []
+        response.on('data', chunk => chunks.push(chunk))
+        response.on('end', () => resolve(iconv.decode(Buffer.concat(chunks), 'gbk')))
+      }).on('error', reject)
+    })
+
+    const lines = data.split('\n').map(l => l.trim()).filter(Boolean)
+    for (const line of lines) {
+      const match = line.match(/hq_str_nf_([A-Za-z0-9]+)="([^"]*)"/)
+      if (match) {
+        const symbol = match[1]
+        const fields = match[2].split(',')
+        if (fields.length > 10) {
+          const price = parseFloat(fields[8]) || 0
+          const prevSettlement = parseFloat(fields[10]) || 0
+          let change = 0
+          let changePercent = 0
+          if (prevSettlement > 0 && price > 0) {
+            change = price - prevSettlement
+            changePercent = (change / prevSettlement) * 100
+          }
+          CACHE.realtime[symbol] = {
+            price, change, changePercent,
+            open: parseFloat(fields[2]) || 0,
+            high: parseFloat(fields[3]) || 0,
+            low: parseFloat(fields[4]) || 0,
+            prevSettlement,
+            volume: parseFloat(fields[13]) || 0,
+            openInterest: parseFloat(fields[14]) || 0,
+            time: fields[1]
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Futures polling error:', e.message)
+  }
+}
+
+async function fetchMinline(symbol) {
+  try {
+    const url = `https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_${symbol}=/InnerFuturesNewService.getMinLine?symbol=${symbol}`
+    const resp = await fetch(url, { headers: { 'Referer': 'https://finance.sina.com.cn', 'User-Agent': 'Mozilla/5.0' }})
+    const text = await resp.text()
+    const match = text.match(/\((\[[\s\S]*?\])\)/)
+    if (match) CACHE.minline[symbol] = JSON.parse(match[1])
+  } catch (e) {
+    // ignore silently on background
+  }
+}
+
+async function fetchKline(symbol) {
+  try {
+    const url = `https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_${symbol}=/InnerFuturesNewService.getDailyKLine?symbol=${symbol}`
+    const resp = await fetch(url, { headers: { 'Referer': 'https://finance.sina.com.cn', 'User-Agent': 'Mozilla/5.0' }})
+    const text = await resp.text()
+    const match = text.match(/\((\[[\s\S]*?\])\)/)
+    if (match) CACHE.kline[symbol] = JSON.parse(match[1])
+  } catch (e) {
+    // ignore
+  }
+}
+
+// Start polling
+setInterval(async () => {
+  try {
+    const list = getAll('SELECT symbol FROM futures_watchlist')
+    if (list.length === 0) return
+    const symbols = list.map(item => item.symbol)
+    await fetchRealtimeForSymbols(symbols)
+  } catch(e) {}
+}, 5000)
+
+setInterval(async () => {
+  try {
+    const list = getAll('SELECT symbol FROM futures_watchlist')
+    if (list.length === 0) return
+    // To avoid rate limiting, fetch one by one
+    for (const item of list) {
+      await fetchMinline(item.symbol)
+      await fetchKline(item.symbol)
+      await new Promise(r => setTimeout(r, 200)) // slight delay
+    }
+  } catch(e) {}
+}, 60000)
+
+// ── Public: get watchlist and cached data ──────────────────────────────────
+router.get('/list-data', (req, res) => {
+  try {
+    const list = getAll('SELECT * FROM futures_watchlist ORDER BY sort_order ASC, id ASC')
+    const results = list.map(item => {
+      return {
+        ...item,
+        realtime: CACHE.realtime[item.symbol] || null,
+        minline: CACHE.minline[item.symbol] || null
+      }
+    })
+    res.json(results)
+  } catch(e) {
+    res.json([])
+  }
+})
+
 // ── Public: get watchlist ──────────────────────────────────────────────────
 router.get('/', (req, res) => {
   const list = getAll('SELECT * FROM futures_watchlist ORDER BY sort_order ASC, id ASC')
@@ -154,16 +273,21 @@ router.get('/realtime', async (req, res) => {
 // ── Public: proxy K-line data from Sina Finance ───────────────────────────
 router.get('/kline/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase()
+  // Return cached K-line if available and recently updated, else fetch
+  if (CACHE.kline[symbol]) {
+    return res.json(CACHE.kline[symbol])
+  }
+  
   try {
     const url = `https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_${symbol}=/InnerFuturesNewService.getDailyKLine?symbol=${symbol}`
     const resp = await fetch(url, {
       headers: { 'Referer': 'https://finance.sina.com.cn', 'User-Agent': 'Mozilla/5.0' }
     })
     const text = await resp.text()
-    // Parse JSONP: var _HC2510=([{...}]);
     const match = text.match(/\((\[[\s\S]*?\])\)/)
     if (!match) return res.json([])
     const data = JSON.parse(match[1])
+    CACHE.kline[symbol] = data
     res.json(data)
   } catch (e) {
     console.error('Futures kline proxy error:', e.message)
