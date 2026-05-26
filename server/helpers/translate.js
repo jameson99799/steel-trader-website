@@ -130,7 +130,7 @@ export function translateHero(hero, map, langCode) {
     const t = map[`hero_${hero.id}`]
     if (!t) return hero
 
-    for (const field of ['tag', 'title', 'subtitle', 'stat1_label', 'stat2_label', 'stat3_label']) {
+    for (const field of ['tag', 'title', 'subtitle']) {
         if (t[field]) hero[`${field}_${langCode}`] = t[field]
     }
 

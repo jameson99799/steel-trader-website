@@ -15,15 +15,15 @@
             <div class="hero-stats">
               <div class="stat-item">
                 <div class="stat-number">{{ hero?.stat1_num }}</div>
-                <div class="stat-label">{{ localizedValue(hero, 'stat1_label') }}</div>
+                <div class="stat-label">{{ hero?.stat1_label_en || hero?.stat1_label }}</div>
               </div>
               <div class="stat-item">
                 <div class="stat-number">{{ hero?.stat2_num }}</div>
-                <div class="stat-label">{{ localizedValue(hero, 'stat2_label') }}</div>
+                <div class="stat-label">{{ hero?.stat2_label_en || hero?.stat2_label }}</div>
               </div>
               <div class="stat-item">
                 <div class="stat-number">{{ hero?.stat3_num }}</div>
-                <div class="stat-label">{{ localizedValue(hero, 'stat3_label') }}</div>
+                <div class="stat-label">{{ hero?.stat3_label_en || hero?.stat3_label }}</div>
               </div>
             </div>
             
