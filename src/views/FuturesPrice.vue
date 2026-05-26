@@ -62,7 +62,7 @@
       </table>
     </div>
 
-    <!-- K-Line Fullscreen Modal (Retained) -->
+    <!-- K-Line Fullscreen Modal -->
     <Teleport to="body">
       <div class="kline-modal" v-if="modalItem" @click.self="closeModal">
         <div class="kline-modal-inner">
@@ -108,7 +108,7 @@ const trendCharts = {} // symbol -> echarts instance
 
 // Kline modal
 const modalItem = ref(null)
-const activeDays = ref(100)
+const activeDays = ref('minline') // 'minline', 60, 100, 9999
 const klineLoading = ref(false)
 const klineChartRef = ref(null)
 let klineChartInstance = null
@@ -117,9 +117,10 @@ let klineDataCache = []
 let refreshTimer = null
 
 const dayOptions = [
-  { value: 60, label: '60天' },
-  { value: 100, label: '100天' },
-  { value: 9999, label: '全部' }
+  { value: 'minline', label: '分时' },
+  { value: 60, label: '60日K' },
+  { value: 100, label: '100日K' },
+  { value: 9999, label: '全部日K' }
 ]
 
 function formatPrice(p) {
@@ -134,26 +135,31 @@ function setTrendRef(el, item) {
       trendCharts[item.symbol] = chart
       renderTrendChart(chart, item)
     } else {
-      // Re-render if updated
       renderTrendChart(trendCharts[item.symbol], item)
     }
   }
 }
 
-// 1. Fetch data from backend cache (instant)
 async function loadAll() {
   try {
     const data = await api.getFuturesListData()
     futuresList.value = data || []
     loading.value = false
     
-    // Auto re-render charts
     nextTick(() => {
       futuresList.value.forEach(item => {
         if (trendCharts[item.symbol]) {
           renderTrendChart(trendCharts[item.symbol], item)
         }
       })
+      // If modal is open and viewing minline, update it too
+      if (modalItem.value && activeDays.value === 'minline' && klineChartInstance) {
+        const liveItem = futuresList.value.find(i => i.symbol === modalItem.value.symbol)
+        if (liveItem) {
+          modalItem.value = liveItem
+          renderModalMinlineChart()
+        }
+      }
     })
   } catch (e) {
     console.error('Futures list data error:', e)
@@ -164,7 +170,6 @@ async function loadAll() {
 function renderTrendChart(chart, item) {
   if (!item.minline || item.minline.length === 0) return
   
-  // Sina Minline format: ["21:00", "3417.000", "3426.841", "34777", "1749616", "3432.000", "2026-05-26"]
   const data = item.minline
   const times = []
   const prices = []
@@ -241,10 +246,10 @@ function calculateMA(dayCount, data) {
 
 function openKline(item) {
   modalItem.value = item
-  activeDays.value = 100
+  activeDays.value = 'minline'
   nextTick(() => {
     initKlineChart()
-    fetchKlineData()
+    renderModalMinlineChart()
   })
 }
 
@@ -258,7 +263,11 @@ function closeModal() {
 
 function changeKlineDays(days) {
   activeDays.value = days
-  renderKlineChart()
+  if (days === 'minline') {
+    renderModalMinlineChart()
+  } else {
+    fetchKlineData()
+  }
 }
 
 async function fetchKlineData() {
@@ -266,10 +275,6 @@ async function fetchKlineData() {
   try {
     const data = await api.getFuturesKline(modalItem.value.symbol)
     klineDataCache = data || []
-    
-    // Optionally, if we have realtime data, and the last kline date is not today, we can append a fake candle
-    // For simplicity, we just rely on standard K-line data for now.
-    
     renderKlineChart()
   } catch(e) {
     console.error('Kline fetch error', e)
@@ -282,6 +287,68 @@ function initKlineChart() {
   if (!klineChartRef.value) return
   if (klineChartInstance) klineChartInstance.dispose()
   klineChartInstance = echarts.init(klineChartRef.value)
+}
+
+function renderModalMinlineChart() {
+  if (!klineChartInstance || !modalItem.value || !modalItem.value.minline) return
+  
+  const data = modalItem.value.minline
+  const times = []
+  const prices = []
+  const avgs = []
+  const volumes = []
+  
+  let prevSettlement = parseFloat(data[0][5]) || modalItem.value.realtime?.prevSettlement || 0
+  
+  data.forEach((d, i) => {
+    times.push(d[0])
+    prices.push(parseFloat(d[1]))
+    avgs.push(parseFloat(d[2]))
+    const p = parseFloat(d[1])
+    const prevP = i === 0 ? prevSettlement : parseFloat(data[i-1][1])
+    const color = p >= prevP ? '#ef232a' : '#14b143'
+    volumes.push({ value: [i, parseFloat(d[3]), color], itemStyle: { color } })
+  })
+
+  const minP = Math.min(...prices, prevSettlement)
+  const maxP = Math.max(...prices, prevSettlement)
+  const range = maxP - minP
+
+  const isUpOverall = (prices[prices.length - 1] || prevSettlement) >= prevSettlement
+  const lineColor = isUpOverall ? '#ef232a' : '#14b143'
+  const areaColors = isUpOverall 
+    ? [{ offset: 0, color: 'rgba(239,35,42,0.3)' }, { offset: 1, color: 'rgba(239,35,42,0)' }]
+    : [{ offset: 0, color: 'rgba(20,177,67,0.3)' }, { offset: 1, color: 'rgba(20,177,67,0)' }]
+
+  const option = {
+    animation: false,
+    backgroundColor: '#0f172a',
+    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+    axisPointer: { link: [{ xAxisIndex: 'all' }] },
+    grid: [
+      { left: '6%', right: '4%', top: '8%', height: '60%' },
+      { left: '6%', right: '4%', top: '71%', height: '18%' }
+    ],
+    xAxis: [
+      { type: 'category', data: times, boundaryGap: false, splitLine: { show: false }, axisLine: { onZero: false }, axisLabel: { color: '#94a3b8' } },
+      { type: 'category', gridIndex: 1, data: times, boundaryGap: false, axisLabel: { show: false }, axisTick: { show: false } }
+    ],
+    yAxis: [
+      { scale: true, splitArea: { show: false }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } }, min: minP - range*0.02, max: maxP + range*0.02, axisLabel: { color: '#94a3b8' } },
+      { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, splitLine: { show: false } }
+    ],
+    series: [
+      {
+        name: '价格', type: 'line', data: prices, showSymbol: false,
+        lineStyle: { color: lineColor, width: 1.5 },
+        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, areaColors) },
+        markLine: { symbol: ['none', 'none'], data: [{ yAxis: prevSettlement }], lineStyle: { color: '#94a3b8', type: 'dashed' }, label: { show: false } }
+      },
+      { name: '均价', type: 'line', data: avgs, showSymbol: false, lineStyle: { color: '#facc15', width: 1.5 } },
+      { name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: volumes }
+    ]
+  }
+  klineChartInstance.setOption(option, true)
 }
 
 function renderKlineChart() {
@@ -338,12 +405,11 @@ function renderKlineChart() {
       { name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: volumes, itemStyle: { color: params => params.data[2] === 1 ? upColor : downColor } }
     ]
   }
-  klineChartInstance.setOption(option)
+  klineChartInstance.setOption(option, true)
 }
 
 onMounted(() => {
   loadAll()
-  // Poll backend cache every 2.5s for seamless realtime updates
   refreshTimer = setInterval(loadAll, 2500)
   
   window.addEventListener('resize', () => {
@@ -448,7 +514,7 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
-/* ==== Modal (K-Line) ==== */
+/* ==== Modal ==== */
 .kline-modal {
   position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.85);
   display: flex; align-items: center; justify-content: center; padding: 20px;

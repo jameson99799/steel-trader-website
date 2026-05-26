@@ -87,15 +87,15 @@ async function fetchRealtimeForSymbols(symbols) {
   if (!symbols || symbols.length === 0) return
   const queryList = symbols.map(s => s.startsWith('nf_') ? s : `nf_${s}`).join(',')
   try {
-    const data = await new Promise((resolve, reject) => {
-      https.get(`https://hq.sinajs.cn/list=${queryList}`, {
-        headers: { 'Referer': 'https://finance.sina.com.cn', 'User-Agent': 'Mozilla/5.0' }
-      }, (response) => {
-        const chunks = []
-        response.on('data', chunk => chunks.push(chunk))
-        response.on('end', () => resolve(iconv.decode(Buffer.concat(chunks), 'gbk')))
-      }).on('error', reject)
+    const url = `https://hq.sinajs.cn/list=${queryList}`
+    const resp = await fetch(url, {
+      headers: {
+        'Referer': 'https://finance.sina.com.cn',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
     })
+    const arrayBuffer = await resp.arrayBuffer()
+    const data = iconv.decode(Buffer.from(arrayBuffer), 'gbk')
 
     const lines = data.split('\n').map(l => l.trim()).filter(Boolean)
     for (const line of lines) {
@@ -120,7 +120,7 @@ async function fetchRealtimeForSymbols(symbols) {
             prevSettlement,
             volume: parseFloat(fields[13]) || 0,
             openInterest: parseFloat(fields[14]) || 0,
-            time: fields[1]
+            date: fields[17] || new Date().toISOString().split('T')[0]
           }
         }
       }
@@ -136,10 +136,31 @@ async function fetchMinline(symbol) {
     const resp = await fetch(url, { headers: { 'Referer': 'https://finance.sina.com.cn', 'User-Agent': 'Mozilla/5.0' }})
     const text = await resp.text()
     const match = text.match(/\((\[[\s\S]*?\])\)/)
-    if (match) CACHE.minline[symbol] = JSON.parse(match[1])
-  } catch (e) {
-    // ignore silently on background
-  }
+    if (match) {
+      const parsed = JSON.parse(match[1])
+      CACHE.minline[symbol] = parsed
+      
+      // Fallback: If realtime is missing, synthesize from minline
+      if (!CACHE.realtime[symbol] && parsed.length > 0) {
+        const lastTick = parsed[parsed.length - 1]
+        const price = parseFloat(lastTick[1]) || 0
+        const prevSettlement = parseFloat(lastTick[5]) || 0
+        const volume = parseFloat(lastTick[3]) || 0
+        const openInterest = parseFloat(lastTick[4]) || 0
+        const date = lastTick[6] || new Date().toISOString().split('T')[0]
+        let change = 0, changePercent = 0
+        if (prevSettlement > 0 && price > 0) {
+          change = price - prevSettlement
+          changePercent = (change / prevSettlement) * 100
+        }
+        CACHE.realtime[symbol] = {
+          price, change, changePercent,
+          open: price, high: price, low: price, // rough fallback
+          prevSettlement, volume, openInterest, date
+        }
+      }
+    }
+  } catch (e) {}
 }
 
 async function fetchKline(symbol) {
@@ -148,10 +169,28 @@ async function fetchKline(symbol) {
     const resp = await fetch(url, { headers: { 'Referer': 'https://finance.sina.com.cn', 'User-Agent': 'Mozilla/5.0' }})
     const text = await resp.text()
     const match = text.match(/\((\[[\s\S]*?\])\)/)
-    if (match) CACHE.kline[symbol] = JSON.parse(match[1])
-  } catch (e) {
-    // ignore
-  }
+    if (match) {
+      let klineData = JSON.parse(match[1])
+      
+      // Inject today's real-time candle if available and missing from kline
+      const rt = CACHE.realtime[symbol]
+      if (rt && rt.date && klineData.length > 0) {
+        const lastDate = klineData[klineData.length - 1].d
+        if (lastDate !== rt.date && rt.price > 0) {
+          klineData.push({
+            d: rt.date,
+            o: rt.open.toString(),
+            h: rt.high.toString(),
+            l: rt.low.toString(),
+            c: rt.price.toString(),
+            v: rt.volume.toString()
+          })
+        }
+      }
+      
+      CACHE.kline[symbol] = klineData
+    }
+  } catch (e) {}
 }
 
 // Start polling
@@ -273,25 +312,13 @@ router.get('/realtime', async (req, res) => {
 // ── Public: proxy K-line data from Sina Finance ───────────────────────────
 router.get('/kline/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase()
-  // Return cached K-line if available and recently updated, else fetch
+  // Return cached K-line if available and recently updated, else return empty to avoid hang
   if (CACHE.kline[symbol]) {
     return res.json(CACHE.kline[symbol])
-  }
-  
-  try {
-    const url = `https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_${symbol}=/InnerFuturesNewService.getDailyKLine?symbol=${symbol}`
-    const resp = await fetch(url, {
-      headers: { 'Referer': 'https://finance.sina.com.cn', 'User-Agent': 'Mozilla/5.0' }
-    })
-    const text = await resp.text()
-    const match = text.match(/\((\[[\s\S]*?\])\)/)
-    if (!match) return res.json([])
-    const data = JSON.parse(match[1])
-    CACHE.kline[symbol] = data
-    res.json(data)
-  } catch (e) {
-    console.error('Futures kline proxy error:', e.message)
-    res.json([])
+  } else {
+    // Attempt a quick fetch
+    await fetchKline(symbol)
+    return res.json(CACHE.kline[symbol] || [])
   }
 })
 
