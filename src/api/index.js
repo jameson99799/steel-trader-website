@@ -308,6 +308,7 @@ export const api = {
 
   // Futures
   getFuturesList: () => request('/futures'),
+  getFuturesRealtime: (symbols) => request(`/futures/realtime?symbols=${symbols}`),
   getFuturesKline: (symbol) => request(`/futures/kline/${symbol}`),
   searchFutures: (q) => request(`/futures/search?q=${encodeURIComponent(q)}`),
   addFutures: (data) => request('/futures', { method: 'POST', body: JSON.stringify(data) }),
