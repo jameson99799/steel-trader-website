@@ -438,7 +438,7 @@ function collectNewsCategories() {
 function collectHero() {
     const h = getOne('SELECT * FROM hero_content WHERE id=1')
     if (!h) return []
-    const fields = ['tag', 'title', 'subtitle']
+    const fields = ['title', 'subtitle', 'stat1_label', 'stat2_label', 'stat3_label']
     return fields.flatMap(f =>
         h[`${f}_en`] ? [{ type: 'hero', id: 1, field: f, text: h[`${f}_en`], itemName: `Hero ${f}` }] : []
     )

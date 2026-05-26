@@ -8,22 +8,22 @@
       <div class="container">
         <div class="hero-content">
           <div class="hero-text">
-            <span class="hero-badge" style="min-height:20px;display:inline-block;">{{ localizedValue(hero, 'tag') }}</span>
+            <span class="hero-badge" style="min-height:20px;display:inline-block;">{{ hero?.tag_en || hero?.tag }}</span>
             <h1 class="hero-title" style="min-height:1.2em;">{{ localizedValue(hero, 'title') }}</h1>
             <h2 class="hero-subtitle" style="min-height:1.5em;">{{ localizedValue(hero, 'subtitle') }}</h2>
             
             <div class="hero-stats">
               <div class="stat-item">
                 <div class="stat-number">{{ hero?.stat1_num }}</div>
-                <div class="stat-label">{{ hero?.stat1_label_en || hero?.stat1_label }}</div>
+                <div class="stat-label">{{ localizedValue(hero, 'stat1_label') }}</div>
               </div>
               <div class="stat-item">
                 <div class="stat-number">{{ hero?.stat2_num }}</div>
-                <div class="stat-label">{{ hero?.stat2_label_en || hero?.stat2_label }}</div>
+                <div class="stat-label">{{ localizedValue(hero, 'stat2_label') }}</div>
               </div>
               <div class="stat-item">
                 <div class="stat-number">{{ hero?.stat3_num }}</div>
-                <div class="stat-label">{{ hero?.stat3_label_en || hero?.stat3_label }}</div>
+                <div class="stat-label">{{ localizedValue(hero, 'stat3_label') }}</div>
               </div>
             </div>
             
