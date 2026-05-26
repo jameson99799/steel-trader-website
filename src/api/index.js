@@ -304,7 +304,15 @@ export const api = {
   getSecuritySettings: () => request('/admin/security/settings'),
   updateSecuritySettings: (data) => request('/admin/security/settings', { method: 'PUT', body: JSON.stringify(data) }),
   getBlockedIps: () => request('/admin/security/blocked-ips'),
-  unblockIp: (ip) => request(`/admin/security/blocked-ips/${encodeURIComponent(ip)}`, { method: 'DELETE' })
+  unblockIp: (ip) => request(`/admin/security/blocked-ips/${encodeURIComponent(ip)}`, { method: 'DELETE' }),
+
+  // Futures
+  getFuturesList: () => request('/futures'),
+  getFuturesKline: (symbol) => request(`/futures/kline/${symbol}`),
+  searchFutures: (q) => request(`/futures/search?q=${encodeURIComponent(q)}`),
+  addFutures: (data) => request('/futures', { method: 'POST', body: JSON.stringify(data) }),
+  reorderFutures: (items) => request('/futures/reorder', { method: 'PUT', body: JSON.stringify({ items }) }),
+  deleteFutures: (id) => request(`/futures/${id}`, { method: 'DELETE' })
 }
 
 export default api

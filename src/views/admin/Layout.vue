@@ -10,6 +10,7 @@
         <router-link to="/admin/categories">📁 分类管理</router-link>
         <router-link to="/admin/products">📦 商品管理</router-link>
         <router-link to="/admin/roofing-profiles">🏠 瓦型图管理</router-link>
+        <router-link to="/admin/futures">📈 期货价格</router-link>
         <router-link to="/admin/media">📷 图库管理</router-link>
         <router-link to="/admin/inquiries">
           📬 询盘管理

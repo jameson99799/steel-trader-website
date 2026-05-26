@@ -101,7 +101,22 @@ const builtInTranslations = {
     defaultPpgiMaterial: '彩涂钢卷 (PPGI/PPGL)',
     defaultGiCoating: 'Z60 – Z275 (镀锌)',
     defaultGlCoating: 'AZ50 – AZ150 (镀铝锌)',
-    defaultPpgiCoating: 'PE / SMP / HDP / PVDF'
+    defaultPpgiCoating: 'PE / SMP / HDP / PVDF',
+    futuresPriceBtn: '实时期货价格',
+    futuresTitle: '实时期货价格',
+    futuresDesc: '钢铁相关期货品种实时行情走势',
+    futuresLatest: '最新价',
+    futuresChange: '涨跌',
+    futuresOpen: '开盘',
+    futuresHigh: '最高',
+    futuresLow: '最低',
+    futuresVol: '成交量',
+    futuresKline: 'K线图',
+    futuresClose: '关闭',
+    futuresDays30: '近30天',
+    futuresDays90: '近90天',
+    futuresDaysAll: '全部',
+    futuresNoData: '暂无数据'
   },
   en: {
     home: 'Home', products: 'Products', about: 'About Us', contact: 'Contact',
@@ -203,7 +218,22 @@ const builtInTranslations = {
     defaultPpgiMaterial: "Pre-Painted Steel (PPGI/PPGL)",
     defaultGiCoating: "Z60 – Z275 (Galvanized)",
     defaultGlCoating: "AZ50 – AZ150 (Galvalume)",
-    defaultPpgiCoating: "PE / SMP / HDP / PVDF"
+    defaultPpgiCoating: "PE / SMP / HDP / PVDF",
+    futuresPriceBtn: 'Futures Price',
+    futuresTitle: 'Live Futures Prices',
+    futuresDesc: 'Real-time commodity futures for steel-related products.',
+    futuresLatest: 'Latest',
+    futuresChange: 'Change',
+    futuresOpen: 'Open',
+    futuresHigh: 'High',
+    futuresLow: 'Low',
+    futuresVol: 'Volume',
+    futuresKline: 'K-Line',
+    futuresClose: 'Close',
+    futuresDays30: '30 Days',
+    futuresDays90: '90 Days',
+    futuresDaysAll: 'All',
+    futuresNoData: 'No data available'
   }
 }
 

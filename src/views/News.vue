@@ -19,15 +19,21 @@
               <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
               <span class="breadcrumb-current">{{ t('roofingTitle') }}</span>
             </template>
+            <template v-else-if="route.name === 'NewsFuturesPrice'">
+              <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+              <span class="breadcrumb-current">{{ t('futuresPriceBtn') }}</span>
+            </template>
           </nav>
           <h1 class="page-title">
             <template v-if="route.name === 'NewsRalColors'">🎨 {{ t('ralColorChart') }}</template>
             <template v-else-if="route.name === 'NewsRoofingProfiles'">📐 {{ t('roofingTitle') }}</template>
+            <template v-else-if="route.name === 'NewsFuturesPrice'">📈 {{ t('futuresTitle') }}</template>
             <template v-else>{{ activeCategory ? localizedValue(activeCategory, 'name') : t('newsUpdates') }}</template>
           </h1>
           <p class="page-subtitle">
             <template v-if="route.name === 'NewsRalColors'">{{ t('ralDesc') }}</template>
             <template v-else-if="route.name === 'NewsRoofingProfiles'">{{ t('roofingProfilesDesc') }}</template>
+            <template v-else-if="route.name === 'NewsFuturesPrice'">{{ t('futuresDesc') }}</template>
             <template v-else>{{ activeCategory ? t('browseArticlesIn') + ' ' + localizedValue(activeCategory, 'name') : t('newsSubtitle') }}</template>
           </p>
 
@@ -51,6 +57,12 @@
             >
               <span class="ral-icon">📐</span> {{ t('roofingProfilesBtn') }}
             </router-link>
+            <router-link 
+              :to="langPath('/news/futures-price')" 
+              :class="['cat-btn', 'futures-btn', route.name === 'NewsFuturesPrice' ? 'active' : '']"
+            >
+              <span class="ral-icon">📈</span> {{ t('futuresPriceBtn') }}
+            </router-link>
           </div>
         </div>
       </div>
@@ -63,6 +75,9 @@
         </template>
         <template v-else-if="route.name === 'NewsRoofingProfiles'">
           <RoofingProfiles hideHeader />
+        </template>
+        <template v-else-if="route.name === 'NewsFuturesPrice'">
+          <FuturesPrice />
         </template>
         <template v-else>
           <div v-if="loading" class="loading-state">
@@ -110,6 +125,7 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 import RalColors from './RalColors.vue'
 import RoofingProfiles from './RoofingProfiles.vue'
+import FuturesPrice from './FuturesPrice.vue'
 
 const { t, localizedValue, langPath } = useLang()
 const router = useRouter()
@@ -148,7 +164,7 @@ async function loadCategories() {
 }
 
 async function loadNews() {
-  if (route.name === 'NewsRalColors' || route.name === 'NewsRoofingProfiles') {
+  if (route.name === 'NewsRalColors' || route.name === 'NewsRoofingProfiles' || route.name === 'NewsFuturesPrice') {
     loading.value = false
     return
   }
@@ -261,6 +277,27 @@ onMounted(() => { loadCategories(); loadNews() })
     linear-gradient(135deg, #3498db, #2c3e50) border-box;
   color: #2c3e50; transform: translateY(-2px);
   box-shadow: 0 4px 16px rgba(52,152,219,.2);
+}
+
+/* Futures button */
+.futures-btn {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--white, #fff), var(--white, #fff)) padding-box,
+    linear-gradient(135deg, #16a34a, #0891b2) border-box;
+  color: #15803d;
+}
+.futures-btn.active {
+  background: var(--primary, #1a56db);
+  color: #fff;
+  border-color: var(--primary, #1a56db);
+}
+.futures-btn:hover {
+  background:
+    linear-gradient(135deg, rgba(22,163,74,.06), rgba(8,145,178,.06)) padding-box,
+    linear-gradient(135deg, #16a34a, #0891b2) border-box;
+  color: #15803d; transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(22,163,74,.2);
 }
 
 /* ── News Grid ── */

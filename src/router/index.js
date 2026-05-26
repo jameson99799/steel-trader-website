@@ -10,6 +10,7 @@ const publicRoutes = [
   { path: 'news/category/:catSlug', name: 'NewsCategory', component: () => import('../views/News.vue') },
   { path: 'news/ral-colors', name: 'NewsRalColors', component: () => import('../views/News.vue') },
   { path: 'news/roofing-profiles', name: 'NewsRoofingProfiles', component: () => import('../views/News.vue') },
+  { path: 'news/futures-price', name: 'NewsFuturesPrice', component: () => import('../views/News.vue') },
   { path: 'news/:slug', name: 'NewsDetail', component: () => import('../views/NewsDetail.vue') },
   { path: 'about', name: 'About', component: () => import('../views/About.vue') },
   { path: 'contact', name: 'Contact', component: () => import('../views/Contact.vue') },
@@ -72,7 +73,8 @@ const routes = [
       { path: 'settings', name: 'AdminSettings', component: () => import('../views/admin/Settings.vue') },
       { path: 'products/ai/:id', name: 'ProductAI', component: () => import('../views/admin/ProductAI.vue') },
       { path: 'mailer', name: 'AdminMailer', component: () => import('../views/admin/Mailer.vue') },
-      { path: 'media', name: 'AdminMedia', component: () => import('../views/admin/MediaLibrary.vue') }
+      { path: 'media', name: 'AdminMedia', component: () => import('../views/admin/MediaLibrary.vue') },
+      { path: 'futures', name: 'AdminFutures', component: () => import('../views/admin/Futures.vue') }
     ]
   },
   // ─── CRM Routes (Admin) ────────────────────────────────────────────────────
@@ -168,6 +170,7 @@ router.afterEach((to) => {
     'NewsCategory': t('news'),
     'NewsRalColors': t('ralColorChart'),
     'NewsRoofingProfiles': t('roofingTitle'),
+    'NewsFuturesPrice': t('futuresTitle'),
     'About': t('aboutUs'),
     'Contact': t('contactUs'),
     'Factory': t('factoryTour'),

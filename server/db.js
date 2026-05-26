@@ -1265,6 +1265,19 @@ Requirements:
   try { db.exec("ALTER TABLE translation_jobs ADD COLUMN concurrency INTEGER DEFAULT 1") } catch (e) { }
   try { db.exec("ALTER TABLE translation_jobs ADD COLUMN pending_items TEXT") } catch (e) { }
 
+  // ── Futures Watchlist ────────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS futures_watchlist (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      symbol TEXT NOT NULL UNIQUE,
+      name TEXT,
+      name_en TEXT,
+      exchange TEXT DEFAULT 'SHFE',
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
   // ── Performance Indexes ──────────────────────────────────────────────────
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)') } catch (e) { }
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_slug ON products(slug)') } catch (e) { }
