@@ -8,6 +8,7 @@
       <button :class="['tab', tab === 'contacts' && 'active']" @click="tab='contacts'">👥 联系人</button>
       <button :class="['tab', tab === 'tasks' && 'active']" @click="tab='tasks'">🚀 发送任务</button>
       <button :class="['tab', tab === 'logs' && 'active']" @click="tab='logs'">📋 发送记录</button>
+      <button :class="['tab', tab === 'daily_logs' && 'active']" @click="tab='daily_logs';loadDailyLogs()">📅 每日日志</button>
       <button :class="['tab', tab === 'accounts' && 'active']" @click="tab='accounts'">📮 发件账号</button>
       <button :class="['tab', tab === 'variables' && 'active']" @click="tab='variables';loadVariables()">🔤 变量</button>
     </div>
@@ -233,6 +234,49 @@
               <span class="log-time">{{ r.sent_at ? new Date(r.sent_at).toLocaleString('zh-CN') : '' }}</span>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Daily Logs Tab ═══ -->
+    <div v-if="tab === 'daily_logs'" class="tab-body">
+      <div v-if="!dailyLogs.length" class="empty">暂无每日日志记录</div>
+      <div v-for="dl in dailyLogs" :key="dl.log_date + '_' + dl.account_id" class="log-group" style="margin-bottom:12px; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden">
+        <div class="log-group-header" style="background:#f8fafc; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; cursor:pointer" @click="toggleDailyLogDetail(dl)">
+          <div style="display:flex; gap:12px; align-items:center">
+            <strong>{{ dl.log_date }}</strong>
+            <span style="color:#64748b">{{ dl.account_name || 'API发送 (未指定别名)' }}</span>
+          </div>
+          <div style="display:flex; gap:12px; align-items:center; font-size:13px">
+            <span style="color:#10b981">成功: {{ dl.success_count }}</span>
+            <span style="color:#ef4444">失败: {{ dl.fail_count }}</span>
+            <span style="color:#64748b; margin-left:8px">{{ expandedDailyLogs.has(dl.log_date + '_' + dl.account_id) ? '▲' : '▼' }}</span>
+          </div>
+        </div>
+        
+        <div v-if="expandedDailyLogs.has(dl.log_date + '_' + dl.account_id)" style="padding:0">
+          <div v-if="dl._loading" style="padding:16px; text-align:center; color:#94a3b8">加载中...</div>
+          <table v-else class="smtp-table" style="margin:0; border:none; box-shadow:none">
+            <thead>
+              <tr><th>发送时间</th><th>发件邮箱</th><th>收件邮箱</th><th>主题</th><th>状态</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in dl._records" :key="r.id">
+                <td style="color:#64748b; font-size:12px">{{ new Date(r.sent_at).toLocaleTimeString('zh-CN') }}</td>
+                <td>{{ r.account_name || '-' }}</td>
+                <td>{{ r.contact_email }}</td>
+                <td class="td-ellipsis" style="max-width:200px" :title="r.subject">{{ r.subject || '-' }}</td>
+                <td>
+                  <span :class="'check '+(r.status==='sent'?'gray':'red')">
+                    {{ r.status === 'sent' ? '✓ 成功' : '✗ 失败' }}
+                  </span>
+                </td>
+                <td>
+                  <button class="btn btn-sm btn-outline" @click="viewDailyLogContent(r)">查看内容</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -509,7 +553,7 @@
     <!-- ═══ Preview Modal ═══ -->
     <div class="modal-overlay" v-if="showPreview" @click.self="showPreview=false">
       <div class="modal-box modal-lg">
-        <h3>📧 模板预览</h3>
+        <h3>📧 邮件内容预览</h3>
         <div class="preview-frame" v-html="previewHtml"></div>
         <div class="modal-actions"><button class="btn btn-outline" @click="showPreview=false">关闭</button></div>
       </div>
@@ -697,6 +741,40 @@ import api from '../../api'
 
 const route = useRoute()
 const isCRM = computed(() => !!window.__CRM_MAILER || window.location.pathname.startsWith('/crm'))
+
+// Daily Logs state
+const dailyLogs = ref([])
+const expandedDailyLogs = reactive(new Set())
+async function loadDailyLogs() {
+  try {
+    dailyLogs.value = await api.request('/mailer/daily-logs') || []
+  } catch (e) {
+    console.error('Failed to load daily logs', e)
+  }
+}
+async function toggleDailyLogDetail(dl) {
+  const key = dl.log_date + '_' + dl.account_id
+  if (expandedDailyLogs.has(key)) {
+    expandedDailyLogs.delete(key)
+  } else {
+    expandedDailyLogs.add(key)
+    if (!dl._records) {
+      dl._loading = true
+      try {
+        const records = await api.request(`/mailer/daily-logs-detail?date=${dl.log_date}&account_id=${dl.account_id || 'null'}`)
+        dl._records = records || []
+      } catch (e) {
+        console.error(e)
+      } finally {
+        dl._loading = false
+      }
+    }
+  }
+}
+function viewDailyLogContent(r) {
+  previewHtml.value = r.sent_html || r.error_msg || '无内容'
+  showPreview.value = true
+}
 const crmIsAdmin = computed(() => {
   if (!isCRM.value) return true // admin panel always has full access
   try {

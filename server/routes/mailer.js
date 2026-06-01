@@ -75,7 +75,7 @@ async function runTask(taskId, isResume = false) {
     if (skipDays > 0 && !task.parent_task_id) {
         const cutoff = new Date(Date.now() - skipDays * 86400000).toISOString()
         const recentlySent = getAll(
-            `SELECT DISTINCT contact_email FROM mail_logs WHERE status='sent' AND sent_at > ?`, [cutoff]
+            `SELECT DISTINCT contact_email FROM mail_logs WHERE status='sent' AND sent_at > ? AND task_id != ?`, [cutoff, taskId]
         )
         const recentEmails = new Set(recentlySent.map(r => r.contact_email.toLowerCase()))
         const before = contacts.length
@@ -90,9 +90,23 @@ async function runTask(taskId, isResume = false) {
         return
     }
 
-    let startIndex = 0
-    if (isResume && task.sent_count > 0) {
-        startIndex = task.sent_count
+    let tplIdx = 0
+    let acctIdx = 0
+
+    if (isResume) {
+        const alreadyProcessed = new Set(
+            getAll(`SELECT contact_email FROM mail_logs WHERE task_id=?`, [taskId])
+            .map(r => r.contact_email.toLowerCase())
+        )
+        tplIdx = alreadyProcessed.size % templates.length
+        acctIdx = alreadyProcessed.size % accounts.length
+        
+        contacts = contacts.filter(c => !alreadyProcessed.has(c.email.toLowerCase()))
+        
+        if (contacts.length === 0) {
+            run("UPDATE mail_tasks SET status='done' WHERE id=?", [taskId])
+            return
+        }
     } else {
         run('UPDATE mail_tasks SET total_count=?, sent_count=0 WHERE id=?', [contacts.length, taskId])
     }
@@ -125,10 +139,7 @@ async function runTask(taskId, isResume = false) {
         }
     }
 
-    let tplIdx = startIndex % templates.length
-    let acctIdx = startIndex % accounts.length
-
-    for (let i = startIndex; i < contacts.length; i++) {
+    for (let i = 0; i < contacts.length; i++) {
         if (ctx.cancelled || ctx.paused) break
         const contact  = contacts[i]
         const template = templates[tplIdx % templates.length]
@@ -642,7 +653,51 @@ router.get('/logs', authMiddleware, (req, res) => {
         logs = isAdmin
             ? getAll('SELECT * FROM mail_logs ORDER BY id DESC LIMIT 500')
             : getAll(`SELECT * FROM mail_logs WHERE created_by=? ORDER BY id DESC LIMIT 500`, [userId])
+    res.json(logs)
+})
+
+router.get('/daily-logs', authMiddleware, (req, res) => {
+    const { userId, isAdmin } = getUserId(req)
+    let where = '1=1'
+    let params = []
+    if (!isAdmin) {
+        where = 'created_by = ?'
+        params.push(userId)
     }
+    const summary = getAll(`
+        SELECT date(sent_at) as log_date, account_id, account_name, COUNT(*) as send_count,
+               SUM(CASE WHEN status='sent' THEN 1 ELSE 0 END) as success_count,
+               SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as fail_count
+        FROM mail_logs
+        WHERE ${where} AND sent_at IS NOT NULL
+        GROUP BY date(sent_at), account_id, account_name
+        ORDER BY log_date DESC, account_id ASC
+        LIMIT 200
+    `, params)
+    res.json(summary)
+})
+
+router.get('/daily-logs-detail', authMiddleware, (req, res) => {
+    const { userId, isAdmin } = getUserId(req)
+    const { date, account_id } = req.query
+    if (!date) return res.status(400).json({ error: 'Date is required' })
+    
+    let where = 'date(sent_at) = ?'
+    let params = [date]
+    
+    if (account_id && account_id !== 'null') {
+        where += ' AND account_id = ?'
+        params.push(account_id)
+    } else if (account_id === 'null') {
+        where += ' AND account_id IS NULL'
+    }
+    
+    if (!isAdmin) {
+        where += ' AND created_by = ?'
+        params.push(userId)
+    }
+    
+    const logs = getAll(`SELECT * FROM mail_logs WHERE ${where} ORDER BY sent_at DESC LIMIT 500`, params)
     res.json(logs)
 })
 

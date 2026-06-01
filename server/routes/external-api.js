@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import crypto from 'crypto'
+import nodemailer from 'nodemailer'
 
 // ─── Product type detection from article context ─────────────────────────────
 const PRODUCT_TYPE_MAP = [
@@ -686,6 +687,81 @@ router.put('/templates/:id', apiKeyMiddleware, (req, res) => {
 router.delete('/templates/:id', apiKeyMiddleware, (req, res) => {
     run('DELETE FROM mail_templates WHERE id = ?', [req.params.id])
     res.json({ success: true, message: 'Template deleted' })
+})
+
+// ─── POST /api/external/send-email ──────────────────────────────────────────
+router.post('/send-email', apiKeyMiddleware, async (req, res) => {
+    const { to_email, to_name, subject, html_body, template_id, account_id } = req.body
+    if (!to_email) return res.status(400).json({ error: 'to_email is required' })
+
+    let finalSubject = subject || ''
+    let finalBody = html_body || ''
+    let tpl = null
+
+    // If template_id is provided, load the template
+    if (template_id) {
+        tpl = getOne('SELECT * FROM mail_templates WHERE id = ?', [template_id])
+        if (tpl) {
+            finalSubject = finalSubject || tpl.subject || ''
+            finalBody = finalBody || tpl.html_body || ''
+        }
+    }
+
+    if (!finalSubject && !finalBody) {
+        return res.status(400).json({ error: 'Must provide either subject/html_body or a valid template_id' })
+    }
+
+    // Replace basic variables
+    const vars = { name: to_name || '', email: to_email }
+    for (const [k, v] of Object.entries(vars)) {
+        const regex = new RegExp(`\\{\\{${k}\\}\\}`, 'gi')
+        finalSubject = finalSubject.replace(regex, v)
+        finalBody = finalBody.replace(regex, v)
+    }
+
+    // Find SMTP account
+    let smtp = null
+    if (account_id) {
+        smtp = getOne('SELECT * FROM smtp_accounts WHERE id = ? AND enabled = 1', [account_id])
+    }
+    if (!smtp) {
+        smtp = getOne('SELECT * FROM smtp_accounts WHERE enabled = 1 ORDER BY is_default DESC, id ASC LIMIT 1')
+    }
+    if (!smtp) return res.status(500).json({ error: 'No enabled SMTP accounts found' })
+
+    const transport = nodemailer.createTransport({
+        host: smtp.smtp_host,
+        port: parseInt(smtp.smtp_port) || 465,
+        secure: parseInt(smtp.smtp_port) === 465,
+        auth: { user: smtp.smtp_user, pass: smtp.smtp_pass },
+        tls: { rejectUnauthorized: false }
+    })
+
+    try {
+        const info = await transport.sendMail({
+            from: `"${smtp.from_name || 'SunSea Steel'}" <${smtp.smtp_user}>`,
+            to: to_email,
+            subject: finalSubject,
+            html: finalBody
+        })
+
+        // Log success
+        run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, template_id, account_id, account_name, subject, sent_html, status, sent_at, message_id)
+             VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 'sent', ?, ?)`,
+            [to_email, to_name || '', template_id || null, smtp.id, smtp.name || smtp.smtp_user, finalSubject, finalBody, new Date().toISOString(), info.messageId || '']
+        )
+        // Increment send count
+        run('UPDATE smtp_accounts SET send_count = send_count + 1 WHERE id = ?', [smtp.id])
+
+        res.json({ success: true, message: 'Email sent successfully', messageId: info.messageId })
+    } catch (e) {
+        // Log failure
+        run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, template_id, account_id, account_name, subject, sent_html, status, sent_at, error_msg)
+             VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?)`,
+            [to_email, to_name || '', template_id || null, smtp.id, smtp.name || smtp.smtp_user, finalSubject, finalBody, new Date().toISOString(), e.message]
+        )
+        res.status(500).json({ success: false, error: 'Failed to send email: ' + e.message })
+    }
 })
 
 router.get('/docs', (req, res) => {
