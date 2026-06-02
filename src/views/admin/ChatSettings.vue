@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-dashboard">
+  <div :class="['chat-dashboard', { 'is-chat': activeTab === 'chat' }]">
     <div class="header">
       <h2>💬 在线客服控制台</h2>
       <p>与网站在线的客户进行实时对话，配置自动回复话术及窗口预设。</p>
@@ -863,11 +863,13 @@ onUnmounted(() => {
   margin: 0 auto;
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  height: calc(100vh - 60px);
-  min-height: 600px;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+}
+.chat-dashboard.is-chat {
+  height: calc(100vh - 60px);
+  min-height: 600px;
 }
 .header { margin-bottom: 20px; }
 .header h2 { font-size: 24px; color: #1f2937; margin-bottom: 4px; }
