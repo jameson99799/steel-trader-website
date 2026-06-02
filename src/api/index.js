@@ -314,7 +314,9 @@ export const api = {
   searchFutures: (q) => request(`/futures/search?q=${encodeURIComponent(q)}`),
   addFutures: (data) => request('/futures', { method: 'POST', body: JSON.stringify(data) }),
   reorderFutures: (items) => request('/futures/reorder', { method: 'PUT', body: JSON.stringify({ items }) }),
-  deleteFutures: (id) => request(`/futures/${id}`, { method: 'DELETE' })
+  deleteFutures: (id) => request(`/futures/${id}`, { method: 'DELETE' }),
+  getFuturesSettings: () => request('/futures/settings'),
+  updateFuturesSettings: (data) => request('/futures/settings', { method: 'PUT', body: JSON.stringify(data) })
 }
 
 export default api

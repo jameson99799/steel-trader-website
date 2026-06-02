@@ -443,9 +443,20 @@
           <button class="modal-close" @click="showMediaPicker=false">&times;</button>
         </div>
         <div class="modal-body">
+          <div class="breadcrumb" style="width: 100%; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: bold; margin-bottom: 8px;">
+            <span @click="mediaPickerGroup=''; mediaPickerFolder=''; loadMediaPicker()" style="cursor: pointer; color: #2563eb;">🏠 全部分组</span>
+            <template v-if="mediaPickerGroup">
+              <span style="color:#94a3b8">/</span>
+              <span @click="mediaPickerFolder=''; loadMediaPicker()" style="cursor: pointer; color: #2563eb;">{{ mediaGroups.find(g => g.id === mediaPickerGroup)?.name }}</span>
+            </template>
+            <template v-if="mediaPickerFolder">
+              <span style="color:#94a3b8">/</span>
+              <span>{{ mediaPickerCurrentFolderName }}</span>
+            </template>
+          </div>
           <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
             <input v-model="mediaPickerSearch" class="form-control" placeholder="搜索文件名..." @input="loadMediaPicker" style="max-width:200px;" />
-            <select v-model="mediaPickerGroup" class="form-control" @change="loadMediaPicker" style="max-width:140px;">
+            <select v-model="mediaPickerGroup" class="form-control" @change="mediaPickerFolder=''; loadMediaPicker()" style="max-width:140px;">
               <option value="">全部分组</option>
               <option v-for="g in mediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
             </select>
@@ -457,7 +468,11 @@
               {{ mediaPickerSelected.length === mediaPickerItems.length ? '取消全选' : '全选图片' }}
             </button>
           </div>
-          <div v-if="mediaPickerItems.length" class="import-grid">
+          <div v-if="mediaPickerItems.length || mediaPickerFolders.length" class="import-grid">
+            <div v-for="folder in mediaPickerFolders" :key="'mf_'+folder.id" class="import-item" style="cursor:pointer; background:#f1f5f9; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100px; padding:10px;" @click="enterMediaPickerFolder(folder)">
+              <div style="font-size: 32px;">📁</div>
+              <div style="font-size: 12px; margin-top:8px; text-align:center; line-height:1.2;">{{ folder.name }}</div>
+            </div>
             <div v-for="item in mediaPickerItems" :key="item.id" :class="['import-item', { selected: mediaPickerSelected.includes(item.filepath) }]" @click="toggleMediaPickerSelect(item.filepath)">
               <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
               <div class="import-check">✓</div>
@@ -507,9 +522,20 @@
           <button class="modal-close" @click="showDetailMediaBrowser=false">&times;</button>
         </div>
         <div class="modal-body">
+          <div class="breadcrumb" style="width: 100%; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: bold; margin-bottom: 8px;">
+            <span @click="detailMediaGroup=''; detailMediaFolder=''; loadDetailMedia()" style="cursor: pointer; color: #2563eb;">🏠 全部分组</span>
+            <template v-if="detailMediaGroup">
+              <span style="color:#94a3b8">/</span>
+              <span @click="detailMediaFolder=''; loadDetailMedia()" style="cursor: pointer; color: #2563eb;">{{ detailMediaGroups.find(g => g.id === detailMediaGroup)?.name }}</span>
+            </template>
+            <template v-if="detailMediaFolder">
+              <span style="color:#94a3b8">/</span>
+              <span>{{ detailMediaCurrentFolderName }}</span>
+            </template>
+          </div>
           <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
             <input v-model="detailMediaSearch" class="form-control" placeholder="搜索文件名..." @input="loadDetailMedia" style="max-width:200px;" />
-            <select v-model="detailMediaGroup" class="form-control" @change="loadDetailMedia" style="max-width:140px;">
+            <select v-model="detailMediaGroup" class="form-control" @change="detailMediaFolder=''; loadDetailMedia()" style="max-width:140px;">
               <option value="">全部分组</option>
               <option v-for="g in detailMediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
             </select>
@@ -518,7 +544,11 @@
               <option v-for="t in watermarkTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
           </div>
-          <div v-if="detailMediaItems.length" class="import-grid" style="max-height:450px;">
+          <div v-if="detailMediaItems.length || detailMediaFolders.length" class="import-grid" style="max-height:450px;">
+            <div v-for="folder in detailMediaFolders" :key="'df_'+folder.id" class="import-item" style="cursor:pointer; background:#f1f5f9; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100px; padding:10px;" @click="enterDetailMediaFolder(folder)">
+              <div style="font-size: 32px;">📁</div>
+              <div style="font-size: 12px; margin-top:8px; text-align:center; line-height:1.2;">{{ folder.name }}</div>
+            </div>
             <div v-for="item in detailMediaItems" :key="item.id" class="import-item" style="cursor:pointer;" @click="selectDetailMediaImage(item)">
               <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
             </div>
@@ -605,8 +635,17 @@ const detailMediaGroup = ref('')
 const detailMediaWatermark = ref('')
 const detailMediaItems = ref([])
 const detailMediaGroups = ref([])
+const detailMediaFolders = ref([])
+const detailMediaFolder = ref('')
+const detailMediaCurrentFolderName = ref('')
 const faqItems = ref([])
 let replacingImg = null  // track image being replaced
+
+function enterDetailMediaFolder(folder) {
+  detailMediaFolder.value = folder.id
+  detailMediaCurrentFolderName.value = folder.name
+  loadDetailMedia()
+}
 const translatingId = ref(null)
 
 const watermarkTemplates = ref([])
@@ -762,17 +801,29 @@ const mediaPickerWatermark = ref('')
 const mediaPickerItems = ref([])
 const mediaPickerSelected = ref([])
 const mediaGroups = ref([])
+const mediaPickerFolders = ref([])
+const mediaPickerFolder = ref('')
+const mediaPickerCurrentFolderName = ref('')
+
+function enterMediaPickerFolder(folder) {
+  mediaPickerFolder.value = folder.id
+  mediaPickerCurrentFolderName.value = folder.name
+  loadMediaPicker()
+}
 
 async function loadMediaPicker() {
   const params = new URLSearchParams({ per_page: '50' })
   if (mediaPickerSearch.value) params.set('search', mediaPickerSearch.value)
   if (mediaPickerGroup.value) params.set('group_id', mediaPickerGroup.value)
+  if (mediaPickerFolder.value) params.set('folder_id', mediaPickerFolder.value)
   try {
     const res = await fetch(`/api/media?${params}`, {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
     })
     const data = await res.json()
     mediaPickerItems.value = data.items || []
+    mediaPickerFolders.value = data.folders || []
+    if (mediaPickerFolder.value && !mediaPickerCurrentFolderName.value) { const folder = mediaPickerFolders.value.find(f => f.id === mediaPickerFolder.value); if (folder) mediaPickerCurrentFolderName.value = folder.name; }
   } catch (e) { console.error(e) }
 }
 
@@ -823,12 +874,16 @@ watch(showMediaPicker, (v) => {
     loadMediaGroups()
     loadWatermarkTemplates()
     mediaPickerGroup.value = localStorage.getItem('_lastMediaGroup') || ''
+    mediaPickerFolder.value = localStorage.getItem('_lastMediaFolder') || ''
+  mediaPickerCurrentFolderName.value = localStorage.getItem('_lastMediaFolderName') || ''
     mediaPickerWatermark.value = localStorage.getItem('_lastWatermarkTemplate') || ''
     loadMediaPicker()
     mediaPickerSelected.value = []
   }
 })
 watch(mediaPickerGroup, v => { if (v !== undefined) localStorage.setItem('_lastMediaGroup', v) })
+watch(mediaPickerFolder, v => { if (v !== undefined) localStorage.setItem('_lastMediaFolder', v); if (!v) { localStorage.removeItem('_lastMediaFolderName'); mediaPickerCurrentFolderName.value = ''; } })
+watch(mediaPickerCurrentFolderName, v => { if (v !== undefined) localStorage.setItem('_lastMediaFolderName', v) })
 watch(mediaPickerWatermark, v => { if (v !== undefined) localStorage.setItem('_lastWatermarkTemplate', v) })
 // Remember selected group
 watch(mediaPickerGroup, v => { if (v) localStorage.setItem('_lastMediaGroup', v) })
@@ -1289,10 +1344,12 @@ async function loadDetailMedia() {
     const token = localStorage.getItem('token')
     const params = new URLSearchParams({ per_page: '200' })
     if (detailMediaGroup.value) params.set('group_id', detailMediaGroup.value)
+    if (detailMediaFolder.value) params.set('folder_id', detailMediaFolder.value)
     if (detailMediaSearch.value) params.set('search', detailMediaSearch.value)
     const res = await fetch(`/api/media?${params}`, { headers: { 'Authorization': `Bearer ${token}` } })
     const data = await res.json()
     detailMediaItems.value = data.items || []
+    detailMediaFolders.value = data.folders || []
   } catch (e) { console.error('Failed to load media:', e) }
 }
 
@@ -1308,6 +1365,7 @@ function pickFromMediaLib() {
   showImgChooser.value = false
   detailMediaSearch.value = ''
   detailMediaGroup.value = localStorage.getItem('_lastMediaGroup') || ''
+  detailMediaFolder.value = ''
   detailMediaWatermark.value = localStorage.getItem('_lastWatermarkTemplate') || ''
   loadDetailMediaGroups()
   loadWatermarkTemplates()

@@ -45,6 +45,8 @@ import ralColorsRoutes from './routes/ral-colors.js'
 import roofingProfilesRoutes from './routes/roofing-profiles.js'
 import factoryRoutes from './routes/factory.js'
 import futuresRoutes from './routes/futures.js'
+import chatRoutes from './routes/chat.js'
+import { initWechatBot } from './utils/wechatBot.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -57,6 +59,7 @@ async function startServer() {
     // 初始化数据库
     await initDb()
     console.log('✓ Database initialized')
+    initWechatBot()
     resetStaleJobs() // Reset any translation jobs stuck in 'running' from previous crash
     try {
       processTranslationQueue()
@@ -351,6 +354,7 @@ async function startServer() {
     app.use('/api/crm/customers', crmCustomersRoutes)
     app.use('/api/crm/mailer', mailerRoutes)  // Share same mailer routes
     app.use('/api/crm/email', emailRoutes)    // Share same email/SMTP routes
+    app.use('/api/chat', chatRoutes)
 
     // 健康检查端点
     app.get('/health', (req, res) => {

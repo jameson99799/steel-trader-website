@@ -233,14 +233,29 @@
           <button class="modal-close" @click="showMediaPicker=false">&times;</button>
         </div>
         <div class="modal-body">
+          <div class="breadcrumb" style="width: 100%; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: bold; margin-bottom: 8px;">
+            <span @click="mediaPickerGroup=''; mediaPickerFolder=''; loadMediaPicker()" style="cursor: pointer; color: #2563eb;">🏠 全部分组</span>
+            <template v-if="mediaPickerGroup">
+              <span style="color:#94a3b8">/</span>
+              <span @click="mediaPickerFolder=''; loadMediaPicker()" style="cursor: pointer; color: #2563eb;">{{ mediaGroups.find(g => g.id === mediaPickerGroup)?.name }}</span>
+            </template>
+            <template v-if="mediaPickerFolder">
+              <span style="color:#94a3b8">/</span>
+              <span>{{ mediaPickerCurrentFolderName }}</span>
+            </template>
+          </div>
           <div style="display:flex;gap:8px;margin-bottom:12px;">
             <input v-model="mediaPickerSearch" class="form-control" placeholder="搜索文件名..." @input="loadMediaPicker" style="max-width:200px;" />
-            <select v-model="mediaPickerGroup" class="form-control" @change="loadMediaPicker" style="max-width:140px;">
+            <select v-model="mediaPickerGroup" class="form-control" @change="mediaPickerFolder=''; loadMediaPicker()" style="max-width:140px;">
               <option value="">全部分组</option>
               <option v-for="g in mediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
             </select>
           </div>
-          <div v-if="mediaPickerItems.length" class="media-grid">
+          <div v-if="mediaPickerItems.length || mediaPickerFolders.length" class="media-grid">
+            <div v-for="folder in mediaPickerFolders" :key="'stf_'+folder.id" class="media-item" style="cursor:pointer; background:#f1f5f9; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px;" @click="enterMediaPickerFolder(folder)">
+              <div style="font-size: 32px;">📁</div>
+              <div style="font-size: 12px; margin-top:8px; text-align:center; line-height:1.2;">{{ folder.name }}</div>
+            </div>
             <div v-for="item in mediaPickerItems" :key="item.id" :class="['media-item', { selected: mediaPickerSelected === item.filepath }]" @click="mediaPickerSelected = item.filepath">
               <img :src="item.filepath" />
             </div>
@@ -468,11 +483,22 @@ const mediaPickerGroup = ref('')
 const mediaPickerSelected = ref('')
 
 const mediaPickerTarget = ref('')
+const mediaPickerFolders = ref([])
+const mediaPickerFolder = ref('')
+const mediaPickerCurrentFolderName = ref('')
+
+function enterMediaPickerFolder(folder) {
+  mediaPickerFolder.value = folder.id
+  mediaPickerCurrentFolderName.value = folder.name
+  loadMediaPicker()
+}
 
 const openMediaPicker = async (target = '') => {
   mediaPickerTarget.value = target
   showMediaPicker.value = true
   mediaPickerSelected.value = ''
+  mediaPickerFolder.value = localStorage.getItem('_lastMediaFolder') || ''
+  mediaPickerCurrentFolderName.value = localStorage.getItem('_lastMediaFolderName') || ''
   try {
     const groups = await api.request('/media/groups')
     mediaGroups.value = groups
@@ -484,9 +510,12 @@ const loadMediaPicker = async () => {
   try {
     let url = '/media?page=1&per_page=50'
     if (mediaPickerGroup.value) url += `&group_id=${mediaPickerGroup.value}`
+    if (mediaPickerFolder.value) url += `&folder_id=${mediaPickerFolder.value}`
     if (mediaPickerSearch.value) url += `&search=${encodeURIComponent(mediaPickerSearch.value)}`
     const data = await api.request(url)
     mediaPickerItems.value = data.items.map(m => ({ id: m.id, filepath: m.filepath }))
+    mediaPickerFolders.value = data.folders || []
+    if (mediaPickerFolder.value && !mediaPickerCurrentFolderName.value) { const folder = mediaPickerFolders.value.find(f => f.id === mediaPickerFolder.value); if (folder) mediaPickerCurrentFolderName.value = folder.name; }
   } catch (e) { console.error(e) }
 }
 

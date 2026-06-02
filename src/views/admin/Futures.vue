@@ -5,6 +5,20 @@
       <p class="page-desc">添加需要在前台展示的期货品种行情，支持自定义排序。</p>
     </div>
 
+    <!-- Settings Section -->
+    <div class="settings-section">
+      <h3>全局显示设置</h3>
+      <div class="settings-row">
+        <label>前台列表K线预览天数：</label>
+        <input type="number" v-model="settings.preview_days" min="5" max="100" class="input-days" />
+        <span class="unit">天</span>
+        <button @click="saveSettings" class="btn-save" :disabled="savingSettings">
+          {{ savingSettings ? '保存中...' : '保存设置' }}
+        </button>
+      </div>
+      <p class="hint">例如设置 15，前台列表就会显示为“走势图 (15日)”，并读取最近 15 天的数据绘制K线。</p>
+    </div>
+
     <!-- Search & Add -->
     <div class="add-section">
       <h3>添加期货品种</h3>
@@ -108,6 +122,9 @@ const toast = ref({ show: false, type: 'success', msg: '' })
 let searchTimer = null
 let dragIndex = ref(null)
 
+const settings = ref({ preview_days: 10 })
+const savingSettings = ref(false)
+
 function showToast(msg, type = 'success') {
   toast.value = { show: true, type, msg }
   setTimeout(() => { toast.value.show = false }, 3000)
@@ -120,11 +137,30 @@ function isAdded(symbol) {
 async function loadList() {
   loadingList.value = true
   try {
-    watchlist.value = await api.getFuturesList()
+    const [listData, settingsData] = await Promise.all([
+      api.getFuturesList(),
+      api.getFuturesSettings().catch(() => ({ preview_days: 10 }))
+    ])
+    watchlist.value = listData
+    if (settingsData && settingsData.preview_days) {
+      settings.value.preview_days = settingsData.preview_days
+    }
   } catch (e) {
     showToast('加载失败: ' + e.message, 'error')
   } finally {
     loadingList.value = false
+  }
+}
+
+async function saveSettings() {
+  savingSettings.value = true
+  try {
+    await api.updateFuturesSettings(settings.value)
+    showToast('设置保存成功')
+  } catch (e) {
+    showToast('设置保存失败', 'error')
+  } finally {
+    savingSettings.value = false
   }
 }
 
@@ -199,6 +235,21 @@ onMounted(loadList)
 .page-header { margin-bottom: 24px; }
 .page-header h1 { font-size: 24px; font-weight: 800; color: var(--text-primary); margin-bottom: 6px; }
 .page-desc { color: var(--text-secondary); font-size: 14px; }
+
+/* Settings Section */
+.settings-section {
+  background: #fff; border-radius: 12px;
+  padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 24px;
+}
+.settings-section h3 { font-size: 16px; font-weight: 700; margin-bottom: 14px; color: #1e293b; }
+.settings-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.settings-row label { font-size: 14px; color: #475569; font-weight: 500; }
+.input-days { width: 80px; padding: 6px 10px; border: 2px solid #e2e8f0; border-radius: 6px; font-size: 14px; outline: none; }
+.input-days:focus { border-color: #3b82f6; }
+.unit { font-size: 14px; color: #64748b; }
+.btn-save { padding: 6px 16px; background: #10b981; color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s; margin-left: 10px; }
+.btn-save:hover:not(:disabled) { background: #059669; }
+.btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* Add Section */
 .add-section {

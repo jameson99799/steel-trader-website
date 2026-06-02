@@ -602,6 +602,34 @@ const UI_TEXTS_EN = {
     "defaultPpgiCoating": "PE / SMP / HDP / PVDF"
 };
 
+const FUTURES_TEXTS_EN = {
+    "futuresLoading": "Loading futures data...",
+    "futuresEmpty": "No futures varieties configured, please contact administrator.",
+    "futuresTimeNote": "Please note: All futures prices are in Beijing Time (CST), and all displayed prices are in CNY.",
+    "futuresName": "Futures Name",
+    "futuresCurrentPrice": "Current Price",
+    "futuresPrevClose": "Previous Close",
+    "futuresChartRealtime": "Trend (Real-time)",
+    "futuresDailyChange": "Daily Change",
+    "futuresLoadingShort": "Loading",
+    "futuresDateTime": "Date/Time",
+    "futuresCurrentPriceStr": "Real-time Price",
+    "futuresChangePct": "Change %",
+    "futuresOpenStr": "Open Price",
+    "futuresCloseStr": "Close Price",
+    "futuresHighStr": "High Price",
+    "futuresLowStr": "Low Price",
+    "futuresMinline": "Intraday",
+    "futures30d": "30 Days",
+    "futures60d": "60 Days",
+    "futures100d": "100 Days",
+    "futuresPrice": "Price",
+    "futuresChartDays": "Trend ({days} Days)",
+    "futuresPriceBtn": "Futures Price",
+    "futuresTitle": "Live Futures Prices",
+    "futuresDesc": "Real-time commodity futures for steel-related products."
+};
+
 function collectUITexts() {
     const entries = Object.entries(UI_TEXTS_EN)
     const CHUNK_SIZE = 15  // read-frog style: small batches = higher AI success rate
@@ -616,6 +644,38 @@ function collectUITexts() {
             itemName: `UI Text (batch ${chunkIdx + 1}/${Math.ceil(entries.length / CHUNK_SIZE)})`
         })
     }
+    return items
+}
+
+function collectFuturesTexts() {
+    const entries = Object.entries(FUTURES_TEXTS_EN)
+    const CHUNK_SIZE = 15
+    const items = []
+    for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
+        const chunk = Object.fromEntries(entries.slice(i, i + CHUNK_SIZE))
+        const chunkIdx = Math.floor(i / CHUNK_SIZE)
+        items.push({
+            type: 'futures', id: 'static', field: 'futures_chunk_' + chunkIdx,
+            text: JSON.stringify(chunk),
+            combined: true, subFields: Object.keys(chunk),
+            itemName: 'Futures Text (batch ' + (chunkIdx + 1) + '/' + Math.ceil(entries.length / CHUNK_SIZE) + ')'
+        })
+    }
+    try {
+        const watchlist = getAll('SELECT id, symbol, name, name_en FROM futures_watchlist')
+        for (const w of watchlist) {
+            const textToTranslate = w.name_en || w.name
+            if (textToTranslate) {
+                items.push({
+                    type: 'futures_watchlist',
+                    id: w.id,
+                    field: 'name',
+                    text: textToTranslate,
+                    itemName: 'Futures Symbol: ' + w.symbol
+                })
+            }
+        }
+    } catch (e) {}
     return items
 }
 
@@ -695,7 +755,8 @@ const PAGES = {
     ral_colors: collectRalColors,
     roofing_categories: () => [...collectRoofingCategories(), ...collectRoofingProfiles()],
     roofing_profiles: collectRoofingProfiles,
-    factory: collectFactory
+    factory: collectFactory,
+    futures: () => collectFuturesTexts()
 };
 
 
@@ -753,13 +814,19 @@ async function translateBatch(settings, items, targetLang, langName, overrideNot
         // Much more reliable than JSON for 3rd-party AI proxies
         const numberedInput = fieldVals.map((v, i) => `${i + 1}. ${v}`).join('\n')
 
-        const systemPrompt = `Translate the following numbered items from English to ${langName}. This is content for a steel products company website.
+        // Avoid paradox if target is actually Chinese or English
+        const strictRule = (langName.toLowerCase().includes('chinese') || langName.toLowerCase().includes('english'))
+            ? `- You MUST translate the text into ${langName}.`
+            : `- DO NOT output the original Chinese or English text. You MUST translate it into ${langName}.`
+
+        const systemPrompt = `Translate the following numbered items into ${langName} (the source text may be in English or Chinese). This is content for a steel products company website.
 Return ONLY numbered lines in the SAME order:
 1. [translation of item 1]
 2. [translation of item 2]
 ...
 Rules:
-- Translate ALL text completely and naturally
+- Translate ALL text completely and naturally into ${langName}.
+${strictRule}
 - Keep HTML tags, product codes, units (mm, kg, MPa) unchanged
 - Keep URLs, email addresses unchanged
 - DO NOT skip any numbered item${fullOverride}`
@@ -892,8 +959,16 @@ Rules:
                     const batch = blocks.slice(i, i + BLOCK_BATCH)
                     blockTasks.push(async () => {
                         const numberedText = batch.map((b, idx) => `---BLOCK ${idx + 1}---\n${b.innerHTML}`).join('\n')
-                        const blockPrompt = `Translate HTML blocks to ${langName}. Context: "${contextName}" steel product page.
-Return the translated blocks in the exact same format using ---BLOCK N--- separators. Keep ALL HTML tags, attributes, URLs unchanged. Translate only visible text.
+                        // Avoid paradox if target is actually Chinese or English
+                        const strictRuleBlock = (langName.toLowerCase().includes('chinese') || langName.toLowerCase().includes('english'))
+                            ? `- You MUST translate the text into ${langName}.`
+                            : `- You MUST translate the text into ${langName}. DO NOT return the original Chinese or English text.`
+
+                        const blockPrompt = `Translate HTML blocks to ${langName}. Context: "${contextName}" steel product page. (Source text may be English or Chinese).
+Return the translated blocks in the exact same format using ---BLOCK N--- separators.
+Rules:
+${strictRuleBlock}
+- Keep ALL HTML tags, attributes, URLs unchanged. Translate only visible text.
 Example output format:
 ---BLOCK 1---
 <p>Translated HTML</p>
@@ -945,9 +1020,14 @@ Example output format:
                 }
             } else {
                 // Normal HTML (<15000 chars): send ENTIRE content in ONE call
-                const htmlPrompt = `Translate the following HTML content from English to ${langName}. Context: "${contextName}" steel product page.
+                // Avoid paradox if target is actually Chinese or English
+                const strictRuleHtml = (langName.toLowerCase().includes('chinese') || langName.toLowerCase().includes('english'))
+                    ? `- Translate ALL visible text content completely into ${langName}.`
+                    : `- Translate ALL visible text content completely into ${langName}.\n- DO NOT output the original Chinese or English text. You MUST translate it into ${langName}.`
+
+                const htmlPrompt = `Translate the following HTML content into ${langName} (the source text may be in English or Chinese). Context: "${contextName}" steel product page.
 Rules:
-- Translate ALL visible text content completely
+${strictRuleHtml}
 - Preserve ALL HTML tags, attributes, class names, styles, URLs exactly as-is
 - Keep product codes, model numbers, units unchanged
 - Return ONLY the translated HTML (no wrapper, no explanation)${fullOverride}`
@@ -1073,7 +1153,7 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'AI API key not configured' })
     }
 
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures' }
     const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
     let overrideNote = manualOverrides.length > 0
         ? '\n\nUse these approved translations as reference:\n' +
@@ -1194,7 +1274,7 @@ Keep unchanged: codes, HTML, ASTM/JIS/EN/GB/T.${overrideNote}`
                     const recent = blocks.slice(Math.max(0, i - 3), i)
                     prevContext = '\nPrevious translated content for context:\n' + recent.map(b => b.innerHTML).join('\n')
                 }
-                const blockPrompt = `You are translating HTML content for a steel products company website from English to ${langRow.name}.
+                const blockPrompt = `You are translating HTML content for a steel products company website into ${langRow.name} (the source text may be in English or Chinese).
 Translate each numbered HTML block. Preserve ALL HTML tags, attributes, CSS, and structure exactly. Only translate visible text content.
 Return ONLY a JSON object like {"1":"<translated html>","2":"<translated html>"}.${contextName}${prevContext}${overrideNote}`
                 try {
@@ -1242,7 +1322,7 @@ router.post('/run-one', authMiddleware, async (req, res) => {
     if (!s?.api_key && !getOne('SELECT api_key FROM ai_channels WHERE is_default = 1')?.api_key) return res.status(400).json({ error: 'AI API key not configured. Please add an AI channel in AI Translation settings.' })
 
     // Map singular type names to PAGES keys (product -> products, category -> categories, etc.)
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures' }
     const pageKey = TYPE_TO_PAGE[content_type] || content_type
     if (!PAGES[pageKey]) return res.status(400).json({ error: `Unknown content type: ${content_type}` })
     const allItems = PAGES[pageKey]()
@@ -1473,8 +1553,8 @@ router.get('/ui-texts/:lang', (req, res) => {
     try {
         // Get all ui_text translations for this language
         const rows = getAll(
-            'SELECT content_field, translated_text FROM translations WHERE language_code = ? AND content_type = ? AND content_id = ?',
-            [lang, 'ui_text', 'static']
+            `SELECT content_field, translated_text FROM translations WHERE language_code = ? AND content_type IN ('ui_text', 'futures') AND content_id = ?`,
+            [lang, 'static']
         )
         
         const result = {}
@@ -1855,7 +1935,7 @@ router.post('/run-selective', authMiddleware, async (req, res) => {
     if (!langs.length) return res.status(400).json({ error: 'No valid languages found' })
 
     const enhanced = enhanceWithDefaultChannel(s)
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures' }
     const pageKey = TYPE_TO_PAGE[type]
     if (!PAGES[pageKey]) return res.status(400).json({ error: 'Invalid type' })
 
@@ -2312,7 +2392,7 @@ async function executeTranslationTask(targetLang, contentType, contentId) {
         throw new Error('AI API key not configured.')
     }
 
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures' }
     const pageKey = TYPE_TO_PAGE[contentType] || contentType
     if (!PAGES[pageKey]) throw new Error(`Unknown content type: ${contentType}`)
     

@@ -980,6 +980,19 @@ Requirements:
     )
   `)
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS media_folders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // Migrations for media table
+  try { db.exec('ALTER TABLE media ADD COLUMN folder_id INTEGER DEFAULT NULL') } catch (e) { }
+
+
   // Seed default media groups if empty
   const mgCount = db.prepare('SELECT COUNT(*) as c FROM media_groups').get()
   if (mgCount.c === 0) {
@@ -1582,6 +1595,50 @@ Requirements:
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS futures_settings (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      preview_days INTEGER DEFAULT 10
+    )
+  `)
+  try {
+    const fsRow = db.prepare('SELECT id FROM futures_settings WHERE id = 1').get()
+    if (!fsRow) {
+      db.prepare('INSERT INTO futures_settings (id, preview_days) VALUES (1, 10)').run()
+    }
+  } catch(e) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS live_chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      visitor_id TEXT NOT NULL,
+      sender_type TEXT NOT NULL, -- 'visitor' or 'admin'
+      content TEXT NOT NULL,
+      is_read INTEGER DEFAULT 0,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS live_chat_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      auto_reply_enabled INTEGER DEFAULT 0,
+      start_time TEXT DEFAULT '22:00',
+      end_time TEXT DEFAULT '07:00',
+      reply_text TEXT DEFAULT 'Hello! We are currently offline. Please leave your message and email address, and we will get back to you as soon as possible.',
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  try {
+    const hasChatSettings = db.prepare("SELECT count(*) as c FROM live_chat_settings").get().c
+    if (hasChatSettings === 0) {
+      db.prepare('INSERT INTO live_chat_settings (auto_reply_enabled) VALUES (0)').run()
+    }
+  } catch (e) {
+    console.error('[db] Error populating default chat settings:', e)
+  }
 
   return db
 }

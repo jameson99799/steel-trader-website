@@ -64,17 +64,34 @@
 
     <!-- Filter bar -->
     <div class="filter-bar">
-      <input v-model="search" class="form-control filter-search" placeholder="🔍 搜索文件名..." @input="loadMedia(false)" />
-      <select v-model="filterGroup" class="form-control filter-select" @change="currentPage=1; loadMedia(false)">
+      <div class="breadcrumb" style="width: 100%; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: bold; margin-bottom: 8px;">
+        <span @click="filterGroup=''; filterFolder=''; currentPage=1; loadMedia(false)" style="cursor: pointer; color: #2563eb;">🏠 全部分组</span>
+        <template v-if="filterGroup">
+          <span style="color:#94a3b8">/</span>
+          <span @click="filterFolder=''; currentPage=1; loadMedia(false)" style="cursor: pointer; color: #2563eb;">{{ groups.find(g => g.id === filterGroup)?.name }}</span>
+        </template>
+        <template v-if="filterFolder">
+          <span style="color:#94a3b8">/</span>
+          <span>{{ currentFolderName }}</span>
+        </template>
+      </div>
+      <input v-model="search" class="form-control filter-search" placeholder="🔍 搜索文件或文件夹..." @input="loadMedia(false)" />
+      <select v-model="filterGroup" class="form-control filter-select" @change="filterFolder=''; currentPage=1; loadMedia(false)">
         <option value="">全部分组</option>
         <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }} ({{ g.image_count }})</option>
       </select>
+      
+      <button v-if="filterGroup && !filterFolder" class="btn btn-sm btn-outline" style="border-color:#10b981; color:#10b981;" @click="createFolder">📁 新建文件夹</button>
       <button class="btn btn-sm btn-outline" @click="toggleSelectAll">{{ selectedIds.length === items.length && items.length ? '取消全选' : '☑ 全选' }}</button>
       <div v-if="selectedIds.length" class="batch-bar">
         <span>已选 {{ selectedIds.length }} 张</span>
-        <select v-model="batchGroupTarget" class="form-control form-control-sm" style="width:120px">
+        <select v-model="batchGroupTarget" class="form-control form-control-sm" style="width:120px; margin-right:4px;" @change="batchFolderTarget=''">
           <option value="">移动到分组...</option>
           <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
+        </select>
+        <select v-if="batchGroupTarget" v-model="batchFolderTarget" class="form-control form-control-sm" style="width:120px">
+          <option value="">根目录</option>
+          <option v-for="f in targetGroupFolders" :key="f.id" :value="f.id">{{ f.name }}</option>
         </select>
         <button class="btn btn-sm btn-primary" @click="batchMove" :disabled="!batchGroupTarget || isBatchMoving">
           {{ isBatchMoving ? '移动中...' : '移动' }}
@@ -89,7 +106,24 @@
     </div>
 
     <!-- Image grid -->
-    <div class="media-grid" v-if="items.length">
+    <div class="media-grid" v-if="items.length || folders.length">
+      <!-- Folders -->
+      <div v-for="folder in folders" :key="'f_'+folder.id" class="media-card folder-card" @dblclick="enterFolder(folder)">
+        <div class="media-thumb folder-thumb">
+          <div style="font-size: 48px;">📁</div>
+        </div>
+        <div class="media-info">
+          <div class="media-name" v-if="renamingFolderId !== folder.id" @dblclick.stop="startRenameFolder(folder)" title="双击修改名称">{{ folder.name }}</div>
+          <input v-else class="media-name-input" v-model="renameFolderValue" @blur="saveRenameFolder(folder)" @keyup.enter="saveRenameFolder(folder)" @keyup.esc="renamingFolderId=null" @click.stop ref="renameFolderInput" />
+          <div class="media-meta"><span>{{ folder.image_count || 0 }} 张图片</span></div>
+        </div>
+        <div class="media-actions" @click.stop>
+          <button class="btn btn-sm btn-outline" @click="enterFolder(folder)" title="打开">📂</button>
+          <button class="btn btn-sm btn-danger" @click="deleteFolder(folder)" title="删除">🗑</button>
+        </div>
+      </div>
+
+      <!-- Images -->
       <div v-for="item in items" :key="item.id" :class="['media-card', { selected: selectedIds.includes(item.id) }]"
            @click="toggleSelect(item.id)">
         <div class="media-thumb">
@@ -131,9 +165,16 @@
         <div class="modal-body">
           <div class="form-group">
             <label>上传到分组</label>
-            <select v-model="uploadGroupId" class="form-control">
+            <select v-model="uploadGroupId" class="form-control" @change="uploadFolderId=''">
               <option value="">默认（未分组）</option>
               <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            </select>
+          </div>
+          <div class="form-group" v-if="uploadGroupId">
+            <label>上传到文件夹</label>
+            <select v-model="uploadFolderId" class="form-control">
+              <option value="">根目录</option>
+              <option v-for="f in targetUploadFolders" :key="f.id" :value="f.id">{{ f.name }}</option>
             </select>
           </div>
           <div class="form-group">
@@ -192,20 +233,23 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 
 const token = () => localStorage.getItem('token')
 const headers = () => ({ 'Authorization': `Bearer ${token()}`, 'Content-Type': 'application/json' })
 
 const items = ref([])
+const folders = ref([])
 const groups = ref([])
 const total = ref(0)
 const currentPage = ref(1)
 const perPage = 30
 const search = ref('')
 const filterGroup = ref('')
+const filterFolder = ref('')
 const selectedIds = ref([])
 const batchGroupTarget = ref('')
+const batchFolderTarget = ref('')
 const showUploadModal = ref(false)
 const uploadGroupId = ref('')
 const uploadFiles = ref([])
@@ -222,6 +266,13 @@ const renamingId = ref(null)
 const renameValue = ref('')
 const renameInput = ref(null)
 
+const showNewFolderPrompt = ref(false)
+const renamingFolderId = ref(null)
+const renameFolderValue = ref('')
+const renameFolderInput = ref(null)
+const currentFolderName = ref('')
+const uploadFolderId = ref('')
+
 const isBatchRenaming = ref(false)
 const isBatchMoving = ref(false)
 
@@ -229,6 +280,35 @@ const optimizing = ref(false)
 const optimizeResult = ref(null)
 
 const loadingMore = ref(false)
+
+const targetGroupFolders = ref([])
+const targetUploadFolders = ref([])
+
+// watch handlers for dynamic folder loading
+async function fetchFolders(groupId) {
+  if (!groupId) return []
+  const res = await fetch(`/api/media?group_id=${groupId}`, { headers: headers() })
+  const data = await res.json()
+  return data.folders || []
+}
+
+watch(batchGroupTarget, async (newVal) => {
+  if (newVal) {
+    if (newVal === filterGroup.value && folders.value) targetGroupFolders.value = folders.value
+    else targetGroupFolders.value = await fetchFolders(newVal)
+  } else {
+    targetGroupFolders.value = []
+  }
+})
+
+watch(uploadGroupId, async (newVal) => {
+  if (newVal) {
+    if (newVal === filterGroup.value && folders.value) targetUploadFolders.value = folders.value
+    else targetUploadFolders.value = await fetchFolders(newVal)
+  } else {
+    targetUploadFolders.value = []
+  }
+})
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage)))
 
@@ -238,6 +318,7 @@ async function loadMedia(isLoadMore = false) {
   }
   const params = new URLSearchParams({ page: currentPage.value, per_page: perPage })
   if (filterGroup.value) params.set('group_id', filterGroup.value)
+  if (filterFolder.value) params.set('folder_id', filterFolder.value)
   if (search.value) params.set('search', search.value)
   const res = await fetch(`/api/media?${params}`, { headers: headers() })
   const data = await res.json()
@@ -245,6 +326,7 @@ async function loadMedia(isLoadMore = false) {
     items.value = [...items.value, ...(data.items || [])]
   } else {
     items.value = data.items || []
+    folders.value = data.folders || []
   }
   total.value = data.total || 0
 }
@@ -305,6 +387,7 @@ async function doUpload() {
   const formData = new FormData()
   uploadFiles.value.forEach(f => formData.append('files', f))
   if (uploadGroupId.value) formData.append('group_id', uploadGroupId.value)
+  if (uploadFolderId.value) formData.append('folder_id', uploadFolderId.value)
   try {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', '/api/media/upload')
@@ -378,7 +461,11 @@ async function batchMove() {
   try {
     const res = await fetch('/api/media/batch-move', {
       method: 'POST', headers: headers(),
-      body: JSON.stringify({ ids: selectedIds.value, group_id: Number(batchGroupTarget.value) })
+      body: JSON.stringify({ 
+        ids: selectedIds.value, 
+        group_id: Number(batchGroupTarget.value),
+        folder_id: batchFolderTarget.value ? Number(batchFolderTarget.value) : null
+      })
     })
     const data = await res.json()
     if (res.ok) {
@@ -458,6 +545,71 @@ async function deleteGroup(g) {
   const data = await res.json()
   if (res.ok) loadGroups()
   else alert(data.error)
+}
+
+async function createFolder() {
+  const name = prompt('请输入新文件夹名称：')
+  if (!name || !name.trim()) return
+  try {
+    const res = await fetch('/api/media/folders', {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ name: name.trim(), group_id: filterGroup.value })
+    })
+    if (res.ok) loadMedia()
+    else {
+      const data = await res.json()
+      alert('创建失败: ' + data.error)
+    }
+  } catch (e) { alert('创建失败: ' + e.message) }
+}
+
+function enterFolder(folder) {
+  filterFolder.value = folder.id
+  currentFolderName.value = folder.name
+  currentPage.value = 1
+  loadMedia()
+}
+
+async function startRenameFolder(folder) {
+  renamingFolderId.value = folder.id
+  renameFolderValue.value = folder.name
+  await nextTick()
+  if (renameFolderInput.value) {
+    const input = Array.isArray(renameFolderInput.value) ? renameFolderInput.value[0] : renameFolderInput.value
+    input?.focus()
+    input?.select()
+  }
+}
+
+async function saveRenameFolder(folder) {
+  const newName = renameFolderValue.value.trim()
+  if (!newName || newName === folder.name) {
+    renamingFolderId.value = null
+    return
+  }
+  try {
+    await fetch(`/api/media/folders/${folder.id}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ name: newName })
+    })
+    folder.name = newName
+  } catch (e) {}
+  renamingFolderId.value = null
+}
+
+async function deleteFolder(folder) {
+  if (!confirm(`确定删除文件夹 "${folder.name}" 吗？\n注意：只能删除空文件夹。`)) return
+  try {
+    const res = await fetch(`/api/media/folders/${folder.id}`, { method: 'DELETE', headers: headers() })
+    const data = await res.json()
+    if (res.ok) {
+      loadMedia()
+    } else {
+      alert('删除失败: ' + data.error)
+    }
+  } catch (e) {
+    alert('删除失败: ' + e.message)
+  }
 }
 
 async function startRename(item) {
@@ -563,6 +715,8 @@ onUnmounted(() => {
 
 .media-thumb { position: relative; aspect-ratio: 1; background: #f8fafc; overflow: hidden; }
 .media-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.folder-thumb { display: flex; align-items: center; justify-content: center; background: #f1f5f9; cursor: pointer; transition: background 0.2s; }
+.folder-thumb:hover { background: #e2e8f0; }
 .media-check { position: absolute; top: 6px; left: 6px; }
 .media-check input { width: 16px; height: 16px; }
 .media-badge { position: absolute; top: 6px; right: 6px; background: #2563eb; color: #fff; padding: 1px 6px; border-radius: 10px; font-size: 10px; font-weight: 600; }

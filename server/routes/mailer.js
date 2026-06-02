@@ -653,6 +653,7 @@ router.get('/logs', authMiddleware, (req, res) => {
         logs = isAdmin
             ? getAll('SELECT * FROM mail_logs ORDER BY id DESC LIMIT 500')
             : getAll(`SELECT * FROM mail_logs WHERE created_by=? ORDER BY id DESC LIMIT 500`, [userId])
+    }
     res.json(logs)
 })
 

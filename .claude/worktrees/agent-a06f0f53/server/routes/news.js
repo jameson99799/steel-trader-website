@@ -1,0 +1,114 @@
+import { Router } from 'express'
+import { getAll, getOne, run } from '../db.js'
+import { authMiddleware } from '../middleware/auth.js'
+import { upload } from '../middleware/upload.js'
+import { loadTranslationsForLang, translateNews } from '../helpers/translate.js'
+
+const router = Router()
+
+// Generate SEO-friendly slug: title words + article ID (no timestamps)
+function slugify(text, id) {
+    const base = text
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/[\s_-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .substring(0, 80) // max 80 chars for readability
+    return id ? `${base}-${id}` : base
+}
+
+// GET all news (public)
+router.get('/', (req, res) => {
+    const { status = '1', page = 1, limit = 12 } = req.query
+    let sql = 'SELECT * FROM news WHERE 1=1'
+    const params = []
+
+    if (status !== 'all') {
+        sql += ' AND status = ?'
+        params.push(parseInt(status))
+    }
+
+    const countSql = sql.replace('SELECT *', 'SELECT COUNT(*) as total')
+    const total = getOne(countSql, params)?.total || 0
+
+    sql += ' ORDER BY sort_order, id DESC LIMIT ? OFFSET ?'
+    params.push(parseInt(limit), (parseInt(page) - 1) * parseInt(limit))
+
+    const news = getAll(sql, params)
+
+    // Inject translations if lang param is provided
+    const lang = req.query.lang
+    if (lang && lang !== 'en') {
+        const tMap = loadTranslationsForLang(lang)
+        if (tMap) news.forEach(n => translateNews(n, tMap, lang))
+    }
+
+    res.json({ data: news, total, page: parseInt(page), limit: parseInt(limit) })
+})
+
+// GET single news by id or slug
+router.get('/:slug', (req, res) => {
+    const { slug } = req.params
+    const isId = /^\d+$/.test(slug)
+    const news = isId
+        ? getOne('SELECT * FROM news WHERE id = ?', [slug])
+        : getOne('SELECT * FROM news WHERE slug = ?', [slug])
+
+    if (!news) return res.status(404).json({ error: '文章不存在' })
+
+    // Inject translations if lang param is provided
+    const lang = req.query.lang
+    if (lang && lang !== 'en') {
+        const tMap = loadTranslationsForLang(lang)
+        if (tMap) translateNews(news, tMap, lang)
+    }
+
+    res.json(news)
+})
+
+// POST create news (admin only)
+router.post('/', authMiddleware, upload.single('cover_image'), (req, res) => {
+    const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status = 1, sort_order = 0, render_mode = 'direct' } = req.body
+    if (!title) return res.status(400).json({ error: '标题不能为空' })
+
+    const slug = slugify(title_en || title)
+    const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || null)
+
+    const result = run(
+        `INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status, sort_order, render_mode)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [title, title_en || null, 'temp', summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status), parseInt(sort_order), render_mode]
+    )
+    // Generate clean SEO slug: title_en (preferred) or title + article ID
+    const newId = result.lastInsertRowid
+    const cleanSlug = slugify(title_en || title, newId)
+    run('UPDATE news SET slug = ? WHERE id = ?', [cleanSlug, newId])
+    res.json({ id: newId, message: '创建成功' })
+})
+
+// PUT update news (admin only)
+router.put('/:id', authMiddleware, upload.single('cover_image'), (req, res) => {
+    const { id } = req.params
+    const existing = getOne('SELECT * FROM news WHERE id = ?', [id])
+    if (!existing) return res.status(404).json({ error: '文章不存在' })
+
+    const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status, sort_order, render_mode } = req.body
+    const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || existing.cover_image)
+    // Regenerate clean SEO slug on update
+    const updatedSlug = slugify(title_en || title, id)
+
+    run(
+        `UPDATE news SET title=?, title_en=?, slug=?, summary=?, summary_en=?, content=?, cover_image=?, seo_title=?, seo_description=?, seo_keywords=?, status=?, sort_order=?, render_mode=?, updated_at=CURRENT_TIMESTAMP
+     WHERE id=?`,
+        [title, title_en || null, updatedSlug, summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status || 1), parseInt(sort_order || 0), render_mode || 'direct', id]
+    )
+    res.json({ message: '更新成功', slug: updatedSlug })
+})
+
+// DELETE news (admin only)
+router.delete('/:id', authMiddleware, (req, res) => {
+    run('DELETE FROM news WHERE id = ?', [req.params.id])
+    res.json({ message: '删除成功' })
+})
+
+export default router

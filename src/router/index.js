@@ -73,6 +73,7 @@ const routes = [
       { path: 'settings', name: 'AdminSettings', component: () => import('../views/admin/Settings.vue') },
       { path: 'products/ai/:id', name: 'ProductAI', component: () => import('../views/admin/ProductAI.vue') },
       { path: 'mailer', name: 'AdminMailer', component: () => import('../views/admin/Mailer.vue') },
+      { path: 'chat', name: 'AdminChat', component: () => import('../views/admin/ChatSettings.vue') },
       { path: 'media', name: 'AdminMedia', component: () => import('../views/admin/MediaLibrary.vue') },
       { path: 'futures', name: 'AdminFutures', component: () => import('../views/admin/Futures.vue') }
     ]

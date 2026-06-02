@@ -142,6 +142,9 @@
                 <router-link :to="langPath('/roofing-profiles')" @click="menuOpen = false" class="nav-dropdown-item">
                   {{ t('roofingProfilesBtn') }}
                 </router-link>
+                <router-link :to="langPath('/news/futures-price')" @click="menuOpen = false" class="nav-dropdown-item">
+                  {{ t('futuresTitle') || 'Futures Price' }}
+                </router-link>
               </div>
             </div>
 

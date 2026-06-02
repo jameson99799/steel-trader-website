@@ -6,6 +6,7 @@
     </main>
     <SiteFooter :key="'footer-' + lang" />
     <FloatingContact :key="'float-' + lang" />
+    <LiveChatWidget :key="'chat-' + lang" />
   </div>
 </template>
 
@@ -14,6 +15,7 @@ import { onMounted, watch, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import SiteHeader from '../components/SiteHeader.vue'
+import LiveChatWidget from '../components/LiveChatWidget.vue'
 import api from '../api'
 
 // Async load below-the-fold components to reduce Total Blocking Time

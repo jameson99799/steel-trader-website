@@ -54,30 +54,74 @@ router.delete('/groups/:id', authMiddleware, (req, res) => {
 
 // ─── Media List ─────────────────────────────────────────────────────────────
 router.get('/', authMiddleware, (req, res) => {
-  const { page = 1, per_page = 30, group_id, search } = req.query
-  let where = 'WHERE m.status=1'
-  const params = []
-  if (group_id) { where += ' AND m.group_id=?'; params.push(group_id) }
+  const { page = 1, per_page = 30, group_id, folder_id, search } = req.query
+  
+  let whereFolders = 'WHERE 1=1'
+  const paramsFolders = []
+
+  let whereItems = 'WHERE m.status=1'
+  const paramsItems = []
+
   if (search) {
+    if (group_id) { 
+      whereFolders += ' AND group_id=?'; paramsFolders.push(group_id)
+      whereItems += ' AND m.group_id=?'; paramsItems.push(group_id) 
+    }
     const terms = search.split('|').map(s => s.trim()).filter(Boolean)
     if (terms.length > 0) {
-      const ors = terms.map(() => '(m.original_filename LIKE ? OR m.alt LIKE ?)').join(' OR ')
-      where += ` AND (${ors})`
-      terms.forEach(term => {
-        params.push(`%${term}%`, `%${term}%`)
-      })
+      const orsFolders = terms.map(() => 'name LIKE ?').join(' OR ')
+      whereFolders += ` AND (${orsFolders})`
+      terms.forEach(term => paramsFolders.push(`%${term}%`))
+
+      const orsItems = terms.map(() => '(m.original_filename LIKE ? OR m.alt LIKE ? OR m.filename LIKE ?)').join(' OR ')
+      whereItems += ` AND (${orsItems})`
+      terms.forEach(term => paramsItems.push(`%${term}%`, `%${term}%`, `%${term}%`))
+    }
+  } else {
+    if (folder_id) {
+      whereFolders += ' AND 1=0'
+      whereItems += ' AND m.folder_id=?'; paramsItems.push(folder_id)
+    } else if (group_id) {
+      whereFolders += ' AND group_id=?'; paramsFolders.push(group_id)
+      whereItems += ' AND m.group_id=? AND m.folder_id IS NULL'; paramsItems.push(group_id)
+    } else {
+      whereFolders += ' AND 1=0'
     }
   }
 
-  const total = getOne(`SELECT COUNT(*) as c FROM media m ${where}`, params)
+  const folders = getAll(`SELECT mf.*, (SELECT COUNT(*) FROM media m WHERE m.folder_id=mf.id AND m.status=1) as image_count FROM media_folders mf ${whereFolders} ORDER BY mf.name`, paramsFolders)
+
+  const total = getOne(`SELECT COUNT(*) as c FROM media m ${whereItems}`, paramsItems)
   const offset = (parseInt(page) - 1) * parseInt(per_page)
   const items = getAll(`SELECT m.*, mg.name as group_name,
     (SELECT COUNT(*) FROM product_images pi WHERE pi.media_id=m.id) as ref_count
     FROM media m LEFT JOIN media_groups mg ON mg.id=m.group_id
-    ${where} ORDER BY m.created_at DESC LIMIT ? OFFSET ?`,
-    [...params, parseInt(per_page), offset])
+    ${whereItems} ORDER BY m.created_at DESC LIMIT ? OFFSET ?`,
+    [...paramsItems, parseInt(per_page), offset])
 
-  res.json({ items, total: total.c, page: parseInt(page), per_page: parseInt(per_page) })
+  res.json({ folders, items, total: total.c, page: parseInt(page), per_page: parseInt(per_page) })
+})
+
+// ─── Media Folders ──────────────────────────────────────────────────────────
+router.post('/folders', authMiddleware, (req, res) => {
+  const { name, group_id } = req.body
+  if (!name || !group_id) return res.status(400).json({ error: '请填写名称并选择分组' })
+  const r = run('INSERT INTO media_folders (name, group_id) VALUES (?,?)', [name.trim(), group_id])
+  res.json({ id: r.lastInsertRowid, message: '文件夹已创建' })
+})
+
+router.put('/folders/:id', authMiddleware, (req, res) => {
+  const { name } = req.body
+  if (!name) return res.status(400).json({ error: '请填写名称' })
+  run('UPDATE media_folders SET name=? WHERE id=?', [name.trim(), req.params.id])
+  res.json({ message: '文件夹已更新' })
+})
+
+router.delete('/folders/:id', authMiddleware, (req, res) => {
+  const count = getOne('SELECT COUNT(*) as c FROM media WHERE folder_id=? AND status=1', [req.params.id])
+  if (count.c > 0) return res.status(400).json({ error: `该文件夹下有 ${count.c} 张图片，请先移动或删除` })
+  run('DELETE FROM media_folders WHERE id=?', [req.params.id])
+  res.json({ message: '文件夹已删除' })
 })
 
 // ─── Watermark Templates ───────────────────────────────────────────────────────
@@ -123,8 +167,10 @@ router.put('/watermark-templates/:id/set-default', authMiddleware, (req, res) =>
 
 // ─── Media Detail ───────────────────────────────────────────────────────────
 router.get('/:id', authMiddleware, (req, res) => {
-  const item = getOne(`SELECT m.*, mg.name as group_name FROM media m
-    LEFT JOIN media_groups mg ON mg.id=m.group_id WHERE m.id=?`, [req.params.id])
+  const item = getOne(`SELECT m.*, mg.name as group_name, mf.name as folder_name FROM media m
+    LEFT JOIN media_groups mg ON mg.id=m.group_id 
+    LEFT JOIN media_folders mf ON mf.id=m.folder_id
+    WHERE m.id=?`, [req.params.id])
   if (!item) return res.status(404).json({ error: '图片不存在' })
   // Get references
   const refs = getAll(`SELECT pi.*, p.name_en, p.name FROM product_images pi
@@ -138,6 +184,7 @@ router.get('/:id', authMiddleware, (req, res) => {
 router.post('/upload', authMiddleware, upload.array('files', 50), async (req, res) => {
   if (!req.files?.length) return res.status(400).json({ error: '请选择文件' })
   const groupId = req.body.group_id || null
+  const folderId = req.body.folder_id || null
 
   let sharp = null
   try { const m = await import('sharp'); sharp = m.default } catch {}
@@ -180,9 +227,9 @@ router.post('/upload', authMiddleware, upload.array('files', 50), async (req, re
       } catch {}
     }
 
-    const r = run(`INSERT INTO media (original_filename, filename, filepath, mimetype, filesize, width, height, group_id)
-      VALUES (?,?,?,?,?,?,?,?)`,
-      [file.originalname, filename, filepath, 'image/webp', filesize, width, height, groupId])
+    const r = run(`INSERT INTO media (original_filename, filename, filepath, mimetype, filesize, width, height, group_id, folder_id)
+      VALUES (?,?,?,?,?,?,?,?,?)`,
+      [file.originalname, filename, filepath, 'image/webp', filesize, width, height, groupId, folderId])
     results.push({ id: r.lastInsertRowid, filepath, filename, width, height, filesize })
   }
   res.json({ items: results, count: results.length })
@@ -190,11 +237,12 @@ router.post('/upload', authMiddleware, upload.array('files', 50), async (req, re
 
 // ─── Update Media ───────────────────────────────────────────────────────────
 router.put('/:id', authMiddleware, (req, res) => {
-  const { alt, group_id, original_filename } = req.body
+  const { alt, group_id, folder_id, original_filename } = req.body
   const sets = []
   const params = []
   if (alt !== undefined) { sets.push('alt=?'); params.push(alt) }
   if (group_id !== undefined) { sets.push('group_id=?'); params.push(group_id || null) }
+  if (folder_id !== undefined) { sets.push('folder_id=?'); params.push(folder_id || null) }
   if (original_filename !== undefined) { sets.push('original_filename=?'); params.push(original_filename) }
   if (sets.length) {
     sets.push("updated_at=datetime('now')")
@@ -242,11 +290,11 @@ router.post('/apply-watermark-batch', authMiddleware, async (req, res) => {
 })
 
 router.post('/batch-move', authMiddleware, (req, res) => {
-  const { ids, group_id } = req.body
+  const { ids, group_id, folder_id } = req.body
   if (!ids?.length) return res.status(400).json({ error: '请选择图片' })
   const placeholders = ids.map(() => '?').join(',')
-  run(`UPDATE media SET group_id=?, updated_at=datetime('now') WHERE id IN (${placeholders})`,
-    [group_id || null, ...ids])
+  run(`UPDATE media SET group_id=?, folder_id=?, updated_at=datetime('now') WHERE id IN (${placeholders})`,
+    [group_id || null, folder_id || null, ...ids])
   res.json({ message: `已移动 ${ids.length} 张图片` })
 })
 

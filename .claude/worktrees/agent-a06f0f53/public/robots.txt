@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+# Block admin panel only
+Disallow: /admin/
+Disallow: /uploads/temp/
+
+# Allow API access (required for SPA rendering by search engines)
+Allow: /api/
+
+# Sitemap
+Sitemap: https://www.sunseasteel.com/sitemap.xml

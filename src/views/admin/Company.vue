@@ -222,9 +222,20 @@
           <button class="modal-close" @click="showMediaPicker=false">&times;</button>
         </div>
         <div class="modal-body">
+          <div class="breadcrumb" style="width: 100%; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: bold; margin-bottom: 8px;">
+            <span @click="mediaPickerGroup=''; mediaPickerFolder=''; loadMediaPicker()" style="cursor: pointer; color: #2563eb;">🏠 全部分组</span>
+            <template v-if="mediaPickerGroup">
+              <span style="color:#94a3b8">/</span>
+              <span @click="mediaPickerFolder=''; loadMediaPicker()" style="cursor: pointer; color: #2563eb;">{{ mediaGroups.find(g => g.id === mediaPickerGroup)?.name }}</span>
+            </template>
+            <template v-if="mediaPickerFolder">
+              <span style="color:#94a3b8">/</span>
+              <span>{{ mediaPickerCurrentFolderName }}</span>
+            </template>
+          </div>
           <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
             <input v-model="mediaPickerSearch" class="form-control" placeholder="搜索文件名..." @input="loadMediaPicker" style="max-width:200px;" />
-            <select v-model="mediaPickerGroup" class="form-control" @change="loadMediaPicker" style="max-width:140px;">
+            <select v-model="mediaPickerGroup" class="form-control" @change="mediaPickerFolder=''; loadMediaPicker()" style="max-width:140px;">
               <option value="">全部分组</option>
               <option v-for="g in mediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
             </select>
@@ -233,7 +244,11 @@
               <option v-for="t in watermarkTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
           </div>
-          <div v-if="mediaPickerItems.length" class="media-grid">
+          <div v-if="mediaPickerItems.length || mediaPickerFolders.length" class="media-grid">
+            <div v-for="folder in mediaPickerFolders" :key="'cf_'+folder.id" class="media-item" style="cursor:pointer; background:#f1f5f9; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px;" @click="enterMediaPickerFolder(folder)">
+              <div style="font-size: 32px;">📁</div>
+              <div style="font-size: 12px; margin-top:8px; text-align:center; line-height:1.2;">{{ folder.name }}</div>
+            </div>
             <div v-for="item in mediaPickerItems" :key="item.id" :class="['media-item', { selected: mediaPickerSelected === item.filepath }]" @click="mediaPickerSelected = item.filepath">
               <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
             </div>
@@ -275,6 +290,15 @@ const mediaPickerItems = ref([])
 const mediaGroups = ref([])
 const mediaPickerSelected = ref(null)
 const mediaPickerTarget = ref('')
+const mediaPickerFolders = ref([])
+const mediaPickerFolder = ref('')
+const mediaPickerCurrentFolderName = ref('')
+
+function enterMediaPickerFolder(folder) {
+  mediaPickerFolder.value = folder.id
+  mediaPickerCurrentFolderName.value = folder.name
+  loadMediaPicker()
+}
 
 const globalProcessing = ref(false)
 const watermarkTemplates = ref([])
@@ -293,6 +317,8 @@ const openMediaPicker = (target) => {
   mediaPickerTarget.value = target
   mediaPickerSelected.value = null
   mediaPickerWatermark.value = localStorage.getItem('_lastWatermarkTemplate') || ''
+  mediaPickerFolder.value = localStorage.getItem('_lastMediaFolder') || ''
+  mediaPickerCurrentFolderName.value = localStorage.getItem('_lastMediaFolderName') || ''
   showMediaPicker.value = true
   loadMediaGroups()
   loadWatermarkTemplates()
@@ -304,12 +330,15 @@ const loadMediaPicker = async () => {
   const params = new URLSearchParams({ per_page: '50' })
   if (mediaPickerSearch.value) params.set('search', mediaPickerSearch.value)
   if (mediaPickerGroup.value) params.set('group_id', mediaPickerGroup.value)
+  if (mediaPickerFolder.value) params.set('folder_id', mediaPickerFolder.value)
   try {
     const res = await fetch(`/api/media?${params}`, {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
     })
     const data = await res.json()
     mediaPickerItems.value = data.items || []
+    mediaPickerFolders.value = data.folders || []
+    if (mediaPickerFolder.value && !mediaPickerCurrentFolderName.value) { const folder = mediaPickerFolders.value.find(f => f.id === mediaPickerFolder.value); if (folder) mediaPickerCurrentFolderName.value = folder.name; }
   } catch (e) { console.error(e) }
 }
 

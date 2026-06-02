@@ -253,7 +253,8 @@
                   </div>
                 </div>
 
-                <button type="button" class="editor-btn" @click="insertNewsImage">📷 插入图片</button>
+                <button type="button" class="editor-btn" @click="insertNewsImage">📷 插入单图</button>
+                <button type="button" class="editor-btn" @click="insertImageGrid" style="color:#059669; border-color:#d1fae5; background:#ecfdf5; font-weight: 500;">🔲 插入多图排版</button>
                 <button type="button" class="fullscreen-btn" @click="isFullscreen = !isFullscreen">
                   {{ isFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
                 </button>
@@ -381,9 +382,20 @@
           <button class="modal-close" @click="showNewsMediaBrowser=false">✕</button>
         </div>
         <div class="modal-body">
+          <div class="breadcrumb" style="width: 100%; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: bold; margin-bottom: 8px;">
+            <span @click="newsMediaGroup=''; newsMediaFolder=''; loadNewsMedia()" style="cursor: pointer; color: #2563eb;">🏠 全部分组</span>
+            <template v-if="newsMediaGroup">
+              <span style="color:#94a3b8">/</span>
+              <span @click="newsMediaFolder=''; loadNewsMedia()" style="cursor: pointer; color: #2563eb;">{{ newsMediaGroups.find(g => g.id === newsMediaGroup)?.name }}</span>
+            </template>
+            <template v-if="newsMediaFolder">
+              <span style="color:#94a3b8">/</span>
+              <span>{{ newsMediaCurrentFolderName }}</span>
+            </template>
+          </div>
           <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
             <input v-model="newsMediaSearch" class="form-control" placeholder="搜索文件名..." @input="loadNewsMedia" style="max-width:200px;" />
-            <select v-model="newsMediaGroup" class="form-control" @change="loadNewsMedia" style="max-width:140px;">
+            <select v-model="newsMediaGroup" class="form-control" @change="newsMediaFolder=''; loadNewsMedia()" style="max-width:140px;">
               <option value="">全部分组</option>
               <option v-for="g in newsMediaGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
             </select>
@@ -392,7 +404,11 @@
               <option v-for="t in watermarkTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
           </div>
-          <div v-if="newsMediaItems.length" class="news-media-grid">
+          <div v-if="newsMediaItems.length || newsMediaFolders.length" class="news-media-grid">
+            <div v-for="folder in newsMediaFolders" :key="'f_'+folder.id" class="news-media-item" @click="enterNewsFolder(folder)" style="background:#f1f5f9; text-align:center;">
+              <div style="font-size: 40px; margin: 10px 0;">📁</div>
+              <div class="news-media-name">{{ folder.name }}</div>
+            </div>
             <div v-for="item in newsMediaItems" :key="item.id" class="news-media-item" @click="selectNewsMediaImage(item)">
               <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
               <div class="news-media-name">{{ item.original_filename || item.filename }}</div>
@@ -839,7 +855,16 @@ const newsMediaSearch = ref('')
 const newsMediaGroup = ref('')
 const newsMediaWatermark = ref('')
 const newsMediaItems = ref([])
+const newsMediaFolders = ref([])
+const newsMediaFolder = ref('')
+const newsMediaCurrentFolderName = ref('')
 const newsMediaGroups = ref([])
+
+function enterNewsFolder(folder) {
+  newsMediaFolder.value = folder.id
+  newsMediaCurrentFolderName.value = folder.name
+  loadNewsMedia()
+}
 let newsImgChooserMode = 'content' // 'content' or 'cover'
 
 const form = ref({
@@ -963,6 +988,42 @@ function insertNewsImage() {
   openNewsImgChooser('content')
 }
 
+function insertImageGrid() {
+  const rowsStr = prompt('请输入想要几行图片？（例如：2）：', '1')
+  if (!rowsStr) return
+  const colsStr = prompt('请输入想要几列图片？（建议 1 到 4 之间，例如：3）：', '3')
+  if (!colsStr) return
+
+  const rows = parseInt(rowsStr) || 1
+  const cols = parseInt(colsStr) || 3
+  const total = rows * cols
+
+  let html = `<div class="image-grid-layout grid-cols-${cols}">\n`
+  for (let i = 0; i < total; i++) {
+    const svgText = `点击替换图片 ${i+1}`
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600"><rect width="100%" height="100%" fill="#f1f5f9"/><text x="50%" y="50%" font-family="sans-serif" font-size="28" font-weight="bold" fill="#64748b" text-anchor="middle" dominant-baseline="middle">${svgText}</text></svg>`
+    const dataUri = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
+    
+    html += `  <div class="grid-item" contenteditable="false">
+    <img src="${dataUri}" />
+  </div>\n`
+  }
+  html += `</div><p><br/></p>`
+
+  if (newsEditorMode.value === 'visual' && newsVisualEl.value) {
+    newsVisualEl.value.focus()
+    document.execCommand('insertHTML', false, html)
+    setTimeout(() => {
+      if (newsVisualEl.value) {
+        newsVisualEl.value.querySelectorAll('.grid-item').forEach(item => item.setAttribute('contenteditable', 'false'));
+        syncNewsFromVisual();
+      }
+    }, 50);
+  } else {
+    form.value.content = (form.value.content || '') + html
+  }
+}
+
 function openNewsImgChooser(mode) {
   newsImgChooserMode = mode
   showNewsImgChooser.value = true
@@ -983,10 +1044,13 @@ async function loadNewsMedia() {
     const token = localStorage.getItem('token')
     const params = new URLSearchParams({ per_page: '200' })
     if (newsMediaGroup.value) params.set('group_id', newsMediaGroup.value)
+    if (newsMediaFolder.value) params.set('folder_id', newsMediaFolder.value)
     if (newsMediaSearch.value) params.set('search', newsMediaSearch.value)
     const res = await fetch(`/api/media?${params}`, { headers: { 'Authorization': `Bearer ${token}` } })
     const data = await res.json()
     newsMediaItems.value = data.items || []
+    newsMediaFolders.value = data.folders || []
+    if (newsMediaFolder.value && !newsMediaCurrentFolderName.value) { const folder = newsMediaFolders.value.find(f => f.id === newsMediaFolder.value); if (folder) newsMediaCurrentFolderName.value = folder.name; }
   } catch (e) { console.error(e) }
 }
 
@@ -1002,6 +1066,8 @@ function newsPickFromMediaLib() {
   showNewsImgChooser.value = false
   newsMediaSearch.value = ''
   newsMediaGroup.value = localStorage.getItem('_lastMediaGroup') || ''
+  newsMediaFolder.value = localStorage.getItem('_lastMediaFolder') || ''
+  newsMediaCurrentFolderName.value = localStorage.getItem('_lastMediaFolderName') || ''
   newsMediaWatermark.value = localStorage.getItem('_lastWatermarkTemplate') || ''
   loadNewsMediaGroups()
   loadWatermarkTemplates()
@@ -1010,6 +1076,8 @@ function newsPickFromMediaLib() {
 }
 // Remember selected group and watermark
 watch(newsMediaGroup, v => { if (v !== undefined) localStorage.setItem('_lastMediaGroup', v) })
+watch(newsMediaFolder, v => { if (v !== undefined) localStorage.setItem('_lastMediaFolder', v); if (!v) { localStorage.removeItem('_lastMediaFolderName'); newsMediaCurrentFolderName.value = ''; } })
+watch(newsMediaCurrentFolderName, v => { if (v !== undefined) localStorage.setItem('_lastMediaFolderName', v) })
 watch(newsMediaWatermark, v => { if (v !== undefined) localStorage.setItem('_lastWatermarkTemplate', v) })
 
 async function selectNewsMediaImage(item) {
@@ -1123,7 +1191,7 @@ async function openEdit(item) {
     cover_image: null, cover_preview: fullItem.cover_image || null,
     status: fullItem.status ?? 1, sort_order: fullItem.sort_order || 0,
     seo_title: fullItem.seo_title || '', seo_description: fullItem.seo_description || '',
-    seo_keywords: fullItem.seo_keywords || '', content: fullItem.content || '',
+    seo_keywords: fullItem.seo_keywords || '', content: (fullItem.content || '').replace(/<div class="grid-item">/g, '<div class="grid-item" contenteditable="false">'),
     render_mode: fullItem.render_mode || 'direct',
     category_id: fullItem.category_id || null
   }
@@ -1695,5 +1763,37 @@ onMounted(() => {
   padding: 4px 8px;
   font-size: 11px;
   border-radius: 4px;
+}
+</style>
+
+<style>
+/* Global styles for the visual editor content so it renders the same as frontend */
+.article-body-direct .image-grid-layout { display: grid; gap: 12px; margin: 25px 0; }
+.article-body-direct .grid-cols-1 { grid-template-columns: 1fr; }
+.article-body-direct .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+.article-body-direct .grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+.article-body-direct .grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+.article-body-direct .grid-cols-5 { grid-template-columns: repeat(5, 1fr); }
+.article-body-direct .grid-cols-6 { grid-template-columns: repeat(6, 1fr); }
+
+.article-body-direct .image-grid-layout .grid-item {
+  aspect-ratio: 4/3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+.article-body-direct .image-grid-layout .grid-item:empty { display: none; }\n.article-body-direct .image-grid-layout .grid-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  margin: 0;
+  display: block;
+  border-radius: 0;
+  box-shadow: none;
+  cursor: pointer;
 }
 </style>

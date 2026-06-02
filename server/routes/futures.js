@@ -67,12 +67,17 @@ const FUTURES_MAP = {
   NR: { name: '20号胶', name_en: 'TSR 20', exchange: 'INE' },
   BC: { name: '国际铜', name_en: 'International Copper', exchange: 'INE' },
   EC: { name: '集运指数', name_en: 'Container Freight Index', exchange: 'INE' },
+  // 外汇 (Forex)
+  USDCNH: { name: '美元兑离岸人民币', name_en: 'USD/CNH', exchange: 'FOREX' },
 }
 
-/** Extract base code from symbol, e.g. HC2510 → HC, I2510 → I, HC0 -> HC */
 function getBaseCode(symbol) {
-  const m = symbol.match(/^([A-Z]+)/i)
-  return m ? m[1].toUpperCase() : symbol.toUpperCase()
+  let s = symbol.replace(/^nf_/, '')
+  if (s.includes('.')) {
+    s = s.split('.')[1]
+  }
+  const m = s.match(/^([A-Z]+)/i)
+  return m ? m[1].toUpperCase() : s.toUpperCase()
 }
 
 // ── Global In-Memory Cache for Futures Data ─────────────────────────────────
@@ -82,149 +87,349 @@ const CACHE = {
   kline: {}     // symbol -> daily kline array
 }
 
+function getChinaDate() {
+  const d = new Date()
+  const utc = d.getTime() + (d.getTimezoneOffset() * 60000)
+  return new Date(utc + (3600000 * 8)).toISOString().split('T')[0]
+}
+
+function getUpdatedKline(symbol, previewDays = null) {
+  const klineArray = CACHE.kline[symbol] || []
+  const realtime = CACHE.realtime[symbol]
+  
+  if (klineArray.length === 0) return []
+  
+  const klineCopy = klineArray.map(item => ({ ...item }))
+  
+  if (realtime && realtime.price) {
+    const lastItem = klineCopy[klineCopy.length - 1]
+    if (lastItem.d === realtime.date) {
+      lastItem.c = realtime.price.toString()
+      if (realtime.open) lastItem.o = realtime.open.toString()
+      
+      const rtHigh = parseFloat(realtime.high || realtime.price)
+      const kHigh = parseFloat(lastItem.h || 0)
+      if (rtHigh > kHigh) lastItem.h = rtHigh.toString()
+      
+      const rtLow = parseFloat(realtime.low || realtime.price)
+      const kLow = parseFloat(lastItem.l || Infinity)
+      if (rtLow < kLow) lastItem.l = rtLow.toString()
+      
+      if (realtime.volume) lastItem.v = realtime.volume.toString()
+    } else if (new Date(realtime.date) > new Date(lastItem.d)) {
+      klineCopy.push({
+        d: realtime.date,
+        o: (realtime.open || realtime.price).toString(),
+        h: (realtime.high || realtime.price).toString(),
+        l: (realtime.low || realtime.price).toString(),
+        c: realtime.price.toString(),
+        v: (realtime.volume || 0).toString()
+      })
+    }
+  }
+  
+  if (previewDays) {
+    return klineCopy.slice(-previewDays)
+  }
+  return klineCopy
+}
+
+// ── EastMoney Mapping ────────────────────────────────────────────────────────
+const EXCHANGE_PREFIX_MAP = {
+  'SHFE': '113', 'DCE': '114', 'CZCE': '115', 'INE': '142', 'GFEX': '225', 'CFFEX': '8', 'FOREX': '133'
+}
+function getEastMoneySecid(symbol) {
+  let raw = symbol.replace(/^nf_/, '').toLowerCase()
+  const baseCode = getBaseCode(raw)
+  if (baseCode === 'USDCNH') return '133.USDCNH'
+  
+  const info = FUTURES_MAP[baseCode]
+  if (!info) return symbol
+  const prefix = EXCHANGE_PREFIX_MAP[info.exchange] || '113'
+  let suffix = raw
+  if (suffix === `${baseCode.toLowerCase()}0`) {
+    suffix = `${baseCode.toLowerCase()}m`
+  }
+  return `${prefix}.${suffix}`
+}
+
+function getSymbolPrecision(symbol, apiF59) {
+  const baseCode = getBaseCode(symbol)
+  if (baseCode === 'USDCNH') return 4
+  
+  const precisions = {
+    AU: 2,
+    I: 1,
+    J: 1,
+    JM: 1,
+    ZC: 1,
+    SC: 1,
+    EC: 1
+  }
+  
+  if (precisions[baseCode] !== undefined) {
+    return precisions[baseCode]
+  }
+  
+  if (apiF59 !== '-' && apiF59 !== undefined) {
+    return Number(apiF59)
+  }
+  
+  return 0
+}
+
 // ── Background Polling Mechanism ──────────────────────────────────────────
 async function fetchRealtimeForSymbols(symbols) {
   if (!symbols || symbols.length === 0) return
-  const queryList = symbols.map(s => s.startsWith('nf_') ? s : `nf_${s}`).join(',')
-  try {
-    const url = `https://hq.sinajs.cn/list=${queryList}`
-    const resp = await fetch(url, {
-      headers: {
-        'Referer': 'https://finance.sina.com.cn',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    })
-    const arrayBuffer = await resp.arrayBuffer()
-    const data = iconv.decode(Buffer.from(arrayBuffer), 'gbk')
+  
+  const emSymbols = symbols.filter(s => getBaseCode(s) !== 'USDCNH')
+  const sinaSymbols = symbols.filter(s => getBaseCode(s) === 'USDCNH')
 
-    const lines = data.split('\n').map(l => l.trim()).filter(Boolean)
-    for (const line of lines) {
-      const match = line.match(/hq_str_nf_([A-Za-z0-9]+)="([^"]*)"/)
-      if (match) {
-        const symbol = match[1]
-        const fields = match[2].split(',')
-        if (fields.length > 10) {
-          const price = parseFloat(fields[8]) || 0
-          const prevSettlement = parseFloat(fields[10]) || 0
-          let change = 0
-          let changePercent = 0
-          if (prevSettlement > 0 && price > 0) {
-            change = price - prevSettlement
-            changePercent = (change / prevSettlement) * 100
-          }
+  // 1. Fetch EastMoney symbols
+  if (emSymbols.length > 0) {
+    const secids = emSymbols.map(s => getEastMoneySecid(s)).join(',')
+    try {
+      const url = `https://push2.eastmoney.com/api/qt/ulist.np/get?fields=f1,f2,f3,f4,f12,f13,f14,f15,f16,f17,f18,f59,f60&secids=${secids}`
+      const resp = await fetch(url)
+      const json = await resp.json()
+      if (json && json.data && json.data.diff) {
+        json.data.diff.forEach((item, index) => {
+          const symbol = emSymbols[index]
+          const decimalPlaces = getSymbolPrecision(symbol, item.f59)
+          const factor = Math.pow(10, decimalPlaces)
+          
+          const price = item.f2 !== '-' ? item.f2 / factor : 0
+          const changePercent = item.f3 !== '-' ? item.f3 / 100 : 0
+          const change = item.f4 !== '-' ? item.f4 / factor : 0
+          const open = item.f17 !== '-' ? item.f17 / factor : 0
+          const high = item.f15 !== '-' ? item.f15 / factor : 0
+          const low = item.f16 !== '-' ? item.f16 / factor : 0
+          const prevSettlement = item.f18 !== '-' ? item.f18 / factor : 0
+          const date = getChinaDate()
+          
           CACHE.realtime[symbol] = {
             price, change, changePercent,
-            open: parseFloat(fields[2]) || 0,
-            high: parseFloat(fields[3]) || 0,
-            low: parseFloat(fields[4]) || 0,
-            prevSettlement,
-            volume: parseFloat(fields[13]) || 0,
-            openInterest: parseFloat(fields[14]) || 0,
-            date: fields[17] || new Date().toISOString().split('T')[0]
+            open, high, low, prevSettlement,
+            volume: 0, openInterest: 0, date
           }
+        })
+      }
+    } catch (e) {
+      console.error('Futures realtime error:', e.message)
+    }
+  }
+
+  // 2. Fetch Sina symbols (USDCNH)
+  if (sinaSymbols.length > 0) {
+    try {
+      const resp = await fetch('https://hq.sinajs.cn/list=fx_susdcnh', { headers: { 'Referer': 'https://finance.sina.com.cn/' } })
+      const text = await resp.text()
+      const match = text.match(/="(.*)"/)
+      if (match) {
+        const parts = match[1].split(',')
+        if (parts.length > 8) {
+          const price = parseFloat(parts[8])
+          const prevSettlement = parseFloat(parts[3])
+          const change = price - prevSettlement
+          const changePercent = prevSettlement ? (change / prevSettlement) * 100 : 0
+          const open = parseFloat(parts[5])
+          const high = parseFloat(parts[6])
+          const low = parseFloat(parts[7])
+          
+          sinaSymbols.forEach(symbol => {
+            CACHE.realtime[symbol] = {
+              price, change, changePercent, open, high, low, prevSettlement,
+              date: parts[17] || getChinaDate(),
+              volume: 0, openInterest: 0
+            }
+          })
         }
       }
-    }
-  } catch (e) {
-    console.error('Futures polling error:', e.message)
+    } catch(e) {}
   }
 }
 
 async function fetchMinline(symbol) {
-  try {
-    const url = `https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_${symbol}=/InnerFuturesNewService.getMinLine?symbol=${symbol}`
-    const resp = await fetch(url, { headers: { 'Referer': 'https://finance.sina.com.cn', 'User-Agent': 'Mozilla/5.0' }})
-    const text = await resp.text()
-    const match = text.match(/\((\[[\s\S]*?\])\)/)
-    if (match) {
-      const parsed = JSON.parse(match[1])
-      CACHE.minline[symbol] = parsed
-      
-      // Fallback: If realtime is missing, synthesize from minline
-      if (!CACHE.realtime[symbol] && parsed.length > 0) {
-        const lastTick = parsed[parsed.length - 1]
-        const price = parseFloat(lastTick[1]) || 0
-        const prevSettlement = parseFloat(lastTick[5]) || 0
-        const volume = parseFloat(lastTick[3]) || 0
-        const openInterest = parseFloat(lastTick[4]) || 0
-        const date = lastTick[6] || new Date().toISOString().split('T')[0]
-        let change = 0, changePercent = 0
-        if (prevSettlement > 0 && price > 0) {
-          change = price - prevSettlement
-          changePercent = (change / prevSettlement) * 100
-        }
-        CACHE.realtime[symbol] = {
-          price, change, changePercent,
-          open: price, high: price, low: price, // rough fallback
-          prevSettlement, volume, openInterest, date
-        }
+  if (getBaseCode(symbol) === 'USDCNH') {
+    try {
+      const resp = await fetch('https://vip.stock.finance.sina.com.cn/forex/api/jsonp.php/var%20_fx_susdcnh=/NewForexService.getMinKLine?symbol=fx_susdcnh&scale=5&datalen=288')
+      const text = await resp.text()
+      const dataStr = text.match(/=\((.*)\)/)[1]
+      const json = JSON.parse(dataStr)
+      if (Array.isArray(json)) {
+        // [time, price, avgPrice, volume, openInterest, prevSettlement, date]
+        const prevSettlement = CACHE.realtime[symbol] ? CACHE.realtime[symbol].prevSettlement : 0
+        const parsed = json.map(k => {
+          const t = k.d.split(' ')[1].slice(0, 5) // "12:00:00" -> "12:00"
+          return [t, k.c, k.c, "0", "0", prevSettlement.toString(), k.d.split(' ')[0]]
+        })
+        CACHE.minline[symbol] = parsed
       }
+    } catch(e) {}
+    return
+  }
+
+  try {
+    const secid = getEastMoneySecid(symbol)
+    const url = `https://push2his.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13&fields2=f51,f53,f56,f58&ndays=1&iscr=0&iscca=0&secid=${secid}`
+    const resp = await fetch(url)
+    const json = await resp.json()
+    if (json && json.data && json.data.trends) {
+      const prevSettlement = json.data.prePrice || 0
+      // EastMoney minline: "2026-05-25 21:01,3417,34777,3426.8" -> [time, price, avgPrice, volume, openInterest, prevSettlement, date]
+      const parsed = json.data.trends.map(t => {
+        const parts = t.split(',')
+        const timeStr = parts[0].split(' ')[1] // '21:01'
+        const price = parseFloat(parts[1])
+        const vol = parseFloat(parts[2])
+        const avg = parseFloat(parts[3])
+        return [timeStr, price.toString(), avg.toString(), vol.toString(), '0', prevSettlement.toString(), parts[0].split(' ')[0]]
+      })
+      CACHE.minline[symbol] = parsed
     }
   } catch (e) {}
 }
 
 async function fetchKline(symbol) {
-  try {
-    const url = `https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_${symbol}=/InnerFuturesNewService.getDailyKLine?symbol=${symbol}`
-    const resp = await fetch(url, { headers: { 'Referer': 'https://finance.sina.com.cn', 'User-Agent': 'Mozilla/5.0' }})
-    const text = await resp.text()
-    const match = text.match(/\((\[[\s\S]*?\])\)/)
-    if (match) {
-      let klineData = JSON.parse(match[1])
-      
-      // Inject today's real-time candle if available and missing from kline
-      const rt = CACHE.realtime[symbol]
-      if (rt && rt.date && klineData.length > 0) {
-        const lastDate = klineData[klineData.length - 1].d
-        if (lastDate !== rt.date && rt.price > 0) {
-          klineData.push({
-            d: rt.date,
-            o: rt.open.toString(),
-            h: rt.high.toString(),
-            l: rt.low.toString(),
-            c: rt.price.toString(),
-            v: rt.volume.toString()
-          })
+  if (getBaseCode(symbol) === 'USDCNH') {
+    try {
+      const resp = await fetch('https://vip.stock.finance.sina.com.cn/forex/api/jsonp.php/var%20_fx_susdcnh=/NewForexService.getDayKLine?symbol=fx_susdcnh')
+      const text = await resp.text()
+      const dataStr = text.split('("')[1].split('")')[0]
+      const rows = dataStr.split(',|')
+      const klineData = rows.map(r => {
+        const p = r.replace(/^\|/, '').split(',')
+        return {
+          d: p[0], o: p[1], c: p[4], h: p[3], l: p[2], v: "0"
         }
-      }
-      
+      }).filter(k => k.d && k.d.includes('-'))
+      CACHE.kline[symbol] = klineData
+    } catch (e) {}
+    return
+  }
+
+  try {
+    const secid = getEastMoneySecid(symbol)
+    const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=101&fqt=1&secid=${secid}&end=20500101&lmt=400`
+    const resp = await fetch(url)
+    const json = await resp.json()
+    if (json && json.data && json.data.klines) {
+      // EastMoney kline: "2026-05-26,3435,3359,3435,3356,668561,..."
+      // Sina format: { d: "2026-05-26", o: "3435", h: "3435", l: "3356", c: "3359", v: "668561" }
+      const klineData = json.data.klines.map(k => {
+        const p = k.split(',')
+        return {
+          d: p[0], o: p[1], c: p[2], h: p[3], l: p[4], v: p[5]
+        }
+      })
       CACHE.kline[symbol] = klineData
     }
   } catch (e) {}
 }
 
 // Start polling
-setInterval(async () => {
-  try {
-    const list = getAll('SELECT symbol FROM futures_watchlist')
-    if (list.length === 0) return
-    const symbols = list.map(item => item.symbol)
-    await fetchRealtimeForSymbols(symbols)
-  } catch(e) {}
-}, 5000)
-
-setInterval(async () => {
-  try {
-    const list = getAll('SELECT symbol FROM futures_watchlist')
-    if (list.length === 0) return
-    // To avoid rate limiting, fetch one by one
-    for (const item of list) {
-      await fetchMinline(item.symbol)
-      await fetchKline(item.symbol)
-      await new Promise(r => setTimeout(r, 200)) // slight delay
+function initPolling() {
+  const getWatchlistSymbols = () => {
+    try {
+      const list = getAll('SELECT symbol FROM futures_watchlist')
+      return list.map(item => item.symbol)
+    } catch (e) {
+      return []
     }
-  } catch(e) {}
-}, 60000)
+  }
+
+  // Initial fetch immediately!
+  const initSymbols = getWatchlistSymbols()
+  if (initSymbols.length > 0) {
+    fetchRealtimeForSymbols(initSymbols)
+    for (const sym of initSymbols) {
+      fetchMinline(sym)
+      fetchKline(sym)
+    }
+  }
+
+  setInterval(() => {
+    const symbols = getWatchlistSymbols()
+    if (symbols.length > 0) {
+      fetchRealtimeForSymbols(symbols)
+    }
+  }, 2500)
+
+  setInterval(async () => {
+    const symbols = getWatchlistSymbols()
+    for (const sym of symbols) {
+      await fetchMinline(sym)
+      await fetchKline(sym)
+      await new Promise(r => setTimeout(r, 100))
+    }
+  }, 30000)
+}
+setTimeout(initPolling, 1000)
 
 // ── Public: get watchlist and cached data ──────────────────────────────────
 router.get('/list-data', (req, res) => {
   try {
     const list = getAll('SELECT * FROM futures_watchlist ORDER BY sort_order ASC, id ASC')
+    const translations = getAll("SELECT content_id, language_code, translated_text FROM translations WHERE content_type = 'futures_watchlist' AND content_field = 'name'")
+    const transMap = {}
+    for (const t of translations) {
+      if (!transMap[t.content_id]) transMap[t.content_id] = {}
+      transMap[t.content_id]['name_' + t.language_code] = t.translated_text
+    }
+    for (const item of list) {
+      if (transMap[item.id]) {
+        Object.assign(item, transMap[item.id])
+      }
+    }
+    const settings = getOne('SELECT preview_days FROM futures_settings WHERE id = 1') || { preview_days: 10 }
+    const previewDays = settings.preview_days
+
     const results = list.map(item => {
+      let realtime = CACHE.realtime[item.symbol] || null
+      
+      // Fallback for USDCNH: if hq.sinajs.cn is blocked by server IP, generate realtime from chart APIs
+      if (!realtime && getBaseCode(item.symbol) === 'USDCNH') {
+        const ml = CACHE.minline[item.symbol]
+        const kl = CACHE.kline[item.symbol]
+        if (ml && ml.length > 0 && kl && kl.length > 0) {
+          const lastMl = ml[ml.length - 1]
+          const price = parseFloat(lastMl[1])
+          const lastKl = kl[kl.length - 1]
+          
+          let prevSettlement = 0
+          if (lastMl[6] && lastKl.d === lastMl[6]) {
+            const prevKl = kl.length > 1 ? kl[kl.length - 2] : lastKl
+            prevSettlement = parseFloat(prevKl.c)
+          } else {
+            prevSettlement = parseFloat(lastKl.c)
+          }
+          
+          const change = price - prevSettlement
+          const changePercent = prevSettlement ? (change / prevSettlement) * 100 : 0
+          
+          let open = parseFloat(ml[0][1])
+          let high = price
+          let low = price
+          ml.forEach(m => {
+            const p = parseFloat(m[1])
+            if (p > high) high = p
+            if (p < low) low = p
+          })
+          
+          realtime = {
+            price, change, changePercent, open, high, low, prevSettlement,
+            date: lastMl[6] || getChinaDate(),
+            volume: 0, openInterest: 0
+          }
+          CACHE.realtime[item.symbol] = realtime
+        }
+      }
+
       return {
         ...item,
-        realtime: CACHE.realtime[item.symbol] || null,
-        minline: CACHE.minline[item.symbol] || null
+        realtime,
+        minline: CACHE.minline[item.symbol] || null,
+        kline: getUpdatedKline(item.symbol, previewDays)
       }
     })
     res.json(results)
@@ -233,78 +438,72 @@ router.get('/list-data', (req, res) => {
   }
 })
 
+// ── Admin: Settings ────────────────────────────────────────────────────────
+router.get('/settings', (req, res) => {
+  const settings = getOne('SELECT preview_days FROM futures_settings WHERE id = 1') || { preview_days: 10 }
+  res.json(settings)
+})
+
+router.put('/settings', authMiddleware, (req, res) => {
+  const { preview_days } = req.body
+  run('UPDATE futures_settings SET preview_days = ? WHERE id = 1', [preview_days || 10])
+  res.json({ success: true })
+})
+
 // ── Public: get watchlist ──────────────────────────────────────────────────
 router.get('/', (req, res) => {
   const list = getAll('SELECT * FROM futures_watchlist ORDER BY sort_order ASC, id ASC')
+  const translations = getAll("SELECT content_id, language_code, translated_text FROM translations WHERE content_type = 'futures_watchlist' AND content_field = 'name'")
+  const transMap = {}
+  for (const t of translations) {
+    if (!transMap[t.content_id]) transMap[t.content_id] = {}
+    transMap[t.content_id]['name_' + t.language_code] = t.translated_text
+  }
+  for (const item of list) {
+    if (transMap[item.id]) {
+      Object.assign(item, transMap[item.id])
+    }
+  }
   res.json(list)
 })
 
-// ── Public: fetch real-time quotes via Sina API ───────────────────────────
+// ── Public: fetch real-time quotes via EastMoney API ───────────────────────────
 router.get('/realtime', async (req, res) => {
   const symbols = req.query.symbols // e.g. "HC0,RB0"
   if (!symbols) return res.json([])
   
-  const queryList = symbols.split(',').map(s => {
-    // Sina API uses prefix 'nf_' for domestic futures
-    return s.startsWith('nf_') ? s : `nf_${s}`
-  }).join(',')
+  const symbolArr = symbols.split(',')
+  const secids = symbolArr.map(s => getEastMoneySecid(s)).join(',')
 
   try {
-    const data = await new Promise((resolve, reject) => {
-      https.get(`https://hq.sinajs.cn/list=${queryList}`, {
-        headers: { 'Referer': 'https://finance.sina.com.cn' }
-      }, (response) => {
-        const chunks = []
-        response.on('data', chunk => chunks.push(chunk))
-        response.on('end', () => resolve(iconv.decode(Buffer.concat(chunks), 'gbk')))
-      }).on('error', reject)
-    })
-
+    const url = `https://push2.eastmoney.com/api/qt/ulist.np/get?fields=f1,f2,f3,f4,f12,f13,f14,f15,f16,f17,f18,f59,f60&secids=${secids}`
+    const resp = await fetch(url)
+    const json = await resp.json()
     const results = []
-    const lines = data.split('\n').map(l => l.trim()).filter(Boolean)
-    
-    for (const line of lines) {
-      // var hq_str_nf_HC0="热轧卷板连续,093952,3435.000,...";
-      const match = line.match(/hq_str_nf_([A-Za-z0-9]+)="([^"]*)"/)
-      if (match) {
-        const symbol = match[1]
-        const fields = match[2].split(',')
-        if (fields.length > 10) {
-          const name = fields[0]
-          const open = parseFloat(fields[2]) || 0
-          const high = parseFloat(fields[3]) || 0
-          const low = parseFloat(fields[4]) || 0
-          const price = parseFloat(fields[8]) || 0
-          const prevSettlement = parseFloat(fields[10]) || 0
-          const volume = parseFloat(fields[13]) || 0
-          const openInterest = parseFloat(fields[14]) || 0
-          
-          let change = 0
-          let changePercent = 0
-          if (prevSettlement > 0 && price > 0) {
-            change = price - prevSettlement
-            changePercent = (change / prevSettlement) * 100
-          }
-
-          results.push({
-            symbol,
-            name,
-            price,
-            change,
-            changePercent,
-            open,
-            high,
-            low,
-            prevSettlement,
-            volume,
-            openInterest
-          })
-        }
-      }
+    if (json && json.data && json.data.diff) {
+      json.data.diff.forEach((item, index) => {
+        const symbol = symbolArr[index]
+        const decimalPlaces = getSymbolPrecision(symbol, item.f59)
+        const factor = Math.pow(10, decimalPlaces)
+        
+        const price = item.f2 !== '-' ? item.f2 / factor : 0
+        const changePercent = item.f3 !== '-' ? item.f3 / 100 : 0
+        const change = item.f4 !== '-' ? item.f4 / factor : 0
+        const open = item.f17 !== '-' ? item.f17 / factor : 0
+        const high = item.f15 !== '-' ? item.f15 / factor : 0
+        const low = item.f16 !== '-' ? item.f16 / factor : 0
+        const prevSettlement = item.f18 !== '-' ? item.f18 / factor : 0
+        
+        results.push({
+          symbol,
+          name: item.f14 || symbol,
+          price, change, changePercent, open, high, low, prevSettlement
+        })
+      })
     }
     res.json(results)
-  } catch (e) {
-    console.error('Futures realtime proxy error:', e.message)
+  } catch (error) {
+    console.error('Futures realtime proxy error:', error.message)
     res.json([])
   }
 })
@@ -312,14 +511,10 @@ router.get('/realtime', async (req, res) => {
 // ── Public: proxy K-line data from Sina Finance ───────────────────────────
 router.get('/kline/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase()
-  // Return cached K-line if available and recently updated, else return empty to avoid hang
-  if (CACHE.kline[symbol]) {
-    return res.json(CACHE.kline[symbol])
-  } else {
-    // Attempt a quick fetch
+  if (!CACHE.kline[symbol]) {
     await fetchKline(symbol)
-    return res.json(CACHE.kline[symbol] || [])
   }
+  return res.json(getUpdatedKline(symbol))
 })
 
 // ── Admin: search futures symbols ─────────────────────────────────────────
@@ -330,6 +525,16 @@ router.get('/search', authMiddleware, (req, res) => {
   const results = []
   for (const [code, info] of Object.entries(FUTURES_MAP)) {
     if (code.includes(q) || info.name.includes(q) || info.name_en.toUpperCase().includes(q)) {
+      if (info.exchange === 'FOREX') {
+        results.push({
+          symbol: code,
+          name: info.name,
+          name_en: info.name_en,
+          exchange: info.exchange
+        })
+        continue;
+      }
+      
       // 1. First add the Main Continuous Contract (主力连续)
       results.push({
         symbol: `${code}0`,
