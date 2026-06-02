@@ -262,9 +262,9 @@ router.post('/send', (req, res) => {
     const { visitor_id, content } = req.body
     if (!visitor_id || !content) return res.status(400).json({ error: 'Missing fields' })
 
-    // Extract client IP address safely
-    const ip = req.ip || req.headers['x-forwarded-for'] || (req.socket ? req.socket.remoteAddress : '') || ''
-    const ipStr = Array.isArray(ip) ? ip[0] : String(ip)
+    // Extract client IP address safely (Cloudflare CF-Connecting-IP first)
+    const rawIp = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.ip || (req.socket ? req.socket.remoteAddress : '') || ''
+    const ipStr = Array.isArray(rawIp) ? rawIp[0] : String(rawIp)
     const cleanIp = ipStr.split(',')[0].trim().replace(/^::ffff:/, '')
 
     // Try to find cached country for this visitor
@@ -272,10 +272,7 @@ router.post('/send', (req, res) => {
     try {
       const existing = getOne('SELECT country FROM live_chat_messages WHERE visitor_id = ? AND country IS NOT NULL AND country != "" LIMIT 1', [visitor_id])
       cachedCountry = existing ? existing.country : null
-    } catch (e) {
-      // Table might not have country column yet if migration hasn't run or failed
-      fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] SELECT country failed: ${e.message}\n`)
-    }
+    } catch (e) {}
 
     try {
       run('INSERT INTO live_chat_messages (visitor_id, sender_type, content, ip, country) VALUES (?, ?, ?, ?, ?)', 
@@ -442,6 +439,24 @@ router.get('/admin/messages', authMiddleware, (req, res) => {
       }
       res.json(visitors)
     }
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack })
+  }
+})
+
+// ── Admin: Delete Messages ───────────────────────────────────
+router.delete('/admin/messages', authMiddleware, (req, res) => {
+  try {
+    const { visitor_ids } = req.body
+    if (!visitor_ids || !Array.isArray(visitor_ids)) {
+      return res.status(400).json({ error: 'Missing or invalid visitor_ids array' })
+    }
+    
+    if (visitor_ids.length > 0) {
+      const placeholders = visitor_ids.map(() => '?').join(',')
+      run(`DELETE FROM live_chat_messages WHERE visitor_id IN (${placeholders})`, visitor_ids)
+    }
+    res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack })
   }

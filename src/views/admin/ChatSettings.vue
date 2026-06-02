@@ -21,6 +21,14 @@
       <div class="visitor-sidebar">
         <div class="search-box">
           <input type="text" v-model="searchQuery" placeholder="搜索访客 ID..." />
+          <div class="bulk-actions" v-if="filteredVisitors.length > 0">
+            <label class="select-all">
+              <input type="checkbox" @change="toggleSelectAll" :checked="selectedVisitors.length === filteredVisitors.length && filteredVisitors.length > 0" /> 全选
+            </label>
+            <button v-if="selectedVisitors.length > 0" class="btn-delete-sm" @click="deleteSelectedVisitors">
+              清除记录 ({{ selectedVisitors.length }})
+            </button>
+          </div>
         </div>
         <div class="visitor-list">
           <div v-if="filteredVisitors.length === 0" class="no-visitors">
@@ -33,6 +41,7 @@
             @click="selectVisitor(visitor.visitor_id)"
           >
             <div class="visitor-info">
+              <input type="checkbox" class="v-checkbox" :value="visitor.visitor_id" v-model="selectedVisitors" @click.stop />
               <span class="visitor-id">访客 #{{ visitor.visitor_id.substring(0, 8) }}</span>
               <span :class="['status-dot', { online: isOnline(visitor.timestamp) }]"></span>
             </div>
@@ -235,6 +244,40 @@ const replyText = ref('')
 const sending = ref(false)
 const searchQuery = ref('')
 const messagesContainer = ref(null)
+
+const selectedVisitors = ref([])
+const toggleSelectAll = (e) => {
+  if (e.target.checked) {
+    selectedVisitors.value = filteredVisitors.value.map(v => v.visitor_id)
+  } else {
+    selectedVisitors.value = []
+  }
+}
+
+const deleteSelectedVisitors = async () => {
+  if (selectedVisitors.value.length === 0) return
+  if (!confirm(`确定要删除选中的 ${selectedVisitors.value.length} 个对话记录吗？`)) return
+  
+  try {
+    const res = await fetch('/api/chat/admin/messages', {
+      method: 'DELETE',
+      headers: headers(),
+      body: JSON.stringify({ visitor_ids: selectedVisitors.value })
+    })
+    if (res.ok) {
+      if (selectedVisitors.value.includes(activeVisitorId.value)) {
+        activeVisitorId.value = ''
+        activeMessages.value = []
+      }
+      selectedVisitors.value = []
+      fetchVisitors()
+    } else {
+      alert('删除失败，请重试')
+    }
+  } catch (e) {
+    console.error('Delete error', e)
+  }
+}
 
 let pollInterval = null
 
@@ -555,7 +598,8 @@ onUnmounted(() => {
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   border: 1px solid #e5e7eb;
-  height: 650px;
+  height: calc(100vh - 200px);
+  min-height: 500px;
   overflow: hidden;
 }
 
@@ -578,6 +622,36 @@ onUnmounted(() => {
   width: 100%;
   font-size: 13px;
   box-sizing: border-box;
+}
+.bulk-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  font-size: 13px;
+}
+.select-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  cursor: pointer;
+}
+.btn-delete-sm {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn-delete-sm:hover {
+  background: #dc2626;
+}
+.v-checkbox {
+  margin-right: 8px;
+  cursor: pointer;
 }
 .visitor-list {
   flex: 1;
