@@ -506,6 +506,12 @@ async function startServer() {
               if (idMatch) product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.id=? AND p.status=1', [idMatch[1]])
             }
             if (product) {
+              // Redirect mismatched slugs (Soft 404 / duplicate fix)
+              if (product.slug !== slug) {
+                const correctPath = lang === 'en' ? `/products/${product.slug}` : `/${lang}/products/${product.slug}`
+                return res.redirect(301, correctPath)
+              }
+
               if (tMap) {
                 translateProduct(product, tMap, lang)
               }
@@ -624,6 +630,9 @@ async function startServer() {
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
               const hasFaqInDetail = /frequently asked|<h[23][^>]*>\s*faq/i.test(detailHtml)
               ssrContent = `<article id="ssr-product"><h1>${escPName}</h1><p>${escPDesc}</p>${specsHtml}${detailHtml}${hasFaqInDetail ? '' : faqHtml}</article>`
+              
+              // Expose ssrData for client-side Vue hydration
+              req.ssrProduct = product
             } else {
               // Product not found — return 404 status to prevent soft 404
               isNotFound = true
@@ -632,8 +641,8 @@ async function startServer() {
             }
           }
 
-          // ── News detail page (skip /news/category/ URLs) ──
-          const newsMatch = subPath.match(/^\/news\/(?!category\/)(.+)$/)
+          // ── News detail page (skip /news/category/ and static /news/ URLs) ──
+          const newsMatch = subPath.match(/^\/news\/(?!category\/|ral-colors\/?$|roofing-profiles\/?$|futures-price\/?$)(.+)$/)
           if (newsMatch) {
             matchedRoute = true
             const slug = newsMatch[1]
@@ -643,6 +652,12 @@ async function startServer() {
               if (idMatch) article = getOne('SELECT * FROM news WHERE id=? AND status=1', [idMatch[1]])
             }
             if (article) {
+              // Redirect mismatched slugs (Soft 404 / duplicate fix)
+              if (article.slug !== slug) {
+                const correctPath = lang === 'en' ? `/news/${article.slug}` : `/${lang}/news/${article.slug}`
+                return res.redirect(301, correctPath)
+              }
+
               if (tMap) {
                 translateNews(article, tMap, lang)
               }
@@ -716,7 +731,10 @@ async function startServer() {
                 } catch (e) {}
               }
 
-              ssrContent = `<article id="ssr-article"><h1>${escATitle}</h1><p>${escASummary}</p>${articleBody}${newsFaqHtml}</article>`
+              ssrContent = `<article id="ssr-article"><h1>${escATitle}</h1><p class="summary">${escASummary}</p><div class="content">${articleBody}</div>${newsFaqHtml}</article>`
+              
+              // Expose ssrData for client-side Vue hydration
+              req.ssrArticle = article
             } else {
               // News article not found — return 404 status
               isNotFound = true
@@ -885,6 +903,7 @@ async function startServer() {
             ] })
           } else if (subPath === '/news/ral-colors' || subPath === '/news/ral-colors/') {
             matchedRoute = true
+            isNotFound = false
             pageTitle = `RAL Color Chart for PPGI & PPGL | ${companyNameTranslated}`
             pageDesc = `Explore the full RAL color chart for our prepainted galvanized (PPGI) and galvalume (PPGL) steel coils. Custom colors available upon request.`
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
@@ -894,6 +913,7 @@ async function startServer() {
             ] })
           } else if (subPath === '/news/roofing-profiles' || subPath === '/news/roofing-profiles/') {
             matchedRoute = true
+            isNotFound = false
             pageTitle = `Roofing Sheet Profiles & Corrugated Steel | ${companyNameTranslated}`
             pageDesc = `View our catalog of steel roofing sheet profiles. We manufacture corrugated, trapezoidal, and glazed tile roofing sheets in various dimensions and colors.`
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
@@ -901,6 +921,30 @@ async function startServer() {
               { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
               { '@type': 'ListItem', position: 3, name: 'Roofing Profiles', item: pageCanonical }
             ] })
+          } else if (subPath === '/news/futures-price' || subPath === '/news/futures-price/') {
+            matchedRoute = true
+            isNotFound = false
+            pageTitle = `Real-time Steel Futures Prices | ${companyNameTranslated}`
+            pageDesc = `Track real-time and historical futures prices for Hot Rolled Coil, Iron Ore, Rebar, and more. Essential market data for steel buyers and traders from ${companyNameTranslated}.`
+            extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
+              { '@type': 'ListItem', position: 3, name: 'Futures Price', item: pageCanonical }
+            ] })
+            
+            // Render basic table for GEO crawlers
+            const watchlist = getAll('SELECT symbol, name, name_en FROM futures_watchlist ORDER BY sort_order ASC')
+            if (watchlist && watchlist.length) {
+              const tableRows = watchlist.map(w => {
+                let name = w.name_en || w.name
+                if (lang !== 'en') {
+                  const tRow = getOne('SELECT translated_text FROM translations WHERE content_type="futures_watchlist" AND content_id=? AND language_code=? AND content_field="name"', [w.id, lang])
+                  if (tRow) name = tRow.translated_text
+                }
+                return `<tr><td>${esc(name)}</td><td>${esc(w.symbol)}</td></tr>`
+              }).join('')
+              ssrContent = `<section id="ssr-futures"><h1>Real-time Steel Futures Prices</h1><table><thead><tr><th>Product Name</th><th>Symbol</th></tr></thead><tbody>${tableRows}</tbody></table></section>`
+            }
           }
 
           // ── Homepage BreadcrumbList + WebSite schema + SSR content ──
@@ -1029,7 +1073,9 @@ async function startServer() {
         const initialState = {
           hero: getOne('SELECT * FROM hero_content WHERE id = 1') || {},
           company: company,
-          pageTexts: getOne('SELECT * FROM page_texts WHERE id = 1') || {}
+          pageTexts: getOne('SELECT * FROM page_texts WHERE id = 1') || {},
+          ssrArticle: req.ssrArticle || null,
+          ssrProduct: req.ssrProduct || null
         }
         const stateTag = `<script>window.__INITIAL_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')}</script>`
         html = html.replace('</head>', `${canonicalTag}\n  ${extraMeta}\n  ${extraSchemas}\n  ${stateTag}\n</head>`)

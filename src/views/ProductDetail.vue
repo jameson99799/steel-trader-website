@@ -467,15 +467,38 @@ const copyToClipboard = (text) => {
 
 onMounted(async () => {
   try {
-    product.value = await api.getProduct(route.params.slug)
-    if (images.value.length) {
+    const slug = route.params.slug
+    const ssr = window.__INITIAL_STATE__
+    const isHydrating = ssr && ssr.ssrProduct && (
+      ssr.ssrProduct.slug === slug || 
+      ssr.ssrProduct.id.toString() === (slug.match(/-(\d+)$/)?.[1] || slug)
+    )
+
+    if (isHydrating) {
+      product.value = ssr.ssrProduct
+      company.value = ssr.company
+      pageTexts.value = ssr.pageTexts
+      window.__INITIAL_STATE__.ssrProduct = null // consume it once
+    }
+    
+    if (product.value && images.value.length) {
       currentImage.value = images.value[0]
     }
-    const [comp, texts, cats] = await Promise.all([
-      api.getCompany(),
-      api.getPageTexts(),
+
+    const promises = [
+      isHydrating ? Promise.resolve(company.value) : api.getCompany(),
+      isHydrating ? Promise.resolve(pageTexts.value) : api.getPageTexts(),
       api.getCategories()
-    ])
+    ]
+    if (!isHydrating) {
+      promises.push(api.getProduct(slug).then(p => {
+        product.value = p
+        if (images.value.length) currentImage.value = images.value[0]
+        return p
+      }))
+    }
+
+    const [comp, texts, cats] = await Promise.all(promises)
     company.value = comp
     pageTexts.value = texts
     allCategories.value = cats || []
@@ -593,13 +616,15 @@ onMounted(async () => {
         } catch (e) {}
       }
 
-      // Remove existing and inject
-      document.getElementById('product-jsonld')?.remove()
-      const script = document.createElement('script')
-      script.id = 'product-jsonld'
-      script.type = 'application/ld+json'
+      // Update or create Product schema
+      let script = document.getElementById('product-jsonld')
+      if (!script) {
+        script = document.createElement('script')
+        script.id = 'product-jsonld'
+        script.type = 'application/ld+json'
+        document.head.appendChild(script)
+      }
       script.textContent = JSON.stringify(productSchema, null, 2)
-      document.head.appendChild(script)
 
       // FAQ schema (if product has faq_items)
       const faqJson = localizedValue(p, 'faq_items') || p.faq_items
@@ -619,12 +644,14 @@ onMounted(async () => {
                 }
               }))
             }
-            document.getElementById('faq-jsonld')?.remove()
-            const faqScript = document.createElement('script')
-            faqScript.id = 'faq-jsonld'
-            faqScript.type = 'application/ld+json'
+            let faqScript = document.getElementById('faq-jsonld')
+            if (!faqScript) {
+              faqScript = document.createElement('script')
+              faqScript.id = 'faq-jsonld'
+              faqScript.type = 'application/ld+json'
+              document.head.appendChild(faqScript)
+            }
             faqScript.textContent = JSON.stringify(faqSchema, null, 2)
-            document.head.appendChild(faqScript)
           }
         } catch (e) {}
       }

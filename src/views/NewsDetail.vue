@@ -131,10 +131,29 @@
       <router-link :to="langPath('/news')" class="btn btn-primary">{{ t('backToNews') }}</router-link>
     </div>
   </div>
+
+  <!-- Lightbox -->
+  <div class="lightbox" :class="{ 'active': lightboxActive }" @click="closeLightbox">
+    <div class="lightbox-top-bar" @click.stop v-if="lightboxImages.length > 0">
+      <div class="lightbox-center-controls">
+        <div class="lightbox-title">{{ lightboxIndex + 1 }} / {{ lightboxImages.length }}</div>
+      </div>
+      <button class="lightbox-close" @click="closeLightbox">&times;</button>
+    </div>
+
+    <div class="lightbox-content" @click.stop v-if="lightboxImages.length > 0">
+      <img :src="lightboxImages[lightboxIndex]" @click="closeLightbox" />
+    </div>
+
+    <div class="lightbox-bottom-bar" @click.stop v-if="lightboxImages.length > 0">
+      <button class="lightbox-bottom-nav prev" @click="lightboxPrev" :disabled="lightboxIndex === 0">❮</button>
+      <button class="lightbox-bottom-nav next" @click="lightboxNext" :disabled="lightboxIndex === lightboxImages.length - 1">❯</button>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
@@ -150,6 +169,11 @@ const articleIframe = ref(null)
 const company = ref(null)
 const relatedNews = ref([])
 const seoSettings = ref(null)
+
+// Lightbox state
+const lightboxActive = ref(false)
+const lightboxImages = ref([])
+const lightboxIndex = ref(0)
 
 // ── Template variable substitution helper ────────────────────────────────
 function resolveTemplateVars(html) {
@@ -256,6 +280,18 @@ function handleMailtoClick(href, event) {
 }
 
 function handleBodyClick(e) {
+  if (e.target.tagName === 'IMG') {
+    const container = e.currentTarget
+    const images = Array.from(container.querySelectorAll('img')).map(img => img.src)
+    const index = images.indexOf(e.target.src)
+    if (index !== -1) {
+      lightboxImages.value = images
+      lightboxIndex.value = index
+      lightboxActive.value = true
+    }
+    return
+  }
+
   const anchor = e.target.closest('a')
   if (!anchor) return
 
@@ -263,6 +299,33 @@ function handleBodyClick(e) {
   if (href.startsWith('mailto:') || href === '{{email}}' || (href.includes('@') && !href.includes('/') && !href.toLowerCase().startsWith('http'))) {
     handleMailtoClick(href, e)
   }
+}
+
+// Lightbox functions
+const closeLightbox = () => {
+  lightboxActive.value = false
+  setTimeout(() => {
+    lightboxImages.value = []
+  }, 300)
+}
+
+const lightboxPrev = () => {
+  if (lightboxIndex.value > 0) {
+    lightboxIndex.value--
+  }
+}
+
+const lightboxNext = () => {
+  if (lightboxIndex.value < lightboxImages.value.length - 1) {
+    lightboxIndex.value++
+  }
+}
+
+const handleKeydown = (e) => {
+  if (!lightboxActive.value) return
+  if (e.key === 'ArrowLeft') lightboxPrev()
+  if (e.key === 'ArrowRight') lightboxNext()
+  if (e.key === 'Escape') closeLightbox()
 }
 
 function setupIframeMailtoInterception(doc) {
@@ -301,16 +364,34 @@ function formatDate(d) {
 }
 
 async function loadArticle(slug) {
-  loading.value = true
-  article.value = null
+  const ssr = window.__INITIAL_STATE__
+  const isHydrating = ssr && ssr.ssrArticle && (
+    ssr.ssrArticle.slug === slug || 
+    ssr.ssrArticle.id.toString() === (slug.match(/-(\d+)$/)?.[1] || slug)
+  )
+
+  if (isHydrating) {
+    article.value = ssr.ssrArticle
+    company.value = ssr.company
+    pageTexts.value = ssr.pageTexts
+    loading.value = false
+    window.__INITIAL_STATE__.ssrArticle = null // consume it once
+  } else {
+    loading.value = true
+    article.value = null
+  }
+
   try {
-    const [art, cats, texts, comp, seoRes] = await Promise.all([
-      api.getNewsItem(slug),
+    const promises = [
+      isHydrating ? Promise.resolve(article.value) : api.getNewsItem(slug),
       api.getCategories(),
-      api.getPageTexts(),
-      api.getCompany(),
+      isHydrating ? Promise.resolve(pageTexts.value) : api.getPageTexts(),
+      isHydrating ? Promise.resolve(company.value) : api.getCompany(),
       fetch('/api/seo').then(r => r.json()).catch(() => ({}))
-    ])
+    ]
+    
+    const [art, cats, texts, comp, seoRes] = await Promise.all(promises)
+    
     article.value = art
     allCategories.value = cats || []
     pageTexts.value = texts
@@ -343,12 +424,14 @@ async function loadArticle(slug) {
         'mainEntityOfPage': { '@type': 'WebPage', '@id': articleUrl }
       }
 
-      document.getElementById('article-jsonld')?.remove()
-      const script = document.createElement('script')
-      script.id = 'article-jsonld'
-      script.type = 'application/ld+json'
+      let script = document.getElementById('article-jsonld')
+      if (!script) {
+        script = document.createElement('script')
+        script.id = 'article-jsonld'
+        script.type = 'application/ld+json'
+        document.head.appendChild(script)
+      }
       script.textContent = JSON.stringify(articleSchema, null, 2)
-      document.head.appendChild(script)
 
       // FAQ schema (if article has faq_items)
       const faqJson = localizedValue(a, 'faq_items') || a.faq_items
@@ -365,12 +448,14 @@ async function loadArticle(slug) {
                 'acceptedAnswer': { '@type': 'Answer', 'text': f.answer }
               }))
             }
-            document.getElementById('faq-jsonld')?.remove()
-            const faqScript = document.createElement('script')
-            faqScript.id = 'faq-jsonld'
-            faqScript.type = 'application/ld+json'
+            let faqScript = document.getElementById('faq-jsonld')
+            if (!faqScript) {
+              faqScript = document.createElement('script')
+              faqScript.id = 'faq-jsonld'
+              faqScript.type = 'application/ld+json'
+              document.head.appendChild(faqScript)
+            }
             faqScript.textContent = JSON.stringify(faqSchema, null, 2)
-            document.head.appendChild(faqScript)
           }
         } catch (e) {}
       }
@@ -389,7 +474,13 @@ async function loadArticle(slug) {
   } catch (e) { console.warn('Failed to load related news:', e) }
 }
 
-onMounted(() => loadArticle(route.params.slug))
+onMounted(() => {
+  loadArticle(route.params.slug)
+  window.addEventListener('keydown', handleKeydown)
+})
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
 watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
 </script>
 
@@ -454,8 +545,11 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
   max-width: 100%; max-height: 600px; height: auto; object-fit: contain; display: block; margin: 0 auto;
 }
 
-.article-body {
+.article-body:not(.article-body-direct) {
   padding: 0;
+}
+.article-body.article-body-direct {
+  padding: 0 var(--spacing-2xl) var(--spacing-2xl);
 }
 
 .article-iframe {
@@ -464,10 +558,10 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
   border: none;
   display: block;
 }
+</style>
 
-/* Direct render mode: clean HTML display */
+<style>
 .article-body-direct {
-  padding: var(--spacing-2xl);
   line-height: 1.8;
   font-size: 16px;
   color: var(--text-primary);
@@ -480,6 +574,7 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
   display: block;
   margin: 12px auto;
   border-radius: 6px;
+  cursor: pointer;
 }
 
 .article-body-direct p { margin: 0 0 14px; }
@@ -497,6 +592,90 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
 }
 .article-body-direct td, .article-body-direct th { border: 1px solid var(--border); padding: 8px 12px; }
 .article-body-direct th { background: var(--gray-50); font-weight: 600; }
+
+/* Custom Article Layout Utilities */
+.article-body-direct .image-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin: 25px 0;
+}
+.article-body-direct .image-gallery img {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  transition: transform 0.3s ease;
+  margin: 0;
+}
+.article-body-direct .image-gallery img:hover {
+  transform: scale(1.02);
+}
+
+/* Dynamic Image Grid Layout */
+.article-body-direct .image-grid-layout { display: grid; gap: 12px; margin: 25px 0; }
+.article-body-direct .grid-cols-1 { grid-template-columns: 1fr; }
+.article-body-direct .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+.article-body-direct .grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+.article-body-direct .grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+.article-body-direct .grid-cols-5 { grid-template-columns: repeat(5, 1fr); }
+.article-body-direct .grid-cols-6 { grid-template-columns: repeat(6, 1fr); }
+
+.article-body-direct .image-grid-layout .grid-item {
+  aspect-ratio: 4/3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+.article-body-direct .image-grid-layout .grid-item:empty {
+  display: none;
+}
+.article-body-direct .image-grid-layout .grid-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  margin: 0;
+  display: block;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+@media (max-width: 768px) {
+  .article-body-direct .image-gallery { grid-template-columns: repeat(2, 1fr); }
+  .article-body-direct .grid-cols-3, .article-body-direct .grid-cols-4, .article-body-direct .grid-cols-5, .article-body-direct .grid-cols-6 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .article-body-direct .image-gallery { grid-template-columns: 1fr; }
+  .article-body-direct .grid-cols-2, .article-body-direct .grid-cols-3, .article-body-direct .grid-cols-4 { grid-template-columns: 1fr; }
+}
+
+.article-body-direct .cta-box {
+  background-color: #f8f9fa;
+  padding: 20px;
+  border-left: 5px solid #0056b3;
+  margin-top: 30px;
+  border-radius: 4px;
+}
+.article-body-direct .cta-box h3 { margin-top: 0; }
+.article-body-direct .cta-box a {
+  color: #0056b3;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.article-body-direct .hashtags {
+  color: #0056b3;
+  font-size: 0.9em;
+  margin-top: 20px;
+  word-wrap: break-word;
+}
+</style>
+
+<style scoped>
 .article-footer {
   padding: var(--spacing-xl) var(--spacing-2xl) var(--spacing-2xl);
   border-top: 1px solid var(--border);
@@ -587,7 +766,8 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
 @media (max-width: 768px) {
   .article-header { padding: var(--spacing-xl) var(--spacing-md) var(--spacing-md); }
   .article-title { font-size: var(--text-3xl); }
-  .article-body { padding: var(--spacing-md); }
+  .article-body:not(.article-body-direct) { padding: 0; }
+  .article-body.article-body-direct { padding: 0 var(--spacing-md) var(--spacing-md); }
   .article-footer { padding: var(--spacing-md); }
 }
 
@@ -647,4 +827,79 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
 }
 
 .rn-date { font-size: 11px; color: var(--text-muted); }
+
+/* ── Lightbox ── */
+.lightbox {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.3s ease;
+  backdrop-filter: blur(5px);
+}
+
+.lightbox.active {
+  opacity: 1; pointer-events: auto;
+}
+
+.lightbox-content {
+  position: relative;
+  max-width: 90vw; max-height: calc(100vh - 100px);
+  margin-top: 60px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.lightbox-content img {
+  max-width: 100%; max-height: calc(100vh - 100px);
+  object-fit: contain; border-radius: 4px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  cursor: zoom-out;
+}
+
+.lightbox-top-bar {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 60px;
+  background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px);
+  display: flex; justify-content: center; align-items: center;
+  padding: 0 20px; color: white; z-index: 10;
+}
+
+.lightbox-center-controls {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; max-width: 800px; padding: 0 80px;
+}
+
+.lightbox-title {
+  text-align: center; font-size: 32px; font-weight: 500;
+  letter-spacing: 1px; flex: 1;
+}
+
+.lightbox-close {
+  background: none; border: none; color: white; font-size: 40px;
+  cursor: pointer; transition: 0.2s; position: absolute; right: 20px;
+}
+.lightbox-close:hover { color: #ff4757; transform: scale(1.1); }
+
+.lightbox-bottom-bar {
+  position: absolute; bottom: 20px; left: 0;
+  width: 100%; height: auto;
+  display: flex; justify-content: center; align-items: center;
+  gap: 80px; z-index: 1000;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.lightbox-bottom-nav {
+  background: rgba(0, 0, 0, 0.7);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  color: white; font-size: 32px;
+  width: 60px; height: 60px; border-radius: 50%;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+.lightbox-bottom-nav:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3); transform: scale(1.05);
+}
+.lightbox-bottom-nav:disabled { opacity: 0.3; cursor: not-allowed; }
 </style>
