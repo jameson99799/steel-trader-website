@@ -29,6 +29,16 @@ function lookupGeoIP(visitorId, ipAddress) {
   })
 }
 
+let schemaHealed = false
+function healSchema() {
+  if (schemaHealed) return
+  try { run('ALTER TABLE live_chat_messages ADD COLUMN is_read INTEGER DEFAULT 0') } catch(e) {}
+  try { run('ALTER TABLE live_chat_messages ADD COLUMN timestamp DATETIME DEFAULT CURRENT_TIMESTAMP') } catch(e) {}
+  try { run('ALTER TABLE live_chat_messages ADD COLUMN ip TEXT') } catch(e) {}
+  try { run('ALTER TABLE live_chat_messages ADD COLUMN country TEXT') } catch(e) {}
+  schemaHealed = true
+}
+
 // Track round-robin index for auto-replies and welcome presets
 let autoReplyIndex = 0
 let welcomePresetIndex = 0
@@ -268,6 +278,7 @@ router.get('/widget-config', (req, res) => {
 // ── Public: Visitor API ──────────────────────────────────────
 router.post('/send', (req, res) => {
   try {
+    healSchema()
     const { visitor_id, content } = req.body
     if (!visitor_id || !content) return res.status(400).json({ error: 'Missing fields' })
 
@@ -378,17 +389,82 @@ router.post('/send', (req, res) => {
 })
 
 router.get('/poll', (req, res) => {
-  const { visitor_id, last_id } = req.query
-  if (!visitor_id) return res.status(400).json({ error: 'Missing visitor_id' })
+  try {
+    healSchema()
+    const { visitor_id, last_id } = req.query
+    if (!visitor_id) return res.status(400).json({ error: 'Missing visitor_id' })
 
-  const queryLastId = parseInt(last_id) || 0
-  const msgs = getAll('SELECT * FROM live_chat_messages WHERE visitor_id = ? AND id > ? ORDER BY timestamp ASC', [visitor_id, queryLastId])
+    const queryLastId = parseInt(last_id) || 0
+    let msgs = []
+    
+    try {
+      msgs = getAll('SELECT * FROM live_chat_messages WHERE visitor_id = ? AND id > ? ORDER BY timestamp ASC', [visitor_id, queryLastId])
+    } catch (e) {
+      // Fallback if timestamp column doesn't exist
+      msgs = getAll('SELECT * FROM live_chat_messages WHERE visitor_id = ? AND id > ? ORDER BY id ASC', [visitor_id, queryLastId])
+    }
 
-  if (msgs.length > 0) {
-    run('UPDATE live_chat_messages SET is_read = 1 WHERE visitor_id = ? AND sender_type = "admin" AND id > ?', [visitor_id, queryLastId])
+    if (msgs.length > 0) {
+      try {
+        run('UPDATE live_chat_messages SET is_read = 1 WHERE visitor_id = ? AND sender_type = "admin" AND id > ?', [visitor_id, queryLastId])
+      } catch (updateErr) {
+        // Fallback: ignore if is_read column doesn't exist
+        fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] poll is_read update error: ${updateErr.message}\n`)
+      }
+    }
+
+    res.json(msgs)
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack })
   }
+})
 
-  res.json(msgs)
+// ── Admin: List Messages ─────────────────────────────────────
+router.get('/admin/messages', authMiddleware, (req, res) => {
+  try {
+    healSchema()
+    const visitorId = req.query.visitor_id
+    if (visitorId) {
+      try {
+        run('UPDATE live_chat_messages SET is_read = 1 WHERE visitor_id = ? AND sender_type = "visitor"', [visitorId])
+      } catch (e) {}
+      
+      let msgs = []
+      try {
+        msgs = getAll('SELECT * FROM live_chat_messages WHERE visitor_id = ? ORDER BY timestamp ASC', [visitorId])
+      } catch (e) {
+        msgs = getAll('SELECT * FROM live_chat_messages WHERE visitor_id = ? ORDER BY id ASC', [visitorId])
+      }
+      res.json(msgs)
+    } else {
+      // Return list of unique visitors with their last message and unread count
+      let visitors = []
+      try {
+        visitors = getAll(`
+          SELECT m.*,
+            (SELECT COUNT(*) FROM live_chat_messages WHERE visitor_id = m.visitor_id AND sender_type = "visitor" AND is_read = 0) as unread_count
+          FROM live_chat_messages m
+          INNER JOIN (
+            SELECT visitor_id, MAX(id) as max_id FROM live_chat_messages GROUP BY visitor_id
+          ) grouped ON m.id = grouped.max_id
+          ORDER BY m.timestamp DESC
+        `)
+      } catch (e) {
+        // Fallback without is_read and timestamp if columns missing
+        visitors = getAll(`
+          SELECT m.*, 0 as unread_count
+          FROM live_chat_messages m
+          INNER JOIN (
+            SELECT visitor_id, MAX(id) as max_id FROM live_chat_messages GROUP BY visitor_id
+          ) grouped ON m.id = grouped.max_id
+          ORDER BY m.id DESC
+        `)
+      }
+      res.json(visitors)
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack })
+  }
 })
 
 export default router

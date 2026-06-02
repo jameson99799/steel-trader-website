@@ -1619,6 +1619,8 @@ Requirements:
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  try { db.exec('ALTER TABLE live_chat_messages ADD COLUMN is_read INTEGER DEFAULT 0') } catch(e) {}
+  try { db.exec('ALTER TABLE live_chat_messages ADD COLUMN timestamp DATETIME DEFAULT CURRENT_TIMESTAMP') } catch(e) {}
   try { db.exec('ALTER TABLE live_chat_messages ADD COLUMN ip TEXT') } catch(e) {}
   try { db.exec('ALTER TABLE live_chat_messages ADD COLUMN country TEXT') } catch(e) {}
 
