@@ -548,6 +548,10 @@ onUnmounted(() => {
   margin: 0 auto;
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  height: calc(100vh - 60px);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
 }
 .header { margin-bottom: 20px; }
 .header h2 { font-size: 24px; color: #1f2937; margin-bottom: 4px; }
@@ -600,8 +604,8 @@ onUnmounted(() => {
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   border: 1px solid #e5e7eb;
-  height: calc(100vh - 200px);
-  min-height: 500px;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -611,6 +615,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   background: #f8fafc;
+  min-height: 0;
 }
 .search-box {
   padding: 12px;
@@ -740,7 +745,6 @@ onUnmounted(() => {
   flex-direction: column;
   background: #fff;
   min-height: 0;
-  height: 100%;
 }
 .no-active-chat {
   flex: 1;
@@ -757,8 +761,7 @@ onUnmounted(() => {
 .active-chat {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  height: 100%;
 }
 .chat-header {
   padding: 16px 20px;
@@ -871,6 +874,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  flex: 1;
+  overflow-y: auto;
 }
 .card {
   background: white;
