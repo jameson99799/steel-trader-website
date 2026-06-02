@@ -78,10 +78,24 @@ const newMessage = ref('')
 const unreadCount = ref(0)
 const messagesContainer = ref(null)
 
+const allCategories = ref([])
+const allNewsCategories = ref([])
+
 let visitorId = ''
 let pollInterval = null
 let autoCloseInterval = null
 let lastInteractionTime = Date.now()
+
+const fetchDependencies = async () => {
+  try {
+    const [cRes, nRes] = await Promise.all([
+      fetch(`/api/categories?lang=${lang.value}`),
+      fetch(`/api/news-categories?lang=${lang.value}`)
+    ])
+    if (cRes.ok) allCategories.value = await cRes.json()
+    if (nRes.ok) allNewsCategories.value = await nRes.json()
+  } catch(e) {}
+}
 
 const toggleChat = () => {
   isOpen.value = !isOpen.value
@@ -108,7 +122,35 @@ const checkAutoClose = () => {
 const parseButtons = (jsonStr) => {
   if (!jsonStr) return []
   try {
-    return JSON.parse(jsonStr)
+    const arr = JSON.parse(jsonStr)
+    return arr.map(b => {
+      // old format fallback
+      if (b.label && b.url && !b.dynamic_type) return b
+      
+      const parts = (b.dynamic_type || '').split(':')
+      const type = parts[0]
+      const id = parts[1]
+      
+      if (type === 'contact') {
+        const labelsEn = { 'page': 'Contact Us', 'whatsapp': 'WhatsApp', 'email': 'Email', 'wechat': 'WeChat' }
+        const labelsZh = { 'page': '联系我们', 'whatsapp': 'WhatsApp 联系', 'email': '发邮件给销售', 'wechat': '查看微信二维码' }
+        const urls = { 'page': '/contact', 'whatsapp': '/contact', 'email': '/contact', 'wechat': '/contact' }
+        const label = lang.value === 'zh' ? labelsZh[id] : labelsEn[id]
+        return { label: label || 'Contact', url: urls[id] || '/contact' }
+      }
+      
+      if (type === 'category') {
+        const cat = allCategories.value.find(c => c.id == id)
+        if (cat) return { label: cat.name_en || cat.name, url: `/products/category/${cat.slug || cat.id}` }
+      }
+      
+      if (type === 'news_category') {
+        const ncat = allNewsCategories.value.find(c => c.id == id)
+        if (ncat) return { label: ncat.name_en || ncat.name, url: `/news/category/${ncat.slug || ncat.id}` }
+      }
+      
+      return null
+    }).filter(b => b !== null)
   } catch (e) {
     return []
   }
@@ -197,9 +239,7 @@ const pollMessages = async () => {
         }
       }
     }
-  } catch (e) {
-    console.error('Polling chat failed', e)
-  }
+  } catch (e) {}
 }
 
 const initChatSystem = async () => {
@@ -251,6 +291,7 @@ const initChatSystem = async () => {
 
 onMounted(() => {
   if (typeof window !== 'undefined') {
+    fetchDependencies()
     initChatSystem()
   }
 })

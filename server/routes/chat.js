@@ -23,8 +23,14 @@ router.get('/admin/settings', authMiddleware, (req, res) => {
 
 router.put('/admin/settings', authMiddleware, (req, res) => {
   const { auto_reply_enabled, start_time, end_time, global_enabled, auto_close_seconds } = req.body
-  run(`UPDATE live_chat_settings SET auto_reply_enabled=?, start_time=?, end_time=?, global_enabled=?, auto_close_seconds=?, updated_at=datetime('now') WHERE id=1`, 
-      [auto_reply_enabled ? 1 : 0, start_time, end_time, global_enabled ? 1 : 0, auto_close_seconds || 0])
+  const exists = getOne('SELECT id FROM live_chat_settings WHERE id = 1')
+  if (exists) {
+    run(`UPDATE live_chat_settings SET auto_reply_enabled=?, start_time=?, end_time=?, global_enabled=?, auto_close_seconds=?, updated_at=datetime('now') WHERE id=1`, 
+        [auto_reply_enabled ? 1 : 0, start_time, end_time, global_enabled ? 1 : 0, auto_close_seconds || 0])
+  } else {
+    run(`INSERT INTO live_chat_settings (id, auto_reply_enabled, start_time, end_time, global_enabled, auto_close_seconds) VALUES (1, ?, ?, ?, ?, ?)`,
+        [auto_reply_enabled ? 1 : 0, start_time, end_time, global_enabled ? 1 : 0, auto_close_seconds || 0])
+  }
   res.json({ success: true })
 })
 
@@ -190,6 +196,34 @@ router.get('/poll', (req, res) => {
   }
   
   res.json(msgs)
+})
+
+// ── OpenClaw Integration (OpenAI Spoofing Webhook) ───────────
+router.post('/openclaw-webhook/chat/completions', (req, res) => {
+  try {
+    const { messages } = req.body
+    if (!messages || messages.length === 0) return res.json({ choices: [{ message: { content: '' } }] })
+    
+    // OpenClaw passes WeChat user messages as 'user' role
+    const userMsg = [...messages].reverse().find(m => m.role === 'user')
+    if (!userMsg) return res.json({ choices: [{ message: { content: '' } }] })
+    
+    // The 'name' field contains the actual WeChat user ID. If missing, fallback to 'wechat_user'
+    const wxid = userMsg.name || 'wechat_user'
+    const content = userMsg.content || ''
+    
+    if (content.trim()) {
+      run('INSERT INTO live_chat_messages (visitor_id, sender_type, content) VALUES (?, ?, ?)', [wxid, 'visitor', content])
+    }
+    
+    // We return empty string so OpenClaw AI doesn't reply automatically.
+    // The Admin will reply using the website dashboard (or filehelper).
+    return res.json({
+      choices: [{ message: { content: '' } }]
+    })
+  } catch (e) {
+    return res.json({ choices: [{ message: { content: '' } }] })
+  }
 })
 
 export default router

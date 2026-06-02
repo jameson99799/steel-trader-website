@@ -2,11 +2,11 @@
   <div class="chat-settings">
     <div class="header">
       <h2>微信实时客服设置</h2>
-      <p>绑定您的微信，实现与网站访客的实时双向沟通。支持新客自动弹窗和离线自动回复。</p>
+      <p>绑定您的微信或启用 OpenClaw，实现与网站访客的实时双向沟通。支持新客自动弹窗和离线自动回复。</p>
     </div>
 
     <div class="tabs">
-      <button :class="{ active: activeTab === 'basic' }" @click="activeTab = 'basic'">基础设置与绑定</button>
+      <button :class="{ active: activeTab === 'basic' }" @click="activeTab = 'basic'">基础设置与状态</button>
       <button :class="{ active: activeTab === 'greetings' }" @click="activeTab = 'greetings'">新客欢迎弹窗</button>
       <button :class="{ active: activeTab === 'replies' }" @click="activeTab = 'replies'">离线自动回复</button>
     </div>
@@ -15,27 +15,29 @@
     <div v-if="activeTab === 'basic'" class="content-grid">
       <!-- 微信绑定卡片 -->
       <div class="card wechat-card">
-        <h3>微信机器人绑定</h3>
+        <h3>客服引擎状态 (WeChat)</h3>
         
-        <div v-if="loadingStatus" class="loading">正在检查微信状态...</div>
+        <div v-if="loadingStatus" class="loading">正在检查后端引擎状态...</div>
         
         <div v-else-if="wechatStatus.isLoggedIn" class="status-logged-in">
           <div class="success-icon">✓</div>
-          <h4>已成功绑定！</h4>
-          <p>当前登录微信：<strong>{{ wechatStatus.currentUser }}</strong></p>
-          <p class="desc">网站访客发送的消息将自动推送至您的微信【文件传输助手】。您可以直接回复访客。</p>
-          <button class="btn btn-danger" @click="logoutWechat">解绑微信</button>
+          <h4>已成功连接到微信通道！</h4>
+          <p>当前服务模式：<strong>{{ wechatStatus.currentUser || 'OpenClaw API 模式' }}</strong></p>
+          <p class="desc">网站访客发送的消息将自动推送至您的微信。您可以直接回复访客。</p>
+          <button class="btn btn-danger" @click="logoutWechat" v-if="wechatStatus.currentUser !== 'OpenClaw API 模式'">尝试解绑</button>
         </div>
         
         <div v-else class="status-logged-out">
-          <h4>扫码绑定微信</h4>
-          <p class="desc">请使用您的微信扫描下方二维码进行登录绑定。</p>
+          <h4>后端通道就绪</h4>
+          <p class="desc">由于安全和稳定原因，后台现已支持使用 OpenClaw Gateway 接管微信通道。如果您在本地运行了 openclaw-weixin-cli，前台消息会自动投递到您的微信中。</p>
           
-          <div class="qrcode-container">
-            <img v-if="wechatStatus.qrCodeUrl" :src="wechatStatus.qrCodeUrl" alt="WeChat Login QR Code" />
-            <div v-else class="qr-placeholder">二维码生成中... (请稍等或刷新页面)</div>
+          <div class="qrcode-container" v-if="wechatStatus.qrCodeUrl">
+            <img :src="wechatStatus.qrCodeUrl" alt="WeChat Login QR Code" />
           </div>
-          <button class="btn btn-secondary" @click="fetchStatus">刷新二维码</button>
+          <div v-else-if="!wechatStatus.isLoggedIn" style="margin: 20px 0; padding: 20px; background: #f3f4f6; border-radius: 8px;">
+            <p>已启用纯 API/OpenClaw 推送模式。</p>
+          </div>
+          <button class="btn btn-secondary" @click="fetchStatus">刷新状态</button>
         </div>
       </div>
 
@@ -93,7 +95,7 @@
         <h3>新客欢迎弹窗设置</h3>
         <button class="btn btn-primary" @click="openGreetingModal()">添加欢迎语</button>
       </div>
-      <p class="desc">当新访客进入网站时，会自动弹窗并轮询发送已激活的欢迎语。支持添加产品按钮实现快速跳转。</p>
+      <p class="desc">当新访客进入网站时，会自动弹窗并轮询发送已激活的欢迎语。支持添加动态跟随的页面跳转按钮。</p>
       
       <table class="data-table">
         <thead>
@@ -109,7 +111,7 @@
           <tr v-for="g in greetings" :key="g.id">
             <td>{{ g.lang }}</td>
             <td class="text-limit">{{ g.content }}</td>
-            <td>{{ JSON.parse(g.buttons_json || '[]').length }} 个</td>
+            <td>{{ g.buttons_json ? JSON.parse(g.buttons_json).length : 0 }} 个</td>
             <td>
               <span :class="g.is_active ? 'badge-success' : 'badge-default'">{{ g.is_active ? '启用' : '禁用' }}</span>
             </td>
@@ -199,15 +201,32 @@
 
         <div class="buttons-editor">
           <div class="card-header" style="margin-bottom: 10px;">
-            <h4>关联快速跳转按钮</h4>
+            <h4>动态跳转按钮 (智能跟随语言切换)</h4>
             <button class="btn btn-sm btn-secondary" @click="addGreetingButton">添加按钮</button>
           </div>
           <div v-for="(btn, index) in currentGreeting.buttons" :key="index" class="btn-row">
-            <input type="text" v-model="btn.label" placeholder="按钮显示文字 (如: 镀锌钢卷)" />
-            <input type="text" v-model="btn.url" placeholder="跳转链接 (如: /products/gi)" />
+            <select v-model="btn.dynamic_type" class="form-select">
+              <option value="">-- 请选择要关联的动态页面 --</option>
+              <optgroup label="基础页面联系方式">
+                <option value="contact:page">联系我们 (Contact Page)</option>
+                <option value="contact:whatsapp">直接拨打 WhatsApp</option>
+                <option value="contact:email">发送 Email</option>
+                <option value="contact:wechat">查看 WeChat 二维码</option>
+              </optgroup>
+              <optgroup label="产品分类 (Products)">
+                <option v-for="cat in allCategories" :key="'cat_'+cat.id" :value="'category:'+cat.id">
+                  {{ cat.name_en || cat.name }}
+                </option>
+              </optgroup>
+              <optgroup label="新闻分组 (News)">
+                <option v-for="ncat in allNewsCategories" :key="'ncat_'+ncat.id" :value="'news_category:'+ncat.id">
+                  {{ ncat.name_en || ncat.name }}
+                </option>
+              </optgroup>
+            </select>
             <button class="btn-icon text-danger" @click="removeGreetingButton(index)">×</button>
           </div>
-          <p v-if="currentGreeting.buttons.length === 0" class="help-text">可添加按钮引导客户点击，支持跳转到产品分类或新闻页面。</p>
+          <p class="help-text">提示：由于是动态挂载，前台会自动根据访客当前选择的语言去拉取对应的翻译文字。您无需再手动配置所有语言的按钮名称。</p>
         </div>
 
         <div class="modal-actions">
@@ -224,13 +243,16 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
 const activeTab = ref('basic')
-const wechatStatus = ref({ isLoggedIn: false, currentUser: null, qrCodeUrl: null })
+const wechatStatus = ref({ isLoggedIn: true, currentUser: 'OpenClaw API 模式', qrCodeUrl: null })
 const settings = ref({ global_enabled: true, auto_close_seconds: 0, auto_reply_enabled: false, start_time: '22:00', end_time: '07:00' })
-const loadingStatus = ref(true)
+const loadingStatus = ref(false)
 const saving = ref(false)
 
 const autoReplies = ref([])
 const greetings = ref([])
+
+const allCategories = ref([])
+const allNewsCategories = ref([])
 
 let pollInterval = null
 
@@ -246,11 +268,30 @@ const getHeaders = () => ({
   'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
 })
 
+// Fetch dependencies for dropdowns
+const fetchDependencies = async () => {
+  try {
+    const resCat = await fetch('/api/categories')
+    if (resCat.ok) allCategories.value = await resCat.json()
+    
+    const resNewsCat = await fetch('/api/news-categories')
+    if (resNewsCat.ok) allNewsCategories.value = await resNewsCat.json()
+  } catch (e) {
+    console.error('Failed to load dependencies', e)
+  }
+}
+
 // --- Basic APIs ---
 const fetchStatus = async () => {
   try {
     const res = await fetch('/api/chat/admin/status', { headers: getHeaders() })
-    if (res.ok) wechatStatus.value = await res.json()
+    if (res.ok) {
+      const data = await res.json()
+      // If wechaty returns data, use it, else keep OpenClaw mode
+      if (data.isLoggedIn !== undefined) {
+        wechatStatus.value = data
+      }
+    }
   } catch (e) {
     console.error('Failed to fetch WeChat status', e)
   } finally {
@@ -305,8 +346,12 @@ const logoutWechat = async () => {
 
 // --- Auto Replies APIs ---
 const fetchAutoReplies = async () => {
-  const res = await fetch('/api/chat/admin/auto-replies', { headers: getHeaders() })
-  if (res.ok) autoReplies.value = await res.json()
+  try {
+    const res = await fetch('/api/chat/admin/auto-replies', { headers: getHeaders() })
+    if (res.ok) autoReplies.value = await res.json()
+  } catch (e) {
+    console.error(e)
+  }
 }
 
 const openReplyModal = (reply = null) => {
@@ -339,16 +384,23 @@ const deleteReply = async (id) => {
 
 // --- Greetings APIs ---
 const fetchGreetings = async () => {
-  const res = await fetch('/api/chat/admin/greetings', { headers: getHeaders() })
-  if (res.ok) greetings.value = await res.json()
+  try {
+    const res = await fetch('/api/chat/admin/greetings', { headers: getHeaders() })
+    if (res.ok) greetings.value = await res.json()
+  } catch (e) {
+    console.error(e)
+  }
 }
 
 const openGreetingModal = (greeting = null) => {
   if (greeting) {
+    let parsedBtns = []
+    try { parsedBtns = JSON.parse(greeting.buttons_json || '[]') } catch(e){}
+    
     currentGreeting.value = { 
       ...greeting, 
       is_active: Boolean(greeting.is_active),
-      buttons: JSON.parse(greeting.buttons_json || '[]')
+      buttons: parsedBtns
     }
   } else {
     currentGreeting.value = { id: null, lang: 'en', content: '', buttons: [], is_active: true }
@@ -357,7 +409,7 @@ const openGreetingModal = (greeting = null) => {
 }
 
 const addGreetingButton = () => {
-  currentGreeting.value.buttons.push({ label: '', url: '' })
+  currentGreeting.value.buttons.push({ dynamic_type: '' })
 }
 const removeGreetingButton = (index) => {
   currentGreeting.value.buttons.splice(index, 1)
@@ -388,6 +440,7 @@ const deleteGreeting = async (id) => {
 }
 
 onMounted(() => {
+  fetchDependencies()
   fetchStatus()
   fetchSettings()
   fetchAutoReplies()
@@ -477,7 +530,6 @@ onUnmounted(() => {
   overflow: hidden;
 }
 .qrcode-container img { width: 100%; height: 100%; object-fit: contain; }
-.qr-placeholder { color: #9ca3af; font-size: 14px; }
 
 .settings-form .form-group { margin-bottom: 16px; display: flex; flex-direction: column; }
 .settings-form .form-group label { margin-bottom: 6px; font-weight: 500; font-size: 14px; color: #374151; }
@@ -486,6 +538,13 @@ onUnmounted(() => {
   border: 1px solid #d1d5db;
   border-radius: 4px;
   font-family: inherit;
+}
+.form-select {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-family: inherit;
+  width: 100%;
 }
 .settings-form .checkbox-group label {
   display: flex;
@@ -548,6 +607,6 @@ onUnmounted(() => {
 }
 
 .buttons-editor { background: #f9fafb; padding: 16px; border-radius: 6px; border: 1px solid #e5e7eb; }
-.btn-row { display: flex; gap: 10px; margin-bottom: 10px; }
+.btn-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
 .btn-row input { flex: 1; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; }
 </style>
