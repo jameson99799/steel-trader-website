@@ -158,14 +158,40 @@ router.get('/admin/page-options', authMiddleware, (req, res) => {
     }
   } catch (e) { /* news_categories table may not exist */ }
 
-  // External links
-  options.push({
-    group: '外部链接',
-    items: [
-      { label: 'WhatsApp', label_en: 'WhatsApp', url: 'https://wa.me/' },
-      { label: 'Email', label_en: 'Email', url: 'mailto:' },
-    ]
-  })
+  // External links - dynamically loaded from company profile
+  try {
+    const comp = getOne('SELECT whatsapp, email FROM company WHERE id = 1')
+    let waUrl = 'https://wa.me/'
+    let mailUrl = 'mailto:'
+    if (comp) {
+      if (comp.whatsapp) {
+        if (comp.whatsapp.startsWith('http')) {
+          waUrl = comp.whatsapp
+        } else {
+          const cleanWa = comp.whatsapp.replace(/[^\d+]/g, '')
+          waUrl = `https://wa.me/${cleanWa}`
+        }
+      }
+      if (comp.email) {
+        mailUrl = `mailto:${comp.email}`
+      }
+    }
+    options.push({
+      group: '外部链接',
+      items: [
+        { label: 'WhatsApp', label_en: 'WhatsApp', url: waUrl },
+        { label: 'Email', label_en: 'Email', url: mailUrl },
+      ]
+    })
+  } catch (e) {
+    options.push({
+      group: '外部链接',
+      items: [
+        { label: 'WhatsApp', label_en: 'WhatsApp', url: 'https://wa.me/' },
+        { label: 'Email', label_en: 'Email', url: 'mailto:' },
+      ]
+    })
+  }
 
   res.json(options)
 })
@@ -189,7 +215,39 @@ router.get('/widget-config', (req, res) => {
   if (presets.length > 0) {
     activePreset = presets[welcomePresetIndex % presets.length]
     welcomePresetIndex++
-    activePreset.buttons = JSON.parse(activePreset.buttons || '[]')
+    
+    let buttons = JSON.parse(activePreset.buttons || '[]')
+    
+    // Dynamically replace generic wa.me/mailto templates with actual company info
+    try {
+      const comp = getOne('SELECT whatsapp, email FROM company WHERE id = 1')
+      if (comp) {
+        let waUrl = 'https://wa.me/'
+        if (comp.whatsapp) {
+          if (comp.whatsapp.startsWith('http')) {
+            waUrl = comp.whatsapp
+          } else {
+            const cleanWa = comp.whatsapp.replace(/[^\d+]/g, '')
+            waUrl = `https://wa.me/${cleanWa}`
+          }
+        }
+        const mailUrl = comp.email ? `mailto:${comp.email}` : 'mailto:'
+
+        buttons = buttons.map(btn => {
+          if (btn.url === 'https://wa.me/' || btn.url === 'https://wa.me') {
+            return { ...btn, url: waUrl }
+          }
+          if (btn.url === 'mailto:' || btn.url === 'mailto') {
+            return { ...btn, url: mailUrl }
+          }
+          return btn
+        })
+      }
+    } catch (e) {
+      console.error('Failed to fill company links in widget-config', e.message)
+    }
+    
+    activePreset.buttons = buttons
   }
 
   res.json({
