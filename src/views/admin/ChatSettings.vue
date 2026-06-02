@@ -324,7 +324,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 
-const activeTab = ref('chat')
+const activeTab = ref(localStorage.getItem('chat_active_tab') || 'chat')
 const settings = ref({ widget_enabled: true, auto_reply_enabled: false, start_time: '22:00', end_time: '07:00', auto_collapse_seconds: 10 })
 const autoReplies = ref([])
 const welcomePresets = ref([])
@@ -334,7 +334,7 @@ const saving = ref(false)
 
 // Chat console reactive variables
 const visitors = ref([])
-const activeVisitorId = ref('')
+const activeVisitorId = ref(localStorage.getItem('chat_active_visitor_id') || '')
 const activeMessages = ref([])
 const replyText = ref('')
 const sending = ref(false)
@@ -347,7 +347,7 @@ const selectedChannelId = ref(null)
 const selectedModel = ref('')
 const targetLang = ref(localStorage.getItem('chat_target_lang') || 'EN')
 const systemPrompt = ref(localStorage.getItem('chat_system_prompt') || '你是一个专业的外贸业务助手和翻译官。请把下面的文字翻译成目标语言，要求表达自然、流畅、得体。不要返回任何多余的解释、前言或标点引导，只需要输出翻译后的纯文本内容。')
-const showTranslationConfig = ref(false)
+const showTranslationConfig = ref(localStorage.getItem('chat_show_translation_config') === 'true')
 const translatingInput = ref(false)
 const translatingBubbleId = ref(null)
 const bubbleTranslations = ref({})
@@ -363,7 +363,10 @@ const currentChannelModels = computed(() => {
   return ch?.models || []
 })
 
-// Watch translation settings to save to localStorage
+// Watch translation and panel settings to save to localStorage
+watch(activeTab, (newVal) => localStorage.setItem('chat_active_tab', newVal || 'chat'))
+watch(activeVisitorId, (newVal) => localStorage.setItem('chat_active_visitor_id', newVal || ''))
+watch(showTranslationConfig, (newVal) => localStorage.setItem('chat_show_translation_config', String(newVal)))
 watch(targetLang, (newVal) => localStorage.setItem('chat_target_lang', newVal))
 watch(systemPrompt, (newVal) => localStorage.setItem('chat_system_prompt', newVal))
 watch(selectedChannelId, (newVal) => {

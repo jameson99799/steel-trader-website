@@ -147,9 +147,9 @@ const messages = ref([])
 const userInput = ref('')
 const streaming = ref(false)
 const streamContent = ref('')
-const contextCount = ref(20)
-const showSystemPrompt = ref(false)
-const showSourceCode = ref(false)
+const contextCount = ref(Number(localStorage.getItem('ai_product_context_count')) || 20)
+const showSystemPrompt = ref(localStorage.getItem('ai_product_show_system_prompt') === 'true')
+const showSourceCode = ref(localStorage.getItem('ai_product_show_source_code') === 'true')
 const editingIdx = ref(-1)
 const editText = ref('')
 const chatMessagesEl = ref(null)
@@ -164,9 +164,9 @@ const inputPlaceholder = computed(() =>
     : '描述产品信息开始生成，例如：请为镀铝锌钢卷生成产品详情页内容'
 )
 
-const systemPrompt = ref(`你是一个专业的钢铁产品详情页内容生成专家。
+const systemPrompt = ref(localStorage.getItem('ai_product_system_prompt') || `你是一个专业的钢铁产品详情页内容生成专家。
 
-重要：你只需要生成产品详情区域的HTML片段（从第一个 <section> 或 <div> 开始），不要生成完整的 HTML 页面（不要包含 <!DOCTYPE>, <html>, <head>, <body> 等外层标签）。生成的内容将被嵌入到产品详情页面的内容区域中。
+重要：你只需要生成产品详情区域的HTML片段（从第一个 <section> 或 <div> 开始），不要生成完整的 HTML 页面（不要包含 <!DOCTYPE>, <html>, <head>, <body> 等外层标签）。生成的内容将被嵌入 to 产品详情页面的内容区域中。
 
 内容结构要求：
 1. 产品概述（Overview）
@@ -194,6 +194,13 @@ SEO & GEO 要求：
 联系方式：使用 {{email}} 和 {{whatsapp_link}} 模板变量
 
 请用 \`\`\`html 代码块返回 HTML 代码。`)
+
+watch(channelId, (newVal) => { if (newVal) localStorage.setItem('ai_product_channel_id', newVal) })
+watch(model, (newVal) => { if (newVal) localStorage.setItem('ai_product_model', newVal) })
+watch(contextCount, (newVal) => { localStorage.setItem('ai_product_context_count', String(newVal)) })
+watch(showSystemPrompt, (newVal) => { localStorage.setItem('ai_product_show_system_prompt', String(newVal)) })
+watch(showSourceCode, (newVal) => { localStorage.setItem('ai_product_show_source_code', String(newVal)) })
+watch(systemPrompt, (newVal) => { localStorage.setItem('ai_product_system_prompt', newVal) })
 
 // ─── Iframe doc with interactive image handling ─────────────────────────────
 
@@ -252,9 +259,19 @@ onMounted(async () => {
   try {
     channels.value = await api.getAIChannels()
     if (channels.value.length) {
-      const def = channels.value.find(c => c.is_default) || channels.value[0]
-      channelId.value = def.id
-      model.value = def.models[0] || ''
+      const savedChannelId = localStorage.getItem('ai_product_channel_id')
+      let matched = channels.value.find(c => String(c.id) === String(savedChannelId))
+      if (!matched) {
+        matched = channels.value.find(c => c.is_default) || channels.value[0]
+      }
+      channelId.value = matched.id
+
+      const savedModel = localStorage.getItem('ai_product_model')
+      if (savedModel && matched.models.includes(savedModel)) {
+        model.value = savedModel
+      } else {
+        model.value = matched.models[0] || ''
+      }
     }
   } catch (e) { console.error(e) }
 })
