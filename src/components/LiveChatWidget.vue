@@ -93,18 +93,23 @@ const detectLang = () => {
 
 watch(() => route?.path, detectLang)
 
+const isExternalOrProtocol = (url) => {
+  return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('mailto:') || url.startsWith('tel:')
+}
+
 const getButtonUrl = (btn) => {
   const url = btn.url || '/'
-  // Prepend language prefix if needed
-  if (lang.value && lang.value !== 'en' && !url.startsWith('http')) {
-    return `/${lang.value}${url}`
+  if (isExternalOrProtocol(url)) {
+    return url
   }
-  return url.startsWith('http') ? url : `/${lang.value}${url}`
+  return lang.value && lang.value !== 'en' ? `/${lang.value}${url}` : url
 }
 
 const handleButtonClick = (btn) => {
   const url = btn.url || '/'
-  if (url.startsWith('http')) {
+  if (url.startsWith('mailto:') || url.startsWith('tel:')) {
+    window.location.href = url
+  } else if (url.startsWith('http://') || url.startsWith('https://')) {
     window.open(url, '_blank')
   } else {
     const fullUrl = lang.value && lang.value !== 'en' ? `/${lang.value}${url}` : url
