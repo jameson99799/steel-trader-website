@@ -1,7 +1,7 @@
 <template>
-  <div class="live-chat-wrapper" v-if="globalEnabled">
-    <!-- Chat Button -->
-    <button v-if="!isOpen" class="chat-toggle" @click="toggleChat">
+  <div v-if="widgetEnabled" class="live-chat-wrapper">
+    <!-- Floating Button -->
+    <button v-if="!isOpen" class="chat-toggle" @click="openChat">
       <div class="chat-icon">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -12,42 +12,43 @@
 
     <!-- Chat Window -->
     <transition name="chat-slide">
-      <div v-if="isOpen" class="chat-window" @mousemove="resetInteractionTimer" @keydown="resetInteractionTimer">
+      <div v-if="isOpen" class="chat-window">
         <div class="chat-header">
           <div class="header-info">
-            <h3>SunSea Steel Support</h3>
-            <span class="status-dot"></span> Online
+            <h3>{{ lang === 'zh' ? 'SunSea Steel 在线客服' : 'SunSea Steel Support' }}</h3>
+            <span class="status-dot"></span> {{ lang === 'zh' ? '在线' : 'Online' }}
           </div>
-          <button class="close-btn" @click="toggleChat">&times;</button>
+          <button class="close-btn" @click="closeChat">&times;</button>
         </div>
-        
+
         <div class="chat-messages" ref="messagesContainer">
-          <div v-for="msg in messages" :key="msg.id" :class="['message', msg.sender_type]">
+          <!-- Welcome preset (first message) -->
+          <div v-if="welcomePreset" class="message admin welcome-msg">
             <div class="message-bubble">
-              {{ msg.content }}
-              
-              <!-- Interactive Buttons from Admin Greetings -->
-              <div class="message-buttons" v-if="msg.buttons_json && parseButtons(msg.buttons_json).length > 0">
-                <button 
-                  v-for="(btn, idx) in parseButtons(msg.buttons_json)" 
-                  :key="idx" 
-                  class="action-btn"
-                  @click="handleButtonClick(btn.url)"
-                >
-                  {{ btn.label }}
-                </button>
-              </div>
+              {{ lang === 'zh' ? welcomePreset.greeting : (welcomePreset.greeting_en || welcomePreset.greeting) }}
             </div>
-            
+            <div v-if="welcomePreset.buttons && welcomePreset.buttons.length" class="quick-buttons">
+              <a v-for="(btn, bi) in welcomePreset.buttons" :key="bi"
+                 :href="getButtonUrl(btn)"
+                 class="quick-btn"
+                 @click.prevent="handleButtonClick(btn)">
+                {{ lang === 'zh' ? btn.label : (btn.label_en || btn.label) }}
+              </a>
+            </div>
+          </div>
+
+          <!-- Regular messages -->
+          <div v-for="msg in messages" :key="msg.id" :class="['message', msg.sender_type]">
+            <div class="message-bubble">{{ msg.content }}</div>
             <div class="message-time">{{ formatTime(msg.timestamp) }}</div>
           </div>
         </div>
 
         <div class="chat-input-area">
-          <textarea 
-            v-model="newMessage" 
-            @keyup.enter.prevent="sendMessage"
-            placeholder="Type your message here..."
+          <textarea
+            v-model="newMessage"
+            @keydown.enter.exact.prevent="sendMessage"
+            :placeholder="lang === 'zh' ? '请输入您的消息...' : 'Type your message...'"
             rows="1"
           ></textarea>
           <button @click="sendMessage" :disabled="!newMessage.trim()">
@@ -62,111 +63,66 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
-import { v4 as uuidv4 } from 'uuid'
-import { useRouter } from 'vue-router'
-import { useLang } from '../composables/useLang'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
-const { lang } = useLang()
+const route = useRoute()
 
-const globalEnabled = ref(false)
-const autoCloseSeconds = ref(0)
+const widgetEnabled = ref(false)
 const isOpen = ref(false)
 const messages = ref([])
 const newMessage = ref('')
 const unreadCount = ref(0)
 const messagesContainer = ref(null)
-
-const allCategories = ref([])
-const allNewsCategories = ref([])
+const welcomePreset = ref(null)
+const autoCollapseSeconds = ref(10)
+const lang = ref('en')
 
 let visitorId = ''
 let pollInterval = null
-let autoCloseInterval = null
-let lastInteractionTime = Date.now()
+let collapseTimer = null
+let hasInteracted = false
 
-const fetchDependencies = async () => {
-  try {
-    const [cRes, nRes] = await Promise.all([
-      fetch(`/api/categories?lang=${lang.value}`),
-      fetch(`/api/news-categories?lang=${lang.value}`)
-    ])
-    if (cRes.ok) allCategories.value = await cRes.json()
-    if (nRes.ok) allNewsCategories.value = await nRes.json()
-  } catch(e) {}
+// Detect language from URL
+const detectLang = () => {
+  const path = route?.path || window.location.pathname
+  const match = path.match(/^\/(zh|en|ru|es|fr|de|pt|ar|hi|ja|ko)\//)
+  lang.value = match ? match[1] : 'en'
 }
 
-const toggleChat = () => {
-  isOpen.value = !isOpen.value
-  if (isOpen.value) {
-    unreadCount.value = 0
-    resetInteractionTimer()
-    scrollToBottom()
+watch(() => route?.path, detectLang)
+
+const getButtonUrl = (btn) => {
+  const url = btn.url || '/'
+  // Prepend language prefix if needed
+  if (lang.value && lang.value !== 'en' && !url.startsWith('http')) {
+    return `/${lang.value}${url}`
   }
+  return url.startsWith('http') ? url : `/${lang.value}${url}`
 }
 
-const resetInteractionTimer = () => {
-  lastInteractionTime = Date.now()
-}
-
-const checkAutoClose = () => {
-  if (isOpen.value && autoCloseSeconds.value > 0) {
-    const inactiveTime = (Date.now() - lastInteractionTime) / 1000
-    if (inactiveTime >= autoCloseSeconds.value) {
-      isOpen.value = false
-    }
-  }
-}
-
-const parseButtons = (jsonStr) => {
-  if (!jsonStr) return []
-  try {
-    const arr = JSON.parse(jsonStr)
-    return arr.map(b => {
-      // old format fallback
-      if (b.label && b.url && !b.dynamic_type) return b
-      
-      const parts = (b.dynamic_type || '').split(':')
-      const type = parts[0]
-      const id = parts[1]
-      
-      if (type === 'contact') {
-        const labelsEn = { 'page': 'Contact Us', 'whatsapp': 'WhatsApp', 'email': 'Email', 'wechat': 'WeChat' }
-        const labelsZh = { 'page': '联系我们', 'whatsapp': 'WhatsApp 联系', 'email': '发邮件给销售', 'wechat': '查看微信二维码' }
-        const urls = { 'page': '/contact', 'whatsapp': '/contact', 'email': '/contact', 'wechat': '/contact' }
-        const label = lang.value === 'zh' ? labelsZh[id] : labelsEn[id]
-        return { label: label || 'Contact', url: urls[id] || '/contact' }
-      }
-      
-      if (type === 'category') {
-        const cat = allCategories.value.find(c => c.id == id)
-        if (cat) return { label: cat.name_en || cat.name, url: `/products/category/${cat.slug || cat.id}` }
-      }
-      
-      if (type === 'news_category') {
-        const ncat = allNewsCategories.value.find(c => c.id == id)
-        if (ncat) return { label: ncat.name_en || ncat.name, url: `/news/category/${ncat.slug || ncat.id}` }
-      }
-      
-      return null
-    }).filter(b => b !== null)
-  } catch (e) {
-    return []
-  }
-}
-
-const handleButtonClick = (url) => {
-  resetInteractionTimer()
-  if (!url) return
-  
+const handleButtonClick = (btn) => {
+  const url = btn.url || '/'
   if (url.startsWith('http')) {
     window.open(url, '_blank')
   } else {
-    // Add language prefix if needed, or just push
-    const targetUrl = url.startsWith('/') ? url : `/${url}`
-    router.push(`/${lang.value}${targetUrl.replace(`/${lang.value}`, '')}`)
+    const fullUrl = lang.value && lang.value !== 'en' ? `/${lang.value}${url}` : url
+    router.push(fullUrl)
+    closeChat()
   }
+}
+
+const openChat = () => {
+  isOpen.value = true
+  hasInteracted = true
+  unreadCount.value = 0
+  if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null }
+  scrollToBottom()
+}
+
+const closeChat = () => {
+  isOpen.value = false
 }
 
 const formatTime = (isoString) => {
@@ -184,12 +140,11 @@ const scrollToBottom = () => {
 }
 
 const sendMessage = async () => {
-  resetInteractionTimer()
   if (!newMessage.value.trim()) return
-  
   const text = newMessage.value.trim()
   newMessage.value = ''
-  
+  hasInteracted = true
+
   messages.value.push({
     id: Date.now(),
     visitor_id: visitorId,
@@ -212,10 +167,9 @@ const sendMessage = async () => {
 }
 
 const pollMessages = async () => {
-  if (!visitorId || !globalEnabled.value) return
-  
+  if (!visitorId) return
   const lastId = messages.value.length > 0 ? Math.max(...messages.value.map(m => m.id)) : 0
-  
+
   try {
     const res = await fetch(`/api/chat/poll?visitor_id=${visitorId}&last_id=${lastId}`)
     if (res.ok) {
@@ -223,82 +177,82 @@ const pollMessages = async () => {
       if (newMsgs.length > 0) {
         const incomingIds = newMsgs.map(m => m.id)
         messages.value = messages.value.filter(m => !incomingIds.includes(m.id))
-        
+
         let hasAdminReply = false
         for (const msg of newMsgs) {
           messages.value.push(msg)
           if (msg.sender_type === 'admin') hasAdminReply = true
         }
-        
+
         if (hasAdminReply && !isOpen.value) {
           unreadCount.value += newMsgs.filter(m => m.sender_type === 'admin').length
         }
-        
-        if (isOpen.value) {
-          scrollToBottom()
-        }
-      }
-    }
-  } catch (e) {}
-}
 
-const initChatSystem = async () => {
-  // 1. Fetch Global Settings
-  try {
-    const res = await fetch('/api/chat/settings')
-    if (res.ok) {
-      const data = await res.json()
-      globalEnabled.value = Boolean(data.global_enabled ?? true)
-      autoCloseSeconds.value = parseInt(data.auto_close_seconds) || 0
+        if (isOpen.value) scrollToBottom()
+      }
     }
   } catch (e) {
-    globalEnabled.value = true
+    console.error('Polling chat failed', e)
   }
+}
 
-  if (!globalEnabled.value) return
+const generateId = () => {
+  return 'v-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8)
+}
 
-  // 2. Manage Visitor ID
-  visitorId = localStorage.getItem('chat_visitor_id')
-  if (!visitorId) {
-    visitorId = uuidv4()
-    localStorage.setItem('chat_visitor_id', visitorId)
-  }
-
-  // 3. Init Greeting API
+const fetchWidgetConfig = async () => {
   try {
-    const initRes = await fetch('/api/chat/init', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ visitor_id: visitorId, lang: lang.value })
-    })
-    if (initRes.ok) {
-      const initData = await initRes.json()
-      if (initData.new_session && initData.greeting_sent) {
-        isOpen.value = true
-        resetInteractionTimer()
+    const res = await fetch('/api/chat/widget-config')
+    if (res.ok) {
+      const config = await res.json()
+      widgetEnabled.value = config.enabled
+      if (!config.enabled) return
+
+      autoCollapseSeconds.value = config.auto_collapse_seconds || 10
+      if (config.welcome_preset) {
+        welcomePreset.value = config.welcome_preset
+      }
+
+      // Auto-popup for new visitors
+      const hasVisited = sessionStorage.getItem('chat_shown')
+      if (!hasVisited && config.welcome_preset) {
+        setTimeout(() => {
+          if (!hasInteracted) {
+            isOpen.value = true
+            sessionStorage.setItem('chat_shown', '1')
+            // Auto-collapse after X seconds
+            collapseTimer = setTimeout(() => {
+              if (!hasInteracted) {
+                isOpen.value = false
+              }
+            }, autoCollapseSeconds.value * 1000)
+          }
+        }, 1500) // Small delay before showing popup
       }
     }
-  } catch (e) {}
-
-  // 4. Start polling
-  pollMessages()
-  pollInterval = setInterval(pollMessages, 3000)
-  
-  if (autoCloseSeconds.value > 0) {
-    autoCloseInterval = setInterval(checkAutoClose, 1000)
+  } catch (e) {
+    console.error('Failed to fetch widget config', e)
   }
 }
 
 onMounted(() => {
-  if (typeof window !== 'undefined') {
-    fetchDependencies()
-    initChatSystem()
+  if (typeof window === 'undefined') return
+  detectLang()
+
+  visitorId = localStorage.getItem('chat_visitor_id')
+  if (!visitorId) {
+    visitorId = generateId()
+    localStorage.setItem('chat_visitor_id', visitorId)
   }
+
+  fetchWidgetConfig()
+  pollMessages()
+  pollInterval = setInterval(pollMessages, 3000)
 })
 
 onUnmounted(() => {
   if (pollInterval) clearInterval(pollInterval)
-  if (autoCloseInterval) clearInterval(autoCloseInterval)
+  if (collapseTimer) clearTimeout(collapseTimer)
 })
 </script>
 
@@ -312,41 +266,44 @@ onUnmounted(() => {
 }
 
 .chat-toggle {
-  background: #2563eb;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   color: white;
   border: none;
   border-radius: 50%;
   width: 60px;
   height: 60px;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.35);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  transition: transform 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s;
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
+  70% { box-shadow: 0 0 0 12px rgba(37, 99, 235, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
 }
 
 .chat-toggle:hover {
-  transform: scale(1.05);
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45);
 }
 
-.chat-icon svg {
-  width: 32px;
-  height: 32px;
-}
+.chat-icon svg { width: 30px; height: 30px; }
 
 .unread-badge {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: -4px; right: -4px;
   background: #ef4444;
   color: white;
-  font-size: 12px;
-  font-weight: bold;
+  font-size: 11px;
+  font-weight: 700;
   border-radius: 50%;
-  width: 24px;
-  height: 24px;
+  width: 22px; height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -355,13 +312,13 @@ onUnmounted(() => {
 
 .chat-window {
   position: absolute;
-  bottom: 80px;
+  bottom: 76px;
   right: 0;
-  width: 350px;
+  width: 360px;
   height: 520px;
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -370,52 +327,41 @@ onUnmounted(() => {
 @media (max-width: 480px) {
   .chat-window {
     position: fixed;
-    bottom: 0;
-    right: 0;
-    width: 100vw;
-    height: 100vh;
+    bottom: 0; right: 0;
+    width: 100vw; height: 100vh;
     border-radius: 0;
   }
 }
 
 .chat-header {
-  background: #2563eb;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   color: white;
-  padding: 16px;
+  padding: 16px 18px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.header-info h3 {
-  margin: 0 0 4px 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-
+.header-info h3 { margin: 0 0 3px; font-size: 15px; font-weight: 600; }
 .status-dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
-  background: #10b981;
+  width: 8px; height: 8px;
+  background: #34d399;
   border-radius: 50%;
   margin-right: 4px;
+  animation: blink 2s infinite;
 }
-
-.header-info {
-  font-size: 12px;
-  color: #dbeafe;
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
-
+.header-info { font-size: 12px; color: #dbeafe; }
 .close-btn {
-  background: none;
-  border: none;
-  color: white;
-  font-size: 24px;
-  cursor: pointer;
-  padding: 0;
-  line-height: 1;
+  background: none; border: none; color: white;
+  font-size: 26px; cursor: pointer; padding: 0; line-height: 1;
+  opacity: 0.8; transition: opacity 0.2s;
 }
+.close-btn:hover { opacity: 1; }
 
 .chat-messages {
   flex: 1;
@@ -423,34 +369,24 @@ onUnmounted(() => {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  background: #f9fafb;
+  gap: 10px;
+  background: #f8fafc;
 }
 
-.message {
-  display: flex;
-  flex-direction: column;
-  max-width: 85%;
-}
-
-.message.visitor {
-  align-self: flex-end;
-}
-
-.message.admin {
-  align-self: flex-start;
-}
+.message { display: flex; flex-direction: column; max-width: 85%; }
+.message.visitor { align-self: flex-end; }
+.message.admin { align-self: flex-start; }
 
 .message-bubble {
   padding: 10px 14px;
   border-radius: 16px;
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 13.5px;
+  line-height: 1.5;
   word-break: break-word;
 }
 
 .message.visitor .message-bubble {
-  background: #2563eb;
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
   color: white;
   border-bottom-right-radius: 4px;
 }
@@ -461,102 +397,86 @@ onUnmounted(() => {
   border-bottom-left-radius: 4px;
 }
 
-.message-buttons {
-  margin-top: 10px;
+.message-time { font-size: 10px; color: #9ca3af; margin-top: 3px; }
+.message.visitor .message-time { text-align: right; }
+
+/* Quick buttons in welcome message */
+.quick-buttons {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
+  margin-top: 8px;
 }
 
-.action-btn {
+.quick-btn {
+  padding: 6px 14px;
   background: white;
-  border: 1px solid #d1d5db;
   color: #2563eb;
-  padding: 6px 12px;
-  border-radius: 16px;
-  font-size: 13px;
+  border: 1px solid #bfdbfe;
+  border-radius: 20px;
+  font-size: 12.5px;
   cursor: pointer;
-  text-align: left;
-  transition: all 0.2s;
+  text-decoration: none;
+  transition: all 0.15s;
   font-weight: 500;
 }
 
-.action-btn:hover {
-  background: #f3f4f6;
+.quick-btn:hover {
+  background: #2563eb;
+  color: white;
   border-color: #2563eb;
 }
 
-.message-time {
-  font-size: 10px;
-  color: #9ca3af;
-  margin-top: 4px;
-}
-
-.message.visitor .message-time {
-  text-align: right;
-}
-
 .chat-input-area {
-  padding: 16px;
+  padding: 14px 16px;
   background: white;
   border-top: 1px solid #e5e7eb;
   display: flex;
   align-items: flex-end;
-  gap: 12px;
+  gap: 10px;
 }
 
 .chat-input-area textarea {
   flex: 1;
   border: 1px solid #d1d5db;
   border-radius: 20px;
-  padding: 10px 16px;
+  padding: 9px 16px;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13.5px;
   resize: none;
   outline: none;
   max-height: 80px;
   transition: border-color 0.2s;
 }
 
-.chat-input-area textarea:focus {
-  border-color: #2563eb;
-}
+.chat-input-area textarea:focus { border-color: #2563eb; }
 
 .chat-input-area button {
-  background: #2563eb;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
   color: white;
   border: none;
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
+  width: 38px; height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
+  transition: transform 0.15s;
 }
-
-.chat-input-area button:disabled {
-  background: #9ca3af;
-  cursor: not-allowed;
-}
-
+.chat-input-area button:hover { transform: scale(1.05); }
+.chat-input-area button:disabled { background: #9ca3af; cursor: not-allowed; transform: none; }
 .chat-input-area button svg {
-  width: 20px;
-  height: 20px;
+  width: 18px; height: 18px;
   transform: rotate(-45deg);
-  margin-left: 2px;
-  margin-top: -2px;
+  margin-left: 2px; margin-top: -1px;
 }
 
 /* Transition */
-.chat-slide-enter-active,
-.chat-slide-leave-active {
+.chat-slide-enter-active, .chat-slide-leave-active {
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
-
-.chat-slide-enter-from,
-.chat-slide-leave-to {
+.chat-slide-enter-from, .chat-slide-leave-to {
   opacity: 0;
   transform: translateY(20px) scale(0.95);
 }

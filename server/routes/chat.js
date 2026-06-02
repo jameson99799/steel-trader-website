@@ -1,19 +1,12 @@
 import express from 'express'
 import { run, getAll, getOne } from '../db.js'
-import { getWechatStatus, logoutWechat, sendWechatMessage } from '../utils/wechatBot.js'
 import { authMiddleware } from '../middleware/auth.js'
 
 const router = express.Router()
 
-// ── Admin: WeChat Bot Status & Control ─────────────────────────
-router.get('/admin/status', authMiddleware, (req, res) => {
-  res.json(getWechatStatus())
-})
-
-router.post('/admin/logout', authMiddleware, async (req, res) => {
-  await logoutWechat()
-  res.json({ success: true })
-})
+// Track round-robin index for auto-replies and welcome presets
+let autoReplyIndex = 0
+let welcomePresetIndex = 0
 
 // ── Admin: Settings ──────────────────────────────────────────
 router.get('/admin/settings', authMiddleware, (req, res) => {
@@ -22,61 +15,61 @@ router.get('/admin/settings', authMiddleware, (req, res) => {
 })
 
 router.put('/admin/settings', authMiddleware, (req, res) => {
-  const { auto_reply_enabled, start_time, end_time, global_enabled, auto_close_seconds } = req.body
-  const exists = getOne('SELECT id FROM live_chat_settings WHERE id = 1')
-  if (exists) {
-    run(`UPDATE live_chat_settings SET auto_reply_enabled=?, start_time=?, end_time=?, global_enabled=?, auto_close_seconds=?, updated_at=datetime('now') WHERE id=1`, 
-        [auto_reply_enabled ? 1 : 0, start_time, end_time, global_enabled ? 1 : 0, auto_close_seconds || 0])
-  } else {
-    run(`INSERT INTO live_chat_settings (id, auto_reply_enabled, start_time, end_time, global_enabled, auto_close_seconds) VALUES (1, ?, ?, ?, ?, ?)`,
-        [auto_reply_enabled ? 1 : 0, start_time, end_time, global_enabled ? 1 : 0, auto_close_seconds || 0])
-  }
+  const { widget_enabled, auto_reply_enabled, start_time, end_time, auto_collapse_seconds } = req.body
+  run(`UPDATE live_chat_settings SET widget_enabled=?, auto_reply_enabled=?, start_time=?, end_time=?, auto_collapse_seconds=?, updated_at=datetime('now') WHERE id=1`,
+      [widget_enabled ? 1 : 0, auto_reply_enabled ? 1 : 0, start_time, end_time, auto_collapse_seconds || 10])
   res.json({ success: true })
 })
 
-// ── Admin: Auto Replies ──────────────────────────────────────
+// ── Admin: Auto-Reply Messages (CRUD) ────────────────────────
 router.get('/admin/auto-replies', authMiddleware, (req, res) => {
-  const replies = getAll('SELECT * FROM live_chat_auto_replies ORDER BY id ASC')
+  const replies = getAll('SELECT * FROM chat_auto_replies ORDER BY sort_order ASC, id ASC')
   res.json(replies)
 })
 
 router.post('/admin/auto-replies', authMiddleware, (req, res) => {
-  const { content, is_active } = req.body
-  const info = run('INSERT INTO live_chat_auto_replies (content, is_active) VALUES (?, ?)', [content, is_active ? 1 : 0])
-  res.json({ id: info.lastInsertRowid })
+  const { content, enabled } = req.body
+  if (!content) return res.status(400).json({ error: 'Content required' })
+  const result = run('INSERT INTO chat_auto_replies (content, enabled) VALUES (?, ?)', [content, enabled ? 1 : 0])
+  res.json({ success: true, id: result.lastInsertRowid })
 })
 
 router.put('/admin/auto-replies/:id', authMiddleware, (req, res) => {
-  const { content, is_active } = req.body
-  run('UPDATE live_chat_auto_replies SET content=?, is_active=? WHERE id=?', [content, is_active ? 1 : 0, req.params.id])
+  const { content, enabled } = req.body
+  run('UPDATE chat_auto_replies SET content=?, enabled=? WHERE id=?', [content, enabled ? 1 : 0, req.params.id])
   res.json({ success: true })
 })
 
 router.delete('/admin/auto-replies/:id', authMiddleware, (req, res) => {
-  run('DELETE FROM live_chat_auto_replies WHERE id=?', [req.params.id])
+  run('DELETE FROM chat_auto_replies WHERE id=?', [req.params.id])
   res.json({ success: true })
 })
 
-// ── Admin: Greetings ─────────────────────────────────────────
-router.get('/admin/greetings', authMiddleware, (req, res) => {
-  const greetings = getAll('SELECT * FROM live_chat_greetings ORDER BY id ASC')
-  res.json(greetings)
+// ── Admin: Welcome Presets (CRUD) ────────────────────────────
+router.get('/admin/welcome-presets', authMiddleware, (req, res) => {
+  const presets = getAll('SELECT * FROM chat_welcome_presets ORDER BY sort_order ASC, id ASC')
+  // Parse buttons JSON
+  const parsed = presets.map(p => ({ ...p, buttons: JSON.parse(p.buttons || '[]') }))
+  res.json(parsed)
 })
 
-router.post('/admin/greetings', authMiddleware, (req, res) => {
-  const { lang, content, buttons_json, is_active } = req.body
-  const info = run('INSERT INTO live_chat_greetings (lang, content, buttons_json, is_active) VALUES (?, ?, ?, ?)', [lang || 'en', content, buttons_json || '[]', is_active ? 1 : 0])
-  res.json({ id: info.lastInsertRowid })
+router.post('/admin/welcome-presets', authMiddleware, (req, res) => {
+  const { greeting, greeting_en, buttons, enabled } = req.body
+  if (!greeting) return res.status(400).json({ error: 'Greeting required' })
+  const result = run('INSERT INTO chat_welcome_presets (greeting, greeting_en, buttons, enabled) VALUES (?, ?, ?, ?)',
+    [greeting, greeting_en || '', JSON.stringify(buttons || []), enabled ? 1 : 0])
+  res.json({ success: true, id: result.lastInsertRowid })
 })
 
-router.put('/admin/greetings/:id', authMiddleware, (req, res) => {
-  const { lang, content, buttons_json, is_active } = req.body
-  run('UPDATE live_chat_greetings SET lang=?, content=?, buttons_json=?, is_active=? WHERE id=?', [lang, content, buttons_json, is_active ? 1 : 0, req.params.id])
+router.put('/admin/welcome-presets/:id', authMiddleware, (req, res) => {
+  const { greeting, greeting_en, buttons, enabled } = req.body
+  run('UPDATE chat_welcome_presets SET greeting=?, greeting_en=?, buttons=?, enabled=? WHERE id=?',
+    [greeting, greeting_en || '', JSON.stringify(buttons || []), enabled ? 1 : 0, req.params.id])
   res.json({ success: true })
 })
 
-router.delete('/admin/greetings/:id', authMiddleware, (req, res) => {
-  run('DELETE FROM live_chat_greetings WHERE id=?', [req.params.id])
+router.delete('/admin/welcome-presets/:id', authMiddleware, (req, res) => {
+  run('DELETE FROM chat_welcome_presets WHERE id=?', [req.params.id])
   res.json({ success: true })
 })
 
@@ -98,55 +91,41 @@ router.get('/admin/messages', authMiddleware, (req, res) => {
   }
 })
 
-router.post('/admin/messages', authMiddleware, async (req, res) => {
+router.post('/admin/messages', authMiddleware, (req, res) => {
   const { visitor_id, content } = req.body
   run('INSERT INTO live_chat_messages (visitor_id, sender_type, content) VALUES (?, ?, ?)', [visitor_id, 'admin', content])
-  await sendWechatMessage(`Replied to visitor ${visitor_id}:\n${content}`)
   res.json({ success: true })
 })
 
-// ── Public: Visitor API ──────────────────────────────────────
-
-router.get('/settings', (req, res) => {
-  const settings = getOne('SELECT global_enabled, auto_close_seconds FROM live_chat_settings WHERE id = 1')
-  res.json(settings || { global_enabled: 1, auto_close_seconds: 0 })
-})
-
-router.post('/init', (req, res) => {
-  const { visitor_id, lang } = req.body
-  if (!visitor_id) return res.status(400).json({ error: 'Missing visitor_id' })
-  
-  const hasHistory = getOne('SELECT id FROM live_chat_messages WHERE visitor_id = ? LIMIT 1', [visitor_id])
-  if (hasHistory) return res.json({ new_session: false })
-
-  // Find greetings for this language
-  const greetings = getAll('SELECT * FROM live_chat_greetings WHERE is_active = 1 AND lang = ? ORDER BY id ASC', [lang || 'en'])
-  if (greetings.length > 0) {
-    const settings = getOne('SELECT greeting_index FROM live_chat_settings WHERE id = 1')
-    let gIdx = settings.greeting_index || 0
-    if (gIdx >= greetings.length) gIdx = 0
-    
-    const selectedGreeting = greetings[gIdx]
-    run('INSERT INTO live_chat_messages (visitor_id, sender_type, content, buttons_json) VALUES (?, ?, ?, ?)', 
-      [visitor_id, 'admin', selectedGreeting.content, selectedGreeting.buttons_json || '[]'])
-      
-    // Increment index
-    run('UPDATE live_chat_settings SET greeting_index = ? WHERE id = 1', [(gIdx + 1) % greetings.length])
-    return res.json({ new_session: true, greeting_sent: true })
+// ── Public: Widget Config (no auth) ─────────────────────────
+router.get('/widget-config', (req, res) => {
+  const settings = getOne('SELECT widget_enabled, auto_collapse_seconds FROM live_chat_settings WHERE id = 1')
+  if (!settings || !settings.widget_enabled) {
+    return res.json({ enabled: false })
   }
-  
-  res.json({ new_session: true, greeting_sent: false })
+
+  // Get enabled welcome presets with round-robin
+  const presets = getAll('SELECT * FROM chat_welcome_presets WHERE enabled = 1 ORDER BY sort_order ASC, id ASC')
+  let activePreset = null
+  if (presets.length > 0) {
+    activePreset = presets[welcomePresetIndex % presets.length]
+    welcomePresetIndex++
+    activePreset.buttons = JSON.parse(activePreset.buttons || '[]')
+  }
+
+  res.json({
+    enabled: true,
+    auto_collapse_seconds: settings.auto_collapse_seconds || 10,
+    welcome_preset: activePreset
+  })
 })
 
-router.post('/send', async (req, res) => {
+// ── Public: Visitor API ──────────────────────────────────────
+router.post('/send', (req, res) => {
   const { visitor_id, content } = req.body
   if (!visitor_id || !content) return res.status(400).json({ error: 'Missing fields' })
 
-  // Save visitor message
   run('INSERT INTO live_chat_messages (visitor_id, sender_type, content) VALUES (?, ?, ?)', [visitor_id, 'visitor', content])
-
-  // Forward to WeChat (Admin)
-  await sendWechatMessage(`Visitor [${visitor_id}]:\n${content}`)
 
   // Check auto-reply logic
   const settings = getOne('SELECT * FROM live_chat_settings WHERE id = 1')
@@ -155,7 +134,7 @@ router.post('/send', async (req, res) => {
     const currentHour = now.getHours()
     const currentMin = now.getMinutes()
     const currentTimeStr = `${currentHour.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}`
-    
+
     let isOfflineTime = false
     if (settings.start_time <= settings.end_time) {
       isOfflineTime = currentTimeStr >= settings.start_time && currentTimeStr <= settings.end_time
@@ -164,18 +143,12 @@ router.post('/send', async (req, res) => {
     }
 
     if (isOfflineTime) {
-      const autoReplies = getAll('SELECT * FROM live_chat_auto_replies WHERE is_active = 1 ORDER BY id ASC')
-      if (autoReplies.length > 0) {
-        let rIdx = settings.auto_reply_index || 0
-        if (rIdx >= autoReplies.length) rIdx = 0
-        const selectedReply = autoReplies[rIdx]
-        
-        // Save auto reply
-        run('INSERT INTO live_chat_messages (visitor_id, sender_type, content) VALUES (?, ?, ?)', [visitor_id, 'admin', selectedReply.content])
-        await sendWechatMessage(`Auto-replied to visitor [${visitor_id}]:\n${selectedReply.content}`)
-        
-        // Increment index
-        run('UPDATE live_chat_settings SET auto_reply_index = ? WHERE id = 1', [(rIdx + 1) % autoReplies.length])
+      // Get enabled auto replies and rotate
+      const replies = getAll('SELECT * FROM chat_auto_replies WHERE enabled = 1 ORDER BY sort_order ASC, id ASC')
+      if (replies.length > 0) {
+        const reply = replies[autoReplyIndex % replies.length]
+        autoReplyIndex++
+        run('INSERT INTO live_chat_messages (visitor_id, sender_type, content) VALUES (?, ?, ?)', [visitor_id, 'admin', reply.content])
       }
     }
   }
@@ -186,44 +159,15 @@ router.post('/send', async (req, res) => {
 router.get('/poll', (req, res) => {
   const { visitor_id, last_id } = req.query
   if (!visitor_id) return res.status(400).json({ error: 'Missing visitor_id' })
-  
+
   const queryLastId = parseInt(last_id) || 0
   const msgs = getAll('SELECT * FROM live_chat_messages WHERE visitor_id = ? AND id > ? ORDER BY timestamp ASC', [visitor_id, queryLastId])
-  
-  // Mark as read
+
   if (msgs.length > 0) {
     run('UPDATE live_chat_messages SET is_read = 1 WHERE visitor_id = ? AND sender_type = "admin" AND id > ?', [visitor_id, queryLastId])
   }
-  
-  res.json(msgs)
-})
 
-// ── OpenClaw Integration (OpenAI Spoofing Webhook) ───────────
-router.post('/openclaw-webhook/chat/completions', (req, res) => {
-  try {
-    const { messages } = req.body
-    if (!messages || messages.length === 0) return res.json({ choices: [{ message: { content: '' } }] })
-    
-    // OpenClaw passes WeChat user messages as 'user' role
-    const userMsg = [...messages].reverse().find(m => m.role === 'user')
-    if (!userMsg) return res.json({ choices: [{ message: { content: '' } }] })
-    
-    // The 'name' field contains the actual WeChat user ID. If missing, fallback to 'wechat_user'
-    const wxid = userMsg.name || 'wechat_user'
-    const content = userMsg.content || ''
-    
-    if (content.trim()) {
-      run('INSERT INTO live_chat_messages (visitor_id, sender_type, content) VALUES (?, ?, ?)', [wxid, 'visitor', content])
-    }
-    
-    // We return empty string so OpenClaw AI doesn't reply automatically.
-    // The Admin will reply using the website dashboard (or filehelper).
-    return res.json({
-      choices: [{ message: { content: '' } }]
-    })
-  } catch (e) {
-    return res.json({ choices: [{ message: { content: '' } }] })
-  }
+  res.json(msgs)
 })
 
 export default router

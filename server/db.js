@@ -1613,7 +1613,7 @@ Requirements:
     CREATE TABLE IF NOT EXISTS live_chat_messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       visitor_id TEXT NOT NULL,
-      sender_type TEXT NOT NULL, -- 'visitor' or 'admin'
+      sender_type TEXT NOT NULL,
       content TEXT NOT NULL,
       is_read INTEGER DEFAULT 0,
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -1623,64 +1623,46 @@ Requirements:
   db.exec(`
     CREATE TABLE IF NOT EXISTS live_chat_settings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      widget_enabled INTEGER DEFAULT 1,
       auto_reply_enabled INTEGER DEFAULT 0,
       start_time TEXT DEFAULT '22:00',
       end_time TEXT DEFAULT '07:00',
-      reply_text TEXT DEFAULT 'Hello! We are currently offline. Please leave your message and email address, and we will get back to you as soon as possible.',
+      auto_collapse_seconds INTEGER DEFAULT 10,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS live_chat_auto_replies (
+    CREATE TABLE IF NOT EXISTS chat_auto_replies (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       content TEXT NOT NULL,
-      is_active INTEGER DEFAULT 1,
+      enabled INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS live_chat_greetings (
+    CREATE TABLE IF NOT EXISTS chat_welcome_presets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      lang TEXT DEFAULT 'en',
-      content TEXT NOT NULL,
-      buttons_json TEXT,
-      is_active INTEGER DEFAULT 1,
+      greeting TEXT NOT NULL DEFAULT '欢迎参观我们的网站！',
+      greeting_en TEXT NOT NULL DEFAULT 'Welcome to our website!',
+      buttons TEXT DEFAULT '[]',
+      enabled INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
 
-  try {
-    const columns = db.pragma("table_info(live_chat_messages)")
-    if (!columns.some(c => c.name === 'buttons_json')) {
-      db.exec("ALTER TABLE live_chat_messages ADD COLUMN buttons_json TEXT")
-    }
-  } catch (e) {
-    console.warn('[db] Migration for live_chat_messages failed:', e)
-  }
-
-  try {
-    const columns = db.pragma("table_info(live_chat_settings)")
-    const colsToAdd = [
-      { name: 'global_enabled', def: 'INTEGER DEFAULT 1' },
-      { name: 'auto_close_seconds', def: 'INTEGER DEFAULT 0' },
-      { name: 'auto_reply_index', def: 'INTEGER DEFAULT 0' },
-      { name: 'greeting_index', def: 'INTEGER DEFAULT 0' }
-    ]
-    colsToAdd.forEach(col => {
-      if (!columns.some(c => c.name === col.name)) {
-        db.exec(`ALTER TABLE live_chat_settings ADD COLUMN ${col.name} ${col.def}`)
-      }
-    })
-  } catch (e) {
-    console.warn('[db] Migration for live_chat_settings failed:', e)
-  }
+  // Migrations for live_chat_settings
+  try { db.exec('ALTER TABLE live_chat_settings ADD COLUMN widget_enabled INTEGER DEFAULT 1') } catch(e) {}
+  try { db.exec('ALTER TABLE live_chat_settings ADD COLUMN auto_collapse_seconds INTEGER DEFAULT 10') } catch(e) {}
+  // Remove old reply_text column if exists (we use chat_auto_replies table now)
 
   try {
     const hasChatSettings = db.prepare("SELECT count(*) as c FROM live_chat_settings").get().c
     if (hasChatSettings === 0) {
-      db.prepare('INSERT INTO live_chat_settings (auto_reply_enabled) VALUES (0)').run()
+      db.prepare('INSERT INTO live_chat_settings (widget_enabled, auto_reply_enabled) VALUES (1, 0)').run()
     }
   } catch (e) {
     console.error('[db] Error populating default chat settings:', e)
