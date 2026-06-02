@@ -154,7 +154,7 @@ const sendMessage = async () => {
   hasInteracted = true
 
   messages.value.push({
-    id: Date.now(),
+    id: 'local-' + Date.now(),
     visitor_id: visitorId,
     sender_type: 'visitor',
     content: text,
