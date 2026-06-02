@@ -739,6 +739,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   background: #fff;
+  min-height: 0;
+  height: 100%;
 }
 .no-active-chat {
   flex: 1;
@@ -755,7 +757,8 @@ onUnmounted(() => {
 .active-chat {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 .chat-header {
   padding: 16px 20px;
