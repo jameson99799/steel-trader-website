@@ -68,6 +68,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useLang } from '../composables/useLang'
 
 const router = useRouter()
 const route = useRoute()
@@ -80,7 +81,7 @@ const unreadCount = ref(0)
 const messagesContainer = ref(null)
 const welcomePreset = ref(null)
 const autoCollapseSeconds = ref(10)
-const lang = ref('en')
+const { lang } = useLang()
 const logoUrl = ref('')
 const textareaRef = ref(null)
 
@@ -161,6 +162,13 @@ const localizedUiTexts = {
     chatOffline: '오프라인',
     chatPlaceholder: '메시지를 입력하세요...',
     chatSend: '전송'
+  },
+  tr: {
+    chatTitle: 'Müşteri Desteği',
+    chatOnline: 'Çevrimiçi',
+    chatOffline: 'Çevrimdışı',
+    chatPlaceholder: 'Mesajınızı yazın...',
+    chatSend: 'Gönder'
   }
 }
 
@@ -174,14 +182,7 @@ let pollInterval = null
 let collapseTimer = null
 let hasInteracted = false
 
-// Detect language from URL
-const detectLang = () => {
-  const path = route?.path || window.location.pathname
-  const match = path.match(/^\/(zh|en|ru|es|fr|de|pt|ar|hi|ja|ko)\//)
-  lang.value = match ? match[1] : 'en'
-}
 
-watch(() => route?.path, detectLang)
 
 const isExternalOrProtocol = (url) => {
   return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('mailto:') || url.startsWith('tel:')
@@ -385,7 +386,6 @@ watch(lang, () => {
 
 onMounted(() => {
   if (typeof window === 'undefined') return
-  detectLang()
 
   visitorId = localStorage.getItem('chat_visitor_id')
   if (!visitorId) {
