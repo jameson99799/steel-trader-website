@@ -3,22 +3,23 @@ import { run, getAll, getOne } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import fs from 'fs'
 import http from 'http'
+import https from 'https'
 
 const router = express.Router()
 
-// GeoIP lookup helper (returns Chinese country name) using native http for maximum Node version compatibility
+// GeoIP lookup helper (returns Chinese country name)
 function lookupGeoIP(visitorId, ipAddress) {
   if (!ipAddress || ipAddress === '127.0.0.1' || ipAddress === '::1' || ipAddress.startsWith('192.168.') || ipAddress.startsWith('::ffff:')) return
   const cleanIp = ipAddress.replace(/^::ffff:/, '')
   
-  http.get(`http://ip-api.com/json/${cleanIp}?lang=zh-CN&fields=status,country`, (res) => {
+  https.get(`https://ip9.com.cn/get?ip=${cleanIp}`, (res) => {
     let data = ''
     res.on('data', (chunk) => { data += chunk })
     res.on('end', () => {
       try {
         const parsed = JSON.parse(data)
-        if (parsed.status === 'success' && parsed.country) {
-          run('UPDATE live_chat_messages SET country = ? WHERE visitor_id = ? AND (country IS NULL OR country = "")', [parsed.country, visitorId])
+        if (parsed.ret === 200 && parsed.data && parsed.data.country) {
+          run('UPDATE live_chat_messages SET country = ? WHERE visitor_id = ? AND (country IS NULL OR country = "")', [parsed.data.country, visitorId])
         }
       } catch (e) {
         console.error('GeoIP parsing failed:', e.message)
@@ -256,6 +257,17 @@ router.get('/widget-config', (req, res) => {
 })
 
 // ── Public: Visitor API ──────────────────────────────────────
+
+router.get('/debug-ip', (req, res) => {
+  res.json({
+    ip: req.ip,
+    headers: req.headers,
+    cf: req.headers['cf-connecting-ip'],
+    xfwd: req.headers['x-forwarded-for'],
+    real: req.headers['x-real-ip']
+  })
+})
+
 router.post('/send', (req, res) => {
   try {
     healSchema()
