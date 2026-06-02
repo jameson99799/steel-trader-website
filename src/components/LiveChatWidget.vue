@@ -123,6 +123,8 @@ const openChat = () => {
 
 const closeChat = () => {
   isOpen.value = false
+  hasInteracted = true
+  if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null }
 }
 
 const formatTime = (isoString) => {
@@ -213,22 +215,18 @@ const fetchWidgetConfig = async () => {
         welcomePreset.value = config.welcome_preset
       }
 
-      // Auto-popup for new visitors
-      const hasVisited = sessionStorage.getItem('chat_shown')
-      if (!hasVisited && config.welcome_preset) {
-        setTimeout(() => {
-          if (!hasInteracted) {
-            isOpen.value = true
-            sessionStorage.setItem('chat_shown', '1')
-            // Auto-collapse after X seconds
-            collapseTimer = setTimeout(() => {
-              if (!hasInteracted) {
-                isOpen.value = false
-              }
-            }, autoCollapseSeconds.value * 1000)
-          }
-        }, 1500) // Small delay before showing popup
-      }
+      // Auto-popup on every page entry
+      setTimeout(() => {
+        if (!hasInteracted) {
+          isOpen.value = true
+          // Auto-collapse after X seconds
+          collapseTimer = setTimeout(() => {
+            if (!hasInteracted) {
+              isOpen.value = false
+            }
+          }, autoCollapseSeconds.value * 1000)
+        }
+      }, 1500) // Small delay before showing popup
     }
   } catch (e) {
     console.error('Failed to fetch widget config', e)

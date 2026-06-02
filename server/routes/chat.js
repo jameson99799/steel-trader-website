@@ -77,11 +77,15 @@ router.delete('/admin/welcome-presets/:id', authMiddleware, (req, res) => {
 router.get('/admin/messages', authMiddleware, (req, res) => {
   const visitorId = req.query.visitor_id
   if (visitorId) {
+    // Mark messages as read when admin loads the thread
+    run('UPDATE live_chat_messages SET is_read = 1 WHERE visitor_id = ? AND sender_type = "visitor"', [visitorId])
     const msgs = getAll('SELECT * FROM live_chat_messages WHERE visitor_id = ? ORDER BY timestamp ASC', [visitorId])
     res.json(msgs)
   } else {
     const visitors = getAll(`
-      SELECT m.* FROM live_chat_messages m
+      SELECT m.*,
+        (SELECT COUNT(*) FROM live_chat_messages WHERE visitor_id = m.visitor_id AND sender_type = "visitor" AND is_read = 0) as unread_count
+      FROM live_chat_messages m
       INNER JOIN (
         SELECT visitor_id, MAX(id) as max_id FROM live_chat_messages GROUP BY visitor_id
       ) grouped ON m.id = grouped.max_id
@@ -184,6 +188,45 @@ router.post('/send', (req, res) => {
   if (!visitor_id || !content) return res.status(400).json({ error: 'Missing fields' })
 
   run('INSERT INTO live_chat_messages (visitor_id, sender_type, content) VALUES (?, ?, ?)', [visitor_id, 'visitor', content])
+
+  // Send email notification on first message
+  try {
+    const msgCount = getOne('SELECT COUNT(*) as c FROM live_chat_messages WHERE visitor_id = ? AND sender_type = "visitor"', [visitor_id]).c
+    if (msgCount === 1) {
+      import('../emailService.js').then(({ sendMail, getEmailConfig }) => {
+        const settings = getOne('SELECT * FROM email_settings WHERE id=1') || {}
+        const toEmails = settings.to_emails || getEmailConfig().to_email || ''
+        if (toEmails) {
+          const html = `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+            <div style="background:#2563eb;color:#fff;padding:24px;border-radius:8px 8px 0 0">
+              <h2 style="margin:0">💬 新客服会话通知</h2>
+              <p style="margin:6px 0 0;opacity:0.85">来自 SunSea Steel 官网在线客服</p>
+            </div>
+            <div style="background:#f8fafc;padding:24px;border-radius:0 0 8px 8px;border:1px solid #e2e8f0;border-top:none">
+              <p>有新访客在官网上发起咨询：</p>
+              <div style="margin:16px 0;padding:16px;background:#fff;border-radius:8px;border:1px solid #e2e8f0">
+                <p style="color:#64748b;margin:0 0 8px;font-size:13px"><strong>访客ID:</strong> ${visitor_id}</p>
+                <p style="margin:0;line-height:1.6;font-size:15px;color:#1e293b"><strong>最新内容：</strong>${content}</p>
+              </div>
+              <p style="margin-bottom:0">请登录网站后台【在线客服】版块，与该客户进行实时回复。</p>
+              <a href="https://www.sunseasteel.com/admin/chat" style="display:inline-block;margin-top:16px;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px">去后台回复 🚀</a>
+              <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8">
+                此邮件由 SunSea Steel 系统自动发送 · ${new Date().toLocaleString('zh-CN')}
+              </div>
+            </div>
+          </div>`
+          sendMail({
+            to: toEmails,
+            subject: `【新客服咨询】来自访客 ${visitor_id.substring(0, 8)}...`,
+            html
+          }).catch(console.error)
+        }
+      }).catch(console.error)
+    }
+  } catch (e) {
+    console.error('Failed to trigger email notification:', e)
+  }
 
   // Check auto-reply logic
   const settings = getOne('SELECT * FROM live_chat_settings WHERE id = 1')
