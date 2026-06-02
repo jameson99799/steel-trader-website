@@ -51,7 +51,7 @@ export function initWechatBot() {
     // But since the bot forwards messages from the visitor, we can just save it.
     
     // Just a simple routing: find the last active visitor who sent a message.
-    const lastMsg = getOne('SELECT visitor_id FROM live_chat_messages WHERE sender_type="visitor" ORDER BY id DESC LIMIT 1')
+    const lastMsg = getOne("SELECT visitor_id FROM live_chat_messages WHERE sender_type='visitor' ORDER BY id DESC LIMIT 1")
     if (lastMsg) {
       run('INSERT INTO live_chat_messages (visitor_id, sender_type, content, is_read) VALUES (?, ?, ?, ?)', [
         lastMsg.visitor_id,

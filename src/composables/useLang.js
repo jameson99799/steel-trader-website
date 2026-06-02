@@ -138,7 +138,12 @@ const builtInTranslations = {
     futures30d: '30日',
     futures60d: '60日',
     futures100d: '100日',
-    futuresPrice: '价格'
+    futuresPrice: '价格',
+    chatTitle: 'SunSea Steel 在线客服',
+    chatOnline: '在线',
+    chatOffline: '离线',
+    chatPlaceholder: '请输入您的消息...',
+    chatSend: '发送'
   },
   en: {
     home: 'Home', products: 'Products', about: 'About Us', contact: 'Contact',
@@ -277,7 +282,12 @@ const builtInTranslations = {
     futures30d: '30 Days',
     futures60d: '60 Days',
     futures100d: '100 Days',
-    futuresPrice: 'Price'
+    futuresPrice: 'Price',
+    chatTitle: 'SunSea Steel Support',
+    chatOnline: 'Online',
+    chatOffline: 'Offline',
+    chatPlaceholder: 'Type your message...',
+    chatSend: 'Send'
   }
 }
 

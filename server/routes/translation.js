@@ -743,6 +743,80 @@ function collectFactory() {
     }
 }
 
+function collectChatSupport() {
+    try {
+        const items = []
+        
+        // 1. Collect auto replies
+        const replies = getAll('SELECT id, content FROM chat_auto_replies')
+        for (const r of replies) {
+            if (r.content) {
+                items.push({
+                    type: 'chat_auto_reply',
+                    id: r.id,
+                    field: 'content',
+                    text: r.content,
+                    itemName: `客服自动回复 #${r.id}`
+                })
+            }
+        }
+        
+        // 2. Collect welcome presets
+        const presets = getAll('SELECT id, greeting, buttons FROM chat_welcome_presets')
+        for (const p of presets) {
+            if (p.greeting) {
+                items.push({
+                    type: 'chat_welcome_preset',
+                    id: p.id,
+                    field: 'greeting',
+                    text: p.greeting,
+                    itemName: `客服欢迎语 #${p.id}`
+                })
+            }
+            if (p.buttons) {
+                try {
+                    const buttons = JSON.parse(p.buttons)
+                    if (Array.isArray(buttons)) {
+                        buttons.forEach((btn, idx) => {
+                            if (btn.label) {
+                                items.push({
+                                    type: 'chat_welcome_preset',
+                                    id: p.id,
+                                    field: `btn_label_${idx}`,
+                                    text: btn.label,
+                                    itemName: `客服欢迎预设 #${p.id} 按钮 #${idx + 1} 文字`
+                                })
+                            }
+                        })
+                    }
+                } catch (e) {}
+            }
+        }
+        
+        // 3. Collect static UI texts using chat_ui_text type
+        const chatUiTexts = {
+            chatTitle: 'SunSea Steel 在线客服',
+            chatOnline: '在线',
+            chatOffline: '离线',
+            chatPlaceholder: '请输入您的消息...',
+            chatSend: '发送'
+        }
+        for (const [key, text] of Object.entries(chatUiTexts)) {
+            items.push({
+                type: 'chat_ui_text',
+                id: 'static',
+                field: key,
+                text: text,
+                itemName: `客服窗口 UI: ${text}`
+            })
+        }
+        
+        return items
+    } catch (e) {
+        return []
+    }
+}
+
 const PAGES = {
     ui_texts_static: () => collectUITexts(),
     products: collectProducts,
@@ -756,7 +830,8 @@ const PAGES = {
     roofing_categories: () => [...collectRoofingCategories(), ...collectRoofingProfiles()],
     roofing_profiles: collectRoofingProfiles,
     factory: collectFactory,
-    futures: () => collectFuturesTexts()
+    futures: () => collectFuturesTexts(),
+    chat: collectChatSupport
 };
 
 
@@ -1153,7 +1228,7 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'AI API key not configured' })
     }
 
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat' }
     const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
     let overrideNote = manualOverrides.length > 0
         ? '\n\nUse these approved translations as reference:\n' +
@@ -1322,7 +1397,7 @@ router.post('/run-one', authMiddleware, async (req, res) => {
     if (!s?.api_key && !getOne('SELECT api_key FROM ai_channels WHERE is_default = 1')?.api_key) return res.status(400).json({ error: 'AI API key not configured. Please add an AI channel in AI Translation settings.' })
 
     // Map singular type names to PAGES keys (product -> products, category -> categories, etc.)
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat' }
     const pageKey = TYPE_TO_PAGE[content_type] || content_type
     if (!PAGES[pageKey]) return res.status(400).json({ error: `Unknown content type: ${content_type}` })
     const allItems = PAGES[pageKey]()
@@ -1553,7 +1628,7 @@ router.get('/ui-texts/:lang', (req, res) => {
     try {
         // Get all ui_text translations for this language
         const rows = getAll(
-            `SELECT content_field, translated_text FROM translations WHERE language_code = ? AND content_type IN ('ui_text', 'futures') AND content_id = ?`,
+            `SELECT content_field, translated_text FROM translations WHERE language_code = ? AND content_type IN ('ui_text', 'futures', 'chat_ui_text') AND content_id = ?`,
             [lang, 'static']
         )
         
@@ -1764,6 +1839,7 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
     const newsCategoryFields = PAGES.news_categories ? PAGES.news_categories() : []
     const heroFields = PAGES.hero ? PAGES.hero() : []
     const uiTextFields = PAGES.ui_texts_static ? PAGES.ui_texts_static() : []
+    const chatFields = PAGES.chat ? PAGES.chat() : []
 
     // Group fields by item, EXPANDING combined fields into actual stored sub-field names
     function groupByItem(fields, type) {
@@ -1869,6 +1945,20 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
         }
     }
 
+    function checkChatUITexts(lang) {
+        const chatUiKeys = ['chatTitle', 'chatOnline', 'chatOffline', 'chatPlaceholder', 'chatSend']
+        const totalKeys = chatUiKeys.length
+        const translated = transMap[`chat_ui_text_static_${lang.code}`] || new Set()
+        const missingKeys = chatUiKeys.filter(k => !translated.has(k))
+        const translatedCount = totalKeys - missingKeys.length
+        return {
+            total: totalKeys,
+            translated: translatedCount,
+            missing: missingKeys,
+            complete: missingKeys.length === 0
+        }
+    }
+
     // Check simple content groups (company, page_texts, categories, hero)
     function checkSimpleGroup(fields, type, lang) {
         const section = { total: fields.length, complete: 0, partial: 0, none: 0, missing: [] }
@@ -1893,7 +1983,10 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
             page_texts: checkSimpleGroup(pageTextFields, 'page_text', lang),
             categories: checkSimpleGroup(categoryFields, 'category', lang),
             news_categories: checkSimpleGroup(newsCategoryFields, 'news_category', lang),
-            hero: checkSimpleGroup(heroFields, 'hero', lang)
+            hero: checkSimpleGroup(heroFields, 'hero', lang),
+            chat_welcome_preset: checkSimpleGroup(chatFields.filter(x => x.type === 'chat_welcome_preset'), 'chat_welcome_preset', lang),
+            chat_auto_reply: checkSimpleGroup(chatFields.filter(x => x.type === 'chat_auto_reply'), 'chat_auto_reply', lang),
+            chat_ui_texts: checkChatUITexts(lang)
         }
 
         for (const item of productItems) checkItem(item, langReport.products, lang)
@@ -1935,7 +2028,7 @@ router.post('/run-selective', authMiddleware, async (req, res) => {
     if (!langs.length) return res.status(400).json({ error: 'No valid languages found' })
 
     const enhanced = enhanceWithDefaultChannel(s)
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat' }
     const pageKey = TYPE_TO_PAGE[type]
     if (!PAGES[pageKey]) return res.status(400).json({ error: 'Invalid type' })
 
@@ -2392,7 +2485,7 @@ async function executeTranslationTask(targetLang, contentType, contentId) {
         throw new Error('AI API key not configured.')
     }
 
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures' }
+    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat' }
     const pageKey = TYPE_TO_PAGE[contentType] || contentType
     if (!PAGES[pageKey]) throw new Error(`Unknown content type: ${contentType}`)
     

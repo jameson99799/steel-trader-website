@@ -1632,6 +1632,7 @@ Requirements:
       start_time TEXT DEFAULT '22:00',
       end_time TEXT DEFAULT '07:00',
       auto_collapse_seconds INTEGER DEFAULT 10,
+      wechat_webhook_url TEXT,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
@@ -1661,6 +1662,7 @@ Requirements:
   // Migrations for live_chat_settings
   try { db.exec('ALTER TABLE live_chat_settings ADD COLUMN widget_enabled INTEGER DEFAULT 1') } catch(e) {}
   try { db.exec('ALTER TABLE live_chat_settings ADD COLUMN auto_collapse_seconds INTEGER DEFAULT 10') } catch(e) {}
+  try { db.exec('ALTER TABLE live_chat_settings ADD COLUMN wechat_webhook_url TEXT') } catch(e) {}
   // Remove old reply_text column if exists (we use chat_auto_replies table now)
 
   try {

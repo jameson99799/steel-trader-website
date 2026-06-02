@@ -1,9 +1,10 @@
 <template>
   <div v-if="widgetEnabled" class="live-chat-wrapper">
     <!-- Floating Button -->
-    <button v-if="!isOpen" class="chat-toggle" @click="openChat">
+    <button class="chat-toggle" :class="{ 'has-logo': !!logoUrl }" @click="toggleChat">
       <div class="chat-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <img v-if="logoUrl" :src="logoUrl" alt="Logo" class="chat-logo-img" />
+        <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         </svg>
       </div>
@@ -15,8 +16,8 @@
       <div v-if="isOpen" class="chat-window">
         <div class="chat-header">
           <div class="header-info">
-            <h3>{{ lang === 'zh' ? 'SunSea Steel 在线客服' : 'SunSea Steel Support' }}</h3>
-            <span class="status-dot"></span> {{ lang === 'zh' ? '在线' : 'Online' }}
+            <h3>{{ uiTexts.chatTitle }}</h3>
+            <span class="status-dot"></span> {{ uiTexts.chatOnline }}
           </div>
           <button class="close-btn" @click="closeChat">&times;</button>
         </div>
@@ -25,14 +26,14 @@
           <!-- Welcome preset (first message) -->
           <div v-if="welcomePreset" class="message admin welcome-msg">
             <div class="message-bubble">
-              {{ lang === 'zh' ? welcomePreset.greeting : (welcomePreset.greeting_en || welcomePreset.greeting) }}
+              {{ welcomePreset.greeting }}
             </div>
             <div v-if="welcomePreset.buttons && welcomePreset.buttons.length" class="quick-buttons">
               <a v-for="(btn, bi) in welcomePreset.buttons" :key="bi"
                  :href="getButtonUrl(btn)"
                  class="quick-btn"
                  @click.prevent="handleButtonClick(btn)">
-                {{ lang === 'zh' ? btn.label : (btn.label_en || btn.label) }}
+                {{ btn.label }}
               </a>
             </div>
           </div>
@@ -46,9 +47,11 @@
 
         <div class="chat-input-area">
           <textarea
+            ref="textareaRef"
             v-model="newMessage"
             @keydown.enter.exact.prevent="sendMessage"
-            :placeholder="lang === 'zh' ? '请输入您的消息...' : 'Type your message...'"
+            @input="adjustTextareaHeight"
+            :placeholder="uiTexts.chatPlaceholder"
             rows="1"
           ></textarea>
           <button @click="sendMessage" :disabled="!newMessage.trim()">
@@ -78,6 +81,16 @@ const messagesContainer = ref(null)
 const welcomePreset = ref(null)
 const autoCollapseSeconds = ref(10)
 const lang = ref('en')
+const logoUrl = ref('')
+const textareaRef = ref(null)
+
+const uiTexts = ref({
+  chatTitle: 'SunSea Steel Support',
+  chatOnline: 'Online',
+  chatOffline: 'Offline',
+  chatPlaceholder: 'Type your message...',
+  chatSend: 'Send'
+})
 
 let visitorId = ''
 let pollInterval = null
@@ -118,6 +131,14 @@ const handleButtonClick = (btn) => {
   }
 }
 
+const toggleChat = () => {
+  if (isOpen.value) {
+    closeChat()
+  } else {
+    openChat()
+  }
+}
+
 const openChat = () => {
   isOpen.value = true
   hasInteracted = true
@@ -147,10 +168,24 @@ const scrollToBottom = () => {
   })
 }
 
+const adjustTextareaHeight = () => {
+  nextTick(() => {
+    const ta = textareaRef.value
+    if (!ta) return
+    ta.style.height = 'auto'
+    ta.style.height = ta.scrollHeight + 'px'
+  })
+}
+
+watch(newMessage, () => {
+  adjustTextareaHeight()
+})
+
 const sendMessage = async () => {
   if (!newMessage.value.trim()) return
   const text = newMessage.value.trim()
   newMessage.value = ''
+  adjustTextareaHeight()
   hasInteracted = true
 
   messages.value.push({
@@ -166,7 +201,7 @@ const sendMessage = async () => {
     await fetch('/api/chat/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ visitor_id: visitorId, content: text })
+      body: JSON.stringify({ visitor_id: visitorId, content: text, lang: lang.value })
     })
     pollMessages()
   } catch (e) {
@@ -219,15 +254,19 @@ const generateId = () => {
 
 const fetchWidgetConfig = async () => {
   try {
-    const res = await fetch('/api/chat/widget-config')
+    const res = await fetch(`/api/chat/widget-config?lang=${lang.value}`)
     if (res.ok) {
       const config = await res.json()
       widgetEnabled.value = config.enabled
       if (!config.enabled) return
 
       autoCollapseSeconds.value = config.auto_collapse_seconds || 10
+      logoUrl.value = config.logo || ''
       if (config.welcome_preset) {
         welcomePreset.value = config.welcome_preset
+      }
+      if (config.ui_texts) {
+        uiTexts.value = config.ui_texts
       }
 
       // Auto-popup on every page entry
@@ -247,6 +286,10 @@ const fetchWidgetConfig = async () => {
     console.error('Failed to fetch widget config', e)
   }
 }
+
+watch(lang, () => {
+  fetchWidgetConfig()
+})
 
 onMounted(() => {
   if (typeof window === 'undefined') return
@@ -293,6 +336,20 @@ onUnmounted(() => {
   position: relative;
   transition: transform 0.2s, box-shadow 0.2s;
   animation: pulse-ring 2s ease-out infinite;
+}
+
+.chat-toggle.has-logo {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  padding: 4px;
+}
+
+.chat-toggle.has-logo .chat-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
 }
 
 @keyframes pulse-ring {
@@ -459,8 +516,9 @@ onUnmounted(() => {
   font-size: 13.5px;
   resize: none;
   outline: none;
-  max-height: 80px;
+  max-height: 120px;
   transition: border-color 0.2s;
+  overflow-y: auto;
 }
 
 .chat-input-area textarea:focus { border-color: #2563eb; }

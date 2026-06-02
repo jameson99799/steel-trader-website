@@ -112,7 +112,8 @@ async function runJobInBackground(jobId) {
                 page_text: 'page_texts', category: 'categories', news_category: 'news_categories',
                 hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors',
                 roofing_profile: 'roofing_profiles', roofing_category: 'roofing_categories',
-                factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures'
+                factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures',
+                chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat'
             }
             
             for (const ei of explicitItems) {
@@ -195,7 +196,8 @@ async function runJobInBackground(jobId) {
         page_text: 'page_texts', category: 'categories', news_category: 'news_categories',
         hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors',
         roofing_profile: 'roofing_profiles', roofing_category: 'roofing_categories',
-        factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures'
+        factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures',
+        chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat'
     }
 
     // ── Process items with concurrency ──

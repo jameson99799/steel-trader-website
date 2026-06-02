@@ -185,8 +185,10 @@
 
           <div class="chat-input">
             <textarea 
+              ref="textareaRef"
               v-model="replyText" 
               @keydown.enter.exact.prevent="sendReply"
+              @input="adjustTextareaHeight"
               placeholder="按 Enter 发送消息，Shift + Enter 换行..."
               rows="2"
             ></textarea>
@@ -235,6 +237,12 @@
             <label>弹窗自动缩回时间（秒）</label>
             <input type="number" v-model.number="settings.auto_collapse_seconds" min="3" max="60" />
             <span class="hint">新用户进入网站后，弹窗会在此秒数后自动缩回为图标按钮</span>
+          </div>
+
+          <div class="form-group">
+            <label>企业微信通知 Webhook 地址</label>
+            <input type="text" v-model="settings.wechat_webhook_url" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." />
+            <span class="hint">配置企业微信群机器人的 Webhook 地址，有新会话时将在此群中收到卡片通知提醒。如果不需要微信通知，请留空。</span>
           </div>
 
           <div class="form-actions">
@@ -325,7 +333,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 
 const activeTab = ref(localStorage.getItem('chat_active_tab') || 'chat')
-const settings = ref({ widget_enabled: true, auto_reply_enabled: false, start_time: '22:00', end_time: '07:00', auto_collapse_seconds: 10 })
+const settings = ref({ widget_enabled: true, auto_reply_enabled: false, start_time: '22:00', end_time: '07:00', auto_collapse_seconds: 10, wechat_webhook_url: '' })
 const autoReplies = ref([])
 const welcomePresets = ref([])
 const pageOptions = ref([])
@@ -340,6 +348,20 @@ const replyText = ref('')
 const sending = ref(false)
 const searchQuery = ref('')
 const messagesContainer = ref(null)
+const textareaRef = ref(null)
+
+const adjustTextareaHeight = () => {
+  nextTick(() => {
+    const ta = textareaRef.value
+    if (!ta) return
+    ta.style.height = 'auto'
+    ta.style.height = ta.scrollHeight + 'px'
+  })
+}
+
+watch(replyText, () => {
+  adjustTextareaHeight()
+})
 
 // AI Translation states
 const aiChannels = ref([])
@@ -527,6 +549,7 @@ const sendReply = async () => {
   sending.value = true
   const content = replyText.value.trim()
   replyText.value = ''
+  adjustTextareaHeight()
 
   try {
     const res = await fetch('/api/chat/admin/messages', {
@@ -576,7 +599,8 @@ const fetchSettings = async () => {
         auto_reply_enabled: Boolean(d.auto_reply_enabled),
         start_time: d.start_time || '22:00',
         end_time: d.end_time || '07:00',
-        auto_collapse_seconds: d.auto_collapse_seconds || 10
+        auto_collapse_seconds: d.auto_collapse_seconds || 10,
+        wechat_webhook_url: d.wechat_webhook_url || ''
       }
     }
   } catch (e) { console.error(e) }
@@ -840,6 +864,7 @@ onUnmounted(() => {
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   height: calc(100vh - 60px);
+  min-height: 600px;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -1152,6 +1177,11 @@ onUnmounted(() => {
   font-size: 13.5px;
   resize: none;
   outline: none;
+  max-height: 160px;
+  height: 42px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  transition: border-color 0.2s;
 }
 .chat-input textarea:focus {
   border-color: #2563eb;
@@ -1266,11 +1296,20 @@ input:focus, textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 
 .buttons-editor { margin-top: 12px; }
 .buttons-editor > label { font-weight: 600; font-size: 13px; color: #374151; display: block; margin-bottom: 8px; }
 .button-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
   align-items: center;
+}
+.button-row .url-select {
+  flex: 2 1 200px;
+}
+.button-row input {
+  flex: 1 1 120px;
+}
+.button-row .btn-danger {
+  flex: 0 0 auto;
 }
 .url-select {
   padding: 8px 12px;
@@ -1472,5 +1511,33 @@ input:focus, textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 768px) {
+  .chat-workspace {
+    grid-template-columns: 1fr;
+  }
+  .visitor-sidebar {
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+    max-height: 300px;
+  }
+}
+
+@media (max-width: 600px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 700px) {
+  .chat-dashboard {
+    height: auto;
+    min-height: auto;
+  }
+  .chat-workspace {
+    height: 500px;
+    flex: none;
+  }
 }
 </style>

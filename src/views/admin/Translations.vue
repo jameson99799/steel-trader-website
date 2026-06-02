@@ -672,6 +672,7 @@
             <option value="page_texts">页面文字</option>
             <option value="ral_colors">🎨 RAL颜色</option>
             <option value="futures">📈 期货行情</option>
+            <option value="chat">💬 在线客服</option>
           </select>
           <input v-model="searchQuery" class="form-control" placeholder="关键词（留空查全部未翻译）" @keyup.enter="doSearch" />
           <button class="btn btn-outline" @click="doSearch" :disabled="searching || !searchLang">
@@ -849,8 +850,8 @@ const saving = ref(false)
 const savedMsg = ref(false)
 
 const selectedLang = ref('')
-const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero', 'ui_texts_static', 'ral_colors', 'roofing_categories', 'factory', 'futures']
-const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字', ral_colors: '🎨 RAL颜色', roofing_categories: '🏠 瓦型分组', factory: '🏭 工厂展示', futures: '📈 期货行情' }
+const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero', 'ui_texts_static', 'ral_colors', 'roofing_categories', 'factory', 'futures', 'chat']
+const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字', ral_colors: '🎨 RAL颜色', roofing_categories: '🏠 瓦型分组', factory: '🏭 工厂展示', futures: '📈 期货行情', chat: '💬 在线客服' }
 const selectedPages = ref([...allPages])
 const concurrency = ref(3)
 const translating = ref(false)
@@ -1645,6 +1646,9 @@ function auditLangTotalMissing(lang) {
   count += (lang.categories?.missing?.length || 0)
   count += (lang.news_categories?.missing?.length || 0)
   count += (lang.hero?.missing?.length || 0)
+  count += (lang.chat_welcome_preset?.missing?.length || 0)
+  count += (lang.chat_auto_reply?.missing?.length || 0)
+  count += (lang.chat_ui_texts?.missing?.length || 0)
   return count
 }
 
@@ -1661,9 +1665,16 @@ const auditMissingAll = computed(() => {
     if (lang.ui_texts?.missing?.length) {
       items.push({ type: 'ui_text', id: 'static', name: 'UI 静态文字 (' + lang.ui_texts.missing.length + ' keys)', lang: lang.code, langName: lang.name, langFlag: lang.flag })
     }
-    for (const section of ['company', 'page_texts', 'categories', 'news_categories', 'hero']) {
+    if (lang.chat_ui_texts?.missing?.length) {
+      items.push({ type: 'chat_ui_text', id: 'static', name: '客服 UI 静态文字 (' + lang.chat_ui_texts.missing.length + ' keys)', lang: lang.code, langName: lang.name, langFlag: lang.flag })
+    }
+    for (const section of ['company', 'page_texts', 'categories', 'news_categories', 'hero', 'chat_welcome_preset', 'chat_auto_reply']) {
       for (const m of (lang[section]?.missing || [])) {
-        const typeMap = { company: 'company', page_texts: 'page_text', categories: 'category', news_categories: 'news_category', hero: 'hero' }
+        const typeMap = { 
+          company: 'company', page_texts: 'page_text', categories: 'category', 
+          news_categories: 'news_category', hero: 'hero',
+          chat_welcome_preset: 'chat_welcome_preset', chat_auto_reply: 'chat_auto_reply'
+        }
         items.push({ type: typeMap[section], id: m.id, name: m.name, lang: lang.code, langName: lang.name, langFlag: lang.flag })
       }
     }
