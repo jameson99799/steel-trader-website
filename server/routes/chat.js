@@ -307,12 +307,15 @@ router.post('/send', (req, res) => {
                 <p>有新访客在官网上发起咨询：</p>
                 <div style="margin:16px 0;padding:16px;background:#fff;border-radius:8px;border:1px solid #e2e8f0">
                   <p style="color:#64748b;margin:0 0 8px;font-size:13px"><strong>访客ID:</strong> ${visitor_id}</p>
+                  <p style="color:#64748b;margin:0 0 8px;font-size:13px"><strong>IP地址:</strong> ${cleanIp}</p>
+                  <p style="color:#64748b;margin:0 0 8px;font-size:13px"><strong>所在国家:</strong> ${cachedCountry || '获取中 (请登录后台查看)'}</p>
+                  <p style="color:#64748b;margin:0 0 8px;font-size:13px"><strong>发送时间(北京):</strong> ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}</p>
                   <p style="margin:0;line-height:1.6;font-size:15px;color:#1e293b"><strong>最新内容：</strong>${content}</p>
                 </div>
                 <p style="margin-bottom:0">请登录网站后台【在线客服】版块，与该客户进行实时回复。</p>
                 <a href="https://www.sunseasteel.com/admin/chat" style="display:inline-block;margin-top:16px;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px">去后台回复 🚀</a>
                 <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8">
-                  此邮件由 SunSea Steel 系统自动发送 · ${new Date().toLocaleString('zh-CN')}
+                  此邮件由 SunSea Steel 系统自动发送 · ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
                 </div>
               </div>
             </div>`

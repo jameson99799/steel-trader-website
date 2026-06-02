@@ -134,8 +134,9 @@ const closeChat = () => {
 
 const formatTime = (isoString) => {
   if (!isoString) return ''
-  const date = new Date(isoString)
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const safeStr = isoString.includes('Z') ? isoString : isoString.replace(' ', 'T') + 'Z'
+  const date = new Date(safeStr)
+  return date.toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false, hour: '2-digit', minute: '2-digit' })
 }
 
 const scrollToBottom = () => {
@@ -175,7 +176,10 @@ const sendMessage = async () => {
 
 const pollMessages = async () => {
   if (!visitorId) return
-  const lastId = messages.value.length > 0 ? Math.max(...messages.value.map(m => m.id)) : 0
+  
+  // Only calculate max ID from real database IDs (numbers), ignore 'local-xxx' strings
+  const realIds = messages.value.map(m => parseInt(m.id)).filter(id => !isNaN(id))
+  const lastId = realIds.length > 0 ? Math.max(...realIds) : 0
 
   try {
     const res = await fetch(`/api/chat/poll?visitor_id=${visitorId}&last_id=${lastId}`)
@@ -183,7 +187,9 @@ const pollMessages = async () => {
       const newMsgs = await res.json()
       if (newMsgs.length > 0) {
         const incomingIds = newMsgs.map(m => m.id)
-        messages.value = messages.value.filter(m => !incomingIds.includes(m.id))
+        
+        // Remove optimistic local messages and old duplicates
+        messages.value = messages.value.filter(m => !incomingIds.includes(m.id) && !String(m.id).startsWith('local-'))
 
         let hasAdminReply = false
         for (const msg of newMsgs) {

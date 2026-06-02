@@ -317,7 +317,8 @@ const totalUnread = computed(() => {
 
 const isOnline = (isoString) => {
   if (!isoString) return false
-  const diff = Date.now() - new Date(isoString).getTime()
+  const safeStr = isoString.includes('Z') ? isoString : isoString.replace(' ', 'T') + 'Z'
+  const diff = Date.now() - new Date(safeStr).getTime()
   return diff < 15 * 60 * 1000 // consider active if message within 15 minutes
 }
 
@@ -332,8 +333,9 @@ const activeVisitorMeta = computed(() => {
 
 const formatTime = (isoString) => {
   if (!isoString) return ''
-  const date = new Date(isoString)
-  return date.toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })
+  const safeStr = isoString.includes('Z') ? isoString : isoString.replace(' ', 'T') + 'Z'
+  const date = new Date(safeStr)
+  return date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false, hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })
 }
 
 const selectVisitor = async (id) => {
