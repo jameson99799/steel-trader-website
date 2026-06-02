@@ -108,27 +108,7 @@ router.delete('/admin/welcome-presets/:id', authMiddleware, (req, res) => {
   res.json({ success: true })
 })
 
-// ── Admin: Chat History ──────────────────────────────────────
-router.get('/admin/messages', authMiddleware, (req, res) => {
-  const visitorId = req.query.visitor_id
-  if (visitorId) {
-    // Mark messages as read when admin loads the thread
-    run('UPDATE live_chat_messages SET is_read = 1 WHERE visitor_id = ? AND sender_type = "visitor"', [visitorId])
-    const msgs = getAll('SELECT * FROM live_chat_messages WHERE visitor_id = ? ORDER BY timestamp ASC', [visitorId])
-    res.json(msgs)
-  } else {
-    const visitors = getAll(`
-      SELECT m.*,
-        (SELECT COUNT(*) FROM live_chat_messages WHERE visitor_id = m.visitor_id AND sender_type = "visitor" AND is_read = 0) as unread_count
-      FROM live_chat_messages m
-      INNER JOIN (
-        SELECT visitor_id, MAX(id) as max_id FROM live_chat_messages GROUP BY visitor_id
-      ) grouped ON m.id = grouped.max_id
-      ORDER BY m.timestamp DESC
-    `)
-    res.json(visitors)
-  }
-})
+
 
 // ── Admin: Page Options for Button URL Dropdown ──────────────
 router.get('/admin/page-options', authMiddleware, (req, res) => {

@@ -12,7 +12,7 @@ export function initWechatBot() {
 
   bot = WechatyBuilder.build({
     name: 'led-trade-bot',
-    puppet: 'wechaty-puppet-wechat4u', // Use wechat4u protocol which is not blocked like default web
+    puppet: 'wechaty-puppet-wechat',
   })
 
   bot.on('scan', async (qrcode, status) => {
