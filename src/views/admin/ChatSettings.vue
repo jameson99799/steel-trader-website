@@ -36,6 +36,9 @@
               <span class="visitor-id">访客 #{{ visitor.visitor_id.substring(0, 8) }}</span>
               <span :class="['status-dot', { online: isOnline(visitor.timestamp) }]"></span>
             </div>
+            <div v-if="visitor.ip" class="visitor-geoip">
+              📍 {{ visitor.country || '未知国家' }} ({{ visitor.ip }})
+            </div>
             <div class="last-msg-snippet">
               {{ visitor.content }}
             </div>
@@ -57,7 +60,12 @@
 
         <div v-else class="active-chat">
           <div class="chat-header">
-            <h3>对讲中：访客 #{{ activeVisitorId.substring(0, 12) }}...</h3>
+            <div class="chat-header-title">
+              <h3>对讲中：访客 #{{ activeVisitorId.substring(0, 12) }}...</h3>
+              <div v-if="activeVisitorMeta && activeVisitorMeta.ip" class="chat-header-geoip">
+                IP: {{ activeVisitorMeta.ip }} | 国家: {{ activeVisitorMeta.country || '未知国家' }}
+              </div>
+            </div>
             <span :class="['status-badge', { online: isCurrentOnline }]">
               {{ isCurrentOnline ? '在线' : '离线' }}
             </span>
@@ -273,6 +281,10 @@ const isOnline = (isoString) => {
 const isCurrentOnline = computed(() => {
   const current = visitors.value.find(v => v.visitor_id === activeVisitorId.value)
   return current ? isOnline(current.timestamp) : false
+})
+
+const activeVisitorMeta = computed(() => {
+  return visitors.value.find(v => v.visitor_id === activeVisitorId.value) || null
 })
 
 const formatTime = (isoString) => {
@@ -610,6 +622,16 @@ onUnmounted(() => {
 .status-dot.online {
   background: #10b981;
 }
+.visitor-geoip {
+  font-size: 11px;
+  color: #2563eb;
+  background: #eff6ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
 .last-msg-snippet {
   font-size: 12.5px;
   color: #64748b;
@@ -671,6 +693,15 @@ onUnmounted(() => {
   font-size: 16px;
   color: #1e293b;
   font-weight: 600;
+}
+.chat-header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chat-header-geoip {
+  font-size: 12px;
+  color: #64748b;
 }
 .status-badge {
   font-size: 12px;

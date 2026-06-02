@@ -4,6 +4,23 @@ import { authMiddleware } from '../middleware/auth.js'
 
 const router = express.Router()
 
+// GeoIP lookup helper (returns Chinese country name)
+async function lookupGeoIP(visitorId, ipAddress) {
+  if (!ipAddress || ipAddress === '127.0.0.1' || ipAddress === '::1' || ipAddress.startsWith('192.168.') || ipAddress.startsWith('::ffff:')) return
+  try {
+    const cleanIp = ipAddress.replace(/^::ffff:/, '')
+    const res = await fetch(`http://ip-api.com/json/${cleanIp}?lang=zh-CN&fields=status,country`)
+    if (res.ok) {
+      const data = await res.json()
+      if (data.status === 'success' && data.country) {
+        run('UPDATE live_chat_messages SET country = ? WHERE visitor_id = ? AND (country IS NULL OR country = "")', [data.country, visitorId])
+      }
+    }
+  } catch (e) {
+    console.error('GeoIP lookup failed for IP:', ipAddress, e.message)
+  }
+}
+
 // Track round-robin index for auto-replies and welcome presets
 let autoReplyIndex = 0
 let welcomePresetIndex = 0
@@ -187,7 +204,21 @@ router.post('/send', (req, res) => {
   const { visitor_id, content } = req.body
   if (!visitor_id || !content) return res.status(400).json({ error: 'Missing fields' })
 
-  run('INSERT INTO live_chat_messages (visitor_id, sender_type, content) VALUES (?, ?, ?)', [visitor_id, 'visitor', content])
+  // Extract client IP address
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || ''
+  const cleanIp = ip.split(',')[0].trim().replace(/^::ffff:/, '')
+
+  // Try to find cached country for this visitor
+  const existing = getOne('SELECT country FROM live_chat_messages WHERE visitor_id = ? AND country IS NOT NULL AND country != "" LIMIT 1', [visitor_id])
+  const cachedCountry = existing ? existing.country : null
+
+  run('INSERT INTO live_chat_messages (visitor_id, sender_type, content, ip, country) VALUES (?, ?, ?, ?, ?)', 
+      [visitor_id, 'visitor', content, cleanIp, cachedCountry])
+
+  if (!cachedCountry) {
+    // Look up in background
+    lookupGeoIP(visitor_id, cleanIp)
+  }
 
   // Send email notification on first message
   try {
