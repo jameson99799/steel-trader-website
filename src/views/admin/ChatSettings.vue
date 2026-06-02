@@ -98,9 +98,16 @@
         <div class="buttons-editor">
           <label>快捷按钮</label>
           <div v-for="(btn, bi) in preset.buttons" :key="bi" class="button-row">
+            <select v-model="btn.url" @change="onPageSelect(btn, $event)" class="url-select">
+              <option value="">-- 选择跳转页面 --</option>
+              <optgroup v-for="group in pageOptions" :key="group.group" :label="group.group">
+                <option v-for="item in group.items" :key="item.url" :value="item.url">
+                  {{ item.label }} ({{ item.label_en }})
+                </option>
+              </optgroup>
+            </select>
             <input type="text" v-model="btn.label" placeholder="按钮文字（中文）" />
             <input type="text" v-model="btn.label_en" placeholder="Button Text (EN)" />
-            <input type="text" v-model="btn.url" placeholder="跳转链接，如 /products" />
             <button class="btn btn-sm btn-danger" @click="preset.buttons.splice(bi, 1)">×</button>
           </div>
           <button class="btn btn-sm btn-secondary" @click="preset.buttons.push({ label: '', label_en: '', url: '' })">+ 添加按钮</button>
@@ -124,10 +131,31 @@ import { ref, onMounted } from 'vue'
 const settings = ref({ widget_enabled: true, auto_reply_enabled: false, start_time: '22:00', end_time: '07:00', auto_collapse_seconds: 10 })
 const autoReplies = ref([])
 const welcomePresets = ref([])
+const pageOptions = ref([])
 const newReplyContent = ref('')
 const saving = ref(false)
 const token = () => localStorage.getItem('token')
 const headers = () => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` })
+
+// When a page is selected from the dropdown, auto-fill label fields
+const onPageSelect = (btn, event) => {
+  const selectedUrl = event.target.value
+  for (const group of pageOptions.value) {
+    const found = group.items.find(i => i.url === selectedUrl)
+    if (found) {
+      if (!btn.label) btn.label = found.label
+      if (!btn.label_en) btn.label_en = found.label_en
+      break
+    }
+  }
+}
+
+const fetchPageOptions = async () => {
+  try {
+    const res = await fetch('/api/chat/admin/page-options', { headers: { 'Authorization': `Bearer ${token()}` } })
+    if (res.ok) pageOptions.value = await res.json()
+  } catch (e) { console.error(e) }
+}
 
 // ── Settings ──
 const fetchSettings = async () => {
@@ -215,7 +243,7 @@ const deletePreset = async (id) => {
   fetchWelcomePresets()
 }
 
-onMounted(() => { fetchSettings(); fetchAutoReplies(); fetchWelcomePresets() })
+onMounted(() => { fetchSettings(); fetchAutoReplies(); fetchWelcomePresets(); fetchPageOptions() })
 </script>
 
 <style scoped>
@@ -326,9 +354,22 @@ input:focus, textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 
 .buttons-editor > label { font-weight: 600; font-size: 13px; color: #374151; display: block; margin-bottom: 8px; }
 .button-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr auto;
+  grid-template-columns: 2fr 1fr 1fr auto;
   gap: 8px;
   margin-bottom: 6px;
+  align-items: center;
 }
+.url-select {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  background: white;
+  cursor: pointer;
+  width: 100%;
+  box-sizing: border-box;
+}
+.url-select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
 .add-preset-area { margin-top: 10px; }
 </style>

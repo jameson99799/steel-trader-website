@@ -91,6 +91,64 @@ router.get('/admin/messages', authMiddleware, (req, res) => {
   }
 })
 
+// ── Admin: Page Options for Button URL Dropdown ──────────────
+router.get('/admin/page-options', authMiddleware, (req, res) => {
+  const options = [
+    { group: '主要页面', items: [
+      { label: '首页', label_en: 'Home', url: '/' },
+      { label: '产品中心', label_en: 'Products', url: '/products' },
+      { label: '新闻资讯', label_en: 'News', url: '/news' },
+      { label: '关于我们', label_en: 'About Us', url: '/about' },
+      { label: '联系我们', label_en: 'Contact', url: '/contact' },
+      { label: '工厂展示', label_en: 'Factory', url: '/factory' },
+      { label: 'RAL颜色', label_en: 'RAL Colors', url: '/news/ral-colors' },
+      { label: '屋顶型材', label_en: 'Roofing Profiles', url: '/news/roofing-profiles' },
+      { label: '期货价格', label_en: 'Futures Price', url: '/news/futures-price' },
+    ]},
+  ]
+
+  // Dynamic: Product Categories
+  try {
+    const cats = getAll('SELECT id, name, name_en, slug FROM categories ORDER BY sort_order ASC')
+    if (cats.length > 0) {
+      options.push({
+        group: '产品分类',
+        items: cats.map(c => ({
+          label: c.name || c.name_en,
+          label_en: c.name_en || c.name,
+          url: `/products/category/${c.slug || c.id}`
+        }))
+      })
+    }
+  } catch (e) { /* categories table may not exist */ }
+
+  // Dynamic: News Categories
+  try {
+    const newsCats = getAll('SELECT id, name, name_en, slug FROM news_categories ORDER BY sort_order ASC')
+    if (newsCats.length > 0) {
+      options.push({
+        group: '新闻分类',
+        items: newsCats.map(c => ({
+          label: c.name || c.name_en,
+          label_en: c.name_en || c.name,
+          url: `/news/category/${c.slug || c.id}`
+        }))
+      })
+    }
+  } catch (e) { /* news_categories table may not exist */ }
+
+  // External links
+  options.push({
+    group: '外部链接',
+    items: [
+      { label: 'WhatsApp', label_en: 'WhatsApp', url: 'https://wa.me/' },
+      { label: 'Email', label_en: 'Email', url: 'mailto:' },
+    ]
+  })
+
+  res.json(options)
+})
+
 router.post('/admin/messages', authMiddleware, (req, res) => {
   const { visitor_id, content } = req.body
   run('INSERT INTO live_chat_messages (visitor_id, sender_type, content) VALUES (?, ?, ?)', [visitor_id, 'admin', content])
