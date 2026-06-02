@@ -2,6 +2,9 @@ import { WechatyBuilder } from 'wechaty'
 import QRCode from 'qrcode'
 import { run, getAll, getOne } from '../db.js'
 
+// Enable UOS protocol to bypass WeChat web login restrictions for new accounts
+process.env.WECHATY_PUPPET_WECHAT_PUPPET_UOS_ENV = '1'
+
 let bot = null
 let currentQrCodeUrl = null
 let isLoggedIn = false
