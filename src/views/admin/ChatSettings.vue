@@ -243,9 +243,9 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
 const activeTab = ref('basic')
-const wechatStatus = ref({ isLoggedIn: true, currentUser: 'OpenClaw API 模式', qrCodeUrl: null })
+const wechatStatus = ref({ isLoggedIn: false, currentUser: null, qrCodeUrl: null })
 const settings = ref({ global_enabled: true, auto_close_seconds: 0, auto_reply_enabled: false, start_time: '22:00', end_time: '07:00' })
-const loadingStatus = ref(false)
+const loadingStatus = ref(true)
 const saving = ref(false)
 
 const autoReplies = ref([])
