@@ -7,19 +7,27 @@ import https from 'https'
 
 const router = express.Router()
 
-// GeoIP lookup helper (returns Chinese country name)
+// GeoIP lookup helper (returns English country name from api.ipapi.is)
 function lookupGeoIP(visitorId, ipAddress) {
   if (!ipAddress || ipAddress === '127.0.0.1' || ipAddress === '::1' || ipAddress.startsWith('192.168.') || ipAddress.startsWith('::ffff:')) return
   const cleanIp = ipAddress.replace(/^::ffff:/, '')
   
-  https.get(`https://ip9.com.cn/get?ip=${cleanIp}`, (res) => {
+  const options = {
+    hostname: 'api.ipapi.is',
+    path: `/?ip=${cleanIp}`,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+  }
+
+  https.get(options, (res) => {
     let data = ''
     res.on('data', (chunk) => { data += chunk })
     res.on('end', () => {
       try {
         const parsed = JSON.parse(data)
-        if (parsed.ret === 200 && parsed.data && parsed.data.country) {
-          run('UPDATE live_chat_messages SET country = ? WHERE visitor_id = ? AND (country IS NULL OR country = "")', [parsed.data.country, visitorId])
+        if (parsed && parsed.location && parsed.location.country) {
+          run('UPDATE live_chat_messages SET country = ? WHERE visitor_id = ? AND (country IS NULL OR country = "")', [parsed.location.country, visitorId])
         }
       } catch (e) {
         console.error('GeoIP parsing failed:', e.message)
