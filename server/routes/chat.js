@@ -1,24 +1,32 @@
 import express from 'express'
 import { run, getAll, getOne } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
+import fs from 'fs'
+import http from 'http'
 
 const router = express.Router()
 
-// GeoIP lookup helper (returns Chinese country name)
-async function lookupGeoIP(visitorId, ipAddress) {
+// GeoIP lookup helper (returns Chinese country name) using native http for maximum Node version compatibility
+function lookupGeoIP(visitorId, ipAddress) {
   if (!ipAddress || ipAddress === '127.0.0.1' || ipAddress === '::1' || ipAddress.startsWith('192.168.') || ipAddress.startsWith('::ffff:')) return
-  try {
-    const cleanIp = ipAddress.replace(/^::ffff:/, '')
-    const res = await fetch(`http://ip-api.com/json/${cleanIp}?lang=zh-CN&fields=status,country`)
-    if (res.ok) {
-      const data = await res.json()
-      if (data.status === 'success' && data.country) {
-        run('UPDATE live_chat_messages SET country = ? WHERE visitor_id = ? AND (country IS NULL OR country = "")', [data.country, visitorId])
+  const cleanIp = ipAddress.replace(/^::ffff:/, '')
+  
+  http.get(`http://ip-api.com/json/${cleanIp}?lang=zh-CN&fields=status,country`, (res) => {
+    let data = ''
+    res.on('data', (chunk) => { data += chunk })
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(data)
+        if (parsed.status === 'success' && parsed.country) {
+          run('UPDATE live_chat_messages SET country = ? WHERE visitor_id = ? AND (country IS NULL OR country = "")', [parsed.country, visitorId])
+        }
+      } catch (e) {
+        console.error('GeoIP parsing failed:', e.message)
       }
-    }
-  } catch (e) {
+    })
+  }).on('error', (e) => {
     console.error('GeoIP lookup failed for IP:', ipAddress, e.message)
-  }
+  })
 }
 
 // Track round-robin index for auto-replies and welcome presets
@@ -259,91 +267,114 @@ router.get('/widget-config', (req, res) => {
 
 // ── Public: Visitor API ──────────────────────────────────────
 router.post('/send', (req, res) => {
-  const { visitor_id, content } = req.body
-  if (!visitor_id || !content) return res.status(400).json({ error: 'Missing fields' })
-
-  // Extract client IP address
-  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || ''
-  const cleanIp = ip.split(',')[0].trim().replace(/^::ffff:/, '')
-
-  // Try to find cached country for this visitor
-  const existing = getOne('SELECT country FROM live_chat_messages WHERE visitor_id = ? AND country IS NOT NULL AND country != "" LIMIT 1', [visitor_id])
-  const cachedCountry = existing ? existing.country : null
-
-  run('INSERT INTO live_chat_messages (visitor_id, sender_type, content, ip, country) VALUES (?, ?, ?, ?, ?)', 
-      [visitor_id, 'visitor', content, cleanIp, cachedCountry])
-
-  if (!cachedCountry) {
-    // Look up in background
-    lookupGeoIP(visitor_id, cleanIp)
-  }
-
-  // Send email notification on first message
   try {
-    const msgCount = getOne('SELECT COUNT(*) as c FROM live_chat_messages WHERE visitor_id = ? AND sender_type = "visitor"', [visitor_id]).c
-    if (msgCount === 1) {
-      import('../emailService.js').then(({ sendMail, getEmailConfig }) => {
-        const settings = getOne('SELECT * FROM email_settings WHERE id=1') || {}
-        const toEmails = settings.to_emails || getEmailConfig().to_email || ''
-        if (toEmails) {
-          const html = `
-          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-            <div style="background:#2563eb;color:#fff;padding:24px;border-radius:8px 8px 0 0">
-              <h2 style="margin:0">💬 新客服会话通知</h2>
-              <p style="margin:6px 0 0;opacity:0.85">来自 SunSea Steel 官网在线客服</p>
-            </div>
-            <div style="background:#f8fafc;padding:24px;border-radius:0 0 8px 8px;border:1px solid #e2e8f0;border-top:none">
-              <p>有新访客在官网上发起咨询：</p>
-              <div style="margin:16px 0;padding:16px;background:#fff;border-radius:8px;border:1px solid #e2e8f0">
-                <p style="color:#64748b;margin:0 0 8px;font-size:13px"><strong>访客ID:</strong> ${visitor_id}</p>
-                <p style="margin:0;line-height:1.6;font-size:15px;color:#1e293b"><strong>最新内容：</strong>${content}</p>
+    const { visitor_id, content } = req.body
+    if (!visitor_id || !content) return res.status(400).json({ error: 'Missing fields' })
+
+    // Extract client IP address safely
+    const ip = req.ip || req.headers['x-forwarded-for'] || (req.socket ? req.socket.remoteAddress : '') || ''
+    const ipStr = Array.isArray(ip) ? ip[0] : String(ip)
+    const cleanIp = ipStr.split(',')[0].trim().replace(/^::ffff:/, '')
+
+    // Try to find cached country for this visitor
+    let cachedCountry = null
+    try {
+      const existing = getOne('SELECT country FROM live_chat_messages WHERE visitor_id = ? AND country IS NOT NULL AND country != "" LIMIT 1', [visitor_id])
+      cachedCountry = existing ? existing.country : null
+    } catch (e) {
+      // Table might not have country column yet if migration hasn't run or failed
+      fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] SELECT country failed: ${e.message}\n`)
+    }
+
+    try {
+      run('INSERT INTO live_chat_messages (visitor_id, sender_type, content, ip, country) VALUES (?, ?, ?, ?, ?)', 
+          [visitor_id, 'visitor', content, cleanIp, cachedCountry])
+    } catch (dbErr) {
+      // Fallback in case columns do not exist yet (migration didn't run or failed)
+      fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] INSERT with ip/country failed, falling back: ${dbErr.message}\n`)
+      run('INSERT INTO live_chat_messages (visitor_id, sender_type, content) VALUES (?, ?, ?)', 
+          [visitor_id, 'visitor', content])
+    }
+
+    if (!cachedCountry) {
+      // Look up in background (will catch internally and not crash or reject)
+      lookupGeoIP(visitor_id, cleanIp)
+    }
+
+    // Send email notification on first message
+    try {
+      const msgCount = getOne('SELECT COUNT(*) as c FROM live_chat_messages WHERE visitor_id = ? AND sender_type = "visitor"', [visitor_id]).c
+      if (msgCount === 1) {
+        import('../emailService.js').then(({ sendMail, getEmailConfig }) => {
+          const settings = getOne('SELECT * FROM email_settings WHERE id=1') || {}
+          const toEmails = settings.to_emails || getEmailConfig().to_email || ''
+          if (toEmails) {
+            const html = `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+              <div style="background:#2563eb;color:#fff;padding:24px;border-radius:8px 8px 0 0">
+                <h2 style="margin:0">💬 新客服会话通知</h2>
+                <p style="margin:6px 0 0;opacity:0.85">来自 SunSea Steel 官网在线客服</p>
               </div>
-              <p style="margin-bottom:0">请登录网站后台【在线客服】版块，与该客户进行实时回复。</p>
-              <a href="https://www.sunseasteel.com/admin/chat" style="display:inline-block;margin-top:16px;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px">去后台回复 🚀</a>
-              <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8">
-                此邮件由 SunSea Steel 系统自动发送 · ${new Date().toLocaleString('zh-CN')}
+              <div style="background:#f8fafc;padding:24px;border-radius:0 0 8px 8px;border:1px solid #e2e8f0;border-top:none">
+                <p>有新访客在官网上发起咨询：</p>
+                <div style="margin:16px 0;padding:16px;background:#fff;border-radius:8px;border:1px solid #e2e8f0">
+                  <p style="color:#64748b;margin:0 0 8px;font-size:13px"><strong>访客ID:</strong> ${visitor_id}</p>
+                  <p style="margin:0;line-height:1.6;font-size:15px;color:#1e293b"><strong>最新内容：</strong>${content}</p>
+                </div>
+                <p style="margin-bottom:0">请登录网站后台【在线客服】版块，与该客户进行实时回复。</p>
+                <a href="https://www.sunseasteel.com/admin/chat" style="display:inline-block;margin-top:16px;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px">去后台回复 🚀</a>
+                <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8">
+                  此邮件由 SunSea Steel 系统自动发送 · ${new Date().toLocaleString('zh-CN')}
+                </div>
               </div>
-            </div>
-          </div>`
-          sendMail({
-            to: toEmails,
-            subject: `【新客服咨询】来自访客 ${visitor_id.substring(0, 8)}...`,
-            html
-          }).catch(console.error)
+            </div>`
+            sendMail({
+              to: toEmails,
+              subject: `【新客服咨询】来自访客 ${visitor_id.substring(0, 8)}...`,
+              html
+            }).catch(console.error)
+          }
+        }).catch(err => {
+          fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] Email import load failed: ${err.message}\n`)
+        })
+      }
+    } catch (e) {
+      console.error('Failed to trigger email notification:', e)
+    }
+
+    // Check auto-reply logic
+    const settings = getOne('SELECT * FROM live_chat_settings WHERE id = 1')
+    if (settings && settings.auto_reply_enabled) {
+      const now = new Date()
+      const currentHour = now.getHours()
+      const currentMin = now.getMinutes()
+      const currentTimeStr = `${currentHour.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}`
+
+      let isOfflineTime = false
+      if (settings.start_time <= settings.end_time) {
+        isOfflineTime = currentTimeStr >= settings.start_time && currentTimeStr <= settings.end_time
+      } else {
+        isOfflineTime = currentTimeStr >= settings.start_time || currentTimeStr <= settings.end_time
+      }
+
+      if (isOfflineTime) {
+        // Get enabled auto replies and rotate
+        const replies = getAll('SELECT * FROM chat_auto_replies WHERE enabled = 1 ORDER BY sort_order ASC, id ASC')
+        if (replies.length > 0) {
+          const reply = replies[autoReplyIndex % replies.length]
+          autoReplyIndex++
+          run('INSERT INTO live_chat_messages (visitor_id, sender_type, content) VALUES (?, ?, ?)', [visitor_id, 'admin', reply.content])
         }
-      }).catch(console.error)
-    }
-  } catch (e) {
-    console.error('Failed to trigger email notification:', e)
-  }
-
-  // Check auto-reply logic
-  const settings = getOne('SELECT * FROM live_chat_settings WHERE id = 1')
-  if (settings && settings.auto_reply_enabled) {
-    const now = new Date()
-    const currentHour = now.getHours()
-    const currentMin = now.getMinutes()
-    const currentTimeStr = `${currentHour.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}`
-
-    let isOfflineTime = false
-    if (settings.start_time <= settings.end_time) {
-      isOfflineTime = currentTimeStr >= settings.start_time && currentTimeStr <= settings.end_time
-    } else {
-      isOfflineTime = currentTimeStr >= settings.start_time || currentTimeStr <= settings.end_time
-    }
-
-    if (isOfflineTime) {
-      // Get enabled auto replies and rotate
-      const replies = getAll('SELECT * FROM chat_auto_replies WHERE enabled = 1 ORDER BY sort_order ASC, id ASC')
-      if (replies.length > 0) {
-        const reply = replies[autoReplyIndex % replies.length]
-        autoReplyIndex++
-        run('INSERT INTO live_chat_messages (visitor_id, sender_type, content) VALUES (?, ?, ?)', [visitor_id, 'admin', reply.content])
       }
     }
-  }
 
-  res.json({ success: true })
+    res.json({ success: true })
+  } catch (err) {
+    try {
+      fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] /send global catch: ${err.stack}\n`)
+    } catch (e) {}
+    res.status(500).json({ error: err.message, stack: err.stack })
+  }
 })
 
 router.get('/poll', (req, res) => {
