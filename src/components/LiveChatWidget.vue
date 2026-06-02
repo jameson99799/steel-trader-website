@@ -182,7 +182,7 @@ const pollMessages = async () => {
   const lastId = realIds.length > 0 ? Math.max(...realIds) : 0
 
   try {
-    const res = await fetch(`/api/chat/poll?visitor_id=${visitorId}&last_id=${lastId}`)
+    const res = await fetch(`/api/chat/poll?visitor_id=${visitorId}&last_id=${lastId}&_t=${Date.now()}`)
     if (res.ok) {
       const newMsgs = await res.json()
       if (newMsgs.length > 0) {
