@@ -57,7 +57,9 @@ fi
 # ── 4. 拉取最新代码（git reset --hard 不影响 /tmp 备份）────
 info "从 GitHub 拉取最新代码..."
 git fetch origin
-git reset --hard origin/master
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || git rev-parse --abbrev-ref HEAD)
+info "正在重置到 origin/${CURRENT_BRANCH}..."
+git reset --hard "origin/${CURRENT_BRANCH}"
 ok "代码: $(git log --oneline -1)"
 
 # ── 5. 从 /tmp 恢复数据库（100% 安全）──────────────────────
