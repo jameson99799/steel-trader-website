@@ -1631,6 +1631,52 @@ Requirements:
     )
   `)
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS live_chat_auto_replies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      content TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS live_chat_greetings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lang TEXT DEFAULT 'en',
+      content TEXT NOT NULL,
+      buttons_json TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  try {
+    const columns = db.pragma("table_info(live_chat_messages)")
+    if (!columns.some(c => c.name === 'buttons_json')) {
+      db.exec("ALTER TABLE live_chat_messages ADD COLUMN buttons_json TEXT")
+    }
+  } catch (e) {
+    console.warn('[db] Migration for live_chat_messages failed:', e)
+  }
+
+  try {
+    const columns = db.pragma("table_info(live_chat_settings)")
+    const colsToAdd = [
+      { name: 'global_enabled', def: 'INTEGER DEFAULT 1' },
+      { name: 'auto_close_seconds', def: 'INTEGER DEFAULT 0' },
+      { name: 'auto_reply_index', def: 'INTEGER DEFAULT 0' },
+      { name: 'greeting_index', def: 'INTEGER DEFAULT 0' }
+    ]
+    colsToAdd.forEach(col => {
+      if (!columns.some(c => c.name === col.name)) {
+        db.exec(`ALTER TABLE live_chat_settings ADD COLUMN ${col.name} ${col.def}`)
+      }
+    })
+  } catch (e) {
+    console.warn('[db] Migration for live_chat_settings failed:', e)
+  }
+
   try {
     const hasChatSettings = db.prepare("SELECT count(*) as c FROM live_chat_settings").get().c
     if (hasChatSettings === 0) {

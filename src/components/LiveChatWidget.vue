@@ -1,5 +1,5 @@
 <template>
-  <div class="live-chat-wrapper">
+  <div class="live-chat-wrapper" v-if="globalEnabled">
     <!-- Chat Button -->
     <button v-if="!isOpen" class="chat-toggle" @click="toggleChat">
       <div class="chat-icon">
@@ -12,7 +12,7 @@
 
     <!-- Chat Window -->
     <transition name="chat-slide">
-      <div v-if="isOpen" class="chat-window">
+      <div v-if="isOpen" class="chat-window" @mousemove="resetInteractionTimer" @keydown="resetInteractionTimer">
         <div class="chat-header">
           <div class="header-info">
             <h3>SunSea Steel Support</h3>
@@ -23,7 +23,22 @@
         
         <div class="chat-messages" ref="messagesContainer">
           <div v-for="msg in messages" :key="msg.id" :class="['message', msg.sender_type]">
-            <div class="message-bubble">{{ msg.content }}</div>
+            <div class="message-bubble">
+              {{ msg.content }}
+              
+              <!-- Interactive Buttons from Admin Greetings -->
+              <div class="message-buttons" v-if="msg.buttons_json && parseButtons(msg.buttons_json).length > 0">
+                <button 
+                  v-for="(btn, idx) in parseButtons(msg.buttons_json)" 
+                  :key="idx" 
+                  class="action-btn"
+                  @click="handleButtonClick(btn.url)"
+                >
+                  {{ btn.label }}
+                </button>
+              </div>
+            </div>
+            
             <div class="message-time">{{ formatTime(msg.timestamp) }}</div>
           </div>
         </div>
@@ -49,20 +64,66 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
+import { useRouter } from 'vue-router'
+import { useLang } from '../composables/useLang'
 
+const router = useRouter()
+const { lang } = useLang()
+
+const globalEnabled = ref(false)
+const autoCloseSeconds = ref(0)
 const isOpen = ref(false)
 const messages = ref([])
 const newMessage = ref('')
 const unreadCount = ref(0)
 const messagesContainer = ref(null)
+
 let visitorId = ''
 let pollInterval = null
+let autoCloseInterval = null
+let lastInteractionTime = Date.now()
 
 const toggleChat = () => {
   isOpen.value = !isOpen.value
   if (isOpen.value) {
     unreadCount.value = 0
+    resetInteractionTimer()
     scrollToBottom()
+  }
+}
+
+const resetInteractionTimer = () => {
+  lastInteractionTime = Date.now()
+}
+
+const checkAutoClose = () => {
+  if (isOpen.value && autoCloseSeconds.value > 0) {
+    const inactiveTime = (Date.now() - lastInteractionTime) / 1000
+    if (inactiveTime >= autoCloseSeconds.value) {
+      isOpen.value = false
+    }
+  }
+}
+
+const parseButtons = (jsonStr) => {
+  if (!jsonStr) return []
+  try {
+    return JSON.parse(jsonStr)
+  } catch (e) {
+    return []
+  }
+}
+
+const handleButtonClick = (url) => {
+  resetInteractionTimer()
+  if (!url) return
+  
+  if (url.startsWith('http')) {
+    window.open(url, '_blank')
+  } else {
+    // Add language prefix if needed, or just push
+    const targetUrl = url.startsWith('/') ? url : `/${url}`
+    router.push(`/${lang.value}${targetUrl.replace(`/${lang.value}`, '')}`)
   }
 }
 
@@ -81,12 +142,12 @@ const scrollToBottom = () => {
 }
 
 const sendMessage = async () => {
+  resetInteractionTimer()
   if (!newMessage.value.trim()) return
   
   const text = newMessage.value.trim()
   newMessage.value = ''
   
-  // Optimistically add to UI
   messages.value.push({
     id: Date.now(),
     visitor_id: visitorId,
@@ -102,7 +163,6 @@ const sendMessage = async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ visitor_id: visitorId, content: text })
     })
-    // The poll will pick up the real DB id and any instant auto-replies
     pollMessages()
   } catch (e) {
     console.error('Failed to send message', e)
@@ -110,7 +170,7 @@ const sendMessage = async () => {
 }
 
 const pollMessages = async () => {
-  if (!visitorId) return
+  if (!visitorId || !globalEnabled.value) return
   
   const lastId = messages.value.length > 0 ? Math.max(...messages.value.map(m => m.id)) : 0
   
@@ -119,9 +179,8 @@ const pollMessages = async () => {
     if (res.ok) {
       const newMsgs = await res.json()
       if (newMsgs.length > 0) {
-        // Only append new messages
         const incomingIds = newMsgs.map(m => m.id)
-        messages.value = messages.value.filter(m => !incomingIds.includes(m.id)) // Remove optimistic msgs if they matched an ID by chance (unlikely)
+        messages.value = messages.value.filter(m => !incomingIds.includes(m.id))
         
         let hasAdminReply = false
         for (const msg of newMsgs) {
@@ -143,25 +202,62 @@ const pollMessages = async () => {
   }
 }
 
-onMounted(() => {
-  // Only initialize on client-side
-  if (typeof window !== 'undefined') {
-    visitorId = localStorage.getItem('chat_visitor_id')
-    if (!visitorId) {
-      visitorId = uuidv4()
-      localStorage.setItem('chat_visitor_id', visitorId)
+const initChatSystem = async () => {
+  // 1. Fetch Global Settings
+  try {
+    const res = await fetch('/api/chat/settings')
+    if (res.ok) {
+      const data = await res.json()
+      globalEnabled.value = Boolean(data.global_enabled ?? true)
+      autoCloseSeconds.value = parseInt(data.auto_close_seconds) || 0
     }
-    
-    // Initial fetch
-    pollMessages()
-    
-    // Poll every 3 seconds
-    pollInterval = setInterval(pollMessages, 3000)
+  } catch (e) {
+    globalEnabled.value = true
+  }
+
+  if (!globalEnabled.value) return
+
+  // 2. Manage Visitor ID
+  visitorId = localStorage.getItem('chat_visitor_id')
+  if (!visitorId) {
+    visitorId = uuidv4()
+    localStorage.setItem('chat_visitor_id', visitorId)
+  }
+
+  // 3. Init Greeting API
+  try {
+    const initRes = await fetch('/api/chat/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visitor_id: visitorId, lang: lang.value })
+    })
+    if (initRes.ok) {
+      const initData = await initRes.json()
+      if (initData.new_session && initData.greeting_sent) {
+        isOpen.value = true
+        resetInteractionTimer()
+      }
+    }
+  } catch (e) {}
+
+  // 4. Start polling
+  pollMessages()
+  pollInterval = setInterval(pollMessages, 3000)
+  
+  if (autoCloseSeconds.value > 0) {
+    autoCloseInterval = setInterval(checkAutoClose, 1000)
+  }
+}
+
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    initChatSystem()
   }
 })
 
 onUnmounted(() => {
   if (pollInterval) clearInterval(pollInterval)
+  if (autoCloseInterval) clearInterval(autoCloseInterval)
 })
 </script>
 
@@ -221,7 +317,7 @@ onUnmounted(() => {
   bottom: 80px;
   right: 0;
   width: 350px;
-  height: 500px;
+  height: 520px;
   background: white;
   border-radius: 12px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
@@ -293,7 +389,7 @@ onUnmounted(() => {
 .message {
   display: flex;
   flex-direction: column;
-  max-width: 80%;
+  max-width: 85%;
 }
 
 .message.visitor {
@@ -322,6 +418,31 @@ onUnmounted(() => {
   background: #e5e7eb;
   color: #1f2937;
   border-bottom-left-radius: 4px;
+}
+
+.message-buttons {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.action-btn {
+  background: white;
+  border: 1px solid #d1d5db;
+  color: #2563eb;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.action-btn:hover {
+  background: #f3f4f6;
+  border-color: #2563eb;
 }
 
 .message-time {
