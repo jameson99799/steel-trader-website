@@ -26,14 +26,14 @@
           <!-- Welcome preset (first message) -->
           <div v-if="welcomePreset" class="message admin welcome-msg">
             <div class="message-bubble">
-              {{ welcomePreset.greeting }}
+              {{ getWelcomeGreeting() }}
             </div>
             <div v-if="welcomePreset.buttons && welcomePreset.buttons.length" class="quick-buttons">
               <a v-for="(btn, bi) in welcomePreset.buttons" :key="bi"
                  :href="getButtonUrl(btn)"
                  class="quick-btn"
                  @click.prevent="handleButtonClick(btn)">
-                {{ btn.label }}
+                {{ getButtonLabel(btn) }}
               </a>
             </div>
           </div>
@@ -66,7 +66,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
@@ -84,12 +84,89 @@ const lang = ref('en')
 const logoUrl = ref('')
 const textareaRef = ref(null)
 
-const uiTexts = ref({
-  chatTitle: 'SunSea Steel Support',
-  chatOnline: 'Online',
-  chatOffline: 'Offline',
-  chatPlaceholder: 'Type your message...',
-  chatSend: 'Send'
+const localizedUiTexts = {
+  zh: {
+    chatTitle: '客服支持',
+    chatOnline: '在线',
+    chatOffline: '离线',
+    chatPlaceholder: '请输入消息...',
+    chatSend: '发送'
+  },
+  en: {
+    chatTitle: 'SunSea Steel Support',
+    chatOnline: 'Online',
+    chatOffline: 'Offline',
+    chatPlaceholder: 'Type your message...',
+    chatSend: 'Send'
+  },
+  ru: {
+    chatTitle: 'Служба поддержки',
+    chatOnline: 'В сети',
+    chatOffline: 'Вне сети',
+    chatPlaceholder: 'Введите сообщение...',
+    chatSend: 'Отправить'
+  },
+  es: {
+    chatTitle: 'Soporte Técnico',
+    chatOnline: 'En línea',
+    chatOffline: 'Desconectado',
+    chatPlaceholder: 'Escribe tu mensaje...',
+    chatSend: 'Enviar'
+  },
+  fr: {
+    chatTitle: 'Support Client',
+    chatOnline: 'En ligne',
+    chatOffline: 'Hors ligne',
+    chatPlaceholder: 'Tapez votre message...',
+    chatSend: 'Envoyer'
+  },
+  de: {
+    chatTitle: 'Kundenservice',
+    chatOnline: 'Online',
+    chatOffline: 'Offline',
+    chatPlaceholder: 'Schreiben Sie eine Nachricht...',
+    chatSend: 'Senden'
+  },
+  pt: {
+    chatTitle: 'Suporte ao Cliente',
+    chatOnline: 'Online',
+    chatOffline: 'Offline',
+    chatPlaceholder: 'Digite sua mensagem...',
+    chatSend: 'Enviar'
+  },
+  ar: {
+    chatTitle: 'الدعم الفني',
+    chatOnline: 'متصل',
+    chatOffline: 'غير متصل',
+    chatPlaceholder: 'اكتب رسالتك...',
+    chatSend: 'إرسال'
+  },
+  hi: {
+    chatTitle: 'ग्राहक सहायता',
+    chatOnline: 'ऑनलाइन',
+    chatOffline: 'ऑफ़라인',
+    chatPlaceholder: 'अपना संदेश लिखें...',
+    chatSend: 'भेजें'
+  },
+  ja: {
+    chatTitle: 'カスタマーサポート',
+    chatOnline: 'オンライン',
+    chatOffline: 'オフ라인',
+    chatPlaceholder: 'メッセージを入力してください...',
+    chatSend: '送信'
+  },
+  ko: {
+    chatTitle: '고객 지원',
+    chatOnline: '온라인',
+    chatOffline: '오프라인',
+    chatPlaceholder: '메시지를 입력하세요...',
+    chatSend: '전송'
+  }
+}
+
+const uiTexts = computed(() => {
+  const currentLang = lang.value || 'en'
+  return localizedUiTexts[currentLang] || localizedUiTexts.en
 })
 
 let visitorId = ''
@@ -248,6 +325,24 @@ const pollMessages = async () => {
   }
 }
 
+const getWelcomeGreeting = () => {
+  if (!welcomePreset.value) return ''
+  const currentLang = lang.value || 'en'
+  if (currentLang === 'zh') {
+    return welcomePreset.value.greeting
+  }
+  return welcomePreset.value[`greeting_${currentLang}`] || welcomePreset.value.greeting_en || welcomePreset.value.greeting
+}
+
+const getButtonLabel = (btn) => {
+  if (!btn) return ''
+  const currentLang = lang.value || 'en'
+  if (currentLang === 'zh') {
+    return btn.label
+  }
+  return btn[`label_${currentLang}`] || btn.label_en || btn.label
+}
+
 const generateId = () => {
   return 'v-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8)
 }
@@ -261,12 +356,9 @@ const fetchWidgetConfig = async () => {
       if (!config.enabled) return
 
       autoCollapseSeconds.value = config.auto_collapse_seconds || 10
-      logoUrl.value = config.logo || ''
+      logoUrl.value = config.company_logo || ''
       if (config.welcome_preset) {
         welcomePreset.value = config.welcome_preset
-      }
-      if (config.ui_texts) {
-        uiTexts.value = config.ui_texts
       }
 
       // Auto-popup on every page entry
@@ -343,6 +435,14 @@ onUnmounted(() => {
   border: 1px solid #e2e8f0;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   padding: 4px;
+}
+
+.chat-toggle.has-logo .chat-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .chat-toggle.has-logo .chat-logo-img {
