@@ -380,13 +380,15 @@ router.post('/send', (req, res) => {
   }
 })
 
-router.get('/poll', (req, res) => {
+router.all('/poll', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
   res.setHeader('Pragma', 'no-cache')
   res.setHeader('Expires', '0')
   try {
     healSchema()
-    const { visitor_id, last_id } = req.query
+    const visitor_id = req.method === 'POST' ? req.body.visitor_id : req.query.visitor_id
+    const last_id = req.method === 'POST' ? req.body.last_id : req.query.last_id
+    
     if (!visitor_id) return res.status(400).json({ error: 'Missing visitor_id' })
 
     const queryLastId = parseInt(last_id) || 0
