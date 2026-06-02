@@ -82,8 +82,104 @@
 
           <div class="chat-messages" ref="messagesContainer">
             <div v-for="msg in activeMessages" :key="msg.id" :class="['message', msg.sender_type]">
-              <div class="message-bubble">{{ msg.content }}</div>
+              <div class="message-bubble-wrapper">
+                <div class="message-bubble">
+                  <div class="message-text">{{ msg.content }}</div>
+                  
+                  <!-- Translation Result inside bubble -->
+                  <div v-if="bubbleTranslations[msg.id]" class="bubble-translation">
+                    <div class="translation-divider"></div>
+                    <div class="translation-text">
+                      <span v-if="translatingBubbleId === msg.id" class="translating-spinner">⏳</span>
+                      {{ bubbleTranslations[msg.id] }}
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Bubble translation hover button -->
+                <button 
+                  v-if="aiChannels.length"
+                  class="btn-translate-bubble"
+                  @click="translateBubble(msg)"
+                  :disabled="translatingBubbleId === msg.id"
+                  title="使用AI翻译此消息"
+                >
+                  🌐
+                </button>
+              </div>
               <div class="message-time">{{ formatTime(msg.timestamp) }}</div>
+            </div>
+          </div>
+
+          <!-- AI Translation Helper Toolbar -->
+          <div class="chat-ai-translation-toolbar" v-if="aiChannels.length">
+            <div class="toolbar-left">
+              <span class="toolbar-label">🤖 AI 翻译助手</span>
+              
+              <!-- Channel Selector -->
+              <select v-model="selectedChannelId" class="toolbar-select" @change="onChannelChange">
+                <option v-for="ch in aiChannels" :key="ch.id" :value="ch.id">{{ ch.name }}</option>
+              </select>
+              
+              <!-- Model Selector -->
+              <select v-model="selectedModel" class="toolbar-select">
+                <option v-for="m in currentChannelModels" :key="m" :value="m">{{ m }}</option>
+              </select>
+              
+              <!-- Target Language Selector -->
+              <span class="toolbar-arrow">➔</span>
+              <select v-model="targetLang" class="toolbar-select">
+                <option value="EN">English (EN)</option>
+                <option value="ZH">简体中文 (ZH)</option>
+                <option value="ES">Español (ES)</option>
+                <option value="RU">Русский (RU)</option>
+                <option value="FR">Français (FR)</option>
+                <option value="DE">Deutsch (DE)</option>
+                <option value="PT">Português (PT)</option>
+                <option value="AR">العربية (AR)</option>
+                <option value="JA">日本語 (JA)</option>
+                <option value="KO">한국어 (KO)</option>
+              </select>
+            </div>
+            
+            <div class="toolbar-right">
+              <!-- Translation Button -->
+              <button 
+                class="btn-toolbar-action translate-input-btn" 
+                @click="translateInput"
+                :disabled="translatingInput || !replyText.trim()"
+                title="翻译输入框内容 (5秒内再次点击重新翻译原文)"
+              >
+                <span v-if="translatingInput">⏳ 正在翻译</span>
+                <span v-else>🌐 翻译并替换</span>
+              </button>
+              
+              <!-- Settings Toggle Button -->
+              <button 
+                class="btn-toolbar-action settings-btn" 
+                @click="showTranslationConfig = !showTranslationConfig"
+                title="翻译大模型设定"
+              >
+                ⚙️ 设定
+              </button>
+            </div>
+          </div>
+          
+          <!-- Collapsible System Prompt Settings -->
+          <div class="translation-settings-panel" v-if="showTranslationConfig && aiChannels.length">
+            <div class="panel-header">
+              <span>🤖 大模型翻译角色预设 (System Prompt)</span>
+              <button class="close-panel-btn" @click="showTranslationConfig = false">✕</button>
+            </div>
+            <textarea 
+              v-model="systemPrompt" 
+              class="system-prompt-textarea"
+              placeholder="例如：你是一个专业的外贸业务助手和翻译官，请将以下文本翻译为指定目标语言，保持语气自然、专业、贴近真实对话，只返回翻译结果，不要包含任何解释性文字。"
+              rows="3"
+            ></textarea>
+            <div class="panel-footer">
+              <span class="hint">提示词将作为 system 角色发送给大模型。更改后将自动保存。</span>
+              <button class="btn btn-sm btn-secondary" @click="resetSystemPrompt">恢复默认</button>
             </div>
           </div>
 
@@ -226,7 +322,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 
 const activeTab = ref('chat')
 const settings = ref({ widget_enabled: true, auto_reply_enabled: false, start_time: '22:00', end_time: '07:00', auto_collapse_seconds: 10 })
@@ -244,6 +340,38 @@ const replyText = ref('')
 const sending = ref(false)
 const searchQuery = ref('')
 const messagesContainer = ref(null)
+
+// AI Translation states
+const aiChannels = ref([])
+const selectedChannelId = ref(null)
+const selectedModel = ref('')
+const targetLang = ref(localStorage.getItem('chat_target_lang') || 'EN')
+const systemPrompt = ref(localStorage.getItem('chat_system_prompt') || '你是一个专业的外贸业务助手和翻译官。请把下面的文字翻译成目标语言，要求表达自然、流畅、得体。不要返回任何多余的解释、前言或标点引导，只需要输出翻译后的纯文本内容。')
+const showTranslationConfig = ref(false)
+const translatingInput = ref(false)
+const translatingBubbleId = ref(null)
+const bubbleTranslations = ref({})
+
+const lastInputTranslation = ref({
+  originalText: '',
+  translatedText: '',
+  timestamp: 0
+})
+
+const currentChannelModels = computed(() => {
+  const ch = aiChannels.value.find(c => c.id === selectedChannelId.value)
+  return ch?.models || []
+})
+
+// Watch translation settings to save to localStorage
+watch(targetLang, (newVal) => localStorage.setItem('chat_target_lang', newVal))
+watch(systemPrompt, (newVal) => localStorage.setItem('chat_system_prompt', newVal))
+watch(selectedChannelId, (newVal) => {
+  if (newVal) localStorage.setItem('chat_selected_channel_id', newVal)
+})
+watch(selectedModel, (newVal) => {
+  if (newVal) localStorage.setItem('chat_selected_model', newVal)
+})
 
 const selectedVisitors = ref([])
 const toggleSelectAll = (e) => {
@@ -520,6 +648,165 @@ const deletePreset = async (id) => {
   fetchWelcomePresets()
 }
 
+// ── AI Translation helper methods ──
+const fetchAiChannels = async () => {
+  try {
+    const res = await fetch('/api/ai/channels', { 
+      headers: { 'Authorization': `Bearer ${token()}` } 
+    })
+    if (res.ok) {
+      aiChannels.value = await res.json()
+      if (aiChannels.value.length) {
+        // Load from localStorage or find default
+        const savedChannelId = localStorage.getItem('chat_selected_channel_id')
+        let matched = aiChannels.value.find(c => String(c.id) === String(savedChannelId))
+        if (!matched) {
+          matched = aiChannels.value.find(c => c.is_default) || aiChannels.value[0]
+        }
+        selectedChannelId.value = matched.id
+        
+        // Match model
+        const savedModel = localStorage.getItem('chat_selected_model')
+        if (savedModel && matched.models.includes(savedModel)) {
+          selectedModel.value = savedModel
+        } else {
+          selectedModel.value = matched.default_model || matched.models[0] || ''
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Failed to fetch AI channels', e)
+  }
+}
+
+const onChannelChange = () => {
+  const ch = aiChannels.value.find(c => c.id === selectedChannelId.value)
+  if (ch) {
+    selectedModel.value = ch.default_model || ch.models[0] || ''
+  }
+}
+
+const resetSystemPrompt = () => {
+  systemPrompt.value = '你是一个专业的外贸业务助手和翻译官。请把下面的文字翻译成目标语言，要求表达自然、流畅、得体。不要返回任何多余的解释、前言或标点引导，只需要输出翻译后的纯文本内容。'
+}
+
+const translateText = async (text, targetLanguage) => {
+  if (!selectedChannelId.value || !selectedModel.value) {
+    alert('请选择有效的 AI 渠道和模型')
+    return null
+  }
+  
+  const tokenVal = token()
+  const payload = {
+    channel_id: selectedChannelId.value,
+    model: selectedModel.value,
+    messages: [
+      { role: 'system', content: systemPrompt.value },
+      { role: 'user', content: `Target Language: ${targetLanguage}\n\nText to translate:\n${text}` }
+    ],
+    temperature: 0.3
+  }
+  
+  try {
+    const response = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenVal}` },
+      body: JSON.stringify(payload)
+    })
+    
+    if (!response.ok) {
+      const err = await response.json()
+      throw new Error(err.error || `HTTP ${response.status}`)
+    }
+    
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let resultText = ''
+    
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop()
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data:')) continue
+        const data = trimmed.slice(5).trim()
+        if (data === '[DONE]') continue
+        try {
+          const json = JSON.parse(data)
+          const delta = json.choices?.[0]?.delta?.content
+          if (delta) { 
+            resultText += delta
+          }
+        } catch {}
+      }
+    }
+    return resultText.trim()
+  } catch (e) {
+    console.error('Translation call failed', e)
+    alert('翻译出错: ' + e.message)
+    return null
+  }
+}
+
+const translateInput = async () => {
+  const currentText = replyText.value.trim()
+  if (!currentText || translatingInput.value) return
+  
+  translatingInput.value = true
+  const duration = 5000 // 5 seconds
+  
+  // If clicked within 5 seconds and input matches last translated output
+  let textToTranslate = currentText
+  if (
+    lastInputTranslation.value.originalText &&
+    Date.now() - lastInputTranslation.value.timestamp <= duration &&
+    currentText === lastInputTranslation.value.translatedText
+  ) {
+    textToTranslate = lastInputTranslation.value.originalText
+  }
+  
+  const result = await translateText(textToTranslate, targetLang.value)
+  if (result) {
+    lastInputTranslation.value = {
+      originalText: textToTranslate,
+      translatedText: result,
+      timestamp: Date.now()
+    }
+    replyText.value = result
+  }
+  translatingInput.value = false
+}
+
+const detectLanguage = (text) => {
+  const chinesePattern = /[\u4e00-\u9fff]/;
+  if (chinesePattern.test(text)) return 'ZH';
+  return 'OTHER';
+}
+
+const translateBubble = async (msg) => {
+  if (translatingBubbleId.value) return
+  translatingBubbleId.value = msg.id
+  
+  const sourceLang = detectLanguage(msg.content)
+  // If Chinese, translate to targetLang. Else, translate to Chinese.
+  const langToUse = sourceLang === 'ZH' ? targetLang.value : 'ZH'
+  
+  // Set temporary indicator
+  bubbleTranslations.value[msg.id] = '正在翻译...'
+  
+  const result = await translateText(msg.content, langToUse)
+  if (result) {
+    bubbleTranslations.value[msg.id] = result
+  } else {
+    delete bubbleTranslations.value[msg.id]
+  }
+  translatingBubbleId.value = null
+}
+
 // ── Polling Engine ──
 const runChatPolling = () => {
   fetchVisitors()
@@ -531,6 +818,7 @@ onMounted(() => {
   fetchAutoReplies()
   fetchWelcomePresets()
   fetchPageOptions()
+  fetchAiChannels()
   
   // Real-time polling every 3 seconds for visitors list & current messages
   runChatPolling()
@@ -823,6 +1111,7 @@ onUnmounted(() => {
   font-size: 13.5px;
   line-height: 1.5;
   word-break: break-word;
+  white-space: pre-wrap;
 }
 .message.admin .message-bubble {
   background: #2563eb;
@@ -993,4 +1282,192 @@ input:focus, textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 
 }
 .url-select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
 .add-preset-area { margin-top: 10px; }
+
+/* AI Translation Toolbar Styling */
+.chat-ai-translation-toolbar {
+  padding: 8px 16px;
+  border-top: 1px solid #e5e7eb;
+  background: #f8fafc;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.toolbar-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+.toolbar-select {
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: white;
+  width: auto;
+  max-width: 140px;
+  cursor: pointer;
+  height: 28px;
+}
+.toolbar-arrow {
+  color: #94a3b8;
+  font-size: 12px;
+}
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-toolbar-action {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  color: #334155;
+  cursor: pointer;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+.btn-toolbar-action:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+.translate-input-btn {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+.translate-input-btn:hover {
+  background: #dbeafe;
+  border-color: #3b82f6;
+}
+.translate-input-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* System Prompt Panel Styling */
+.translation-settings-panel {
+  padding: 12px 16px;
+  border-top: 1px solid #e5e7eb;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+}
+.close-panel-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 14px;
+}
+.close-panel-btn:hover {
+  color: #64748b;
+}
+.system-prompt-textarea {
+  width: 100%;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  resize: vertical;
+}
+.panel-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.panel-footer .hint {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* Bubble Translation Styling */
+.message-bubble-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  max-width: 100%;
+}
+.message.admin .message-bubble-wrapper {
+  flex-direction: row-reverse;
+}
+.btn-translate-bubble {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #64748b;
+  opacity: 0;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  flex-shrink: 0;
+}
+.message-bubble-wrapper:hover .btn-translate-bubble {
+  opacity: 1;
+}
+.btn-translate-bubble:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #2563eb;
+}
+.btn-translate-bubble:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.bubble-translation {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.translation-divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 6px 0;
+}
+.message.admin .translation-divider {
+  background: rgba(255, 255, 255, 0.2);
+}
+.translation-text {
+  opacity: 0.9;
+  word-break: break-word;
+}
+.translating-spinner {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 </style>

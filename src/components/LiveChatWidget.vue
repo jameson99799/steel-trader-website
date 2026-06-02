@@ -396,6 +396,7 @@ onUnmounted(() => {
   font-size: 13.5px;
   line-height: 1.5;
   word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .message.visitor .message-bubble {
