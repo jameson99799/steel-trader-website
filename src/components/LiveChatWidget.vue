@@ -514,12 +514,17 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 768px) {
   .chat-window {
     position: fixed;
-    bottom: 0; right: 0;
-    width: 100vw; height: 100vh;
-    border-radius: 0;
+    bottom: 96px;
+    right: 16px;
+    width: calc(100vw - 32px);
+    max-width: 380px;
+    height: calc(100vh - 130px);
+    max-height: 520px;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   }
 }
 
