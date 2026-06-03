@@ -11,10 +11,9 @@
       <span v-if="displayUnreadCount > 0" class="unread-badge">{{ displayUnreadCount }}</span>
     </button>
 
-    <!-- Chat Window: Teleported to body -->
-    <Teleport to="body">
+    <!-- Chat Window -->
     <transition name="chat-slide">
-      <div v-if="isOpen" class="chat-window-mobile" :style="mobileWindowStyle">
+      <div v-if="isOpen" class="chat-window">
         <div class="chat-header">
           <div class="header-info">
             <h3>{{ uiTexts.chatTitle }}</h3>
@@ -58,7 +57,7 @@
           <textarea
             ref="textareaRef"
             v-model="newMessage"
-            @keydown="handleTextareaKeydown"
+            @keydown.enter.exact.prevent="sendMessage"
             @input="adjustTextareaHeight"
             @focus="handleFocus"
             @blur="handleBlur"
@@ -73,7 +72,6 @@
         </div>
       </div>
     </transition>
-    </Teleport>
   </div>
 </template>
 
@@ -105,100 +103,18 @@ const autoCollapseSeconds = ref(10)
 const { lang } = useLang()
 const logoUrl = ref('')
 const textareaRef = ref(null)
-const isFocused = ref(false)
-const vvHeight = ref(0)
-const isMobile = () => typeof window !== 'undefined' && window.innerWidth <= 768
-const isTablet = () => typeof window !== 'undefined' && window.innerWidth > 768 && window.innerWidth <= 1024
-
-// Computed style for the teleported chat window
-const mobileWindowStyle = computed(() => {
-  const vw = typeof window !== 'undefined' ? window.innerWidth : 1200
-
-  // Desktop (>1024px): floating card anchored to toggle button
-  if (vw > 1024) {
-    return {
-      position: 'fixed',
-      bottom: '96px',
-      right: '24px',
-      width: '360px',
-      height: '520px',
-      zIndex: 9998,
-      borderRadius: '16px'
-    }
-  }
-
-  // Tablet (769–1024px): floating card, not full screen
-  if (vw > 768) {
-    return {
-      position: 'fixed',
-      bottom: '96px',
-      right: '20px',
-      width: '380px',
-      height: 'min(520px, calc(100vh - 130px))',
-      zIndex: 9998,
-      borderRadius: '16px'
-    }
-  }
-
-  // Mobile (≤768px): bottom-anchored, above the toggle button
-  // When keyboard is open, vvHeight shrinks to the visible area so window shrinks too
-  const availH = vvHeight.value > 0 ? vvHeight.value : window.innerHeight
-  // Reserve 88px at bottom for the toggle button + safe area
-  const winHeight = Math.min(availH - 88, availH * 0.82)
-
-  return {
-    position: 'fixed',
-    bottom: '84px',
-    left: '10px',
-    right: '10px',
-    width: 'calc(100% - 20px)',
-    height: winHeight + 'px',
-    zIndex: 9998,
-    borderRadius: '16px'
-  }
-})
-
-// Handle Enter key: Enter=send on all devices, Shift+Enter=newline
-const handleTextareaKeydown = (e) => {
-  if (e.key === 'Enter') {
-    // Shift+Enter always inserts newline
-    if (e.shiftKey) return
-    e.preventDefault()
-    sendMessage()
-  }
-}
 
 const handleFocus = () => {
-  if (isMobile() || isTablet()) {
-    isFocused.value = true
-    setTimeout(scrollToBottom, 100)
+  // On mobile, scroll messages to bottom after keyboard opens
+  if (window.innerWidth <= 768) {
     setTimeout(scrollToBottom, 300)
+    setTimeout(scrollToBottom, 600)
   }
 }
 
 const handleBlur = () => {
-  // Small delay so send button tap is registered before blur resets state
-  setTimeout(() => { isFocused.value = false }, 200)
+  // Nothing needed - fullscreen layout handles it
 }
-
-const handleViewportChange = () => {
-  if (typeof window === 'undefined') return
-  if (window.visualViewport) {
-    vvHeight.value = window.visualViewport.height
-  }
-  if (isOpen.value) {
-    scrollToBottom()
-    setTimeout(scrollToBottom, 100)
-  }
-}
-
-watch(isOpen, (open) => {
-  if (open) {
-    if (window.visualViewport) vvHeight.value = window.visualViewport.height
-    nextTick(() => scrollToBottom())
-    setTimeout(scrollToBottom, 100)
-  }
-})
 
 const localizedUiTexts = {
   zh: {
@@ -338,9 +254,6 @@ const openChat = () => {
   isWelcomeMessageRead.value = true
   unreadCount.value = 0
   if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null }
-  if (window.innerWidth <= 768) {
-    lockBodyScroll()
-  }
   scrollToBottom()
 }
 
@@ -349,7 +262,6 @@ const closeChat = () => {
   hasInteracted = true
   isWelcomeMessageRead.value = true
   if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null }
-  unlockBodyScroll()
 }
 
 const formatTime = (isoString) => {
@@ -515,11 +427,6 @@ onMounted(() => {
     localStorage.setItem('chat_visitor_id', visitorId)
   }
 
-  if (window.visualViewport) {
-    vvHeight.value = window.visualViewport.height
-    window.visualViewport.addEventListener('resize', handleViewportChange)
-  }
-
   fetchWidgetConfig()
   pollMessages()
   pollInterval = setInterval(pollMessages, 3000)
@@ -528,9 +435,6 @@ onMounted(() => {
 onUnmounted(() => {
   if (pollInterval) clearInterval(pollInterval)
   if (collapseTimer) clearTimeout(collapseTimer)
-  if (window.visualViewport) {
-    window.visualViewport.removeEventListener('resize', handleViewportChange)
-  }
 })
 </script>
 
@@ -624,22 +528,19 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* Teleported window: used for both desktop and mobile */
-.chat-window-mobile {
-  background: white;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  border-radius: 16px;
-}
-
 @media (max-width: 768px) {
-  .chat-window-mobile {
+  .chat-window {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    max-height: none;
     border-radius: 0;
     box-shadow: none;
-    /* Height/top are set dynamically by mobileWindowStyle computed */
+    z-index: 10000;
   }
 }
 
