@@ -8,7 +8,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         </svg>
       </div>
-      <span v-if="unreadCount > 0" class="unread-badge">{{ unreadCount }}</span>
+      <span v-if="displayUnreadCount > 0" class="unread-badge">{{ displayUnreadCount }}</span>
     </button>
 
     <!-- Chat Window -->
@@ -78,6 +78,15 @@ const isOpen = ref(false)
 const messages = ref([])
 const newMessage = ref('')
 const unreadCount = ref(0)
+const isWelcomeMessageRead = ref(false)
+
+const displayUnreadCount = computed(() => {
+  let count = unreadCount.value
+  if (welcomePreset.value && !isWelcomeMessageRead.value && !isOpen.value) {
+    count += 1
+  }
+  return count
+})
 const messagesContainer = ref(null)
 const welcomePreset = ref(null)
 const autoCollapseSeconds = ref(10)
@@ -220,6 +229,7 @@ const toggleChat = () => {
 const openChat = () => {
   isOpen.value = true
   hasInteracted = true
+  isWelcomeMessageRead.value = true
   unreadCount.value = 0
   if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null }
   scrollToBottom()
@@ -228,6 +238,7 @@ const openChat = () => {
 const closeChat = () => {
   isOpen.value = false
   hasInteracted = true
+  isWelcomeMessageRead.value = true
   if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null }
 }
 
@@ -265,6 +276,7 @@ const sendMessage = async () => {
   newMessage.value = ''
   adjustTextareaHeight()
   hasInteracted = true
+  isWelcomeMessageRead.value = true
 
   messages.value.push({
     id: 'local-' + Date.now(),
