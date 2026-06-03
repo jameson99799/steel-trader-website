@@ -13,7 +13,7 @@
 
     <!-- Chat Window -->
     <transition name="chat-slide">
-      <div v-if="isOpen" class="chat-window">
+      <div v-if="isOpen" class="chat-window" :class="{ 'keyboard-open': isFocused }">
         <div class="chat-header">
           <div class="header-info">
             <h3>{{ uiTexts.chatTitle }}</h3>
@@ -59,6 +59,8 @@
             v-model="newMessage"
             @keydown.enter.exact.prevent="sendMessage"
             @input="adjustTextareaHeight"
+            @focus="handleFocus"
+            @blur="handleBlur"
             :placeholder="uiTexts.chatPlaceholder"
             rows="1"
           ></textarea>
@@ -101,6 +103,19 @@ const autoCollapseSeconds = ref(10)
 const { lang } = useLang()
 const logoUrl = ref('')
 const textareaRef = ref(null)
+const isFocused = ref(false)
+
+const handleFocus = () => {
+  if (window.innerWidth <= 768) {
+    isFocused.value = true
+    scrollToBottom()
+    setTimeout(scrollToBottom, 150)
+  }
+}
+
+const handleBlur = () => {
+  isFocused.value = false
+}
 
 const localizedUiTexts = {
   zh: {
@@ -525,6 +540,14 @@ onUnmounted(() => {
     max-height: 520px;
     border-radius: 16px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    transition: bottom 0.25s ease, height 0.25s ease, top 0.25s ease;
+  }
+
+  .chat-window.keyboard-open {
+    bottom: auto;
+    top: 12px;
+    height: calc(100vh - 350px) !important;
+    max-height: calc(100vh - 350px) !important;
   }
 }
 
