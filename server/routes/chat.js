@@ -66,22 +66,7 @@ async function processNotificationAndGeoIP(visitor_id, cleanIp, content) {
       }
     }
 
-    // We notify if it is the first message OR if the previous message was sent more than 15 minutes ago
-    let shouldNotify = false
-    const previousMsg = getOne(
-      "SELECT timestamp FROM live_chat_messages WHERE visitor_id = ? ORDER BY id DESC LIMIT 1 OFFSET 1",
-      [visitor_id]
-    )
-    if (!previousMsg) {
-      shouldNotify = true
-    } else {
-      const prevTime = new Date(previousMsg.timestamp.includes('Z') ? previousMsg.timestamp : previousMsg.timestamp.replace(' ', 'T') + 'Z').getTime()
-      const now = Date.now()
-      if (now - prevTime > 15 * 60 * 1000) {
-        shouldNotify = true
-      }
-    }
-
+    const shouldNotify = true
     if (shouldNotify) {
       const settings = getOne('SELECT * FROM live_chat_settings WHERE id = 1') || {}
       
