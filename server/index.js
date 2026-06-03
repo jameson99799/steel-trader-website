@@ -209,6 +209,15 @@ async function startServer() {
     if (NODE_ENV === 'production') {
       app.use((req, res, next) => {
         const host = req.headers.host || ''
+        
+        // Skip redirects for API requests, health checks, IP address hosts, and localhost
+        const isApiOrHealth = req.path.startsWith('/api/') || req.path === '/health'
+        const isIpOrLocal = /^(localhost|127\.0\.0\.1|::1|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/i.test(host)
+        
+        if (isApiOrHealth || isIpOrLocal) {
+          return next()
+        }
+
         const proto = req.headers['x-forwarded-proto'] || req.protocol
         const isHttps = proto === 'https'
         const isWww = host.startsWith('www.')
