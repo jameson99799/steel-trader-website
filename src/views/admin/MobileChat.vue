@@ -94,6 +94,11 @@
             <div class="bubble-body-row">
               <div class="message-bubble">
                 <div class="bubble-content">{{ msg.content }}</div>
+                <div v-if="msg.buttons && msg.buttons.length" class="bubble-quick-buttons-preview" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;">
+                  <span v-for="(btn, bi) in msg.buttons" :key="bi" class="bubble-quick-btn-preview-tag" style="background: rgba(0,0,0,0.05); color: inherit; font-size: 11px; padding: 2px 6px; border-radius: 4px; border: 1px dashed currentColor; opacity: 0.85;">
+                    🔗 {{ btn.label || btn.label_en || '链接' }}
+                  </span>
+                </div>
                 
                 <!-- AI Translation Display -->
                 <div v-if="bubbleTranslations[msg.id]" class="bubble-translation-content">

@@ -85,6 +85,11 @@
               <div class="message-bubble-wrapper">
                 <div class="message-bubble">
                   <div class="message-text">{{ msg.content }}</div>
+                  <div v-if="msg.buttons && msg.buttons.length" class="bubble-quick-buttons-preview" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;">
+                    <span v-for="(btn, bi) in msg.buttons" :key="bi" class="bubble-quick-btn-preview-tag" style="background: rgba(0,0,0,0.05); color: inherit; font-size: 11px; padding: 2px 6px; border-radius: 4px; border: 1px dashed currentColor; opacity: 0.85;">
+                      🔗 {{ btn.label || btn.label_en || '链接' }}
+                    </span>
+                  </div>
                   
                   <!-- Translation Result inside bubble -->
                   <div v-if="bubbleTranslations[msg.id]" class="bubble-translation">
@@ -256,22 +261,45 @@
       <!-- 自动回复话术 -->
       <div class="card">
         <h3>自动回复话术 <span class="badge">轮询发送</span></h3>
-        <p class="desc">可以添加多条自动回复话术，勾选启用的话术将在离线时间段内轮询发送给客户。</p>
+        <p class="desc">可以添加多条自动回复话术，勾选启用的话术将在离线时间段内轮询发送给客户。按钮支持自定义文字和跳转链接，并在前台对应显示。</p>
 
-        <div v-for="reply in autoReplies" :key="reply.id" class="reply-item">
-          <div class="reply-check">
+        <div v-for="(reply, idx) in autoReplies" :key="reply.id" class="preset-item">
+          <div class="preset-header">
             <input type="checkbox" :checked="reply.enabled" @change="toggleReply(reply)" />
-          </div>
-          <textarea v-model="reply.content" rows="2" class="reply-textarea"></textarea>
-          <div class="reply-actions">
-            <button class="btn btn-sm btn-primary" @click="updateReply(reply)">保存</button>
+            <strong>自动回复话术 #{{ idx + 1 }}</strong>
             <button class="btn btn-sm btn-danger" @click="deleteReply(reply.id)">删除</button>
+          </div>
+
+          <div class="form-group">
+            <label>回复内容</label>
+            <textarea v-model="reply.content" rows="2" class="reply-textarea"></textarea>
+          </div>
+
+          <div class="buttons-editor">
+            <label>快捷按钮</label>
+            <div v-for="(btn, bi) in reply.buttons" :key="bi" class="button-row">
+              <select v-model="btn.url" @change="onPageSelect(btn, $event)" class="url-select">
+                <option value="">-- 选择跳转页面 --</option>
+                <optgroup v-for="group in pageOptions" :key="group.group" :label="group.group">
+                  <option v-for="item in group.items" :key="item.url" :value="item.url">
+                    {{ item.label }} ({{ item.label_en }})
+                  </option>
+                </optgroup>
+              </select>
+              <input type="text" v-model="btn.label" placeholder="按钮文字（中文）" />
+              <input type="text" v-model="btn.label_en" placeholder="Button Text (EN)" />
+              <button class="btn btn-sm btn-danger" @click="reply.buttons.splice(bi, 1)">×</button>
+            </div>
+            <button class="btn btn-sm btn-secondary" @click="reply.buttons.push({ label: '', label_en: '', url: '' })">+ 添加按钮</button>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn btn-primary" @click="updateReply(reply)">保存此话术与按钮</button>
           </div>
         </div>
 
-        <div class="add-row">
-          <textarea v-model="newReplyContent" rows="2" placeholder="输入新的自动回复话术..." class="reply-textarea"></textarea>
-          <button class="btn btn-primary" @click="addReply" :disabled="!newReplyContent.trim()">+ 添加话术</button>
+        <div class="add-preset-area" style="margin-top: 16px;">
+          <button class="btn btn-primary" @click="addReply">+ 新增自动回复话术</button>
         </div>
       </div>
 
@@ -337,7 +365,6 @@ const settings = ref({ widget_enabled: true, auto_reply_enabled: false, start_ti
 const autoReplies = ref([])
 const welcomePresets = ref([])
 const pageOptions = ref([])
-const newReplyContent = ref('')
 const saving = ref(false)
 
 // Chat console reactive variables
@@ -619,19 +646,33 @@ const saveSettings = async () => {
 const fetchAutoReplies = async () => {
   try {
     const res = await fetch('/api/chat/admin/auto-replies', { headers: { 'Authorization': `Bearer ${token()}` } })
-    if (res.ok) autoReplies.value = (await res.json()).map(r => ({ ...r, enabled: Boolean(r.enabled) }))
+    if (res.ok) autoReplies.value = (await res.json()).map(r => ({ ...r, enabled: Boolean(r.enabled), buttons: r.buttons || [] }))
   } catch (e) { console.error(e) }
 }
 
 const addReply = async () => {
-  if (!newReplyContent.value.trim()) return
-  await fetch('/api/chat/admin/auto-replies', { method: 'POST', headers: headers(), body: JSON.stringify({ content: newReplyContent.value, enabled: true }) })
-  newReplyContent.value = ''
+  await fetch('/api/chat/admin/auto-replies', { 
+    method: 'POST', 
+    headers: headers(), 
+    body: JSON.stringify({ 
+      content: '预设自动回复内容', 
+      buttons: [{ label: '联系我们', label_en: 'Contact Us', url: '/contact' }], 
+      enabled: true 
+    }) 
+  })
   fetchAutoReplies()
 }
 
 const updateReply = async (reply) => {
-  await fetch(`/api/chat/admin/auto-replies/${reply.id}`, { method: 'PUT', headers: headers(), body: JSON.stringify({ content: reply.content, enabled: reply.enabled }) })
+  await fetch(`/api/chat/admin/auto-replies/${reply.id}`, { 
+    method: 'PUT', 
+    headers: headers(), 
+    body: JSON.stringify({ 
+      content: reply.content, 
+      enabled: reply.enabled, 
+      buttons: reply.buttons || [] 
+    }) 
+  })
   alert('已保存')
 }
 

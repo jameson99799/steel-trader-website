@@ -41,6 +41,14 @@
           <!-- Regular messages -->
           <div v-for="msg in messages" :key="msg.id" :class="['message', msg.sender_type]">
             <div class="message-bubble">{{ msg.content }}</div>
+            <div v-if="msg.buttons && msg.buttons.length" class="quick-buttons">
+              <a v-for="(btn, bi) in msg.buttons" :key="bi"
+                 :href="getButtonUrl(btn)"
+                 class="quick-btn"
+                 @click.prevent="handleButtonClick(btn)">
+                {{ getButtonLabel(btn) }}
+              </a>
+            </div>
             <div class="message-time">{{ formatTime(msg.timestamp) }}</div>
           </div>
         </div>

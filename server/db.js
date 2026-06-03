@@ -1663,8 +1663,8 @@ Requirements:
   try { db.exec('ALTER TABLE live_chat_settings ADD COLUMN widget_enabled INTEGER DEFAULT 1') } catch(e) {}
   try { db.exec('ALTER TABLE live_chat_settings ADD COLUMN auto_collapse_seconds INTEGER DEFAULT 10') } catch(e) {}
   try { db.exec('ALTER TABLE live_chat_settings ADD COLUMN wechat_webhook_url TEXT') } catch(e) {}
-  // Remove old reply_text column if exists (we use chat_auto_replies table now)
-
+  try { db.exec("ALTER TABLE chat_auto_replies ADD COLUMN buttons TEXT DEFAULT '[]'") } catch(e) {}
+  try { db.exec("ALTER TABLE live_chat_messages ADD COLUMN buttons TEXT DEFAULT '[]'") } catch(e) {}
   try {
     const hasChatSettings = db.prepare("SELECT count(*) as c FROM live_chat_settings").get().c
     if (hasChatSettings === 0) {

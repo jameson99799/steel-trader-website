@@ -167,6 +167,7 @@ function healSchema() {
   try { run('ALTER TABLE live_chat_messages ADD COLUMN timestamp DATETIME DEFAULT CURRENT_TIMESTAMP') } catch(e) {}
   try { run('ALTER TABLE live_chat_messages ADD COLUMN ip TEXT') } catch(e) {}
   try { run('ALTER TABLE live_chat_messages ADD COLUMN country TEXT') } catch(e) {}
+  try { run("ALTER TABLE live_chat_messages ADD COLUMN buttons TEXT DEFAULT '[]'") } catch(e) {}
   schemaHealed = true
 }
 
@@ -190,19 +191,28 @@ router.put('/admin/settings', authMiddleware, (req, res) => {
 // ── Admin: Auto-Reply Messages (CRUD) ────────────────────────
 router.get('/admin/auto-replies', authMiddleware, (req, res) => {
   const replies = getAll('SELECT * FROM chat_auto_replies ORDER BY sort_order ASC, id ASC')
-  res.json(replies)
+  const parsed = replies.map(r => {
+    let btns = []
+    try {
+      if (r.buttons) btns = JSON.parse(r.buttons)
+    } catch (e) {}
+    return { ...r, buttons: btns }
+  })
+  res.json(parsed)
 })
 
 router.post('/admin/auto-replies', authMiddleware, (req, res) => {
-  const { content, enabled } = req.body
+  const { content, enabled, buttons } = req.body
   if (!content) return res.status(400).json({ error: 'Content required' })
-  const result = run('INSERT INTO chat_auto_replies (content, enabled) VALUES (?, ?)', [content, enabled ? 1 : 0])
+  const result = run('INSERT INTO chat_auto_replies (content, enabled, buttons) VALUES (?, ?, ?)',
+    [content, enabled ? 1 : 0, JSON.stringify(buttons || [])])
   res.json({ success: true, id: result.lastInsertRowid })
 })
 
 router.put('/admin/auto-replies/:id', authMiddleware, (req, res) => {
-  const { content, enabled } = req.body
-  run('UPDATE chat_auto_replies SET content=?, enabled=? WHERE id=?', [content, enabled ? 1 : 0, req.params.id])
+  const { content, enabled, buttons } = req.body
+  run('UPDATE chat_auto_replies SET content=?, enabled=?, buttons=? WHERE id=?',
+    [content, enabled ? 1 : 0, JSON.stringify(buttons || []), req.params.id])
   res.json({ success: true })
 })
 
@@ -507,7 +517,8 @@ router.post('/send', (req, res) => {
               console.error('Failed to translate auto-reply:', transErr.message)
             }
           }
-          run('INSERT INTO live_chat_messages (visitor_id, sender_type, content) VALUES (?, ?, ?)', [visitor_id, 'admin', replyContent])
+          run('INSERT INTO live_chat_messages (visitor_id, sender_type, content, buttons) VALUES (?, ?, ?, ?)',
+              [visitor_id, 'admin', replyContent, reply.buttons || '[]'])
         }
       }
     }
@@ -551,7 +562,14 @@ router.all('/poll', (req, res) => {
       }
     }
 
-    res.json(msgs)
+    const parsed = msgs.map(m => {
+      let btns = []
+      try {
+        if (m.buttons) btns = JSON.parse(m.buttons)
+      } catch (e) {}
+      return { ...m, buttons: btns }
+    })
+    res.json(parsed)
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack })
   }
@@ -573,7 +591,14 @@ router.get('/admin/messages', authMiddleware, (req, res) => {
       } catch (e) {
         msgs = getAll('SELECT * FROM live_chat_messages WHERE visitor_id = ? ORDER BY id ASC', [visitorId])
       }
-      res.json(msgs)
+      const parsed = msgs.map(m => {
+        let btns = []
+        try {
+          if (m.buttons) btns = JSON.parse(m.buttons)
+        } catch (e) {}
+        return { ...m, buttons: btns }
+      })
+      res.json(parsed)
     } else {
       // Return list of unique visitors with their last message and unread count
       let visitors = []
