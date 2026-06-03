@@ -97,14 +97,17 @@ router.get('/settings', authMiddleware, (req, res) => {
 })
 
 router.put('/settings', authMiddleware, express.json(), (req, res) => {
-    const { to_emails, ssl_warn_days, round_robin } = req.body
+    const { to_emails, ssl_warn_days, round_robin, inquiry_notify_enabled, chat_notify_enabled } = req.body
     const existing = getOne('SELECT id FROM email_settings WHERE id=1')
+    const inquiryVal = inquiry_notify_enabled !== false && inquiry_notify_enabled !== 0 ? 1 : 0
+    const chatVal = chat_notify_enabled !== false && chat_notify_enabled !== 0 ? 1 : 0
+
     if (existing) {
-        run(`UPDATE email_settings SET to_emails=?, ssl_warn_days=?, round_robin=? WHERE id=1`,
-            [to_emails || '', ssl_warn_days || 30, round_robin ? 1 : 0])
+        run(`UPDATE email_settings SET to_emails=?, ssl_warn_days=?, round_robin=?, inquiry_notify_enabled=?, chat_notify_enabled=? WHERE id=1`,
+            [to_emails || '', ssl_warn_days || 30, round_robin ? 1 : 0, inquiryVal, chatVal])
     } else {
-        run(`INSERT INTO email_settings (id, to_emails, ssl_warn_days, round_robin) VALUES (1,?,?,?)`,
-            [to_emails || '', ssl_warn_days || 30, round_robin ? 1 : 0])
+        run(`INSERT INTO email_settings (id, to_emails, ssl_warn_days, round_robin, inquiry_notify_enabled, chat_notify_enabled) VALUES (1,?,?,?,?,?)`,
+            [to_emails || '', ssl_warn_days || 30, round_robin ? 1 : 0, inquiryVal, chatVal])
     }
     res.json({ message: '设置已保存' })
 })

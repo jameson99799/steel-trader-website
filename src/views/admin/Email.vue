@@ -68,6 +68,16 @@
             <span>开启轮流发送（多账号按顺序交替发送询盘通知）</span>
           </label>
         </div>
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 10px; margin: 16px 0;">
+          <label class="toggle-label">
+            <input type="checkbox" v-model="settings.inquiry_notify_enabled" />
+            <span>开启新询盘邮件通知</span>
+          </label>
+          <label class="toggle-label">
+            <input type="checkbox" v-model="settings.chat_notify_enabled" />
+            <span>开启新客服消息邮件通知</span>
+          </label>
+        </div>
         <div class="actions">
           <button class="btn btn-primary" @click="saveSettings" :disabled="savingSettings">
             {{ savingSettings ? '保存中...' : '💾 保存设置' }}
@@ -149,7 +159,7 @@ import api from '../../api'
 
 const accounts = ref([])
 const sslInfo = ref(null)
-const settings = reactive({ to_emails: '', ssl_warn_days: 30, round_robin: false })
+const settings = reactive({ to_emails: '', ssl_warn_days: 30, round_robin: false, inquiry_notify_enabled: true, chat_notify_enabled: true })
 const showAcctModal = ref(false)
 const showTestModal = ref(false)
 const editingAcct = reactive({ id: null, name: '', smtp_host: '', smtp_port: 465, smtp_user: '', smtp_pass: '', from_name: 'SunSea Steel', is_default: false, enabled: true })
@@ -171,7 +181,14 @@ async function load() {
     ])
     accounts.value = accts || []
     sslInfo.value = ssl
-    if (s) Object.assign(settings, { ...s, round_robin: !!s.round_robin })
+    if (s) {
+      Object.assign(settings, {
+        ...s,
+        round_robin: !!s.round_robin,
+        inquiry_notify_enabled: s.inquiry_notify_enabled !== 0,
+        chat_notify_enabled: s.chat_notify_enabled !== 0
+      })
+    }
   } catch (e) { console.error(e) }
 }
 

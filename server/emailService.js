@@ -72,6 +72,10 @@ export async function sendMail({ to, subject, html, text, accountId, cc, readRec
 // ─── Inquiry notification ─────────────────────────────────────────────────────
 export async function sendInquiryNotification(inquiry) {
     const settings = getOne('SELECT * FROM email_settings WHERE id=1') || {}
+    if (settings.inquiry_notify_enabled === 0) {
+        console.log('[Inquiry Email] Notification is disabled in settings, skipping.')
+        return
+    }
     const toEmails = settings.to_emails || ''
     if (!toEmails) {
         // Fallback to old config

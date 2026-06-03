@@ -816,6 +816,9 @@ Requirements:
     }
   } catch (e) { }
   try { db.exec("ALTER TABLE smtp_accounts ADD COLUMN assigned_users TEXT DEFAULT 'all'") } catch(e) {}
+  try { db.exec("ALTER TABLE email_settings ADD COLUMN inquiry_notify_enabled INTEGER DEFAULT 1") } catch(e) {}
+  try { db.exec("ALTER TABLE email_settings ADD COLUMN chat_notify_enabled INTEGER DEFAULT 1") } catch(e) {}
+  try { db.exec("ALTER TABLE email_settings ADD COLUMN last_ssl_warn_at TEXT DEFAULT ''") } catch(e) {}
 
   // Bulk email: templates
   db.exec(`

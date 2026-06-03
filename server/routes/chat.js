@@ -80,6 +80,9 @@ async function processNotificationAndGeoIP(visitor_id, cleanIp, content) {
 
       import('../emailService.js').then(({ sendMail, getEmailConfig }) => {
         const emailSettings = getOne('SELECT * FROM email_settings WHERE id=1') || {}
+        if (emailSettings.chat_notify_enabled === 0) {
+          return
+        }
         const toEmails = emailSettings.to_emails || getEmailConfig().to_email || ''
         if (toEmails) {
           const html = `
