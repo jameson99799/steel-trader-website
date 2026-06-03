@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { sendInquiryNotification } from '../emailService.js'
+import { sendWeChatNotification } from '../utils/wechatWebhook.js'
 
 const router = Router()
 
@@ -17,9 +18,19 @@ router.post('/', async (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `, [name, email, phone || null, company || null, country || null, message || null, product_id || null])
 
-  // Send email notification asynchronously (don't block response)
   const product = product_id ? getOne('SELECT name, name_en FROM products WHERE id = ?', [product_id]) : null
-  sendInquiryNotification({ name, email, phone, company, country, message, product_name: product?.name_en || product?.name }).catch(() => { })
+  const productNameStr = product ? (product.name_en || product.name) : ''
+
+  // Send email notification asynchronously (don't block response)
+  sendInquiryNotification({ name, email, phone, company, country, message, product_name: productNameStr }).catch(() => { })
+
+  // Send WeChat Webhook notification
+  try {
+    const markdownContent = `📋 **新网站询盘通知**\n\n有新客户在官网上提交了询盘：\n- **客户姓名:** \`${name}\`\n- **电子邮箱:** \`${email}\`\n- **联络电话:** \`${phone || '无'}\`\n- **公司名称:** \`${company || '无'}\`\n- **国家/地区:** \`${country || '未知'}\`\n${productNameStr ? `- **意向产品:** \`${productNameStr}\`\n` : ''}- **留言内容:** ${message || '无'}\n\n[👉 点击进入后台查看询盘](https://www.sunseasteel.com/admin/inquiries)`
+    sendWeChatNotification('inquiry', markdownContent)
+  } catch (webhookErr) {
+    console.error('Failed to send WeChat notification:', webhookErr)
+  }
 
   res.json({ id: result.lastInsertRowid, message: '询盘提交成功' })
 })

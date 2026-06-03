@@ -1,6 +1,7 @@
 import express from 'express'
 import { run, getAll, getOne } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
+import { sendWeChatNotification } from '../utils/wechatWebhook.js'
 import fs from 'fs'
 import http from 'http'
 import https from 'https'
@@ -68,56 +69,13 @@ async function processNotificationAndGeoIP(visitor_id, cleanIp, content) {
 
     const shouldNotify = true
     if (shouldNotify) {
-      let webhooks = []
-      try {
-        webhooks = getAll('SELECT url FROM chat_wechat_webhooks WHERE enabled = 1')
-      } catch (e) {
-        // Fallback to legacy field if table query fails
-        const settings = getOne('SELECT wechat_webhook_url FROM live_chat_settings WHERE id = 1') || {}
-        if (settings.wechat_webhook_url) {
-          webhooks = [{ url: settings.wechat_webhook_url }]
-        }
-      }
-
       const locationStr = cachedCountry || '未知'
       const markdownContent = `💬 **新客服会话通知**\n\n有新访客在官网上发起咨询：\n- **访客ID:** \`${visitor_id}\`\n- **IP地址:** \`${cleanIp}\` (${locationStr})\n- **咨询内容:** ${content}\n\n[👉 点击进入后台回复](https://www.sunseasteel.com/admin/mobile-chat?visitor_id=${visitor_id})`
       
-      const payload = JSON.stringify({
-        msgtype: 'markdown',
-        markdown: {
-          content: markdownContent
-        }
-      })
-
-      for (const wh of webhooks) {
-        if (!wh.url) continue
-        try {
-          const urlObj = new URL(wh.url)
-          const req = https.request({
-            hostname: urlObj.hostname,
-            path: urlObj.pathname + urlObj.search,
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Content-Length': Buffer.byteLength(payload)
-            }
-          }, (res) => {
-            let resData = ''
-            res.on('data', chunk => resData += chunk)
-            res.on('end', () => {
-              if (res.statusCode !== 200) {
-                fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] WeChat webhook response error: ${res.statusCode} ${resData}\n`)
-              }
-            })
-          })
-          req.on('error', (e) => {
-            fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] WeChat webhook send failed: ${e.message}\n`)
-          })
-          req.write(payload)
-          req.end()
-        } catch (webhookErr) {
-          fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] WeChat webhook parsing/sending failed for ${wh.url}: ${webhookErr.message}\n`)
-        }
+      try {
+        sendWeChatNotification('chat', markdownContent)
+      } catch (webhookErr) {
+        fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] sendWeChatNotification call failed: ${webhookErr.message}\n`)
       }
 
       import('../emailService.js').then(({ sendMail, getEmailConfig }) => {
@@ -182,6 +140,7 @@ function healSchema() {
   try { run('ALTER TABLE live_chat_messages ADD COLUMN ip TEXT') } catch(e) {}
   try { run('ALTER TABLE live_chat_messages ADD COLUMN country TEXT') } catch(e) {}
   try { run("ALTER TABLE live_chat_messages ADD COLUMN buttons TEXT DEFAULT '[]'") } catch(e) {}
+  try { run("ALTER TABLE chat_wechat_webhooks ADD COLUMN notify_type TEXT DEFAULT 'all'") } catch(e) {}
   schemaHealed = true
 }
 
@@ -242,17 +201,17 @@ router.get('/admin/wechat-webhooks', authMiddleware, (req, res) => {
 })
 
 router.post('/admin/wechat-webhooks', authMiddleware, (req, res) => {
-  const { name, url, enabled } = req.body
+  const { name, url, enabled, notify_type } = req.body
   if (!url) return res.status(400).json({ error: 'Webhook URL required' })
-  const result = run('INSERT INTO chat_wechat_webhooks (name, url, enabled) VALUES (?, ?, ?)',
-    [name || '未命名机器人', url, enabled ? 1 : 0])
+  const result = run('INSERT INTO chat_wechat_webhooks (name, url, enabled, notify_type) VALUES (?, ?, ?, ?)',
+    [name || '未命名机器人', url, enabled ? 1 : 0, notify_type || 'all'])
   res.json({ success: true, id: result.lastInsertRowid })
 })
 
 router.put('/admin/wechat-webhooks/:id', authMiddleware, (req, res) => {
-  const { name, url, enabled } = req.body
-  run('UPDATE chat_wechat_webhooks SET name=?, url=?, enabled=? WHERE id=?',
-    [name || '未命名机器人', url, enabled ? 1 : 0, req.params.id])
+  const { name, url, enabled, notify_type } = req.body
+  run('UPDATE chat_wechat_webhooks SET name=?, url=?, enabled=?, notify_type=? WHERE id=?',
+    [name || '未命名机器人', url, enabled ? 1 : 0, notify_type || 'all', req.params.id])
   res.json({ success: true })
 })
 

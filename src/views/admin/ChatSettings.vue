@@ -248,13 +248,18 @@
             <label>企业微信通知 Webhook 机器人（支持配置多个且多选）</label>
             <div v-for="(webhook, wIdx) in wechatWebhooks" :key="webhook.id || wIdx" class="webhook-item-row" style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
               <input type="checkbox" :checked="webhook.enabled" @change="toggleWebhook(webhook)" style="width: 18px; height: 18px; cursor: pointer; flex-shrink: 0;" />
-              <input type="text" v-model="webhook.name" placeholder="名称（如：销售通知群）" style="width: 150px; flex-shrink: 0;" />
+              <input type="text" v-model="webhook.name" placeholder="名称（如：通知群）" style="width: 120px; flex-shrink: 0;" />
+              <select v-model="webhook.notify_type" style="width: 110px; flex-shrink: 0; padding: 4px; border: 1px solid #ddd; border-radius: 4px; background-color: #fff; cursor: pointer;">
+                <option value="all">全部通知</option>
+                <option value="chat">仅客服消息</option>
+                <option value="inquiry">仅网站询盘</option>
+              </select>
               <input type="text" v-model="webhook.url" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." style="flex: 1;" />
               <button type="button" class="btn btn-sm btn-primary" @click="updateWebhook(webhook)">保存</button>
               <button type="button" class="btn btn-sm btn-danger" @click="deleteWebhook(webhook)">删除</button>
             </div>
             <button type="button" class="btn btn-sm btn-secondary" @click="addWebhook" style="margin-top: 5px;">+ 添加 Webhook 机器人</button>
-            <span class="hint" style="display: block; margin-top: 8px;">配置企业微信群机器人的 Webhook 地址，勾选开启的机器人均会在收到新会话时发送卡片通知提醒。如果不需要微信通知，请保留列表为空。</span>
+            <span class="hint" style="display: block; margin-top: 8px;">配置企业微信群机器人的 Webhook 地址。可以为机器人选择接收的通知类型（客服、询盘或全部）。如果不需要微信通知，请保留列表为空。</span>
           </div>
 
           <div class="form-actions">
@@ -742,7 +747,7 @@ const addWebhook = async () => {
     await fetch('/api/chat/admin/wechat-webhooks', {
       method: 'POST',
       headers: headers(),
-      body: JSON.stringify({ name: '新通知机器人', url: '', enabled: true })
+      body: JSON.stringify({ name: '新通知机器人', url: '', enabled: true, notify_type: 'all' })
     })
     fetchWebhooks()
   } catch (e) { console.error(e) }
@@ -760,7 +765,8 @@ const updateWebhook = async (webhook) => {
       body: JSON.stringify({
         name: webhook.name,
         url: webhook.url,
-        enabled: webhook.enabled
+        enabled: webhook.enabled,
+        notify_type: webhook.notify_type || 'all'
       })
     })
     if (res.ok) {
@@ -779,7 +785,8 @@ const toggleWebhook = async (webhook) => {
       body: JSON.stringify({
         name: webhook.name,
         url: webhook.url,
-        enabled: webhook.enabled
+        enabled: webhook.enabled,
+        notify_type: webhook.notify_type || 'all'
       })
     })
   }

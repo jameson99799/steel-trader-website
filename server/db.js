@@ -1671,9 +1671,11 @@ Requirements:
       name TEXT NOT NULL,
       url TEXT NOT NULL,
       enabled INTEGER DEFAULT 1,
+      notify_type TEXT DEFAULT 'all',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  try { db.exec("ALTER TABLE chat_wechat_webhooks ADD COLUMN notify_type TEXT DEFAULT 'all'") } catch(e) {}
 
   try {
     const hasChatSettings = db.prepare("SELECT count(*) as c FROM live_chat_settings").get().c
