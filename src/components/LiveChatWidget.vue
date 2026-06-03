@@ -11,9 +11,10 @@
       <span v-if="displayUnreadCount > 0" class="unread-badge">{{ displayUnreadCount }}</span>
     </button>
 
-    <!-- Chat Window -->
+    <!-- Chat Window: Teleported to body -->
+    <Teleport to="body">
     <transition name="chat-slide">
-      <div v-if="isOpen" class="chat-window" :class="{ 'keyboard-open': isFocused }" :style="{ bottom: visualBottom, height: visualHeight }">
+      <div v-if="isOpen" class="chat-window-mobile" :style="mobileWindowStyle">
         <div class="chat-header">
           <div class="header-info">
             <h3>{{ uiTexts.chatTitle }}</h3>
@@ -57,7 +58,7 @@
           <textarea
             ref="textareaRef"
             v-model="newMessage"
-            @keydown.enter.exact.prevent="sendMessage"
+            @keydown="handleTextareaKeydown"
             @input="adjustTextareaHeight"
             @focus="handleFocus"
             @blur="handleBlur"
@@ -72,6 +73,7 @@
         </div>
       </div>
     </transition>
+    </Teleport>
   </div>
 </template>
 
@@ -104,87 +106,81 @@ const { lang } = useLang()
 const logoUrl = ref('')
 const textareaRef = ref(null)
 const isFocused = ref(false)
+const vvHeight = ref(0)
+const isMobile = () => typeof window !== 'undefined' && window.innerWidth <= 768
 
-const lockBodyScroll = () => {
-  if (typeof document === 'undefined') return
-  if (document.body.style.position === 'fixed') return
-  const scrollY = window.scrollY || document.documentElement.scrollTop || 0
-  document.body.setAttribute('data-scroll-y', scrollY.toString())
-  
-  document.body.style.position = 'fixed'
-  document.body.style.top = `-${scrollY}px`
-  document.body.style.left = '0'
-  document.body.style.right = '0'
-  document.body.style.width = '100%'
-  document.body.style.overflow = 'hidden'
-}
+// Computed style for the teleported chat window
+const mobileWindowStyle = computed(() => {
+  if (!isMobile()) {
+    // Desktop: positioned absolutely relative to the toggle button via fixed
+    return {
+      position: 'fixed',
+      bottom: '96px',
+      right: '24px',
+      width: '360px',
+      height: '520px',
+      zIndex: 9998
+    }
+  }
+  // Mobile: always full-width, anchored from top, height = available viewport
+  const availH = vvHeight.value > 0 ? vvHeight.value : window.innerHeight
+  return {
+    position: 'fixed',
+    top: '0',
+    left: '0',
+    right: '0',
+    width: '100%',
+    height: availH + 'px',
+    zIndex: 9998,
+    borderRadius: '0'
+  }
+})
 
-const unlockBodyScroll = () => {
-  if (typeof document === 'undefined') return
-  if (document.body.style.position !== 'fixed') return
-  const scrollY = parseInt(document.body.getAttribute('data-scroll-y') || '0', 10)
-  
-  document.body.style.position = ''
-  document.body.style.top = ''
-  document.body.style.left = ''
-  document.body.style.right = ''
-  document.body.style.width = ''
-  document.body.style.overflow = ''
-  
-  window.scrollTo(0, scrollY)
+// Handle Enter key: mobile always newline, desktop Enter=send Shift+Enter=newline
+const handleTextareaKeydown = (e) => {
+  if (e.key === 'Enter') {
+    if (isMobile()) {
+      // On mobile keyboard: Enter = newline (user uses send button to send)
+      // Do nothing, let default textarea behavior insert newline
+      return
+    }
+    // Desktop: Enter = send, Shift+Enter = newline
+    if (!e.shiftKey) {
+      e.preventDefault()
+      sendMessage()
+    }
+  }
 }
 
 const handleFocus = () => {
-  if (window.innerWidth <= 768) {
+  if (isMobile()) {
     isFocused.value = true
-    scrollToBottom()
-    setTimeout(scrollToBottom, 50)
-    setTimeout(scrollToBottom, 150)
+    setTimeout(scrollToBottom, 100)
+    setTimeout(scrollToBottom, 300)
   }
 }
 
 const handleBlur = () => {
-  isFocused.value = false
+  // Small delay so send button tap is registered before blur resets state
+  setTimeout(() => { isFocused.value = false }, 200)
 }
 
-const visualBottom = ref('')
-const visualHeight = ref('')
-
 const handleViewportChange = () => {
-  if (!isOpen.value) return
-  if (window.visualViewport && window.innerWidth <= 768) {
-    const vv = window.visualViewport
-    const keyboardHeight = window.innerHeight - vv.height
-    
-    if (keyboardHeight > 120) {
-      // Keyboard is open!
-      visualBottom.value = '10px'
-      visualHeight.value = `${vv.height - 20}px`
-      isFocused.value = true
-    } else {
-      // Keyboard is closed!
-      visualBottom.value = '96px'
-      visualHeight.value = 'calc(100vh - 130px)'
-      isFocused.value = false
-    }
+  if (typeof window === 'undefined') return
+  if (window.visualViewport) {
+    vvHeight.value = window.visualViewport.height
+  }
+  if (isOpen.value) {
     scrollToBottom()
-    setTimeout(scrollToBottom, 50)
-    setTimeout(scrollToBottom, 150)
-  } else {
-    visualBottom.value = ''
-    visualHeight.value = ''
-    isFocused.value = false
+    setTimeout(scrollToBottom, 100)
   }
 }
 
 watch(isOpen, (open) => {
   if (open) {
-    nextTick(() => {
-      handleViewportChange()
-      scrollToBottom()
-    })
-  } else {
-    isFocused.value = false
+    if (window.visualViewport) vvHeight.value = window.visualViewport.height
+    nextTick(() => scrollToBottom())
+    setTimeout(scrollToBottom, 100)
   }
 })
 
@@ -503,26 +499,22 @@ onMounted(() => {
     localStorage.setItem('chat_visitor_id', visitorId)
   }
 
+  if (window.visualViewport) {
+    vvHeight.value = window.visualViewport.height
+    window.visualViewport.addEventListener('resize', handleViewportChange)
+  }
+
   fetchWidgetConfig()
   pollMessages()
   pollInterval = setInterval(pollMessages, 3000)
-
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', handleViewportChange)
-    window.visualViewport.addEventListener('scroll', handleViewportChange)
-  }
-  window.addEventListener('resize', handleViewportChange)
 })
 
 onUnmounted(() => {
-  unlockBodyScroll()
   if (pollInterval) clearInterval(pollInterval)
   if (collapseTimer) clearTimeout(collapseTimer)
   if (window.visualViewport) {
     window.visualViewport.removeEventListener('resize', handleViewportChange)
-    window.visualViewport.removeEventListener('scroll', handleViewportChange)
   }
-  window.removeEventListener('resize', handleViewportChange)
 })
 </script>
 
@@ -616,17 +608,22 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+/* Teleported window: used for both desktop and mobile */
+.chat-window-mobile {
+  background: white;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  border-radius: 16px;
+}
+
 @media (max-width: 768px) {
-  .chat-window {
-    position: fixed;
-    bottom: 96px;
-    right: 16px;
-    width: calc(100vw - 32px);
-    max-width: 380px;
-    height: calc(100vh - 130px);
-    max-height: 520px;
-    border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  .chat-window-mobile {
+    border-radius: 0;
+    box-shadow: none;
+    /* Height/top are set dynamically by mobileWindowStyle computed */
   }
 }
 
