@@ -382,9 +382,9 @@ const fetchWidgetConfig = async () => {
         welcomePreset.value = config.welcome_preset
       }
 
-      // Auto-popup on every page entry
+      // Auto-popup on every page entry (desktop only)
       setTimeout(() => {
-        if (!hasInteracted) {
+        if (!hasInteracted && window.innerWidth > 1024) {
           isOpen.value = true
           // Auto-collapse after X seconds
           collapseTimer = setTimeout(() => {

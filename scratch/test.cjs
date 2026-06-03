@@ -1,6 +1,4 @@
-fetch('https://www.sunseasteel.com/zh/products').then(r => r.text()).then(t => { 
-  console.log('Hreflang en found:', t.includes('hreflang="en"')); 
-  console.log('Hreflang zh-CN found:', t.includes('hreflang="zh-CN"')); 
-  console.log('INITIAL_STATE found:', t.includes('__INITIAL_STATE__')); 
-  console.log('seoSettings found in state:', t.includes('seoSettings')); 
+fetch('https://www.sunseasteel.com/en/').then(r => r.text()).then(t => {
+  console.log('Aria label Home found:', t.includes('aria-label="Home"'));
+  console.log('Aria label Language options found:', t.includes('aria-label="Language options"'));
 }).catch(e => console.error(e));
