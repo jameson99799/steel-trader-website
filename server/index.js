@@ -30,6 +30,7 @@ import translationRoutes, { processTranslationQueue } from './routes/translation
 import translationJobsRoutes, { resetStaleJobs } from './routes/translation-jobs.js'
 import sslRoutes from './routes/ssl.js'
 import emailRoutes from './routes/email.js'
+import { checkAndSendSslWarning } from './emailService.js'
 import indexingRoutes, { startIndexingScheduler } from './routes/indexing.js'
 import aiRoutes from './routes/ai.js'
 import aiAutoPostRoutes from './routes/ai-auto-post.js'
@@ -118,6 +119,13 @@ async function startServer() {
     }
     setTimeout(autoFreshnessRefresh, 10000) // Run 10s after startup
     setInterval(autoFreshnessRefresh, 6 * 60 * 60 * 1000) // Then every 6 hours
+
+    // ── SSL Expiry Email Warning Scheduler ──────────────────────────
+    function autoSslWarningCheck() {
+      checkAndSendSslWarning().catch(e => console.warn('SSL warning check error:', e.message))
+    }
+    setTimeout(autoSslWarningCheck, 15000) // Run 15s after startup
+    setInterval(autoSslWarningCheck, 12 * 60 * 60 * 1000) // Then check every 12 hours
 
     // ── One-time cleanup of corrupt files on server start ──────────────
     try {

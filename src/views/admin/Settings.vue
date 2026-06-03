@@ -71,9 +71,6 @@
           <button class="btn btn-primary" @click="saveSsl" :disabled="sslLoading">
             {{ sslLoading ? '保存配置中...' : '🔒 保存并启用 HTTPS' }}
           </button>
-          <button v-if="sslStatus?.hasCert" class="btn btn-outline" @click="deleteSsl" style="color:#dc2626;border-color:#dc2626;">
-            🗑 删除证书
-          </button>
         </div>
       </div>
     </div>
@@ -361,17 +358,6 @@ const saveSsl = async () => {
   } catch (e) {
     sslResult.value = { success: false, message: e.message }
   } finally { sslLoading.value = false }
-}
-
-const deleteSsl = async () => {
-  if (!confirm('确定删除SSL证书吗？删除后网站将不支持HTTPS')) return
-  try {
-    const token = localStorage.getItem('token')
-    await fetch('/api/ssl', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
-    sslForm.cert = ''; sslForm.key = ''
-    await loadSslStatus()
-    alert('SSL证书已删除')
-  } catch (e) { alert(e.message) }
 }
 
 onMounted(() => {

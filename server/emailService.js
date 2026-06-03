@@ -135,6 +135,10 @@ export function getSslDaysRemaining() {
 }
 
 export async function checkAndSendSslWarning() {
+    try {
+        run("ALTER TABLE email_settings ADD COLUMN last_ssl_warn_at TEXT DEFAULT ''")
+    } catch (e) {}
+
     const settings = getOne('SELECT * FROM email_settings WHERE id=1') || {}
     const toEmails = settings.to_emails || getEmailConfig().to_email || ''
     if (!toEmails) return
@@ -142,6 +146,13 @@ export async function checkAndSendSslWarning() {
     if (!ssl) return
     const warnDays = parseInt(settings.ssl_warn_days) || 30
     if (ssl.days > warnDays) return
+
+    // Prevent duplicate emails within the same UTC/local day
+    const todayStr = new Date().toISOString().split('T')[0] // e.g., '2026-06-03'
+    if (settings.last_ssl_warn_at === todayStr) {
+        console.log(`[SSL Warning] Already sent a warning email today (${todayStr}), skipping.`)
+        return
+    }
 
     const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
@@ -161,6 +172,8 @@ export async function checkAndSendSslWarning() {
             subject: `【SSL提醒】证书${ssl.expired ? '已过期' : `还有 ${ssl.days} 天到期`} - www.sunseasteel.com`,
             html
         })
+        run('UPDATE email_settings SET last_ssl_warn_at=? WHERE id=1', [todayStr])
+        console.log(`[SSL Warning] Successfully sent warning email to: ${toEmails}`)
     } catch (e) {
         console.error('发送SSL到期邮件失败:', e.message)
     }
