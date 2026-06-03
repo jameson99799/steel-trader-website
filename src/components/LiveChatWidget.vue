@@ -105,13 +105,21 @@ const logoUrl = ref('')
 const textareaRef = ref(null)
 const isFocused = ref(false)
 
+let originalScrollY = 0
+
 const handleFocus = () => {
   if (window.innerWidth <= 768) {
+    originalScrollY = window.scrollY || document.documentElement.scrollTop || 0
     isFocused.value = true
     scrollToBottom()
     setTimeout(() => {
-      window.scrollTo(0, 0)
-      document.body.scrollTop = 0
+      window.scrollTo(0, originalScrollY)
+      document.body.scrollTop = originalScrollY
+      scrollToBottom()
+    }, 50)
+    setTimeout(() => {
+      window.scrollTo(0, originalScrollY)
+      document.body.scrollTop = originalScrollY
       scrollToBottom()
     }, 150)
   }
@@ -121,7 +129,8 @@ const handleBlur = () => {
   isFocused.value = false
   if (window.innerWidth <= 768) {
     setTimeout(() => {
-      window.scrollTo(0, Math.max(0, document.documentElement.scrollTop || document.body.scrollTop))
+      window.scrollTo(0, originalScrollY)
+      document.body.scrollTop = originalScrollY
     }, 100)
   }
 }
@@ -146,6 +155,9 @@ const handleViewportChange = () => {
       visualHeight.value = 'calc(100vh - 130px)'
       isFocused.value = false
     }
+    scrollToBottom()
+    setTimeout(scrollToBottom, 50)
+    setTimeout(scrollToBottom, 150)
   } else {
     visualBottom.value = ''
     visualHeight.value = ''
@@ -598,14 +610,6 @@ onUnmounted(() => {
     max-height: 520px;
     border-radius: 16px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    transition: bottom 0.25s ease, height 0.25s ease, top 0.25s ease;
-  }
-
-  .chat-window.keyboard-open {
-    bottom: auto;
-    top: 12px;
-    height: calc(100vh - 350px) !important;
-    max-height: calc(100vh - 350px) !important;
   }
 }
 
