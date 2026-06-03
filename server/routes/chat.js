@@ -72,7 +72,7 @@ async function processNotificationAndGeoIP(visitor_id, cleanIp, content) {
       
       if (settings.wechat_webhook_url) {
         const locationStr = cachedCountry || '未知'
-        const markdownContent = `💬 **新客服会话通知**\n\n有新访客在官网上发起咨询：\n- **访客ID:** \`${visitor_id}\`\n- **IP地址:** \`${cleanIp}\` (${locationStr})\n- **咨询内容:** ${content}\n\n[👉 点击进入后台回复](https://www.sunseasteel.com/admin/chat)`
+        const markdownContent = `💬 **新客服会话通知**\n\n有新访客在官网上发起咨询：\n- **访客ID:** \`${visitor_id}\`\n- **IP地址:** \`${cleanIp}\` (${locationStr})\n- **咨询内容:** ${content}\n\n[👉 点击进入后台回复](https://www.sunseasteel.com/admin/mobile-chat?visitor_id=${visitor_id})`
         
         const payload = JSON.stringify({
           msgtype: 'markdown',
@@ -126,7 +126,7 @@ async function processNotificationAndGeoIP(visitor_id, cleanIp, content) {
                 <p style="margin:0;line-height:1.6;font-size:15px;color:#1e293b"><strong>最新内容：</strong>${content}</p>
               </div>
               <p style="margin-bottom:0">请登录网站后台【在线客服】版块，与该客户进行实时回复。</p>
-              <a href="https://www.sunseasteel.com/admin/chat" style="display:inline-block;margin-top:16px;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px">去后台回复 🚀</a>
+              <a href="https://www.sunseasteel.com/admin/mobile-chat?visitor_id=${visitor_id}" style="display:inline-block;margin-top:16px;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px">去后台回复 🚀</a>
               <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8">
                 此邮件由 SunSea Steel 系统自动发送 · ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
               </div>

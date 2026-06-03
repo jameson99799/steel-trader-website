@@ -50,6 +50,12 @@ const routes = [
     component: () => import('../views/admin/Login.vue')
   },
   {
+    path: '/admin/mobile-chat',
+    name: 'AdminMobileChat',
+    component: () => import('../views/admin/MobileChat.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/admin',
     component: () => import('../views/admin/Layout.vue'),
     meta: { requiresAuth: true },
