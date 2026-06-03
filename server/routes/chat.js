@@ -148,6 +148,48 @@ function healSchema() {
 let autoReplyIndex = 0
 let welcomePresetIndex = 0
 
+function replaceButtonPlaceholders(buttons) {
+  if (!Array.isArray(buttons) || buttons.length === 0) return buttons
+  try {
+    const comp = getOne('SELECT whatsapp, email FROM company WHERE id = 1')
+    if (comp) {
+      let waUrl = ''
+      if (comp.whatsapp) {
+        const cleanWa = comp.whatsapp.replace(/\D/g, '')
+        waUrl = `https://api.whatsapp.com/send?phone=${cleanWa}`
+      }
+      const mailUrl = comp.email ? `mailto:${comp.email}` : ''
+
+      return buttons.map(btn => {
+        const urlStr = String(btn.url || '')
+        if (
+          urlStr.includes('wa.me') ||
+          urlStr.includes('whatsapp.com') ||
+          urlStr === 'whatsapp' ||
+          urlStr.startsWith('whatsapp:')
+        ) {
+          if (waUrl) {
+            return { ...btn, url: waUrl }
+          }
+        }
+        if (
+          urlStr.startsWith('mailto:') ||
+          urlStr === 'email' ||
+          urlStr === 'mailto'
+        ) {
+          if (mailUrl) {
+            return { ...btn, url: mailUrl }
+          }
+        }
+        return btn
+      })
+    }
+  } catch (e) {
+    console.error('Failed to replace placeholders in buttons:', e.message)
+  }
+  return buttons
+}
+
 // ── Admin: Settings ──────────────────────────────────────────
 router.get('/admin/settings', authMiddleware, (req, res) => {
   const settings = getOne('SELECT * FROM live_chat_settings WHERE id = 1')
@@ -299,15 +341,15 @@ router.get('/admin/page-options', authMiddleware, (req, res) => {
   // External links - dynamically loaded from company profile
   try {
     const comp = getOne('SELECT whatsapp, email FROM company WHERE id = 1')
-    let waUrl = 'https://wa.me/'
+    let waUrl = 'https://api.whatsapp.com/send?phone='
     let mailUrl = 'mailto:'
     if (comp) {
       if (comp.whatsapp) {
         if (comp.whatsapp.startsWith('http')) {
           waUrl = comp.whatsapp
         } else {
-          const cleanWa = comp.whatsapp.replace(/[^\d+]/g, '')
-          waUrl = `https://wa.me/${cleanWa}`
+          const cleanWa = comp.whatsapp.replace(/\D/g, '')
+          waUrl = `https://api.whatsapp.com/send?phone=${cleanWa}`
         }
       }
       if (comp.email) {
@@ -325,7 +367,7 @@ router.get('/admin/page-options', authMiddleware, (req, res) => {
     options.push({
       group: '外部链接',
       items: [
-        { label: 'WhatsApp', label_en: 'WhatsApp', url: 'https://wa.me/' },
+        { label: 'WhatsApp', label_en: 'WhatsApp', url: 'https://api.whatsapp.com/send?phone=' },
         { label: 'Email', label_en: 'Email', url: 'mailto:' },
       ]
     })
@@ -359,33 +401,7 @@ router.get('/widget-config', (req, res) => {
     let buttons = JSON.parse(activePreset.buttons || '[]')
     
     // Dynamically replace generic wa.me/mailto templates with actual company info
-    try {
-      const comp = getOne('SELECT whatsapp, email FROM company WHERE id = 1')
-      if (comp) {
-        let waUrl = 'https://wa.me/'
-        if (comp.whatsapp) {
-          if (comp.whatsapp.startsWith('http')) {
-            waUrl = comp.whatsapp
-          } else {
-            const cleanWa = comp.whatsapp.replace(/[^\d+]/g, '')
-            waUrl = `https://wa.me/${cleanWa}`
-          }
-        }
-        const mailUrl = comp.email ? `mailto:${comp.email}` : 'mailto:'
-
-        buttons = buttons.map(btn => {
-          if (btn.url === 'https://wa.me/' || btn.url === 'https://wa.me') {
-            return { ...btn, url: waUrl }
-          }
-          if (btn.url === 'mailto:' || btn.url === 'mailto') {
-            return { ...btn, url: mailUrl }
-          }
-          return btn
-        })
-      }
-    } catch (e) {
-      console.error('Failed to fill company links in widget-config', e.message)
-    }
+    buttons = replaceButtonPlaceholders(buttons)
 
     // Load translations for activePreset if lang is not zh
     if (lang && lang !== 'zh') {
@@ -566,7 +582,7 @@ router.all('/poll', (req, res) => {
       try {
         if (m.buttons) btns = JSON.parse(m.buttons)
       } catch (e) {}
-      return { ...m, buttons: btns }
+      return { ...m, buttons: replaceButtonPlaceholders(btns) }
     })
     res.json(parsed)
   } catch (err) {
@@ -595,7 +611,7 @@ router.get('/admin/messages', authMiddleware, (req, res) => {
         try {
           if (m.buttons) btns = JSON.parse(m.buttons)
         } catch (e) {}
-        return { ...m, buttons: btns }
+        return { ...m, buttons: replaceButtonPlaceholders(btns) }
       })
       res.json(parsed)
     } else {
