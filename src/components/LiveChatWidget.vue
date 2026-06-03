@@ -13,7 +13,7 @@
 
     <!-- Chat Window -->
     <transition name="chat-slide">
-      <div v-if="isOpen" class="chat-window" :style="{ transform: windowTransform }">
+      <div v-if="isOpen" class="chat-window" :style="windowStyle">
         <div class="chat-header">
           <div class="header-info">
             <h3>{{ uiTexts.chatTitle }}</h3>
@@ -104,45 +104,68 @@ const { lang } = useLang()
 const logoUrl = ref('')
 const textareaRef = ref(null)
 
+const windowStyle = reactive({
+  top: '',
+  height: '',
+  bottom: '',
+  transform: 'none'
+})
+const isFocused = ref(false)
+
+const handleViewportChange = () => {
+  if (!isOpen.value) return
+  if (window.innerWidth <= 768) {
+    let vh = window.innerHeight
+    if (window.visualViewport) {
+      vh = window.visualViewport.height
+    }
+    
+    let h = vh * 0.6
+    if (h > 520) h = 520
+    if (h < 250) h = 250 // maintain minimum reasonable height
+    
+    // If typing (focused), leave a small 16px gap to the keyboard.
+    // If not typing, leave the original 96px gap to avoid covering the floating button.
+    let gap = isFocused.value ? 16 : 96
+    
+    let top = vh - h - gap
+    if (top < 16) top = 16
+    
+    windowStyle.height = `${h}px`
+    windowStyle.top = `${top}px`
+    windowStyle.bottom = 'auto'
+    windowStyle.transform = 'none'
+  } else {
+    // Reset for desktop
+    windowStyle.top = ''
+    windowStyle.height = ''
+    windowStyle.bottom = ''
+    windowStyle.transform = ''
+  }
+}
+
 const handleFocus = () => {
   if (window.innerWidth <= 768) {
+    isFocused.value = true
+    handleViewportChange()
     scrollToBottom()
     setTimeout(() => {
       window.scrollTo(0, 0)
       document.body.scrollTop = 0
       scrollToBottom()
+      handleViewportChange()
     }, 150)
   }
 }
 
 const handleBlur = () => {
   if (window.innerWidth <= 768) {
+    isFocused.value = false
+    handleViewportChange()
     setTimeout(() => {
       window.scrollTo(0, Math.max(0, document.documentElement.scrollTop || document.body.scrollTop))
+      handleViewportChange()
     }, 100)
-  }
-}
-
-const windowTransform = ref('none')
-
-const handleViewportChange = () => {
-  if (!isOpen.value) return
-  if (window.visualViewport && window.innerWidth <= 768) {
-    const vv = window.visualViewport
-    // Fallback to screen.height for total height if window.innerHeight shrank
-    const totalHeight = window.screen.height > window.innerHeight ? window.innerHeight : window.screen.height
-    const keyboardHeight = window.innerHeight - vv.height
-    
-    if (keyboardHeight > 100) {
-      // Keyboard is open
-      const shiftAmount = Math.max(0, keyboardHeight - 96 + 10)
-      windowTransform.value = `translateY(-${shiftAmount}px)`
-    } else {
-      // Keyboard is closed
-      windowTransform.value = 'none'
-    }
-  } else {
-    windowTransform.value = 'none'
   }
 }
 
@@ -153,7 +176,10 @@ watch(isOpen, (open) => {
       scrollToBottom()
     })
   } else {
-    windowTransform.value = 'none'
+    isFocused.value = false
+    windowStyle.top = ''
+    windowStyle.height = ''
+    windowStyle.bottom = ''
   }
 })
 
