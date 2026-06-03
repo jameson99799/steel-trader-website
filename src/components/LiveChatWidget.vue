@@ -529,7 +529,7 @@ onUnmounted(() => {
     right: 16px;
     width: calc(100vw - 32px);
     max-width: 380px;
-    height: 340px; /* Small enough so the input is in the safe zone above the keyboard */
+    height: 425px; /* Increased by 1/4 per user request */
     max-height: none;
     border-radius: 16px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
