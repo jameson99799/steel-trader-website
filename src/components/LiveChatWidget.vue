@@ -524,13 +524,13 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .chat-window {
     position: fixed;
-    top: 12vh;
+    top: 16px;
     bottom: auto;
     right: 16px;
     width: calc(100vw - 32px);
     max-width: 380px;
-    height: 55vh;
-    max-height: 520px;
+    height: 340px; /* Small enough so the input is in the safe zone above the keyboard */
+    max-height: none;
     border-radius: 16px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     z-index: 10000;
