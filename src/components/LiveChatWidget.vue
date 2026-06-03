@@ -105,12 +105,27 @@ const logoUrl = ref('')
 const textareaRef = ref(null)
 
 const windowStyle = reactive({
+  position: '',
   top: '',
   height: '',
   bottom: '',
   transform: 'none'
 })
 const isFocused = ref(false)
+
+let viewportPoller = null
+
+const startPolling = () => {
+  if (viewportPoller) return
+  viewportPoller = setInterval(handleViewportChange, 100)
+}
+
+const stopPolling = () => {
+  if (viewportPoller) {
+    clearInterval(viewportPoller)
+    viewportPoller = null
+  }
+}
 
 const handleViewportChange = () => {
   if (!isOpen.value) return
@@ -124,19 +139,27 @@ const handleViewportChange = () => {
     if (h > 520) h = 520
     if (h < 250) h = 250 // maintain minimum reasonable height
     
-    // If typing (focused), leave a small 16px gap to the keyboard.
-    // If not typing, leave the original 96px gap to avoid covering the floating button.
     let gap = isFocused.value ? 16 : 96
-    
     let top = vh - h - gap
     if (top < 16) top = 16
     
+    if (isFocused.value) {
+      // By using position: absolute when focused, we allow Android's
+      // adjustPan behavior to correctly pan the entire document and 
+      // bring the textarea into view naturally.
+      windowStyle.position = 'absolute'
+      windowStyle.top = `${window.scrollY + top}px`
+    } else {
+      windowStyle.position = 'fixed'
+      windowStyle.top = `${top}px`
+    }
+    
     windowStyle.height = `${h}px`
-    windowStyle.top = `${top}px`
     windowStyle.bottom = 'auto'
     windowStyle.transform = 'none'
   } else {
     // Reset for desktop
+    windowStyle.position = ''
     windowStyle.top = ''
     windowStyle.height = ''
     windowStyle.bottom = ''
@@ -148,10 +171,8 @@ const handleFocus = () => {
   if (window.innerWidth <= 768) {
     isFocused.value = true
     handleViewportChange()
-    scrollToBottom()
+    startPolling()
     setTimeout(() => {
-      window.scrollTo(0, 0)
-      document.body.scrollTop = 0
       scrollToBottom()
       handleViewportChange()
     }, 150)
@@ -163,9 +184,9 @@ const handleBlur = () => {
     isFocused.value = false
     handleViewportChange()
     setTimeout(() => {
-      window.scrollTo(0, Math.max(0, document.documentElement.scrollTop || document.body.scrollTop))
+      stopPolling()
       handleViewportChange()
-    }, 100)
+    }, 500)
   }
 }
 
