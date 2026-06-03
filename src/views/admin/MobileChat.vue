@@ -90,26 +90,29 @@
               <span class="sender-name">{{ msg.sender_type === 'visitor' ? '访客' : '客服' }}</span>
               <span class="bubble-time">{{ formatTime(msg.timestamp) }}</span>
             </div>
-            <div class="message-bubble">
-              <div class="bubble-content">{{ msg.content }}</div>
-              
-              <!-- AI Translation Display -->
-              <div v-if="bubbleTranslations[msg.id]" class="bubble-translation-content">
-                <div class="translation-divider"></div>
-                <div class="translated-label">AI 翻译：</div>
-                <div class="translated-text">{{ bubbleTranslations[msg.id] }}</div>
+            
+            <div class="bubble-body-row">
+              <div class="message-bubble">
+                <div class="bubble-content">{{ msg.content }}</div>
+                
+                <!-- AI Translation Display -->
+                <div v-if="bubbleTranslations[msg.id]" class="bubble-translation-content">
+                  <div class="translation-divider"></div>
+                  <div class="translated-label">AI 翻译：</div>
+                  <div class="translated-text">{{ bubbleTranslations[msg.id] }}</div>
+                </div>
               </div>
-            </div>
-            <div class="bubble-actions" v-if="msg.sender_type === 'visitor'">
+
+              <!-- Inline Translate Trigger Icon (Only for visitor bubbles) -->
               <button 
-                class="translate-bubble-btn" 
+                v-if="msg.sender_type === 'visitor' && aiChannels.length"
+                class="bubble-translate-icon-btn" 
                 :disabled="translatingBubbleId === msg.id"
                 @click="translateBubble(msg)"
+                title="AI 翻译"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M5 8h10M4 14h12M2 5h20M2 19h20"></path>
-                </svg>
-                {{ translatingBubbleId === msg.id ? '翻译中...' : '翻译成中文' }}
+                <span v-if="translatingBubbleId === msg.id" class="translating-spinner">⏳</span>
+                <span v-else>🌐</span>
               </button>
             </div>
           </div>
@@ -118,31 +121,54 @@
         <!-- Chat Input Bar (Mobile Docked) -->
         <div class="input-panel-dock">
           <!-- Translation Helper Bar -->
-          <div class="translation-quick-bar">
+          <div class="translation-quick-bar" v-if="aiChannels.length">
             <div class="lang-selector-group">
-              <label for="target-lang">翻译目标语种:</label>
-              <select id="target-lang" v-model="targetLang" class="quick-select">
-                <option value="EN">英语 (EN)</option>
-                <option value="TR">土耳其语 (TR)</option>
-                <option value="RU">俄语 (RU)</option>
-                <option value="ES">西班牙语 (ES)</option>
-                <option value="FR">法语 (FR)</option>
-                <option value="DE">德语 (DE)</option>
-                <option value="AR">阿拉伯语 (AR)</option>
-                <option value="JA">日语 (JA)</option>
-                <option value="KO">韩语 (KO)</option>
+              <span class="toolbar-avatar">🤖</span>
+              <select v-model="targetLang" class="quick-select">
+                <option value="EN">English (EN)</option>
+                <option value="ZH">简体中文 (ZH)</option>
+                <option value="TR">Türkçe (TR)</option>
+                <option value="ES">Español (ES)</option>
+                <option value="RU">Русский (RU)</option>
+                <option value="FR">Français (FR)</option>
+                <option value="DE">Deutsch (DE)</option>
+                <option value="PT">Português (PT)</option>
+                <option value="AR">العربية (AR)</option>
+                <option value="JA">日本語 (JA)</option>
+                <option value="KO">한국어 (KO)</option>
               </select>
+              <button 
+                class="settings-gear-btn" 
+                :class="{ active: showTranslationConfig }"
+                @click="showTranslationConfig = !showTranslationConfig"
+                title="AI 渠道和模型设置"
+              >
+                ⚙️
+              </button>
             </div>
             <button 
               class="quick-action-btn translate-input-btn"
               :disabled="translatingInput || !replyText.trim()"
               @click="translateInput"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-              </svg>
-              <span>{{ translatingInput ? '翻译中...' : '翻译输入框' }}</span>
+              <span>{{ translatingInput ? '正在翻译...' : '翻译并替换' }}</span>
             </button>
+          </div>
+
+          <!-- Collapsible AI settings -->
+          <div v-if="showTranslationConfig && aiChannels.length" class="ai-config-collapse-panel">
+            <div class="config-row">
+              <span class="config-label">AI 渠道:</span>
+              <select v-model="selectedChannelId" class="config-select" @change="onChannelChange">
+                <option v-for="ch in aiChannels" :key="ch.id" :value="ch.id">{{ ch.name }}</option>
+              </select>
+            </div>
+            <div class="config-row">
+              <span class="config-label">AI 模型:</span>
+              <select v-model="selectedModel" class="config-select">
+                <option v-for="m in currentChannelModels" :key="m" :value="m">{{ m }}</option>
+              </select>
+            </div>
           </div>
 
           <!-- Typing & Sending Row -->
@@ -199,12 +225,13 @@ const visitors = ref([])
 const activeVisitorId = ref('')
 const activeMessages = ref([])
 
-// Translation States
+// AI Translation States
 const aiChannels = ref([])
 const selectedChannelId = ref(null)
 const selectedModel = ref('')
 const targetLang = ref(localStorage.getItem('chat_target_lang') || 'EN')
 const systemPrompt = ref(localStorage.getItem('chat_system_prompt') || '你是一个专业的外贸业务助手和翻译官。请把下面的文字翻译成目标语言，要求表达自然、流畅、得体。不要返回任何多余的解释、前言或标点引导，只需要输出翻译后的纯文本内容。')
+const showTranslationConfig = ref(localStorage.getItem('chat_show_translation_config') === 'true')
 const translatingInput = ref(false)
 const translatingBubbleId = ref(null)
 const bubbleTranslations = ref({})
@@ -225,7 +252,28 @@ const adjustTextareaHeight = () => {
 }
 
 watch(replyText, adjustTextareaHeight)
+
+// Watch AI settings to keep in localStorage
+watch(showTranslationConfig, (newVal) => localStorage.setItem('chat_show_translation_config', String(newVal)))
 watch(targetLang, (newVal) => localStorage.setItem('chat_target_lang', newVal))
+watch(selectedChannelId, (newVal) => {
+  if (newVal) localStorage.setItem('chat_selected_channel_id', newVal)
+})
+watch(selectedModel, (newVal) => {
+  if (newVal) localStorage.setItem('chat_selected_model', newVal)
+})
+
+const currentChannelModels = computed(() => {
+  const ch = aiChannels.value.find(c => c.id === selectedChannelId.value)
+  return ch?.models || []
+})
+
+const onChannelChange = () => {
+  const ch = aiChannels.value.find(c => c.id === selectedChannelId.value)
+  if (ch) {
+    selectedModel.value = ch.default_model || ch.models[0] || ''
+  }
+}
 
 // Timer for polling messages
 let pollTimer = null
@@ -383,7 +431,7 @@ const fetchAiSettings = async () => {
 
 const translateText = async (text, targetLanguage) => {
   if (!selectedChannelId.value || !selectedModel.value) {
-    alert('请在主后台的客服设置中配置有效的 AI 渠道和模型')
+    alert('请配置有效的 AI 渠道和模型')
     return null
   }
   
@@ -829,15 +877,7 @@ onUnmounted(() => {
 .message-bubble-wrapper {
   display: flex;
   flex-direction: column;
-  max-width: 85%;
-}
-
-.message-bubble-wrapper.visitor {
-  align-self: flex-start;
-}
-
-.message-bubble-wrapper.admin {
-  align-self: flex-end;
+  width: 100%;
 }
 
 .bubble-meta {
@@ -853,7 +893,23 @@ onUnmounted(() => {
   justify-content: flex-end;
 }
 
+.bubble-body-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.message-bubble-wrapper.visitor .bubble-body-row {
+  justify-content: flex-start;
+}
+
+.message-bubble-wrapper.admin .bubble-body-row {
+  justify-content: flex-end;
+}
+
 .message-bubble {
+  max-width: 80%;
   padding: 10px 14px;
   border-radius: 12px;
   font-size: 14px;
@@ -872,6 +928,38 @@ onUnmounted(() => {
   background-color: #2563eb;
   color: #ffffff;
   border-bottom-right-radius: 4px;
+}
+
+/* Inline Translate Button Styles */
+.bubble-translate-icon-btn {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s;
+}
+
+.bubble-translate-icon-btn:active {
+  background-color: #f1f5f9;
+  transform: scale(0.9);
+}
+
+.translating-spinner {
+  display: inline-block;
+  animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+  from { opacity: 0.5; }
+  to { opacity: 1; }
 }
 
 /* Translated Text Styles */
@@ -909,27 +997,6 @@ onUnmounted(() => {
   color: #fae8ff;
 }
 
-.bubble-actions {
-  margin-top: 4px;
-  align-self: flex-start;
-}
-
-.translate-bubble-btn {
-  background: none;
-  border: none;
-  color: #6366f1;
-  font-size: 11px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 0;
-}
-
-.translate-bubble-btn:active {
-  opacity: 0.7;
-}
-
 /* Chat Input Bar (Mobile Docked) */
 .input-panel-dock {
   background: #ffffff;
@@ -958,6 +1025,10 @@ onUnmounted(() => {
   color: #64748b;
 }
 
+.toolbar-avatar {
+  font-size: 14px;
+}
+
 .quick-select {
   border: 1px solid #cbd5e1;
   border-radius: 4px;
@@ -965,6 +1036,26 @@ onUnmounted(() => {
   padding: 2px 6px;
   font-size: 11px;
   outline: none;
+  font-weight: 500;
+}
+
+.settings-gear-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.settings-gear-btn:active {
+  background-color: #f1f5f9;
+}
+
+.settings-gear-btn.active {
+  background-color: #eff6ff;
+  border-radius: 4px;
 }
 
 .quick-action-btn {
@@ -993,6 +1084,45 @@ onUnmounted(() => {
 .translate-input-btn {
   background-color: #eff6ff;
   color: #2563eb;
+}
+
+/* Collapsible AI settings panel */
+.ai-config-collapse-panel {
+  background-color: #f8fafc;
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px dashed #cbd5e1;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.config-label {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.config-select {
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background-color: #ffffff;
+  padding: 2px 6px;
+  font-size: 11px;
+  outline: none;
+  width: 70%;
 }
 
 .typing-action-row {
