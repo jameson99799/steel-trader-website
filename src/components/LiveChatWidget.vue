@@ -13,7 +13,7 @@
 
     <!-- Chat Window -->
     <transition name="chat-slide">
-      <div v-if="isOpen" class="chat-window">
+      <div v-if="isOpen" class="chat-window" :style="{ transform: windowTransform }">
         <div class="chat-header">
           <div class="header-info">
             <h3>{{ uiTexts.chatTitle }}</h3>
@@ -105,16 +105,57 @@ const logoUrl = ref('')
 const textareaRef = ref(null)
 
 const handleFocus = () => {
-  // On mobile, scroll messages to bottom after keyboard opens
   if (window.innerWidth <= 768) {
-    setTimeout(scrollToBottom, 300)
-    setTimeout(scrollToBottom, 600)
+    scrollToBottom()
+    setTimeout(() => {
+      window.scrollTo(0, 0)
+      document.body.scrollTop = 0
+      scrollToBottom()
+    }, 150)
   }
 }
 
 const handleBlur = () => {
-  // Nothing needed - fullscreen layout handles it
+  if (window.innerWidth <= 768) {
+    setTimeout(() => {
+      window.scrollTo(0, Math.max(0, document.documentElement.scrollTop || document.body.scrollTop))
+    }, 100)
+  }
 }
+
+const windowTransform = ref('none')
+
+const handleViewportChange = () => {
+  if (!isOpen.value) return
+  if (window.visualViewport && window.innerWidth <= 768) {
+    const vv = window.visualViewport
+    // Fallback to screen.height for total height if window.innerHeight shrank
+    const totalHeight = window.screen.height > window.innerHeight ? window.innerHeight : window.screen.height
+    const keyboardHeight = window.innerHeight - vv.height
+    
+    if (keyboardHeight > 100) {
+      // Keyboard is open
+      const shiftAmount = Math.max(0, keyboardHeight - 96 + 10)
+      windowTransform.value = `translateY(-${shiftAmount}px)`
+    } else {
+      // Keyboard is closed
+      windowTransform.value = 'none'
+    }
+  } else {
+    windowTransform.value = 'none'
+  }
+}
+
+watch(isOpen, (open) => {
+  if (open) {
+    nextTick(() => {
+      handleViewportChange()
+      scrollToBottom()
+    })
+  } else {
+    windowTransform.value = 'none'
+  }
+})
 
 const localizedUiTexts = {
   zh: {
@@ -430,11 +471,23 @@ onMounted(() => {
   fetchWidgetConfig()
   pollMessages()
   pollInterval = setInterval(pollMessages, 3000)
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', handleViewportChange)
+    window.visualViewport.addEventListener('scroll', handleViewportChange)
+  }
+  window.addEventListener('resize', handleViewportChange)
 })
 
 onUnmounted(() => {
   if (pollInterval) clearInterval(pollInterval)
   if (collapseTimer) clearTimeout(collapseTimer)
+  
+  if (window.visualViewport) {
+    window.visualViewport.removeEventListener('resize', handleViewportChange)
+    window.visualViewport.removeEventListener('scroll', handleViewportChange)
+  }
+  window.removeEventListener('resize', handleViewportChange)
 })
 </script>
 
@@ -531,15 +584,15 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .chat-window {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100%;
-    height: 100%;
-    max-height: none;
-    border-radius: 0;
-    box-shadow: none;
+    bottom: 96px;
+    right: 16px;
+    width: calc(100vw - 32px);
+    max-width: 380px;
+    height: 60vh;
+    max-height: 520px;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     z-index: 10000;
   }
 }
