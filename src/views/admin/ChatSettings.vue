@@ -245,9 +245,16 @@
           </div>
 
           <div class="form-group">
-            <label>企业微信通知 Webhook 地址</label>
-            <input type="text" v-model="settings.wechat_webhook_url" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." />
-            <span class="hint">配置企业微信群机器人的 Webhook 地址，有新会话时将在此群中收到卡片通知提醒。如果不需要微信通知，请留空。</span>
+            <label>企业微信通知 Webhook 机器人（支持配置多个且多选）</label>
+            <div v-for="(webhook, wIdx) in wechatWebhooks" :key="webhook.id || wIdx" class="webhook-item-row" style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+              <input type="checkbox" :checked="webhook.enabled" @change="toggleWebhook(webhook)" style="width: 18px; height: 18px; cursor: pointer; flex-shrink: 0;" />
+              <input type="text" v-model="webhook.name" placeholder="名称（如：销售通知群）" style="width: 150px; flex-shrink: 0;" />
+              <input type="text" v-model="webhook.url" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." style="flex: 1;" />
+              <button type="button" class="btn btn-sm btn-primary" @click="updateWebhook(webhook)">保存</button>
+              <button type="button" class="btn btn-sm btn-danger" @click="deleteWebhook(webhook)">删除</button>
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary" @click="addWebhook" style="margin-top: 5px;">+ 添加 Webhook 机器人</button>
+            <span class="hint" style="display: block; margin-top: 8px;">配置企业微信群机器人的 Webhook 地址，勾选开启的机器人均会在收到新会话时发送卡片通知提醒。如果不需要微信通知，请保留列表为空。</span>
           </div>
 
           <div class="form-actions">
@@ -365,6 +372,7 @@ const settings = ref({ widget_enabled: true, auto_reply_enabled: false, start_ti
 const autoReplies = ref([])
 const welcomePresets = ref([])
 const pageOptions = ref([])
+const wechatWebhooks = ref([])
 const saving = ref(false)
 
 // Chat console reactive variables
@@ -716,6 +724,80 @@ const deletePreset = async (id) => {
   fetchWelcomePresets()
 }
 
+// ── WeChat Webhooks CRUD ──
+const fetchWebhooks = async () => {
+  try {
+    const res = await fetch('/api/chat/admin/wechat-webhooks', { headers: { 'Authorization': `Bearer ${token()}` } })
+    if (res.ok) {
+      wechatWebhooks.value = (await res.json()).map(w => ({
+        ...w,
+        enabled: Boolean(w.enabled)
+      }))
+    }
+  } catch (e) { console.error(e) }
+}
+
+const addWebhook = async () => {
+  try {
+    await fetch('/api/chat/admin/wechat-webhooks', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ name: '新通知机器人', url: '', enabled: true })
+    })
+    fetchWebhooks()
+  } catch (e) { console.error(e) }
+}
+
+const updateWebhook = async (webhook) => {
+  if (!webhook.url) {
+    alert('请输入 Webhook 地址')
+    return
+  }
+  try {
+    const res = await fetch(`/api/chat/admin/wechat-webhooks/${webhook.id}`, {
+      method: 'PUT',
+      headers: headers(),
+      body: JSON.stringify({
+        name: webhook.name,
+        url: webhook.url,
+        enabled: webhook.enabled
+      })
+    })
+    if (res.ok) {
+      alert('已保存')
+      fetchWebhooks()
+    }
+  } catch (e) { console.error(e) }
+}
+
+const toggleWebhook = async (webhook) => {
+  webhook.enabled = !webhook.enabled
+  if (webhook.id) {
+    await fetch(`/api/chat/admin/wechat-webhooks/${webhook.id}`, {
+      method: 'PUT',
+      headers: headers(),
+      body: JSON.stringify({
+        name: webhook.name,
+        url: webhook.url,
+        enabled: webhook.enabled
+      })
+    })
+  }
+}
+
+const deleteWebhook = async (webhook) => {
+  if (!confirm('确定删除此 Webhook 机器人吗？')) return
+  try {
+    const res = await fetch(`/api/chat/admin/wechat-webhooks/${webhook.id}`, {
+      method: 'DELETE',
+      headers: headers()
+    })
+    if (res.ok) {
+      fetchWebhooks()
+    }
+  } catch (e) { console.error(e) }
+}
+
 // ── AI Translation helper methods ──
 const fetchAiChannels = async () => {
   try {
@@ -887,6 +969,7 @@ onMounted(() => {
   fetchWelcomePresets()
   fetchPageOptions()
   fetchAiChannels()
+  fetchWebhooks()
   
   // Real-time polling every 3 seconds for visitors list & current messages
   runChatPolling()

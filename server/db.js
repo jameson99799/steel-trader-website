@@ -1665,6 +1665,16 @@ Requirements:
   try { db.exec('ALTER TABLE live_chat_settings ADD COLUMN wechat_webhook_url TEXT') } catch(e) {}
   try { db.exec("ALTER TABLE chat_auto_replies ADD COLUMN buttons TEXT DEFAULT '[]'") } catch(e) {}
   try { db.exec("ALTER TABLE live_chat_messages ADD COLUMN buttons TEXT DEFAULT '[]'") } catch(e) {}
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_wechat_webhooks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
   try {
     const hasChatSettings = db.prepare("SELECT count(*) as c FROM live_chat_settings").get().c
     if (hasChatSettings === 0) {
@@ -1672,6 +1682,18 @@ Requirements:
     }
   } catch (e) {
     console.error('[db] Error populating default chat settings:', e)
+  }
+
+  try {
+    const hasWebhooks = db.prepare("SELECT count(*) as c FROM chat_wechat_webhooks").get().c
+    if (hasWebhooks === 0) {
+      const settings = db.prepare("SELECT wechat_webhook_url FROM live_chat_settings WHERE id = 1").get()
+      if (settings && settings.wechat_webhook_url) {
+        db.prepare("INSERT INTO chat_wechat_webhooks (name, url, enabled) VALUES (?, ?, 1)").run('默认机器人', settings.wechat_webhook_url)
+      }
+    }
+  } catch (e) {
+    console.error('[db] Error migrating wechat_webhook_url:', e)
   }
 
   return db

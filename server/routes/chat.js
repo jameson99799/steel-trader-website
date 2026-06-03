@@ -68,42 +68,56 @@ async function processNotificationAndGeoIP(visitor_id, cleanIp, content) {
 
     const shouldNotify = true
     if (shouldNotify) {
-      const settings = getOne('SELECT * FROM live_chat_settings WHERE id = 1') || {}
+      let webhooks = []
+      try {
+        webhooks = getAll('SELECT url FROM chat_wechat_webhooks WHERE enabled = 1')
+      } catch (e) {
+        // Fallback to legacy field if table query fails
+        const settings = getOne('SELECT wechat_webhook_url FROM live_chat_settings WHERE id = 1') || {}
+        if (settings.wechat_webhook_url) {
+          webhooks = [{ url: settings.wechat_webhook_url }]
+        }
+      }
+
+      const locationStr = cachedCountry || '未知'
+      const markdownContent = `💬 **新客服会话通知**\n\n有新访客在官网上发起咨询：\n- **访客ID:** \`${visitor_id}\`\n- **IP地址:** \`${cleanIp}\` (${locationStr})\n- **咨询内容:** ${content}\n\n[👉 点击进入后台回复](https://www.sunseasteel.com/admin/mobile-chat?visitor_id=${visitor_id})`
       
-      if (settings.wechat_webhook_url) {
-        const locationStr = cachedCountry || '未知'
-        const markdownContent = `💬 **新客服会话通知**\n\n有新访客在官网上发起咨询：\n- **访客ID:** \`${visitor_id}\`\n- **IP地址:** \`${cleanIp}\` (${locationStr})\n- **咨询内容:** ${content}\n\n[👉 点击进入后台回复](https://www.sunseasteel.com/admin/mobile-chat?visitor_id=${visitor_id})`
-        
-        const payload = JSON.stringify({
-          msgtype: 'markdown',
-          markdown: {
-            content: markdownContent
-          }
-        })
-        
-        const urlObj = new URL(settings.wechat_webhook_url)
-        const req = https.request({
-          hostname: urlObj.hostname,
-          path: urlObj.pathname + urlObj.search,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(payload)
-          }
-        }, (res) => {
-          let resData = ''
-          res.on('data', chunk => resData += chunk)
-          res.on('end', () => {
-            if (res.statusCode !== 200) {
-              fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] WeChat webhook response error: ${res.statusCode} ${resData}\n`)
+      const payload = JSON.stringify({
+        msgtype: 'markdown',
+        markdown: {
+          content: markdownContent
+        }
+      })
+
+      for (const wh of webhooks) {
+        if (!wh.url) continue
+        try {
+          const urlObj = new URL(wh.url)
+          const req = https.request({
+            hostname: urlObj.hostname,
+            path: urlObj.pathname + urlObj.search,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(payload)
             }
+          }, (res) => {
+            let resData = ''
+            res.on('data', chunk => resData += chunk)
+            res.on('end', () => {
+              if (res.statusCode !== 200) {
+                fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] WeChat webhook response error: ${res.statusCode} ${resData}\n`)
+              }
+            })
           })
-        })
-        req.on('error', (e) => {
-          fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] WeChat webhook send failed: ${e.message}\n`)
-        })
-        req.write(payload)
-        req.end()
+          req.on('error', (e) => {
+            fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] WeChat webhook send failed: ${e.message}\n`)
+          })
+          req.write(payload)
+          req.end()
+        } catch (webhookErr) {
+          fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] WeChat webhook parsing/sending failed for ${wh.url}: ${webhookErr.message}\n`)
+        }
       }
 
       import('../emailService.js').then(({ sendMail, getEmailConfig }) => {
@@ -218,6 +232,32 @@ router.put('/admin/auto-replies/:id', authMiddleware, (req, res) => {
 
 router.delete('/admin/auto-replies/:id', authMiddleware, (req, res) => {
   run('DELETE FROM chat_auto_replies WHERE id=?', [req.params.id])
+  res.json({ success: true })
+})
+
+// ── Admin: WeChat Webhooks (CRUD) ───────────────────────────
+router.get('/admin/wechat-webhooks', authMiddleware, (req, res) => {
+  const list = getAll('SELECT * FROM chat_wechat_webhooks ORDER BY id ASC')
+  res.json(list)
+})
+
+router.post('/admin/wechat-webhooks', authMiddleware, (req, res) => {
+  const { name, url, enabled } = req.body
+  if (!url) return res.status(400).json({ error: 'Webhook URL required' })
+  const result = run('INSERT INTO chat_wechat_webhooks (name, url, enabled) VALUES (?, ?, ?)',
+    [name || '未命名机器人', url, enabled ? 1 : 0])
+  res.json({ success: true, id: result.lastInsertRowid })
+})
+
+router.put('/admin/wechat-webhooks/:id', authMiddleware, (req, res) => {
+  const { name, url, enabled } = req.body
+  run('UPDATE chat_wechat_webhooks SET name=?, url=?, enabled=? WHERE id=?',
+    [name || '未命名机器人', url, enabled ? 1 : 0, req.params.id])
+  res.json({ success: true })
+})
+
+router.delete('/admin/wechat-webhooks/:id', authMiddleware, (req, res) => {
+  run('DELETE FROM chat_wechat_webhooks WHERE id=?', [req.params.id])
   res.json({ success: true })
 })
 
