@@ -105,34 +105,46 @@ const logoUrl = ref('')
 const textareaRef = ref(null)
 const isFocused = ref(false)
 
-let originalScrollY = 0
+const lockBodyScroll = () => {
+  if (typeof document === 'undefined') return
+  if (document.body.style.position === 'fixed') return
+  const scrollY = window.scrollY || document.documentElement.scrollTop || 0
+  document.body.setAttribute('data-scroll-y', scrollY.toString())
+  
+  document.body.style.position = 'fixed'
+  document.body.style.top = `-${scrollY}px`
+  document.body.style.left = '0'
+  document.body.style.right = '0'
+  document.body.style.width = '100%'
+  document.body.style.overflow = 'hidden'
+}
+
+const unlockBodyScroll = () => {
+  if (typeof document === 'undefined') return
+  if (document.body.style.position !== 'fixed') return
+  const scrollY = parseInt(document.body.getAttribute('data-scroll-y') || '0', 10)
+  
+  document.body.style.position = ''
+  document.body.style.top = ''
+  document.body.style.left = ''
+  document.body.style.right = ''
+  document.body.style.width = ''
+  document.body.style.overflow = ''
+  
+  window.scrollTo(0, scrollY)
+}
 
 const handleFocus = () => {
   if (window.innerWidth <= 768) {
-    originalScrollY = window.scrollY || document.documentElement.scrollTop || 0
     isFocused.value = true
     scrollToBottom()
-    setTimeout(() => {
-      window.scrollTo(0, originalScrollY)
-      document.body.scrollTop = originalScrollY
-      scrollToBottom()
-    }, 50)
-    setTimeout(() => {
-      window.scrollTo(0, originalScrollY)
-      document.body.scrollTop = originalScrollY
-      scrollToBottom()
-    }, 150)
+    setTimeout(scrollToBottom, 50)
+    setTimeout(scrollToBottom, 150)
   }
 }
 
 const handleBlur = () => {
   isFocused.value = false
-  if (window.innerWidth <= 768) {
-    setTimeout(() => {
-      window.scrollTo(0, originalScrollY)
-      document.body.scrollTop = originalScrollY
-    }, 100)
-  }
 }
 
 const visualBottom = ref('')
@@ -314,6 +326,9 @@ const openChat = () => {
   isWelcomeMessageRead.value = true
   unreadCount.value = 0
   if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null }
+  if (window.innerWidth <= 768) {
+    lockBodyScroll()
+  }
   scrollToBottom()
 }
 
@@ -322,6 +337,7 @@ const closeChat = () => {
   hasInteracted = true
   isWelcomeMessageRead.value = true
   if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null }
+  unlockBodyScroll()
 }
 
 const formatTime = (isoString) => {
@@ -499,6 +515,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  unlockBodyScroll()
   if (pollInterval) clearInterval(pollInterval)
   if (collapseTimer) clearTimeout(collapseTimer)
   if (window.visualViewport) {
