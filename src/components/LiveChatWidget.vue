@@ -13,7 +13,7 @@
 
     <!-- Chat Window -->
     <transition name="chat-slide">
-      <div v-if="isOpen" class="chat-window">
+      <div v-if="isOpen" class="chat-window" :style="windowStyle">
         <div class="chat-header">
           <div class="header-info">
             <h3>{{ uiTexts.chatTitle }}</h3>
@@ -59,6 +59,8 @@
             v-model="newMessage"
             @keydown.enter.exact.prevent="sendMessage"
             @input="adjustTextareaHeight"
+            @focus="handleFocus"
+            @blur="handleBlur"
             :placeholder="uiTexts.chatPlaceholder"
             rows="1"
           ></textarea>
@@ -74,7 +76,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 
@@ -101,6 +103,103 @@ const autoCollapseSeconds = ref(10)
 const { lang } = useLang()
 const logoUrl = ref('')
 const textareaRef = ref(null)
+
+const windowStyle = reactive({
+  position: '',
+  top: '',
+  height: '',
+  bottom: '',
+  transform: 'none'
+})
+const isFocused = ref(false)
+
+let viewportPoller = null
+
+const startPolling = () => {
+  if (viewportPoller) return
+  viewportPoller = setInterval(handleViewportChange, 100)
+}
+
+const stopPolling = () => {
+  if (viewportPoller) {
+    clearInterval(viewportPoller)
+    viewportPoller = null
+  }
+}
+
+const handleViewportChange = () => {
+  if (!isOpen.value) return
+  if (window.innerWidth <= 768) {
+    let vh = window.innerHeight
+    if (window.visualViewport) {
+      vh = window.visualViewport.height
+    }
+    
+    let h = vh * 0.6
+    if (h > 520) h = 520
+    if (h < 250) h = 250 // maintain minimum reasonable height
+    
+    let gap = isFocused.value ? 16 : 96
+    let top = vh - h - gap
+    if (top < 16) top = 16
+    
+    if (isFocused.value) {
+      windowStyle.position = 'absolute'
+      windowStyle.top = `${window.scrollY + top}px`
+    } else {
+      windowStyle.position = 'fixed'
+      windowStyle.top = `${top}px`
+    }
+    
+    windowStyle.height = `${h}px`
+    windowStyle.bottom = 'auto'
+    windowStyle.transform = 'none'
+  } else {
+    // Reset for desktop
+    windowStyle.position = ''
+    windowStyle.top = ''
+    windowStyle.height = ''
+    windowStyle.bottom = ''
+    windowStyle.transform = ''
+  }
+}
+
+const handleFocus = () => {
+  if (window.innerWidth <= 768) {
+    isFocused.value = true
+    handleViewportChange()
+    startPolling()
+    setTimeout(() => {
+      scrollToBottom()
+      handleViewportChange()
+    }, 150)
+  }
+}
+
+const handleBlur = () => {
+  if (window.innerWidth <= 768) {
+    isFocused.value = false
+    handleViewportChange()
+    setTimeout(() => {
+      stopPolling()
+      handleViewportChange()
+    }, 500)
+  }
+}
+
+watch(isOpen, (open) => {
+  if (open) {
+    nextTick(() => {
+      handleViewportChange()
+      scrollToBottom()
+    })
+  } else {
+    isFocused.value = false
+    windowStyle.top = ''
+    windowStyle.height = ''
+    windowStyle.bottom = ''
+  }
+})
 
 const localizedUiTexts = {
   zh: {
@@ -416,11 +515,23 @@ onMounted(() => {
   fetchWidgetConfig()
   pollMessages()
   pollInterval = setInterval(pollMessages, 3000)
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', handleViewportChange)
+    window.visualViewport.addEventListener('scroll', handleViewportChange)
+  }
+  window.addEventListener('resize', handleViewportChange)
 })
 
 onUnmounted(() => {
   if (pollInterval) clearInterval(pollInterval)
   if (collapseTimer) clearTimeout(collapseTimer)
+  
+  if (window.visualViewport) {
+    window.visualViewport.removeEventListener('resize', handleViewportChange)
+    window.visualViewport.removeEventListener('scroll', handleViewportChange)
+  }
+  window.removeEventListener('resize', handleViewportChange)
 })
 </script>
 
@@ -524,14 +635,16 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .chat-window {
     position: fixed;
-    bottom: 150px;
+    bottom: 96px;
     right: 16px;
     width: calc(100vw - 32px);
     max-width: 380px;
-    height: calc(100vh - 170px);
+    height: 60vh;
     max-height: 520px;
     border-radius: 16px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 10000;
   }
 }
 
