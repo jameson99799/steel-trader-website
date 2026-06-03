@@ -1094,7 +1094,9 @@ async function startServer() {
           company: company,
           pageTexts: getOne('SELECT * FROM page_texts WHERE id = 1') || {},
           ssrArticle: req.ssrArticle || null,
-          ssrProduct: req.ssrProduct || null
+          ssrProduct: req.ssrProduct || null,
+          seoSettings: seoSettings,
+          languages: getAll('SELECT * FROM languages WHERE status=1 ORDER BY sort_order, code') || []
         }
         const stateTag = `<script>window.__INITIAL_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')}</script>`
         html = html.replace('</head>', `${canonicalTag}\n  ${extraMeta}\n  ${extraSchemas}\n  ${stateTag}\n</head>`)

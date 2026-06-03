@@ -16,7 +16,8 @@ const publicRoutes = [
   { path: 'contact', name: 'Contact', component: () => import('../views/Contact.vue') },
   { path: 'factory', name: 'Factory', component: () => import('../views/Factory.vue') },
   { path: 'ral-colors', name: 'RalColors', redirect: to => `/${to.params.lang || 'en'}/news/ral-colors` },
-  { path: 'roofing-profiles', name: 'RoofingProfiles', redirect: to => `/${to.params.lang || 'en'}/news/roofing-profiles` }
+  { path: 'roofing-profiles', name: 'RoofingProfiles', redirect: to => `/${to.params.lang || 'en'}/news/roofing-profiles` },
+  { path: ':pathMatch(.*)*', name: 'NotFound', component: () => import('../views/NotFound.vue') }
 ]
 
 const routes = [
@@ -44,6 +45,7 @@ const routes = [
   { path: '/factory', redirect: '/en/factory' },
   { path: '/ral-colors', redirect: '/en/news/ral-colors' },
   { path: '/roofing-profiles', redirect: '/en/news/roofing-profiles' },
+  { path: '/:pathMatch(.*)*', component: () => import('../views/NotFound.vue') },
   {
     path: '/admin/login',
     name: 'AdminLogin',

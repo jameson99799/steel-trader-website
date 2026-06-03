@@ -35,16 +35,22 @@ async function updateHreflang() {
   document.querySelectorAll('link[rel="alternate"][hreflang]').forEach(el => el.remove())
 
   try {
-    const languages = await api.getActiveLanguages()
+    const languages = window.__INITIAL_STATE__?.languages || await api.getActiveLanguages()
     if (!languages || !languages.length) return
 
+    const seoSettings = window.__INITIAL_STATE__?.seoSettings || await api.getSeoSettings().catch(() => ({}))
     const currentPath = route.path.replace(/^\/[a-z]{2}(\/|$)/, '/')
     const origin = window.location.origin
 
     for (const l of languages) {
       const link = document.createElement('link')
       link.rel = 'alternate'
-      link.hreflang = l.code
+      
+      let actualHreflang = l.code
+      if (l.code === 'en' && seoSettings.hreflang_en) actualHreflang = seoSettings.hreflang_en
+      if (l.code === 'zh' && seoSettings.hreflang_zh) actualHreflang = seoSettings.hreflang_zh
+      
+      link.hreflang = actualHreflang
       // ALL languages get /xx/ prefix for consistent SEO
       const href = origin + '/' + l.code + (currentPath === '/' ? '' : currentPath)
       link.href = href
@@ -136,9 +142,13 @@ async function injectStructuredData() {
 }
 
 onMounted(() => {
-  updateHreflang()
-  updateCanonical()
-  injectStructuredData()
+  // If no SSR state (e.g. Dev mode), inject tags immediately.
+  // Otherwise, SSR already injected perfect tags, so we leave them untouched on first load!
+  if (!window.__INITIAL_STATE__) {
+    updateHreflang()
+    updateCanonical()
+    injectStructuredData()
+  }
 })
 watch(() => route.path, () => {
   updateHreflang()
