@@ -30,18 +30,6 @@ function setMeta(name, content, attr = 'name') {
   document.head.appendChild(m)
 }
 
-// Inject hreflang link tags
-function setHreflang(lang, href) {
-  if (!lang || !href) return
-  const sel = `link[rel="alternate"][hreflang="${lang}"]`
-  document.querySelector(sel)?.remove()
-  const l = document.createElement('link')
-  l.rel = 'alternate'
-  l.hreflang = lang
-  l.href = href
-  document.head.appendChild(l)
-}
-
 // Inject / update a JSON-LD script block
 function setJsonLd(id, data) {
   document.getElementById(id)?.remove()
@@ -79,11 +67,6 @@ onMounted(async () => {
         setMeta('ICBM',         `${geo_lat}, ${geo_lng}`)
       }
 
-      // ── hreflang link tags ─────────────────────────────────
-      const siteUrl = window.location.origin
-      if (hreflang_en) setHreflang(hreflang_en, siteUrl)
-      if (hreflang_zh) setHreflang(hreflang_zh, siteUrl)
-      setHreflang('x-default', siteUrl)
 
       // ── LocalBusiness JSON-LD ──────────────────────────────
       if (geo_lat && geo_lng && company) {

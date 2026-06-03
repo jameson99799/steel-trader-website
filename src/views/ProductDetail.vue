@@ -192,7 +192,7 @@
                 class="related-product-card"
               >
                 <div class="rp-image">
-                  <img :src="(rp.images || '').split(',')[0]" :alt="localizedValue(rp, 'name')" v-if="rp.images" />
+                  <img :src="(rp.images || '').split(',')[0]" :alt="localizedValue(rp, 'name') || 'Related product image'" v-if="rp.images" loading="lazy" />
                   <div class="rp-placeholder" v-else>
                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
                   </div>
@@ -220,7 +220,7 @@
               class="cat-card"
             >
               <div class="cat-image" v-if="cat.image">
-                <img :src="cat.image" :alt="localizedValue(cat, 'name')" />
+                <img :src="cat.image" :alt="localizedValue(cat, 'name') || 'Category image'" loading="lazy" />
               </div>
               <div class="cat-image cat-image-placeholder" v-else>
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>

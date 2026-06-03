@@ -424,12 +424,14 @@ async function startServer() {
         try {
           const seo = getOne('SELECT robots_txt FROM seo_settings WHERE id = 1')
           res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-          if (seo && seo.robots_txt) {
-            return res.send(seo.robots_txt)
+          let robotsTxt = (seo && seo.robots_txt) ? seo.robots_txt : 'User-agent: *\nAllow: /\n'
+          if (!robotsTxt.toLowerCase().includes('sitemap:')) {
+            robotsTxt += '\nSitemap: https://www.sunseasteel.com/sitemap.xml\n'
           }
+          return res.send(robotsTxt.trim() + '\n')
         } catch (e) {}
         res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-        res.send('User-agent: *\nAllow: /')
+        res.send('User-agent: *\nAllow: /\nSitemap: https://www.sunseasteel.com/sitemap.xml\n')
       })
 
       app.get('*', (req, res) => {

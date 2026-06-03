@@ -27,7 +27,7 @@
           <div class="header-actions">
             <!-- Dynamic Language Switcher -->
             <div class="lang-switcher" ref="langSwitcherRef" :style="{ visibility: (multilingualEnabled && activeLanguages.length > 1) ? 'visible' : 'hidden' }">
-              <button class="lang-btn" @click="langDropOpen = !langDropOpen">
+              <button class="lang-btn" @click="langDropOpen = !langDropOpen" aria-label="Language options">
                 <!-- Globe Icon -->
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="10"/>
@@ -62,9 +62,9 @@
     <div class="header-main">
       <div class="container" style="max-width: 1440px;">
         <div class="header-main-content">
-          <router-link :to="langPath('/')" class="logo">
+          <router-link :to="langPath('/')" class="logo" aria-label="Home">
             <div class="logo-image" v-if="company?.logo">
-              <img :src="company.logo" :alt="localizedValue(company, 'name')" />
+              <img :src="company.logo" :alt="localizedValue(company, 'name') || 'SUNSEA STEEL Logo'" />
             </div>
             <div class="logo-text">
               <span class="logo-title">{{ localizedValue(company, 'name') }}</span>

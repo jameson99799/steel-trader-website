@@ -5,9 +5,9 @@
         <div class="footer-content">
           <div class="footer-brand">
             <div class="brand-logo">
-              <div class="logo-image-wrap" v-if="company?.logo">
-                <img :src="company.logo" :alt="localizedValue(company, 'name')" />
-              </div>
+              <router-link :to="langPath('/')" class="logo-image-wrap" v-if="company?.logo" aria-label="Home">
+                <img :src="company.logo" :alt="localizedValue(company, 'name') || 'SUNSEA STEEL Logo'" loading="lazy" />
+              </router-link>
               <div class="brand-text">
                 <h3 class="brand-name">{{ localizedValue(company, 'name') }}</h3>
                 <p class="brand-tagline">{{ localizedValue(pageTexts, 'logo_subtitle') }}</p>
