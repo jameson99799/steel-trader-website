@@ -108,31 +108,53 @@ const textareaRef = ref(null)
 const isFocused = ref(false)
 const vvHeight = ref(0)
 const isMobile = () => typeof window !== 'undefined' && window.innerWidth <= 768
+const isTablet = () => typeof window !== 'undefined' && window.innerWidth > 768 && window.innerWidth <= 1024
 
 // Computed style for the teleported chat window
 const mobileWindowStyle = computed(() => {
-  if (!isMobile()) {
-    // Desktop: positioned absolutely relative to the toggle button via fixed
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1200
+
+  // Desktop (>1024px): floating card anchored to toggle button
+  if (vw > 1024) {
     return {
       position: 'fixed',
       bottom: '96px',
       right: '24px',
       width: '360px',
       height: '520px',
-      zIndex: 9998
+      zIndex: 9998,
+      borderRadius: '16px'
     }
   }
-  // Mobile: always full-width, anchored from top, height = available viewport
+
+  // Tablet (769–1024px): floating card, not full screen
+  if (vw > 768) {
+    return {
+      position: 'fixed',
+      bottom: '96px',
+      right: '20px',
+      width: '380px',
+      height: 'min(520px, calc(100vh - 130px))',
+      zIndex: 9998,
+      borderRadius: '16px'
+    }
+  }
+
+  // Mobile (≤768px): bottom-anchored, above the toggle button
+  // When keyboard is open, vvHeight shrinks to the visible area so window shrinks too
   const availH = vvHeight.value > 0 ? vvHeight.value : window.innerHeight
+  // Reserve 88px at bottom for the toggle button + safe area
+  const winHeight = Math.min(availH - 88, availH * 0.82)
+
   return {
     position: 'fixed',
-    top: '0',
-    left: '0',
-    right: '0',
-    width: '100%',
-    height: availH + 'px',
+    bottom: '84px',
+    left: '10px',
+    right: '10px',
+    width: 'calc(100% - 20px)',
+    height: winHeight + 'px',
     zIndex: 9998,
-    borderRadius: '0'
+    borderRadius: '16px'
   }
 })
 
@@ -147,7 +169,7 @@ const handleTextareaKeydown = (e) => {
 }
 
 const handleFocus = () => {
-  if (isMobile()) {
+  if (isMobile() || isTablet()) {
     isFocused.value = true
     setTimeout(scrollToBottom, 100)
     setTimeout(scrollToBottom, 300)
