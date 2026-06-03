@@ -136,19 +136,13 @@ const mobileWindowStyle = computed(() => {
   }
 })
 
-// Handle Enter key: mobile always newline, desktop Enter=send Shift+Enter=newline
+// Handle Enter key: Enter=send on all devices, Shift+Enter=newline
 const handleTextareaKeydown = (e) => {
   if (e.key === 'Enter') {
-    if (isMobile()) {
-      // On mobile keyboard: Enter = newline (user uses send button to send)
-      // Do nothing, let default textarea behavior insert newline
-      return
-    }
-    // Desktop: Enter = send, Shift+Enter = newline
-    if (!e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
+    // Shift+Enter always inserts newline
+    if (e.shiftKey) return
+    e.preventDefault()
+    sendMessage()
   }
 }
 
