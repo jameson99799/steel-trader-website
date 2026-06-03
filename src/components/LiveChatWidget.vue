@@ -13,7 +13,7 @@
 
     <!-- Chat Window -->
     <transition name="chat-slide">
-      <div v-if="isOpen" class="chat-window" :class="{ 'keyboard-open': isFocused }">
+      <div v-if="isOpen" class="chat-window" :class="{ 'keyboard-open': isFocused }" :style="{ bottom: visualBottom, height: visualHeight }">
         <div class="chat-header">
           <div class="header-info">
             <h3>{{ uiTexts.chatTitle }}</h3>
@@ -109,13 +109,60 @@ const handleFocus = () => {
   if (window.innerWidth <= 768) {
     isFocused.value = true
     scrollToBottom()
-    setTimeout(scrollToBottom, 150)
+    setTimeout(() => {
+      window.scrollTo(0, 0)
+      document.body.scrollTop = 0
+      scrollToBottom()
+    }, 150)
   }
 }
 
 const handleBlur = () => {
   isFocused.value = false
+  if (window.innerWidth <= 768) {
+    setTimeout(() => {
+      window.scrollTo(0, Math.max(0, document.documentElement.scrollTop || document.body.scrollTop))
+    }, 100)
+  }
 }
+
+const visualBottom = ref('')
+const visualHeight = ref('')
+
+const handleViewportChange = () => {
+  if (!isOpen.value) return
+  if (window.visualViewport && window.innerWidth <= 768) {
+    const vv = window.visualViewport
+    const keyboardHeight = window.innerHeight - vv.height
+    
+    if (keyboardHeight > 120) {
+      // Keyboard is open!
+      visualBottom.value = '10px'
+      visualHeight.value = `${vv.height - 20}px`
+      isFocused.value = true
+    } else {
+      // Keyboard is closed!
+      visualBottom.value = '96px'
+      visualHeight.value = 'calc(100vh - 130px)'
+      isFocused.value = false
+    }
+  } else {
+    visualBottom.value = ''
+    visualHeight.value = ''
+    isFocused.value = false
+  }
+}
+
+watch(isOpen, (open) => {
+  if (open) {
+    nextTick(() => {
+      handleViewportChange()
+      scrollToBottom()
+    })
+  } else {
+    isFocused.value = false
+  }
+})
 
 const localizedUiTexts = {
   zh: {
@@ -431,11 +478,22 @@ onMounted(() => {
   fetchWidgetConfig()
   pollMessages()
   pollInterval = setInterval(pollMessages, 3000)
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', handleViewportChange)
+    window.visualViewport.addEventListener('scroll', handleViewportChange)
+  }
+  window.addEventListener('resize', handleViewportChange)
 })
 
 onUnmounted(() => {
   if (pollInterval) clearInterval(pollInterval)
   if (collapseTimer) clearTimeout(collapseTimer)
+  if (window.visualViewport) {
+    window.visualViewport.removeEventListener('resize', handleViewportChange)
+    window.visualViewport.removeEventListener('scroll', handleViewportChange)
+  }
+  window.removeEventListener('resize', handleViewportChange)
 })
 </script>
 
