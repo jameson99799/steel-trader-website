@@ -149,8 +149,8 @@ async function startServer() {
         const updates = {}
         for (const k of ['detail_content']) {
           if (p[k] && p[k].includes('替换图')) {
-            updates[k] = p[k].replace(/<span[^>]*class=["\']?(hero-tip|replace-tip)["\']?[^>]*>.*?替换图提示.*?<\\/span>/ig, '')
-                             .replace(/👉 替换图提示：.*?(<\\/p>|<br>|\\n|$)/ig, '$1')
+            updates[k] = p[k].replace(/<span[^>]*class=["\']?(hero-tip|replace-tip)["\']?[^>]*>.*?替换图提示.*?<\/span>/ig, '')
+                             .replace(/👉 替换图提示：.*?(<\/p>|<br>|\n|$)/ig, '$1')
             changed = true
           }
         }
@@ -178,7 +178,7 @@ async function startServer() {
       if (NODE_ENV === 'production') {
         const proto = req.headers['x-forwarded-proto'] || req.protocol
         if (proto !== 'https') {
-          return res.redirect(301, \`https://\${req.hostname}\${req.originalUrl}\`)
+          return res.redirect(301, `https://${req.hostname}${req.originalUrl}`)
         }
       }
       next()
@@ -1065,9 +1065,17 @@ async function startServer() {
                return `<li><a href="${siteUrl}/${lang}/products/category/${catSlug}">${esc(trName)}</a></li>`
             }).join('')
             
-            const quickLinks = `<li><a href="${siteUrl}/${lang}/products">All Products</a></li><li><a href="${siteUrl}/${lang}/news">News & Blog</a></li><li><a href="${siteUrl}/${lang}/contact">Contact Us</a></li><li><a href="${siteUrl}/${lang}/about">About Us</a></li>`
+            const labCat = lang === 'zh' ? '主要分类' : 'Main Categories'
+            const labProd = lang === 'zh' ? '主要产品' : 'Main Products'
+            const labLink = lang === 'zh' ? '快捷链接' : 'Quick Links'
+            const labAllProd = lang === 'zh' ? '所有产品' : 'All Products'
+            const labNews = lang === 'zh' ? '新闻与博客' : 'News & Blog'
+            const labContact = lang === 'zh' ? '联系我们' : 'Contact Us'
+            const labAbout = lang === 'zh' ? '关于我们' : 'About Us'
             
-            ssrContent = `<section id="ssr-home"><h1>${esc(companyNameTranslated)} – GI, GL, PPGI, PPGL Steel Coil Manufacturer</h1><p>${companyDesc}</p><h2>Main Categories</h2><ul>${homeCatList}</ul><h2>Main Products</h2><ul>${homeProductList}</ul><h2>Quick Links</h2><ul>${quickLinks}</ul></section>`
+            const quickLinks = `<li><a href="${siteUrl}/${lang}/products">${labAllProd}</a></li><li><a href="${siteUrl}/${lang}/news">${labNews}</a></li><li><a href="${siteUrl}/${lang}/contact">${labContact}</a></li><li><a href="${siteUrl}/${lang}/about">${labAbout}</a></li>`
+            
+            ssrContent = `<section id="ssr-home"><h1>${esc(pageTitle)}</h1><p>${companyDesc}</p><h2>${labCat}</h2><ul>${homeCatList}</ul><h2>${labProd}</h2><ul>${homeProductList}</ul><h2>${labLink}</h2><ul>${quickLinks}</ul></section>`
           }
 
           // ── Catch-all for invalid routes ──
