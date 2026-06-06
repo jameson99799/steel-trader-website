@@ -93,13 +93,13 @@
             
             <div class="products-grid" v-else-if="products.length">
               <router-link 
-                v-for="product in products" 
+                v-for="(product, index) in products" 
                 :key="product.id" 
                 :to="langPath(`/products/${product.slug || product.id}`)"
                 class="product-card"
               >
                 <div class="product-image">
-                  <img :src="product.images?.split(',')[0] || '/placeholder.svg'" :alt="localizedValue(product, 'name')" loading="lazy" />
+                  <img :src="product.images?.split(',')[0] || '/placeholder.svg'" :alt="localizedValue(product, 'name')" :loading="index < 4 ? 'eager' : 'lazy'" :fetchpriority="index < 4 ? 'high' : 'auto'" />
                   <div class="product-overlay">
                     <div class="product-actions">
                       <button class="action-btn" title="Quick View">
