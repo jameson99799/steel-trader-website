@@ -212,6 +212,13 @@ router.get('/products', (req, res) => {
             console.log(`[sitemap] Products sitemap: ${products.length} products found`)
         }
 
+        const urls = []
+        const seoSettings = getSeoSettings()
+        for (const p of products || []) {
+            const prodSlug = p.slug || p.id
+            const prodPath = `/products/${prodSlug}`
+            const lastmod = toDateStr(p.lastmod_date, now)
+            
             for (const l of activeLangs) {
                 let imagesHTML = ''
                 if (p.images) {
