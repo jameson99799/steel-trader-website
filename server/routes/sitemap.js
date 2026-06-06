@@ -41,7 +41,8 @@ function hreflangLinks(path, activeLangs) {
 function buildUrlset(urls) {
     return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        xmlns:xhtml="http://www.w3.org/1999/xhtml"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
 ${urls.join('\n')}
 </urlset>`
 }
@@ -49,17 +50,19 @@ ${urls.join('\n')}
 function emptyUrlset() {
     return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        xmlns:xhtml="http://www.w3.org/1999/xhtml"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
 </urlset>`
 }
 
-function urlEntry({ loc, lastmod, changefreq, priority, hreflang }) {
+function urlEntry({ loc, lastmod, changefreq, priority, hreflang, imagesHTML = '' }) {
     return `  <url>
     <loc>${escapeXml(loc)}</loc>
     <lastmod>${lastmod}</lastmod>
     <changefreq>${changefreq}</changefreq>
     <priority>${priority}</priority>
 ${hreflang}
+${imagesHTML}
   </url>`
 }
 
@@ -194,9 +197,9 @@ router.get('/products', (req, res) => {
         const activeLangs = getActiveLangs()
 
         // Primary: status=1 (active). Fallback: all products (handles non-standard status values)
-        let products = getAll(`SELECT id, slug, name_en, COALESCE(updated_at, created_at) as lastmod_date FROM products WHERE status = 1 ORDER BY id DESC`)
+        let products = getAll(`SELECT id, slug, name_en, name, images, COALESCE(updated_at, created_at) as lastmod_date FROM products WHERE status = 1 ORDER BY id DESC`)
         if (!products || products.length === 0) {
-            products = getAll(`SELECT id, slug, name_en, COALESCE(updated_at, created_at) as lastmod_date FROM products ORDER BY id DESC`)
+            products = getAll(`SELECT id, slug, name_en, name, images, COALESCE(updated_at, created_at) as lastmod_date FROM products ORDER BY id DESC`)
             if (products && products.length > 0) {
                 console.log(`[sitemap] WARN: No products with status=1 found; using all ${products.length} products as fallback`)
             }
@@ -209,13 +212,25 @@ router.get('/products', (req, res) => {
             const prodSlug = p.slug || p.id
             const prodPath = `/products/${prodSlug}`
             const lastmod = toDateStr(p.lastmod_date, now)
+            
+            let imagesHTML = ''
+            if (p.images) {
+                const titleStr = p.name_en || p.name || 'product'
+                const imgList = String(p.images).split(',').filter(Boolean).slice(0, 5) // Map up to 5 images per product
+                imagesHTML = imgList.map(img => {
+                    const imgUrl = img.startsWith('http') ? img : BASE_URL + img
+                    return `    <image:image>\n      <image:loc>${escapeXml(imgUrl)}</image:loc>\n      <image:title>${escapeXml(titleStr)}</image:title>\n    </image:image>`
+                }).join('\n')
+            }
+            
             for (const l of activeLangs) {
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + prodPath,
                     lastmod,
                     changefreq: 'weekly',
                     priority: '0.8',
-                    hreflang: hreflangLinks(prodPath, activeLangs)
+                    hreflang: hreflangLinks(prodPath, activeLangs),
+                    imagesHTML
                 }))
             }
         }
@@ -233,20 +248,29 @@ router.get('/news', (req, res) => {
     try {
         const now = new Date().toISOString().split('T')[0]
         const activeLangs = getActiveLangs()
-        const news = getAll(`SELECT slug, id, title_en, created_at FROM news WHERE status = 1 ORDER BY id DESC`)
+        const news = getAll(`SELECT slug, id, title_en, title, cover_image, created_at FROM news WHERE status = 1 ORDER BY id DESC`)
 
         const urls = []
         for (const n of news) {
             const slug = n.slug || n.id
             const newsPath = `/news/${slug}`
             const lastmod = toDateStr(n.created_at, now)
+            
+            let imagesHTML = ''
+            if (n.cover_image) {
+                const titleStr = n.title_en || n.title || 'news article'
+                const imgUrl = String(n.cover_image).startsWith('http') ? n.cover_image : BASE_URL + n.cover_image
+                imagesHTML = `    <image:image>\n      <image:loc>${escapeXml(imgUrl)}</image:loc>\n      <image:title>${escapeXml(titleStr)}</image:title>\n    </image:image>\n`
+            }
+            
             for (const l of activeLangs) {
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + newsPath,
                     lastmod,
                     changefreq: 'monthly',
                     priority: '0.6',
-                    hreflang: hreflangLinks(newsPath, activeLangs)
+                    hreflang: hreflangLinks(newsPath, activeLangs),
+                    imagesHTML
                 }))
             }
         }
