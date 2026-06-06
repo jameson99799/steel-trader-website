@@ -873,7 +873,7 @@ async function startServer() {
               const catProducts = getAll('SELECT id, slug, name_en, name, description_en, description FROM products WHERE category_id = ? AND status = 1 ORDER BY sort_order DESC, id DESC LIMIT 30', [cat.id])
               if (catProducts.length) {
                 const catProdItems = catProducts.map(p =>
-                  `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a><p>${esc((p.description_en || p.description || '').substring(0, 150))}</p></li>`
+                  `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a><p>${esc((p.description_en || p.description || '').substring(0, 150).replace(/\\s+\\S*$/, '...'))}</p></li>`
                 ).join('')
                 ssrContent = `<section id="ssr-cat-products"><h1>${esc(catName)}</h1><ul>${catProdItems}</ul></section>`
                 extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'ItemList',
@@ -900,7 +900,7 @@ async function startServer() {
             // SSR product list for GEO crawlers
             const productList = getAll('SELECT id, slug, name_en, name, description_en, description FROM products WHERE status=1 ORDER BY sort_order, id DESC LIMIT 20')
             if (productList.length) {
-              const prodItems = productList.map(p => `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a><p>${esc((p.description_en || p.description || '').substring(0, 150))}</p></li>`).join('')
+              const prodItems = productList.map(p => `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a><p>${esc((p.description_en || p.description || '').substring(0, 150).replace(/\\s+\\S*$/, '...'))}</p></li>`).join('')
               ssrContent = `<section id="ssr-products"><h1>Steel Products</h1><ul>${prodItems}</ul></section>`
             }
             // ItemList Schema for product listing
@@ -945,6 +945,8 @@ async function startServer() {
               ...(company.phone && { telephone: company.phone }),
               description: (company.description_en || '').substring(0, 300)
             })
+            // Fully render About page content for GEO AI crawlers
+            ssrContent = `<article id="ssr-about"><h1>About ${esc(companyNameTranslated)}</h1><p>${esc(company.description_en || company.description || '')}</p><h2>Company Information</h2><ul><li><strong>Company Name:</strong> ${esc(company.name_en || company.name)}</li><li><strong>Headquarters:</strong> ${esc(company.address_en || company.address)}</li><li><strong>Email:</strong> ${esc(company.email)}</li><li><strong>Phone:</strong> ${esc(company.phone)}</li></ul><h2>Global Export Manufacturer</h2><p>As a leading supplier in China, we specialize in manufacturing galvanized (GI), galvalume (GL), prepainted galvanized (PPGI), prepainted galvalume (PPGL), and cold rolled (CRC) steel coils. Our advanced production lines ensure strict quality control and international certifications.</p></article>`
           } else if (subPath === '/contact' || subPath === '/contact/') {
             matchedRoute = true
             pageTitle = `Contact Us | ${companyName}`
@@ -962,6 +964,8 @@ async function startServer() {
                 ...(company.phone && { telephone: company.phone })
               }
             })
+            // Add dense Contact info into SSR Dom
+            ssrContent = `<article id="ssr-contact"><h1>Contact Us</h1><p>Contact ${esc(companyNameTranslated)} for custom steel coil requirements, competitive FOB pricing, and rapid export shipping quotes.</p><h2>Contact Details</h2><ul><li><strong>Email:</strong> <a href="mailto:${esc(company.email)}">${esc(company.email)}</a></li><li><strong>Telephone:</strong> <a href="tel:${esc(company.phone)}">${esc(company.phone)}</a></li><li><strong>WhatsApp:</strong> <a href="https://wa.me/${(company.whatsapp || '').replace(/[^0-9]/g, '')}">${esc(company.whatsapp)}</a></li><li><strong>Factory Address:</strong> ${esc(company.address_en || company.address)}</li></ul><h2>Online Inquiry Form</h2><p>Please send us your specific specifications including coating mass, thickness, width, color code, and target quantity for an accurate quote.</p></article>`
           } else if (subPath === '/factory' || subPath === '/factory/') {
             matchedRoute = true
             pageTitle = `Factory Tour & Production Lines | ${companyName}`
@@ -970,6 +974,7 @@ async function startServer() {
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: 'Factory', item: pageCanonical }
             ] })
+            ssrContent = `<article id="ssr-factory"><h1>Factory & Production Facility</h1><p>Our expansive factory encompasses multiple advanced production lines dedicated to the comprehensive processing of steel coils. From precision cold rolling to continuous galvanizing and extensive color coating operations, we maintain stringent internal quality control metrics across all stations. Our facility boasts high-capacity inventory management to ensure rapid global deployment and fulfillment of bulk steel requirements.</p></article>`
           } else if (subPath === '/news/ral-colors' || subPath === '/news/ral-colors/') {
             matchedRoute = true
             isNotFound = false
@@ -1021,9 +1026,14 @@ async function startServer() {
             matchedRoute = true
             // Keyword-rich homepage title (overrides bare company name from seoSettings)
             const baseTitle = seoSettings.site_title || companyNameTranslated
-            pageTitle = baseTitle.toLowerCase().includes('gi') || baseTitle.toLowerCase().includes('steel coil')
-              ? baseTitle
-              : `${companyNameTranslated} | GI GL PPGI PPGL CRC Steel Coil Manufacturer & Exporter`
+            
+            if (lang === 'zh') {
+              pageTitle = `镀锌钢卷、镀铝锌钢卷、彩涂钢卷与冷轧钢卷源头工厂供应商 | ${companyNameTranslated}`
+            } else {
+              pageTitle = baseTitle.toLowerCase().includes('gi') || baseTitle.toLowerCase().includes('steel coil')
+                ? baseTitle
+                : `${companyNameTranslated} | GI GL PPGI PPGL CRC Steel Coil Manufacturer & Exporter`
+            }
             // Keyword-rich homepage description
             if (!pageDesc) {
               pageDesc = companyDescTranslated || `Shandong Sunsea Steel Co., Ltd — Professional manufacturer and exporter of Galvanized (GI), Galvalume (GL), Prepainted (PPGI/PPGL) and Cold Rolled (CRC) steel coils. ASTM A653 / JIS G3302 / EN 10346 certified. Factory direct pricing, global shipping from Shandong, China.`
@@ -1057,7 +1067,7 @@ async function startServer() {
             
             const quickLinks = `<li><a href="${siteUrl}/${lang}/products">All Products</a></li><li><a href="${siteUrl}/${lang}/news">News & Blog</a></li><li><a href="${siteUrl}/${lang}/contact">Contact Us</a></li><li><a href="${siteUrl}/${lang}/about">About Us</a></li>`
             
-            ssrContent = `<section id="ssr-home"><h1>${esc(companyNameTranslated)}</h1><p>${companyDesc}</p><h2>Main Categories</h2><ul>${homeCatList}</ul><h2>Main Products</h2><ul>${homeProductList}</ul><h2>Quick Links</h2><ul>${quickLinks}</ul></section>`
+            ssrContent = `<section id="ssr-home"><h1>${esc(companyNameTranslated)} – GI, GL, PPGI, PPGL Steel Coil Manufacturer</h1><p>${companyDesc}</p><h2>Main Categories</h2><ul>${homeCatList}</ul><h2>Main Products</h2><ul>${homeProductList}</ul><h2>Quick Links</h2><ul>${quickLinks}</ul></section>`
           }
 
           // ── Catch-all for invalid routes ──
