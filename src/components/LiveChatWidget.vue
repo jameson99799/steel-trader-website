@@ -1,7 +1,7 @@
 <template>
   <div v-if="widgetEnabled" class="live-chat-wrapper">
     <!-- Floating Button -->
-    <button class="chat-toggle" :class="{ 'has-logo': !!logoUrl }" @click="toggleChat">
+    <button class="chat-toggle" :class="{ 'has-logo': !!logoUrl }" @click="toggleChat" aria-label="Toggle live chat">
       <div class="chat-icon">
         <img v-if="logoUrl" :src="logoUrl" alt="Logo" class="chat-logo-img" />
         <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -19,7 +19,7 @@
             <h3>{{ uiTexts.chatTitle }}</h3>
             <span class="status-dot"></span> {{ uiTexts.chatOnline }}
           </div>
-          <button class="close-btn" @click="closeChat">&times;</button>
+          <button class="close-btn" @click="closeChat" aria-label="Close live chat">&times;</button>
         </div>
 
         <div class="chat-messages" ref="messagesContainer">
@@ -62,7 +62,7 @@
             :placeholder="uiTexts.chatPlaceholder"
             rows="1"
           ></textarea>
-          <button @click="sendMessage" :disabled="!newMessage.trim()">
+          <button @click="sendMessage" :disabled="!newMessage.trim()" aria-label="Send message">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
               <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
             </svg>

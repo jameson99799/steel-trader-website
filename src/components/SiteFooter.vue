@@ -143,7 +143,7 @@
       <div class="legal-modal">
         <div class="legal-modal-header">
           <h3>{{ activeModal === 'privacy' ? 'Privacy Policy' : 'Terms of Service' }}</h3>
-          <button class="modal-close" @click="activeModal = null">✕</button>
+          <button class="modal-close" @click="activeModal = null" aria-label="Close modal">✕</button>
         </div>
         <div class="legal-modal-body">
           <div v-if="activeModal === 'privacy'">
