@@ -1,6 +1,21 @@
 <template>
-  <div class="float-panel" v-if="company">
-    <div class="panel-header">Contact Us</div>
+  <!-- Minimized Toggle Button -->
+  <div v-if="company && isMinimized" class="float-panel is-minimized" @click="isMinimized = false" title="Expand Contact Panel">
+    <svg class="chat-icon" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+    </svg>
+  </div>
+
+  <!-- Expanded Panel -->
+  <div class="float-panel" v-if="company && !isMinimized">
+    <div class="panel-header">
+      <span>Contact Us</span>
+      <button class="minimize-btn" @click.stop="isMinimized = true" aria-label="Minimize" title="Minimize">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
+    </div>
 
     <!-- WhatsApp -->
     <div class="panel-item" v-if="company.whatsapp">
@@ -88,6 +103,7 @@ import api from '../api'
 const company = ref(null)
 const toastVisible = ref(false)
 const zoomed = ref(null) // 'wa' | 'wc' | null
+const isMinimized = ref(false)
 
 function toggleZoom(key) {
   zoomed.value = zoomed.value === key ? null : key
@@ -143,6 +159,28 @@ onMounted(async () => {
   overflow: visible;
 }
 
+.float-panel.is-minimized {
+  width: 44px;
+  height: 48px;
+  background: #1a202c;
+  color: white;
+  border-radius: 8px 0 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  box-shadow: -2px 0 12px rgba(0,0,0,0.2);
+}
+.float-panel.is-minimized:hover {
+  background: #2d3748;
+  transform: translateY(-50%) scale(1.05);
+}
+.chat-icon {
+  width: 24px;
+  height: 24px;
+}
+
 .panel-header {
   background: #1a202c;
   color: white;
@@ -152,6 +190,30 @@ onMounted(async () => {
   text-transform: uppercase;
   padding: 10px 14px;
   border-radius: 12px 0 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.minimize-btn {
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.8;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.minimize-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+.minimize-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .panel-item {
