@@ -141,6 +141,29 @@ async function startServer() {
       console.warn('Cleanup error:', e.message)
     }
 
+    // ── One-time cleanup of replacing placeholder image texts ────────────
+    try {
+      const allProducts = getAll('SELECT id, detail_content FROM products')
+      for (const p of allProducts) {
+        let changed = false
+        const updates = {}
+        for (const k of ['detail_content']) {
+          if (p[k] && p[k].includes('替换图')) {
+            updates[k] = p[k].replace(/<span[^>]*class=["\']?(hero-tip|replace-tip)["\']?[^>]*>.*?替换图提示.*?<\\/span>/ig, '')
+                             .replace(/👉 替换图提示：.*?(<\\/p>|<br>|\\n|$)/ig, '$1')
+            changed = true
+          }
+        }
+        if (changed) {
+          const upCols = Object.keys(updates)
+          run(`UPDATE products SET ${upCols.map(c => `${c}=?`).join(', ')} WHERE id=?`, [...upCols.map(c => updates[c]), p.id])
+          console.log(`[Cleanup] Fixed placeholder texts for product ID ${p.id}`)
+        }
+      }
+    } catch (e) {
+      console.warn('Placeholder cleanup error:', e.message)
+    }
+
     // CORS 配置
     const corsOptions = {
       origin: NODE_ENV === 'production'
@@ -149,6 +172,17 @@ async function startServer() {
       credentials: true
     }
     app.use(cors(corsOptions))
+
+    // ── Enforce HTTPS ───────────────────────────────────────────────────────
+    app.use((req, res, next) => {
+      if (NODE_ENV === 'production') {
+        const proto = req.headers['x-forwarded-proto'] || req.protocol
+        if (proto !== 'https') {
+          return res.redirect(301, \`https://\${req.hostname}\${req.originalUrl}\`)
+        }
+      }
+      next()
+    })
 
     // ── Security Firewalls ──────────────────────────────────────────────────
     app.use(helmet({

@@ -42,9 +42,9 @@ th,td{border:1px solid var(--border);padding:14px 18px;text-align:left;vertical-
 th{background:#f8fafc;color:var(--heading);font-weight:700}
 .info-box{background:#f0f9ff;border-left:4px solid #0284c7;padding:20px 24px;border-radius:0 8px 8px 0;margin:30px 0;color:#0369a1}
 .check-list li{position:relative;padding-left:20px;margin-bottom:12px;list-style:none}
-.check-list li::before{content:'✓';position:absolute;left:0;color:var(--secondary);font-weight:bold}
+.check-list li::before{content:'�?;position:absolute;left:0;color:var(--secondary);font-weight:bold}
 .pack-steps li{position:relative;padding-left:20px;margin-bottom:12px;list-style:none}
-.pack-steps li::before{content:'✓';position:absolute;left:0;color:var(--secondary);font-weight:bold}
+.pack-steps li::before{content:'�?;position:absolute;left:0;color:var(--secondary);font-weight:bold}
 .faq-list{margin-top:30px}
 .faq-item{background:#fff;border:1px solid var(--border);border-radius:10px;padding:22px 24px;margin-bottom:18px;box-shadow:0 4px 10px rgba(0,0,0,0.03)}
 .faq-item h3{margin:0 0 10px;font-size:20px;color:var(--heading);border:none;padding:0}
@@ -69,7 +69,7 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   <div class="hero-content">
     <h1>PRODUCT_NAME</h1>
     <p>Product subtitle and key selling points</p>
-    <span class="hero-tip">👉 替换图提示：请替换为产品横幅大图</span>
+    
   </div>
 </header>
 <main class="content">
@@ -81,7 +81,7 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   </div>
   <div class="split-image image-box">
     <img src="images/placeholder-overview.jpg" alt="PRODUCT_NAME surface" loading="lazy">
-    <span class="replace-tip">👉 替换图提示：产品特写图</span>
+    <span class="replace-tip">👉 替换图提示：产品特写�?/span>
   </div>
 </section>
 <section id="specifications">
@@ -96,22 +96,22 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   <p>Application overview paragraph.</p>
   <div class="grid-2"><div class="image-box" style="margin:0;">
     <img src="images/placeholder-app1.jpg" alt="Application 1" loading="lazy">
-    <span class="replace-tip">📷 替换应用场景图</span>
-    <h3 style="margin-top:15px;color:var(--heading);">🏗️ Application Area 1</h3>
+    <span class="replace-tip">📷 替换应用场景�?/span>
+    <h3 style="margin-top:15px;color:var(--heading);">🏗�?Application Area 1</h3>
     <p>Description of application area 1.</p>
   </div><div class="image-box" style="margin:0;">
     <img src="images/placeholder-app2.jpg" alt="Application 2" loading="lazy">
-    <span class="replace-tip">📷 替换应用场景图</span>
+    <span class="replace-tip">📷 替换应用场景�?/span>
     <h3 style="margin-top:15px;color:var(--heading);">🏠 Application Area 2</h3>
     <p>Description of application area 2.</p>
   </div><div class="image-box" style="margin:0;">
     <img src="images/placeholder-app3.jpg" alt="Application 3" loading="lazy">
-    <span class="replace-tip">📷 替换应用场景图</span>
+    <span class="replace-tip">📷 替换应用场景�?/span>
     <h3 style="margin-top:15px;color:var(--heading);">🔧 Application Area 3</h3>
     <p>Description of application area 3.</p>
   </div><div class="image-box" style="margin:0;">
     <img src="images/placeholder-app4.jpg" alt="Application 4" loading="lazy">
-    <span class="replace-tip">📷 替换应用场景图</span>
+    <span class="replace-tip">📷 替换应用场景�?/span>
     <h3 style="margin-top:15px;color:var(--heading);">🚗 Application Area 4</h3>
     <p>Description of application area 4.</p>
   </div></div>
@@ -120,17 +120,17 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   <h2>Product Comparison</h2>
   <p>Comparison overview paragraph.</p>
   <div class="compare-image-grid">
-    <div class="fixed-image-card"><div class="fixed-image-frame"><img src="images/placeholder-compare1.jpg" alt="Product Type A" loading="lazy"></div><span class="replace-tip">👉 替换产品A实拍图</span><h3 style="margin-top:15px;color:var(--heading);">Product Type A</h3><p>Description of product type A.</p></div>
-    <div class="fixed-image-card"><div class="fixed-image-frame"><img src="images/placeholder-compare2.jpg" alt="Product Type B" loading="lazy"></div><span class="replace-tip">👉 替换产品B实拍图</span><h3 style="margin-top:15px;color:var(--heading);">Product Type B</h3><p>Description of product type B.</p></div>
+    <div class="fixed-image-card"><div class="fixed-image-frame"><img src="images/placeholder-compare1.jpg" alt="Product Type A" loading="lazy"></div><span class="replace-tip">👉 替换产品A实拍�?/span><h3 style="margin-top:15px;color:var(--heading);">Product Type A</h3><p>Description of product type A.</p></div>
+    <div class="fixed-image-card"><div class="fixed-image-frame"><img src="images/placeholder-compare2.jpg" alt="Product Type B" loading="lazy"></div><span class="replace-tip">👉 替换产品B实拍�?/span><h3 style="margin-top:15px;color:var(--heading);">Product Type B</h3><p>Description of product type B.</p></div>
   </div>
   <div class="table-responsive"><table><thead><tr><th>Item</th><th>Type A</th><th>Type B</th></tr></thead><tbody><tr><td>Feature 1</td><td>Value A</td><td>Value B</td></tr><tr><td>Feature 2</td><td>Value A</td><td>Value B</td></tr><tr><td>Best For</td><td>Use case A</td><td>Use case B</td></tr></tbody></table></div>
 </section>
 <section id="advantages" class="split-section">
-  <div class="split-image image-box"><img src="images/placeholder-advantages.jpg" alt="PRODUCT_NAME advantages" loading="lazy"><span class="replace-tip">👉 替换优势展示图</span></div>
+  <div class="split-image image-box"><img src="images/placeholder-advantages.jpg" alt="PRODUCT_NAME advantages" loading="lazy"><span class="replace-tip">👉 替换优势展示�?/span></div>
   <div class="split-text">
     <h2 style="margin-top:0;">Main Advantages</h2>
     <p>Advantages overview.</p>
-    <ul class="check-list"><li><strong>Advantage 1</strong> — Detail</li><li><strong>Advantage 2</strong> — Detail</li><li><strong>Advantage 3</strong> — Detail</li><li><strong>Advantage 4</strong> — Detail</li><li><strong>Advantage 5</strong> — Detail</li><li><strong>Advantage 6</strong> — Detail</li></ul>
+    <ul class="check-list"><li><strong>Advantage 1</strong> �?Detail</li><li><strong>Advantage 2</strong> �?Detail</li><li><strong>Advantage 3</strong> �?Detail</li><li><strong>Advantage 4</strong> �?Detail</li><li><strong>Advantage 5</strong> �?Detail</li><li><strong>Advantage 6</strong> �?Detail</li></ul>
   </div>
 </section>
 <section id="why-choose-us">
@@ -144,19 +144,19 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
     <p>Factory description paragraph 1.</p><p>Factory description paragraph 2.</p>
     <ul class="check-list"><li>Factory point 1</li><li>Factory point 2</li><li>Factory point 3</li><li>Factory point 4</li></ul>
   </div>
-  <div class="split-image image-box"><img src="images/placeholder-factory.jpg" alt="factory production line" loading="lazy"><span class="replace-tip">👉 替换工厂实拍图</span></div>
+  <div class="split-image image-box"><img src="images/placeholder-factory.jpg" alt="factory production line" loading="lazy"><span class="replace-tip">👉 替换工厂实拍�?/span></div>
 </section>
 <section id="quality-control">
   <h2>Quality Control</h2>
   <p>QC overview.</p>
   <div class="qc-image-grid">
-    <div class="fixed-image-card"><div class="fixed-image-frame"><img src="images/placeholder-qc1.jpg" alt="Quality inspection" loading="lazy"></div><span class="replace-tip">👉 替换质检图片</span><h3 style="margin-top:15px;color:var(--heading);">QC Step 1</h3><p>QC step 1 description.</p></div>
-    <div class="fixed-image-card"><div class="fixed-image-frame"><img src="images/placeholder-qc2.jpg" alt="Pre-shipment QC" loading="lazy"></div><span class="replace-tip">👉 替换质检图片</span><h3 style="margin-top:15px;color:var(--heading);">QC Step 2</h3><p>QC step 2 description.</p></div>
+    <div class="fixed-image-card"><div class="fixed-image-frame"><img src="images/placeholder-qc1.jpg" alt="Quality inspection" loading="lazy"></div><h3 style="margin-top:15px;color:var(--heading);">QC Step 1</h3><p>QC step 1 description.</p></div>
+    <div class="fixed-image-card"><div class="fixed-image-frame"><img src="images/placeholder-qc2.jpg" alt="Pre-shipment QC" loading="lazy"></div><h3 style="margin-top:15px;color:var(--heading);">QC Step 2</h3><p>QC step 2 description.</p></div>
   </div>
   <div class="grid-2"><div class="card"><h3>QC Card 1</h3><p>Detail.</p></div><div class="card"><h3>QC Card 2</h3><p>Detail.</p></div><div class="card"><h3>QC Card 3</h3><p>Detail.</p></div><div class="card"><h3>QC Card 4</h3><p>Detail.</p></div></div>
 </section>
 <section id="packaging" class="split-section" style="background:#f1f5f9;padding:40px;border-radius:12px;">
-  <div class="split-image image-box" style="background:#fff;margin:0;"><img src="images/placeholder-packing.jpg" alt="Export packaging" loading="lazy"><span class="replace-tip">👉 替换包装实拍图</span></div>
+  <div class="split-image image-box" style="background:#fff;margin:0;"><img src="images/placeholder-packing.jpg" alt="Export packaging" loading="lazy"><span class="replace-tip">👉 替换包装实拍�?/span></div>
   <div class="split-text">
     <h2 style="margin-top:0;border-bottom:none;">Standard Export Packaging</h2>
     <p>Packaging overview.</p>
@@ -167,8 +167,8 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   <h2>Shipping Solutions</h2>
   <p>Shipping overview.</p>
   <div class="shipping-image-grid">
-    <div class="fixed-image-card"><div class="fixed-image-frame"><img src="images/placeholder-ship1.jpg" alt="Container shipment" loading="lazy"></div><span class="replace-tip">👉 替换集装箱图片</span><h3 style="margin-top:15px;color:var(--heading);">Container Shipment</h3><p>Container shipping description.</p></div>
-    <div class="fixed-image-card"><div class="fixed-image-frame"><img src="images/placeholder-ship2.jpg" alt="Bulk vessel" loading="lazy"></div><span class="replace-tip">👉 替换散货船图片</span><h3 style="margin-top:15px;color:var(--heading);">Break Bulk Vessel</h3><p>Bulk vessel description.</p></div>
+    <div class="fixed-image-card"><div class="fixed-image-frame"><img src="images/placeholder-ship1.jpg" alt="Container shipment" loading="lazy"></div><span class="replace-tip">👉 替换集装箱图�?/span><h3 style="margin-top:15px;color:var(--heading);">Container Shipment</h3><p>Container shipping description.</p></div>
+    <div class="fixed-image-card"><div class="fixed-image-frame"><img src="images/placeholder-ship2.jpg" alt="Bulk vessel" loading="lazy"></div><span class="replace-tip">👉 替换散货船图�?/span><h3 style="margin-top:15px;color:var(--heading);">Break Bulk Vessel</h3><p>Bulk vessel description.</p></div>
   </div>
 </section>
 <section id="faq">

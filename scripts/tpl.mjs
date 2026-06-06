@@ -10,7 +10,7 @@ export async function upload(endpoint,data){
   return r.json()
 }
 
-/* ═══════════════════════ PRODUCT HTML (rich, full-page, matches reference) ═══════════════════════ */
+/* ══════════════════════�?PRODUCT HTML (rich, full-page, matches reference) ══════════════════════�?*/
 export function productHtml(p){
   const a=p.accent||'#e67e22'
   // Quick links
@@ -27,7 +27,7 @@ export function productHtml(p){
   // Applications
   const appCards=p.apps.map((ap,i)=>`<div class="image-box" style="margin:0;">
     <img src="${IMG}" alt="${ap.t} application for ${p.name_en}" loading="lazy">
-    <span class="replace-tip">📷 替换为${ap.t}应用场景图</span>
+    <span class="replace-tip">📷 替换�?{ap.t}应用场景�?/span>
     <h3 style="margin-top:15px;color:var(--heading);">${ap.i} ${ap.t}</h3>
     <p>${ap.d}</p>
   </div>`).join('')
@@ -43,7 +43,7 @@ export function productHtml(p){
   }
 
   // Advantages
-  const advItems=(p.advantages||[]).map(a=>`<li><strong>${a.t}</strong> — ${a.d}</li>`).join('')
+  const advItems=(p.advantages||[]).map(a=>`<li><strong>${a.t}</strong> �?${a.d}</li>`).join('')
 
   // FAQ
   const faqItems=p.faqs.map(f=>`<div class="faq-item"><h3>${f.q}</h3><p>${f.a}</p></div>`).join('')
@@ -107,9 +107,9 @@ th,td{border:1px solid var(--border);padding:14px 18px;text-align:left;vertical-
 th{background:#f8fafc;color:var(--heading);font-weight:700}
 .info-box{background:#f0f9ff;border-left:4px solid #0284c7;padding:20px 24px;border-radius:0 8px 8px 0;margin:30px 0;color:#0369a1}
 .check-list li{position:relative;padding-left:20px;margin-bottom:12px;list-style:none}
-.check-list li::before{content:'✓';position:absolute;left:0;color:var(--secondary);font-weight:bold}
+.check-list li::before{content:'�?;position:absolute;left:0;color:var(--secondary);font-weight:bold}
 .pack-steps li{position:relative;padding-left:20px;margin-bottom:12px;list-style:none}
-.pack-steps li::before{content:'✓';position:absolute;left:0;color:var(--secondary);font-weight:bold}
+.pack-steps li::before{content:'�?;position:absolute;left:0;color:var(--secondary);font-weight:bold}
 .faq-list{margin-top:30px}
 .faq-item{background:#fff;border:1px solid var(--border);border-radius:10px;padding:22px 24px;margin-bottom:18px;box-shadow:0 4px 10px rgba(0,0,0,0.03)}
 .faq-item h3{margin:0 0 10px;font-size:20px;color:var(--heading);border:none;padding:0}
@@ -136,7 +136,7 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   <div class="hero-content">
     <h1>${p.hero}</h1>
     <p>${p.sub}</p>
-    <span class="hero-tip">👉 替换图提示：请替换为${p.name}横幅大图，建议展示钢卷仓库、生产线或成品库存场景。</span>
+    <span class="hero-tip">👉 替换图提示：请替换为${p.name}横幅大图，建议展示钢卷仓库、生产线或成品库存场景�?/span>
   </div>
 </header>
 
@@ -147,7 +147,7 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   ${ql}
 </nav>
 
-<!-- ═══ OVERVIEW ═══ -->
+<!-- ══�?OVERVIEW ══�?-->
 <section id="overview" class="split-section" style="margin-top:20px;">
   <div class="split-text">
     <h2 style="margin-top:0;">What Is ${p.name_en.split(' - ')[0]}?</h2>
@@ -155,11 +155,11 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   </div>
   <div class="split-image image-box">
     <img src="${IMG}" alt="${p.name_en} surface close up" loading="lazy">
-    <span class="replace-tip">👉 替换图提示：放一张${p.name}表面特写或产品实拍图。</span>
+    <span class="replace-tip">👉 替换图提示：放一�?{p.name}表面特写或产品实拍图�?/span>
   </div>
 </section>
 
-<!-- ═══ SPECIFICATIONS ═══ -->
+<!-- ══�?SPECIFICATIONS ══�?-->
 <section id="specifications">
   <h2>Technical Specifications</h2>
   <p>Available in various thicknesses, widths and coating options. Common standards include <strong>ASTM</strong>, <strong>JIS</strong>, <strong>EN</strong> and <strong>GB/T</strong>. Different industries may choose different specifications depending on service life, corrosion requirements and fabrication method.</p>
@@ -172,14 +172,14 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   </div>
 </section>
 
-<!-- ═══ APPLICATIONS ═══ -->
+<!-- ══�?APPLICATIONS ══�?-->
 <section id="applications">
   <h2>Applications</h2>
   <p>${p.appIntro||'Thanks to its corrosion resistance, processing flexibility and cost-performance ratio, this product is widely used across construction, manufacturing and industrial sectors.'}</p>
   <div class="grid-2">${appCards}</div>
 </section>
 
-<!-- ═══ COMPARISON ═══ -->
+<!-- ══�?COMPARISON ══�?-->
 <section id="comparison">
   <h2>${compHead}</h2>
   <p>${compIntro}</p>
@@ -188,7 +188,7 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
       <div class="fixed-image-frame">
         <img src="${IMG}" alt="${p.compCol1||p.name_en} appearance" loading="lazy">
       </div>
-      <span class="replace-tip">👉 替换为${p.compCol1||p.name}实拍图</span>
+      <span class="replace-tip">👉 替换�?{p.compCol1||p.name}实拍�?/span>
       <h3 style="margin-top:15px;color:var(--heading);">${p.compCol1||p.name_en.split(' - ')[0]}</h3>
       <p>${p.compDesc1||'Known for reliable performance and wide application range.'}</p>
     </div>
@@ -196,7 +196,7 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
       <div class="fixed-image-frame">
         <img src="${IMG}" alt="${p.compCol2||'Alternative product'} appearance" loading="lazy">
       </div>
-      <span class="replace-tip">👉 替换为${p.compCol2||'对比产品'}实拍图</span>
+      <span class="replace-tip">👉 替换�?{p.compCol2||'对比产品'}实拍�?/span>
       <h3 style="margin-top:15px;color:var(--heading);">${p.compCol2||'Alternative'}</h3>
       <p>${p.compDesc2||'A widely used option with its own performance characteristics.'}</p>
     </div>
@@ -204,11 +204,11 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   ${compTable}
 </section>
 
-<!-- ═══ ADVANTAGES ═══ -->
+<!-- ══�?ADVANTAGES ══�?-->
 <section id="advantages" class="split-section">
   <div class="split-image image-box">
     <img src="${IMG}" alt="${p.name_en} advantages" loading="lazy">
-    <span class="replace-tip">👉 替换为${p.name}优势展示图</span>
+    <span class="replace-tip">👉 替换�?{p.name}优势展示�?/span>
   </div>
   <div class="split-text">
     <h2 style="margin-top:0;">Main Advantages</h2>
@@ -217,14 +217,14 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   </div>
 </section>
 
-<!-- ═══ WHY CHOOSE US ═══ -->
+<!-- ══�?WHY CHOOSE US ══�?-->
 <section id="why-choose-us">
   <h2>Why Choose SunSea Steel?</h2>
   <p>Choosing the right supplier means more than buying steel. It also means stable quality, export experience, efficient communication and reliable delivery support.</p>
   <div class="grid-2">${wcuCards}</div>
 </section>
 
-<!-- ═══ FACTORY STRENGTH ═══ -->
+<!-- ══�?FACTORY STRENGTH ══�?-->
 <section id="factory-strength" class="split-section">
   <div class="split-text">
     <h2 style="margin-top:0;">Factory Strength and Production Capability</h2>
@@ -239,11 +239,11 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   </div>
   <div class="split-image image-box">
     <img src="${IMG}" alt="${p.name_en} factory production line" loading="lazy">
-    <span class="replace-tip">👉 替换为生产线、检验区或工厂实拍图</span>
+    
   </div>
 </section>
 
-<!-- ═══ QUALITY CONTROL ═══ -->
+<!-- ══�?QUALITY CONTROL ══�?-->
 <section id="quality-control">
   <h2>Quality Control and Inspection</h2>
   <p>Product quality is one of the key concerns for overseas buyers. Quality should be controlled not only by final visual inspection, but also by process stability, specification verification and export packing inspection.</p>
@@ -252,7 +252,7 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
       <div class="fixed-image-frame">
         <img src="${IMG}" alt="Quality inspection for ${p.name_en}" loading="lazy">
       </div>
-      <span class="replace-tip">👉 替换为质检人员检查表面图片</span>
+      <span class="replace-tip">👉 替换为质检人员检查表面图�?/span>
       <h3 style="margin-top:15px;color:var(--heading);">Surface and Dimension Inspection</h3>
       <p>Surface condition, width, edge quality and dimensional tolerance are checked before delivery.</p>
     </div>
@@ -260,7 +260,7 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
       <div class="fixed-image-frame">
         <img src="${IMG}" alt="Pre-shipment quality control for ${p.name_en}" loading="lazy">
       </div>
-      <span class="replace-tip">👉 替换为出货前检验或实验室图片</span>
+      <span class="replace-tip">👉 替换为出货前检验或实验室图�?/span>
       <h3 style="margin-top:15px;color:var(--heading);">Pre-Shipment Quality Control</h3>
       <p>Packing condition, identification, quantity confirmation and shipment readiness are reviewed before export.</p>
     </div>
@@ -268,11 +268,11 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   <div class="grid-2">${qcCards}</div>
 </section>
 
-<!-- ═══ PACKAGING ═══ -->
+<!-- ══�?PACKAGING ══�?-->
 <section id="packaging" class="split-section" style="background:#f1f5f9;padding:40px;border-radius:12px;">
   <div class="split-image image-box" style="background:#fff;margin:0;">
     <img src="${IMG}" alt="Seaworthy export packaging of ${p.name_en}" loading="lazy">
-    <span class="replace-tip">👉 替换为钢卷海运包装实拍图</span>
+    
   </div>
   <div class="split-text">
     <h2 style="margin-top:0;border-bottom:none;">Standard Export Seaworthy Packaging</h2>
@@ -287,7 +287,7 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   </div>
 </section>
 
-<!-- ═══ SHIPPING ═══ -->
+<!-- ══�?SHIPPING ══�?-->
 <section id="shipping">
   <h2>Shipping, Loading and Delivery Solutions</h2>
   <p>Shipping method depends on order quantity, coil size and destination requirements. Container shipment and break bulk vessel are the most common methods for steel coil export.</p>
@@ -296,7 +296,7 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
       <div class="fixed-image-frame">
         <img src="${IMG}" alt="Container shipment of ${p.name_en}" loading="lazy">
       </div>
-      <span class="replace-tip">👉 替换为集装箱装运图片</span>
+      
       <h3 style="margin-top:15px;color:var(--heading);">Container Shipment</h3>
       <p>Suitable for regular export orders. Coils packed on pallets and loaded into containers for safe sea transport. FOB/CIF/CFR available.</p>
     </div>
@@ -304,7 +304,7 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
       <div class="fixed-image-frame">
         <img src="${IMG}" alt="Break bulk vessel shipment of ${p.name_en}" loading="lazy">
       </div>
-      <span class="replace-tip">👉 替换为散货船运输图片</span>
+      
       <h3 style="margin-top:15px;color:var(--heading);">Break Bulk Vessel Shipment</h3>
       <p>For large volume orders or oversized coils. Professional lifting, lashing and port handling for bulk steel procurement.</p>
     </div>
@@ -315,7 +315,7 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
   </div>
 </section>
 
-<!-- ═══ FAQ ═══ -->
+<!-- ══�?FAQ ══�?-->
 <section id="faq">
   <h2>Frequently Asked Questions</h2>
   <div class="faq-list">${faqItems}</div>
@@ -323,7 +323,7 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
 
 </main>
 
-<!-- ═══ CTA ═══ -->
+<!-- ══�?CTA ══�?-->
 <section class="cta-section">
   <h2>${p.ctaTitle||'Looking for a Reliable Supplier?'}</h2>
   <p>${p.ctaDesc||'Contact us now for the latest price, technical specifications, export packing details and shipping recommendations. We support customized supply for construction, appliance and industrial applications worldwide.'}</p>
@@ -335,17 +335,17 @@ th{background:#f8fafc;color:var(--heading);font-weight:700}
 </body></html>`
 }
 
-/* ═══════════════════════ ARTICLE HTML (rich, styled, iframe mode) ═══════════════════════ */
+/* ══════════════════════�?ARTICLE HTML (rich, styled, iframe mode) ══════════════════════�?*/
 export function articleHtml(a){
   const accent=a.accent||'#2980b9'
   let body=''
   body+=`<div class="art-hero"><h1>${a.title_en}</h1><p class="art-sum">${a.sum_en||''}</p></div>`
-  body+=`<div class="sec"><div class="intro-grid"><div class="intro-text">${a.intro}</div><div class="intro-img"><img src="${IMG}" alt="${a.title_en}"/><span class="replace-tip">📷 请上传文章主题配图 (建议800×500px)</span></div></div></div>`
+  body+=`<div class="sec"><div class="intro-grid"><div class="intro-text">${a.intro}</div><div class="intro-img"><img src="${IMG}" alt="${a.title_en}"/></div></div></div>`
   a.sections.forEach((s,i)=>{
     const alt=i%2===0?'':' alt-bg'
     body+=`<div class="sec${alt}"><h2 class="sh">${s.h}</h2>${s.c}</div>`
     if(i===0||i===2){
-      body+=`<div class="sec img-break"><div class="img-row"><div class="img-frame"><img src="${IMG}" alt="${s.h}"/><span class="replace-tip">📷 请上传${s.h}相关配图</span></div><div class="img-frame"><img src="${IMG}" alt="${s.h} detail"/><span class="replace-tip">📷 请上传${s.h}细节图</span></div></div></div>`
+      body+=`<div class="sec img-break"><div class="img-row"><div class="img-frame"><img src="${IMG}" alt="${s.h}"/></div><div class="img-frame"><img src="${IMG}" alt="${s.h} detail"/><span class="replace-tip">📷 请上�?{s.h}细节�?/span></div></div></div>`
     }
   })
   if(a.takeaways){
