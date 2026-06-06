@@ -586,6 +586,11 @@ onUnmounted(() => {
   align-items: center;
   gap: 24px;
 }
+@media (min-width: 1024px) {
+  .main-nav {
+    margin-right: 160px;
+  }
+}
 
 .nav-link {
   position: relative;
