@@ -1,7 +1,7 @@
 <template>
   <header class="site-header">
     <div class="header-top">
-      <div class="container" style="max-width: 1440px;">
+      <div class="container">
         <div class="header-top-content">
           <div class="contact-info">
             <a v-if="company?.email" :href="`mailto:${company.email}`" class="contact-item">
@@ -471,6 +471,11 @@ onUnmounted(() => {
   align-items: center;
   gap: 16px;
 }
+@media (min-width: 1024px) {
+  .header-actions {
+    margin-right: 160px;
+  }
+}
 
 .btn-top-cta {
   display: inline-flex;
@@ -580,7 +585,6 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 24px;
-  margin-left: auto;
 }
 
 .nav-link {
