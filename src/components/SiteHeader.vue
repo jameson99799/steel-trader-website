@@ -60,7 +60,7 @@
     </div>
     
     <div class="header-main">
-      <div class="container">
+      <div class="container" style="max-width: 1440px;">
         <div class="header-main-content">
           <router-link :to="langPath('/')" class="logo" aria-label="Home">
             <div class="logo-image" v-if="company?.logo">
