@@ -1,7 +1,7 @@
 <template>
   <header class="site-header">
     <div class="header-top">
-      <div class="container" style="max-width: 1440px;">
+      <div class="container">
         <div class="header-top-content">
           <div class="contact-info">
             <a v-if="company?.email" :href="`mailto:${company.email}`" class="contact-item">
@@ -60,7 +60,7 @@
     </div>
     
     <div class="header-main">
-      <div class="container" style="max-width: 1440px;">
+      <div class="container">
         <div class="header-main-content">
           <router-link :to="langPath('/')" class="logo" aria-label="Home">
             <div class="logo-image" v-if="company?.logo">
