@@ -498,9 +498,17 @@ router.post('/optimize-all', authMiddleware, async (req, res) => {
     return res.status(500).json({ error: '无法读取上传目录' })
   }
 
-  // Target legacy image formats
+  // Target legacy image formats AND oversized webp files
   const targetExts = ['.jpg', '.jpeg', '.png', '.bmp']
-  const imagesToOptimize = files.filter(f => targetExts.includes(f.match(/\.[^.]+$/)?.[0].toLowerCase()))
+  const imagesToOptimize = files.filter(f => {
+    const ext = f.match(/\.[^.]+$/)?.[0].toLowerCase()
+    if (!ext) return false
+    if (targetExts.includes(ext)) return true
+    if (ext === '.webp') {
+      try { return fs.statSync(join(uploadDir, f)).size > 250 * 1024 } catch(e) { return false }
+    }
+    return false
+  })
 
   if (imagesToOptimize.length === 0) {
     return res.json({ message: '没有需要优化的图片', total: 0, successCount: 0, errorCount: 0, errors: [] })
@@ -512,50 +520,56 @@ router.post('/optimize-all', authMiddleware, async (req, res) => {
 
   for (const filename of imagesToOptimize) {
     const oldPath = join(uploadDir, filename)
+    const isWebp = filename.toLowerCase().endsWith('.webp')
     const newFilename = filename.replace(/\.[^.]+$/, '.webp')
-    const newPath = join(uploadDir, newFilename)
+    const newPath = isWebp ? `${oldPath}.tmp` : join(uploadDir, newFilename)
 
     try {
       const meta = await sharp(oldPath)
-        .rotate() // Auto-orient based on EXIF
-        .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 85, effort: 4 })
+        .rotate()
+        .resize({ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 80, effort: 4 })
         .toFile(newPath)
 
       const oldFilepath = `/uploads/${filename}`
-      const newFilepath = `/uploads/${newFilename}`
 
-      // 1. Update media table
-      run(`UPDATE media SET filename=?, filepath=?, mimetype=?, filesize=?, width=?, height=?, updated_at=datetime('now') WHERE filepath=?`,
-        [newFilename, newFilepath, 'image/webp', meta.size, meta.width, meta.height, oldFilepath])
+      if (isWebp) {
+        fs.renameSync(newPath, oldPath) // Overwrite inplace
+        run(`UPDATE media SET filesize=?, width=?, height=?, updated_at=datetime('now') WHERE filepath=?`,
+          [meta.size, meta.width, meta.height, oldFilepath])
+      } else {
+        const newFilepath = `/uploads/${newFilename}`
 
-      // 2. Update product_images table
-      run('UPDATE product_images SET image_url=? WHERE image_url=?', [newFilepath, oldFilepath])
+        // 1. Update media table
+        run(`UPDATE media SET filename=?, filepath=?, mimetype=?, filesize=?, width=?, height=?, updated_at=datetime('now') WHERE filepath=?`,
+          [newFilename, newFilepath, 'image/webp', meta.size, meta.width, meta.height, oldFilepath])
 
-      // 3. Update rich text globally
-      const tablesToUpdate = [
-        { table: 'products', columns: ['detail_content', 'images'] },
-        { table: 'news', columns: ['content', 'cover_image'] },
-        { table: 'categories', columns: ['image'] },
-        { table: 'hero_slides', columns: ['image_url'] },
-        { table: 'company', columns: ['about_image', 'logo', 'favicon', 'whatsapp_qr', 'wechat_qr'] },
-        { table: 'banners', columns: ['image'] },
-        { table: 'seo_settings', columns: ['og_image'] }
-      ]
+        // 2. Update product_images table
+        run('UPDATE product_images SET image_url=? WHERE image_url=?', [newFilepath, oldFilepath])
 
-      for (const t of tablesToUpdate) {
-        for (const col of t.columns) {
-          try {
-            run(`UPDATE ${t.table} SET ${col}=REPLACE(${col}, ?, ?) WHERE ${col} LIKE ?`,
-              [oldFilepath, newFilepath, `%${oldFilepath}%`])
-          } catch (e) {
-            // ignore missing columns during global replace
+        // 3. Update rich text globally
+        const tablesToUpdate = [
+          { table: 'products', columns: ['detail_content', 'images'] },
+          { table: 'news', columns: ['content', 'cover_image'] },
+          { table: 'categories', columns: ['image'] },
+          { table: 'hero_slides', columns: ['image_url'] },
+          { table: 'company', columns: ['about_image', 'logo', 'favicon', 'whatsapp_qr', 'wechat_qr'] },
+          { table: 'banners', columns: ['image'] },
+          { table: 'seo_settings', columns: ['og_image'] }
+        ]
+
+        for (const t of tablesToUpdate) {
+          for (const col of t.columns) {
+            try {
+              run(`UPDATE ${t.table} SET ${col}=REPLACE(${col}, ?, ?) WHERE ${col} LIKE ?`,
+                [oldFilepath, newFilepath, `%${oldFilepath}%`])
+            } catch (e) {}
           }
         }
-      }
 
-      // Delete original file
-      fs.unlinkSync(oldPath)
+        // Delete original file
+        fs.unlinkSync(oldPath)
+      }
       successCount++
     } catch (err) {
       console.error(`Failed to optimize ${filename}:`, err)
