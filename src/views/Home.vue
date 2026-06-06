@@ -803,6 +803,10 @@ watch(lang, () => {
 }
 
 @media (max-width: 640px) {
+  .products-grid {
+    grid-template-columns: 1fr;
+  }
+
   .section {
     padding: var(--spacing-xl) 0;
   }

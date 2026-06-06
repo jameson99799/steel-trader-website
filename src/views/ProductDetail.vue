@@ -1394,13 +1394,25 @@ onMounted(async () => {
     gap: var(--spacing);
   }
   
-  .spec-row {
-    grid-template-columns: 1fr;
+  .specs-table, .spec-row, .spec-label, .spec-value {
+    display: block;
+    width: 100%;
   }
-  
+
+  .spec-row {
+    border-bottom: 1px solid var(--border);
+    padding: var(--spacing-sm) 0;
+  }
+
   .spec-label {
     border-right: none;
-    border-bottom: 1px solid var(--border);
+    padding-bottom: 0px;
+    color: var(--text-muted);
+  }
+
+  .spec-value {
+    padding-top: 4px;
+    font-weight: 500;
   }
 
   .contact-panel-inner {
