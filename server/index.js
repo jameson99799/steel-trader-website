@@ -141,6 +141,11 @@ async function startServer() {
       console.warn('Cleanup error:', e.message)
     }
 
+    try {
+      run(`UPDATE news SET slug = 'galvanized-steel-coil-guide' WHERE slug LIKE '%choose-the-r'`)
+      run(`UPDATE news SET slug = 'color-coated-steel-coils-differences' WHERE slug LIKE '%pvdf-an'`)
+    } catch (e) {}
+
 
     const corsOptions = {
       origin: NODE_ENV === 'production'
@@ -645,6 +650,9 @@ async function startServer() {
               let detailHtml = rawDetail
                 .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
                 .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                .replace(/<h1[^>]*>[\s\S]*?<\/h1>/gi, '')
+                .replace(/<span[^>]*class=["\']?(hero-tip|replace-tip)["\']?[^>]*>.*?<\/span>/ig, '')
+                .replace(/👉\s*替换图提示：.*?(<\/p>|<br>|\n|$)/ig, '$1')
                 .replace(/\{\{email\}\}/g, company.email || '')
                 .replace(/\{\{phone\}\}/g, company.phone || '')
                 .replace(/\{\{whatsapp\}\}/g, company.whatsapp || '')
@@ -740,6 +748,7 @@ async function startServer() {
               let articleBody = rawContent
                 .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
                 .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                .replace(/<h1[^>]*>[\s\S]*?<\/h1>/gi, '')
                 .replace(/\{\{email\}\}/g, company.email || '')
                 .replace(/\{\{phone\}\}/g, company.phone || company.whatsapp || '')
                 .replace(/\{\{whatsapp_link\}\}/g, whatsappLink)
@@ -841,7 +850,7 @@ async function startServer() {
               const catProducts = getAll('SELECT id, slug, name_en, name, description_en, description FROM products WHERE category_id = ? AND status = 1 ORDER BY sort_order DESC, id DESC LIMIT 30', [cat.id])
               if (catProducts.length) {
                 const catProdItems = catProducts.map(p =>
-                  `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a><p>${esc((p.description_en || p.description || '').substring(0, 150).replace(/\\s+\\S*$/, '...'))}</p></li>`
+                  `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a><p>${esc((p.description_en || p.description || '').substring(0, 150).replace(/\s+\S*$/, '...'))}</p></li>`
                 ).join('')
                 ssrContent = `<section id="ssr-cat-products"><h1>${esc(catName)}</h1><ul>${catProdItems}</ul></section>`
                 extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'ItemList',
@@ -868,7 +877,7 @@ async function startServer() {
             // SSR product list for GEO crawlers
             const productList = getAll('SELECT id, slug, name_en, name, description_en, description FROM products WHERE status=1 ORDER BY sort_order, id DESC LIMIT 20')
             if (productList.length) {
-              const prodItems = productList.map(p => `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a><p>${esc((p.description_en || p.description || '').substring(0, 150).replace(/\\s+\\S*$/, '...'))}</p></li>`).join('')
+              const prodItems = productList.map(p => `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a><p>${esc((p.description_en || p.description || '').substring(0, 150).replace(/\s+\S*$/, '...'))}</p></li>`).join('')
               ssrContent = `<section id="ssr-products"><h1>Steel Products</h1><ul>${prodItems}</ul></section>`
             }
             // ItemList Schema for product listing
@@ -933,7 +942,7 @@ async function startServer() {
               }
             })
             // Add dense Contact info into SSR Dom
-            ssrContent = `<article id="ssr-contact"><h1>Contact Us</h1><p>Contact ${esc(companyNameTranslated)} for custom steel coil requirements, competitive FOB pricing, and rapid export shipping quotes.</p><h2>Contact Details</h2><ul><li><strong>Email:</strong> <a href="mailto:${esc(company.email)}">${esc(company.email)}</a></li><li><strong>Telephone:</strong> <a href="tel:${esc(company.phone)}">${esc(company.phone)}</a></li><li><strong>WhatsApp:</strong> <a href="https://wa.me/${(company.whatsapp || '').replace(/[^0-9]/g, '')}">${esc(company.whatsapp)}</a></li><li><strong>Factory Address:</strong> ${esc(company.address_en || company.address)}</li></ul><h2>Online Inquiry Form</h2><p>Please send us your specific specifications including coating mass, thickness, width, color code, and target quantity for an accurate quote.</p></article>`
+            ssrContent = `<article id="ssr-contact"><h1>Contact Us</h1><p>Contact ${esc(companyNameTranslated)} for custom steel coil requirements, competitive FOB pricing, and rapid export shipping quotes.</p><h2>Contact Details</h2><ul><li><strong>Email:</strong> <a href="mailto:${esc(company.email)}">${esc(company.email)}</a></li><li><strong>Telephone:</strong> <a href="tel:${esc(company.phone)}">${esc(company.phone)}</a></li><li><strong>WhatsApp:</strong> <a href="https://wa.me/${(company.whatsapp || '').replace(/[^0-9]/g, '')}">${esc(company.whatsapp)}</a></li><li><strong>Factory Address:</strong> ${esc(company.address_en || company.address)}</li></ul><h2>Online Inquiry Form</h2><p>Please send us your specific specifications including coating mass, thickness, width, color code, and target quantity for an accurate quote.</p><form><input type="text" name="name" aria-label="Name" /><input type="email" name="email" aria-label="Email" /><input type="tel" name="phone" aria-label="Phone" /><textarea name="message" aria-label="Message"></textarea><button type="submit">Submit Inquiry</button></form></article>`
           } else if (subPath === '/factory' || subPath === '/factory/') {
             matchedRoute = true
             pageTitle = `Factory Tour & Production Lines | ${companyName}`
@@ -1004,7 +1013,11 @@ async function startServer() {
             }
             // Keyword-rich homepage description
             if (!pageDesc) {
-              pageDesc = companyDescTranslated || `Shandong Sunsea Steel Co., Ltd — Professional manufacturer and exporter of Galvanized (GI), Galvalume (GL), Prepainted (PPGI/PPGL) and Cold Rolled (CRC) steel coils. ASTM A653 / JIS G3302 / EN 10346 certified. Factory direct pricing, global shipping from Shandong, China.`
+              if (lang === 'zh') {
+                pageDesc = `山东三海钢铁有限公司 — 专业镀锌钢卷 (GI)、镀铝锌钢卷 (GL)、彩涂钢卷 (PPGI/PPGL) 和冷轧钢卷 (CRC) 的源头工厂制造商与出口商。工厂直供，全球配送。`
+              } else {
+                pageDesc = companyDescTranslated || `Shandong Sunsea Steel Co., Ltd — Professional manufacturer and exporter of Galvanized (GI), Galvalume (GL), Prepainted (PPGI/PPGL) and Cold Rolled (CRC) steel coils. ASTM A653 / JIS G3302 / EN 10346 certified. Factory direct pricing, global shipping from Shandong, China.`
+              }
             }
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` }
