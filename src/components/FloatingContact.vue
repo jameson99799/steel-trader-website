@@ -1,13 +1,13 @@
 <template>
   <!-- Minimized Toggle Button -->
-  <div v-if="company && isMinimized" class="float-panel is-minimized" @click="isMinimized = false" title="Expand Contact Panel">
+  <div v-if="company && isMinimized && !isMobile" class="float-panel is-minimized" @click="isMinimized = false" title="Expand Contact Panel">
     <svg class="chat-icon" viewBox="0 0 24 24" fill="currentColor">
       <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
     </svg>
   </div>
 
   <!-- Expanded Panel -->
-  <div class="float-panel" v-if="company && !isMinimized">
+  <div class="float-panel" v-if="company && (!isMinimized || isMobile)">
     <div class="panel-header">
       <span>Contact Us</span>
       <button class="minimize-btn" @click.stop="isMinimized = true" aria-label="Minimize" title="Minimize">
@@ -97,13 +97,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import api from '../api'
 
 const company = ref(null)
 const toastVisible = ref(false)
 const zoomed = ref(null) // 'wa' | 'wc' | null
 const isMinimized = ref(false)
+const isMobile = ref(false)
+
+function checkMobile() {
+  isMobile.value = window.innerWidth <= 1024
+}
 
 function toggleZoom(key) {
   zoomed.value = zoomed.value === key ? null : key
@@ -141,7 +146,13 @@ function fallbackCopy(text) {
 }
 
 onMounted(async () => {
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
   try { company.value = await api.getCompany() } catch (e) {}
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile)
 })
 </script>
 
