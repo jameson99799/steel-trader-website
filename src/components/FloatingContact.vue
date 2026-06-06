@@ -1,13 +1,13 @@
 <template>
   <!-- Minimized Toggle Button -->
-  <div v-if="showFloatingPanel && company && isMinimized" class="float-panel is-minimized" @click="isMinimized = false" title="Expand Contact Panel">
+  <div v-if="company && isMinimized" class="float-panel is-minimized" @click="isMinimized = false" title="Expand Contact Panel">
     <svg class="chat-icon" viewBox="0 0 24 24" fill="currentColor">
       <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
     </svg>
   </div>
 
   <!-- Expanded Panel -->
-  <div class="float-panel" v-if="showFloatingPanel && company && !isMinimized">
+  <div class="float-panel" v-if="company && !isMinimized">
     <div class="panel-header">
       <span>Contact Us</span>
       <button class="minimize-btn" @click.stop="isMinimized = true" aria-label="Minimize" title="Minimize">
@@ -97,19 +97,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, onMounted } from 'vue'
 import api from '../api'
 
-const route = useRoute()
 const company = ref(null)
 const toastVisible = ref(false)
 const zoomed = ref(null) // 'wa' | 'wc' | null
 const isMinimized = ref(false)
-
-const showFloatingPanel = computed(() => {
-  return route.name !== 'ProductDetail' && route.name !== 'Contact'
-})
 
 function toggleZoom(key) {
   zoomed.value = zoomed.value === key ? null : key
