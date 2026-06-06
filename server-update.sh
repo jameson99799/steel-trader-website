@@ -53,6 +53,11 @@ if [ -d "uploads" ] && [ "$(ls -A uploads/ 2>/dev/null)" ]; then
   cp -r uploads/. "${UPLOADS_BACKUP}/" 2>/dev/null || true
   ok "上传文件已备份"
 fi
+# ── 3.5. 自动清理多余的历史备份（仅保留最近 5 个）─────────────
+info "清理多余的历史备份包 (仅保留最新5个)..."
+ls -tp /tmp/steel-trader-db-*.db 2>/dev/null | grep -v '/$' | tail -n +6 | xargs -I {} rm -f -- {} || true
+ls -td /tmp/steel-trader-uploads-* 2>/dev/null | tail -n +6 | xargs -I {} rm -rf -- {} || true
+ok "陈旧备份瘦身完成"
 
 # ── 4. 拉取最新代码（git reset --hard 不影响 /tmp 备份）────
 info "从 GitHub 拉取最新代码..."
