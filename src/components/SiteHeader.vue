@@ -523,6 +523,11 @@ onUnmounted(() => {
   color: inherit;
   min-height: 48px; /* prevent CLS — reserve logo space */
 }
+@media (min-width: 1024px) {
+  .logo {
+    margin-left: 120px;
+  }
+}
 
 .logo-image {
   width: 60px;
