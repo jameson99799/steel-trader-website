@@ -83,6 +83,10 @@ router.get('/', (req, res) => {
     <lastmod>${now}</lastmod>
   </sitemap>
   <sitemap>
+    <loc>${BASE_URL}/sitemap-categories.xml</loc>
+    <lastmod>${now}</lastmod>
+  </sitemap>
+  <sitemap>
     <loc>${BASE_URL}/sitemap-news.xml</loc>
     <lastmod>${now}</lastmod>
   </sitemap>
@@ -110,17 +114,7 @@ router.get('/static', (req, res) => {
             { loc: '/news/futures-price', priority: '0.8', changefreq: 'daily' },
         ]
 
-        // Category pages — path-based, no query params
-        const categories = getAll(`SELECT id, slug, name_en FROM categories ORDER BY sort_order, id`)
-        for (const c of categories) {
-            const catSlug = c.slug || c.name_en?.toLowerCase().replace(/\s+/g, '-') || c.id
-            staticPages.push({ loc: `/products/category/${catSlug}`, priority: '0.7', changefreq: 'weekly' })
-        }
 
-        const newsCategories = getAll(`SELECT slug, name_en FROM news_categories ORDER BY sort_order, id`)
-        for (const nc of newsCategories) {
-            if (nc.slug) staticPages.push({ loc: `/news/category/${nc.slug}`, priority: '0.7', changefreq: 'weekly' })
-        }
 
         const urls = []
         for (const p of staticPages) {
@@ -139,6 +133,55 @@ router.get('/static', (req, res) => {
         res.send(buildUrlset(urls))
     } catch (e) {
         console.error('Static sitemap error:', e)
+        res.status(500).send('Internal Server Error')
+    }
+})
+
+// ── Categories sitemap ─────────────────────────────────────────
+router.get('/categories', (req, res) => {
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+    try {
+        const now = new Date().toISOString().split('T')[0]
+        const activeLangs = getActiveLangs()
+        const urls = []
+
+        // Product categories
+        const categories = getAll(`SELECT id, slug, name_en, created_at FROM categories ORDER BY sort_order, id`)
+        for (const c of categories) {
+            const catSlug = c.slug || c.name_en?.toLowerCase().replace(/\\s+/g, '-') || c.id
+            const locPath = `/products/category/${catSlug}`
+            const lastmod = toDateStr(c.created_at, now)
+            for (const l of activeLangs) {
+                urls.push(urlEntry({
+                    loc: BASE_URL + '/' + l.code + locPath,
+                    lastmod,
+                    changefreq: 'weekly',
+                    priority: '0.9',
+                    hreflang: hreflangLinks(locPath, activeLangs)
+                }))
+            }
+        }
+
+        // News categories
+        const newsCategories = getAll(`SELECT id, slug, name_en, created_at FROM news_categories ORDER BY sort_order, id`)
+        for (const nc of newsCategories) {
+            if (!nc.slug) continue
+            const locPath = `/news/category/${nc.slug}`
+            const lastmod = toDateStr(nc.created_at, now)
+            for (const l of activeLangs) {
+                urls.push(urlEntry({
+                    loc: BASE_URL + '/' + l.code + locPath,
+                    lastmod,
+                    changefreq: 'weekly',
+                    priority: '0.8',
+                    hreflang: hreflangLinks(locPath, activeLangs)
+                }))
+            }
+        }
+
+        res.send(buildUrlset(urls))
+    } catch (e) {
+        console.error('Categories sitemap error:', e)
         res.status(500).send('Internal Server Error')
     }
 })

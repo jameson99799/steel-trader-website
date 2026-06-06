@@ -348,6 +348,7 @@ async function startServer() {
     app.use('/sitemap.xml', sitemapRoutes)
     app.use('/sitemap-static.xml', (req, res, next) => { req.url = '/static'; sitemapRoutes(req, res, next) })
     app.use('/sitemap-products.xml', (req, res, next) => { req.url = '/products'; sitemapRoutes(req, res, next) })
+    app.use('/sitemap-categories.xml', (req, res, next) => { req.url = '/categories'; sitemapRoutes(req, res, next) })
     app.use('/api/ral-colors', ralColorsRoutes)
     app.use('/api/roofing-profiles', roofingProfilesRoutes)
     app.use('/api/factory', factoryRoutes)
@@ -996,7 +997,20 @@ async function startServer() {
               const trName = p[`name_${lang}`] || p.name_en || p.name
               return `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(trName)}</a></li>`
             }).join('')
-            ssrContent = `<section id="ssr-home"><h1>${esc(companyNameTranslated)}</h1><p>${companyDesc}</p><h2>Main Products</h2><ul>${homeProductList}</ul></section>`
+            
+            const allCats = getAll('SELECT id, slug, name_en, name FROM categories ORDER BY sort_order, id') || []
+            const homeCatList = allCats.map(c => {
+               const catSlug = c.slug || c.id
+               let trName = c.name_en || c.name
+               if (lang !== 'en' && tMap && tMap['categories'] && tMap['categories'][c.id] && tMap['categories'][c.id].name) {
+                 trName = tMap['categories'][c.id].name
+               }
+               return `<li><a href="${siteUrl}/${lang}/products/category/${catSlug}">${esc(trName)}</a></li>`
+            }).join('')
+            
+            const quickLinks = `<li><a href="${siteUrl}/${lang}/products">All Products</a></li><li><a href="${siteUrl}/${lang}/news">News & Blog</a></li><li><a href="${siteUrl}/${lang}/contact">Contact Us</a></li><li><a href="${siteUrl}/${lang}/about">About Us</a></li>`
+            
+            ssrContent = `<section id="ssr-home"><h1>${esc(companyNameTranslated)}</h1><p>${companyDesc}</p><h2>Main Categories</h2><ul>${homeCatList}</ul><h2>Main Products</h2><ul>${homeProductList}</ul><h2>Quick Links</h2><ul>${quickLinks}</ul></section>`
           }
 
           // ── Catch-all for invalid routes ──
