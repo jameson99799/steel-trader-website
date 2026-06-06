@@ -1014,7 +1014,7 @@ async function startServer() {
             // Keyword-rich homepage description
             if (!pageDesc) {
               if (lang === 'zh') {
-                pageDesc = `山东三海钢铁有限公司 — 专业镀锌钢卷 (GI)、镀铝锌钢卷 (GL)、彩涂钢卷 (PPGI/PPGL) 和冷轧钢卷 (CRC) 的源头工厂制造商与出口商。工厂直供，全球配送。`
+                pageDesc = `山东耀海钢铁有限公司 — 专业镀锌钢卷 (GI)、镀铝锌钢卷 (GL)、彩涂钢卷 (PPGI/PPGL) 和冷轧钢卷 (CRC) 的源头工厂制造商与出口商。工厂直供，全球配送。`
               } else {
                 pageDesc = companyDescTranslated || `Shandong Sunsea Steel Co., Ltd — Professional manufacturer and exporter of Galvanized (GI), Galvalume (GL), Prepainted (PPGI/PPGL) and Cold Rolled (CRC) steel coils. ASTM A653 / JIS G3302 / EN 10346 certified. Factory direct pricing, global shipping from Shandong, China.`
               }
