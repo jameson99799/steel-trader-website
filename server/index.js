@@ -1098,10 +1098,7 @@ async function startServer() {
           ssrArticle: req.ssrArticle || null,
           ssrProduct: req.ssrProduct || null,
           seoSettings: seoSettings,
-          languages: getAll('SELECT * FROM languages WHERE status=1 ORDER BY sort_order, code') || [],
-          featuredProducts: getAll('SELECT * FROM products WHERE status=1 AND is_featured=1 ORDER BY sort_order, id DESC LIMIT 8') || [],
-          categories: getAll('SELECT * FROM categories ORDER BY sort_order, id') || [],
-          latestNews: getAll('SELECT * FROM news WHERE status=1 ORDER BY id DESC LIMIT 5') || []
+          languages: getAll('SELECT * FROM languages WHERE status=1 ORDER BY sort_order, code') || []
         }
         const stateTag = `<script>window.__INITIAL_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')}</script>`
         html = html.replace('</head>', `${canonicalTag}\n  ${extraMeta}\n  ${extraSchemas}\n  ${stateTag}\n</head>`)

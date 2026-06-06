@@ -67,8 +67,8 @@
               <img
                 :src="product.images?.split(',')[0] || '/placeholder.svg'"
                 :alt="localizedValue(product, 'name')"
-                :loading="index === 0 ? 'eager' : 'lazy'"
-                :fetchpriority="index === 0 ? 'high' : 'auto'"
+                :loading="'lazy'"
+                :fetchpriority="'auto'"
                 decoding="async"
                 width="400" height="300"
               />
@@ -235,8 +235,8 @@ import api from '../api'
 
 const { t, localizedValue, langPath, lang } = useLang()
 const hero = ref(window.__INITIAL_STATE__?.hero || {})
-const featuredProducts = ref(window.__INITIAL_STATE__?.featuredProducts || [])
-const categories = ref(window.__INITIAL_STATE__?.categories || [])
+const featuredProducts = ref([])
+const categories = ref([])
 const pageTexts = ref({})
 const company = ref({})
 
@@ -461,6 +461,7 @@ watch(lang, () => {
 /* Featured Products */
 .featured-products {
   background: var(--gray-50);
+  min-height: 500px;
   padding-bottom: var(--spacing-xl);
 }
 
@@ -497,6 +498,7 @@ watch(lang, () => {
   height: 100%;
   object-fit: cover;
   transition: var(--transition-slow);
+  loading: lazy;
 }
 
 .product-card:hover .product-image img {
@@ -572,6 +574,11 @@ watch(lang, () => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: var(--spacing-lg);
+}
+
+.categories-section {
+  background: var(--white);
+  min-height: 400px;
 }
 
 .category-card {
