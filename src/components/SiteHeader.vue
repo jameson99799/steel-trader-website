@@ -590,6 +590,9 @@ onUnmounted(() => {
   .main-nav {
     margin-right: 160px;
   }
+  .header-cta {
+    display: none;
+  }
 }
 
 .nav-link {
