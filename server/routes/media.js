@@ -527,8 +527,7 @@ router.post('/optimize-all', authMiddleware, async (req, res) => {
     try {
       const meta = await sharp(oldPath)
         .rotate()
-        .resize({ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 80, effort: 4 })
+        .webp({ quality: 75, effort: 4 })
         .toFile(newPath)
 
       const oldFilepath = `/uploads/${filename}`
