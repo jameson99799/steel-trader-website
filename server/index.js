@@ -652,7 +652,19 @@ async function startServer() {
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
               const hasFaqInDetail = /frequently asked|<h[23][^>]*>\\s*faq/i.test(detailHtml)
               const ssrFeaturedImage = productImages.length ? `<img src="${esc(productImages[0])}" alt="${escPName}" style="display:none;" />` : ''
-              ssrContent = `<article id="ssr-product">${ssrFeaturedImage}<h1>${escPName}</h1><p>${escPDesc}</p>${specsHtml}${detailHtml}${hasFaqInDetail ? '' : faqHtml}</article>`
+              
+              // Internal linking for GEO crawler topic clusters
+              let relatedHtml = ''
+              const relatedProducts = getAll('SELECT id, slug, name_en, name FROM products WHERE category_id=? AND id!=? AND status=1 LIMIT 5', [product.category_id, product.id])
+              if (relatedProducts.length) {
+                relatedHtml = '<h2>Related Products</h2><ul>' + relatedProducts.map(rp => {
+                  if (tMap) translateProduct(rp, tMap, lang)
+                  const rpName = rp[`name_${lang}`] || rp.name_en || rp.name
+                  return `<li><a href="${siteUrl}/${lang}/products/${rp.slug || rp.id}">${esc(rpName)}</a></li>`
+                }).join('') + '</ul>'
+              }
+              
+              ssrContent = `<article id="ssr-product">${ssrFeaturedImage}<h1>${escPName}</h1><p>${escPDesc}</p>${specsHtml}${detailHtml}${hasFaqInDetail ? '' : faqHtml}${relatedHtml}</article>`
               
               // Expose ssrData for client-side Vue hydration
               req.ssrProduct = product
