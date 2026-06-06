@@ -1,7 +1,7 @@
 <template>
   <header class="site-header">
     <div class="header-top">
-      <div class="container">
+      <div class="container" style="max-width: 1440px;">
         <div class="header-top-content">
           <div class="contact-info">
             <a v-if="company?.email" :href="`mailto:${company.email}`" class="contact-item">
@@ -580,6 +580,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 24px;
+  margin-left: auto;
 }
 
 .nav-link {
