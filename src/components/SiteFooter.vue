@@ -170,10 +170,10 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const { t, localizedValue, langPath } = useLang()
-const company = ref(null)
-const categories = ref([])
-const pageTexts = ref(null)
-const latestNews = ref([])
+const company = ref(window.__INITIAL_STATE__?.company || null)
+const categories = ref(window.__INITIAL_STATE__?.categories ? window.__INITIAL_STATE__.categories.slice(0,5) : [])
+const pageTexts = ref(window.__INITIAL_STATE__?.pageTexts || null)
+const latestNews = ref(window.__INITIAL_STATE__?.latestNews || [])
 const activeModal = ref(null)
 
 function showLegalModal(type) {

@@ -69,6 +69,7 @@
                 :alt="localizedValue(product, 'name')"
                 :loading="index === 0 ? 'eager' : 'lazy'"
                 :fetchpriority="index === 0 ? 'high' : 'auto'"
+                decoding="async"
                 width="400" height="300"
               />
               <div class="product-overlay">
@@ -111,7 +112,7 @@
             class="category-card"
           >
             <div class="category-image">
-              <img :src="cat.image || '/placeholder.svg'" :alt="localizedValue(cat, 'name')" loading="lazy" width="400" height="300" />
+              <img :src="cat.image || '/placeholder.svg'" :alt="localizedValue(cat, 'name')" loading="lazy" decoding="async" width="400" height="300" />
               <div class="category-overlay">
                 <div class="category-icon">
                   <svg viewBox="0 0 20 20" fill="currentColor">
@@ -234,8 +235,8 @@ import api from '../api'
 
 const { t, localizedValue, langPath, lang } = useLang()
 const hero = ref(window.__INITIAL_STATE__?.hero || {})
-const featuredProducts = ref([])
-const categories = ref([])
+const featuredProducts = ref(window.__INITIAL_STATE__?.featuredProducts || [])
+const categories = ref(window.__INITIAL_STATE__?.categories || [])
 const pageTexts = ref({})
 const company = ref({})
 
