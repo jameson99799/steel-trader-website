@@ -650,8 +650,9 @@ async function startServer() {
                 .replace(/\{\{company_name\}\}/g, companyNameTranslated)
               detailHtml = formatSsrMailtoLinks(detailHtml, company.email || '')
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
-              const hasFaqInDetail = /frequently asked|<h[23][^>]*>\s*faq/i.test(detailHtml)
-              ssrContent = `<article id="ssr-product"><h1>${escPName}</h1><p>${escPDesc}</p>${specsHtml}${detailHtml}${hasFaqInDetail ? '' : faqHtml}</article>`
+              const hasFaqInDetail = /frequently asked|<h[23][^>]*>\\s*faq/i.test(detailHtml)
+              const ssrFeaturedImage = productImages.length ? `<img src="${esc(productImages[0])}" alt="${escPName}" style="display:none;" />` : ''
+              ssrContent = `<article id="ssr-product">${ssrFeaturedImage}<h1>${escPName}</h1><p>${escPDesc}</p>${specsHtml}${detailHtml}${hasFaqInDetail ? '' : faqHtml}</article>`
               
               // Expose ssrData for client-side Vue hydration
               req.ssrProduct = product
@@ -752,8 +753,8 @@ async function startServer() {
                   }
                 } catch (e) {}
               }
-
-              ssrContent = `<article id="ssr-article"><h1>${escATitle}</h1><p class="summary">${escASummary}</p><div class="content">${articleBody}</div>${newsFaqHtml}</article>`
+              const ssrFeaturedImgNews = pageImage ? `<img src="${esc(pageImage)}" alt="${escATitle}" style="display:none;" />` : ''
+              ssrContent = `<article id="ssr-article">${ssrFeaturedImgNews}<h1>${escATitle}</h1><p class="summary">${escASummary}</p><div class="content">${articleBody}</div>${newsFaqHtml}</article>`
               
               // Expose ssrData for client-side Vue hydration
               req.ssrArticle = article
