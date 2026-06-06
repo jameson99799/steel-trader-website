@@ -173,16 +173,7 @@ async function startServer() {
     }
     app.use(cors(corsOptions))
 
-    // ── Enforce HTTPS ───────────────────────────────────────────────────────
-    app.use((req, res, next) => {
-      if (NODE_ENV === 'production') {
-        const proto = req.headers['x-forwarded-proto'] || req.protocol
-        if (proto !== 'https') {
-          return res.redirect(301, `https://${req.hostname}${req.originalUrl}`)
-        }
-      }
-      next()
-    })
+    // HTTPS redirect removed to prevent proxy loops
 
     // ── Security Firewalls ──────────────────────────────────────────────────
     app.use(helmet({
