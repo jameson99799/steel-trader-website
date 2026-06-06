@@ -207,23 +207,32 @@ router.get('/products', (req, res) => {
             console.log(`[sitemap] Products sitemap: ${products.length} products found`)
         }
 
+        // Translation mapping for multilingual image URLs
+        const transRows = getAll('SELECT content_id, language_code, translated_text FROM translations WHERE content_type="product" AND content_field="name"') || []
+        const tMap = {}
+        for (const tr of transRows) {
+            if (!tMap[tr.language_code]) tMap[tr.language_code] = {}
+            if (tr.translated_text) tMap[tr.language_code][tr.content_id] = tr.translated_text
+        }
+
         const urls = []
         for (const p of products || []) {
             const prodSlug = p.slug || p.id
             const prodPath = `/products/${prodSlug}`
             const lastmod = toDateStr(p.lastmod_date, now)
             
-            let imagesHTML = ''
-            if (p.images) {
-                const titleStr = p.name_en || p.name || 'product'
-                const imgList = String(p.images).split(',').filter(Boolean).slice(0, 5) // Map up to 5 images per product
-                imagesHTML = imgList.map(img => {
-                    const imgUrl = img.startsWith('http') ? img : BASE_URL + img
-                    return `    <image:image>\n      <image:loc>${escapeXml(imgUrl)}</image:loc>\n      <image:title>${escapeXml(titleStr)}</image:title>\n    </image:image>`
-                }).join('\n')
-            }
-            
             for (const l of activeLangs) {
+                let imagesHTML = ''
+                if (p.images) {
+                    // Translate image title based on language loop
+                    const titleStr = (tMap[l.code] && tMap[l.code][p.id]) ? tMap[l.code][p.id] : (p.name_en || p.name || 'product')
+                    const imgList = String(p.images).split(',').filter(Boolean).slice(0, 5) // Map up to 5 images per product
+                    imagesHTML = imgList.map(img => {
+                        const imgUrl = img.startsWith('http') ? img : BASE_URL + img
+                        return `    <image:image>\n      <image:loc>${escapeXml(imgUrl)}</image:loc>\n      <image:title>${escapeXml(titleStr)}</image:title>\n    </image:image>`
+                    }).join('\n')
+                }
+                
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + prodPath,
                     lastmod,
@@ -250,20 +259,28 @@ router.get('/news', (req, res) => {
         const activeLangs = getActiveLangs()
         const news = getAll(`SELECT slug, id, title_en, title, cover_image, created_at FROM news WHERE status = 1 ORDER BY id DESC`)
 
+        // Translation mapping for multilingual news images
+        const transRows = getAll('SELECT content_id, language_code, translated_text FROM translations WHERE content_type="news" AND content_field="title"') || []
+        const tMap = {}
+        for (const tr of transRows) {
+            if (!tMap[tr.language_code]) tMap[tr.language_code] = {}
+            if (tr.translated_text) tMap[tr.language_code][tr.content_id] = tr.translated_text
+        }
+
         const urls = []
         for (const n of news) {
             const slug = n.slug || n.id
             const newsPath = `/news/${slug}`
             const lastmod = toDateStr(n.created_at, now)
             
-            let imagesHTML = ''
-            if (n.cover_image) {
-                const titleStr = n.title_en || n.title || 'news article'
-                const imgUrl = String(n.cover_image).startsWith('http') ? n.cover_image : BASE_URL + n.cover_image
-                imagesHTML = `    <image:image>\n      <image:loc>${escapeXml(imgUrl)}</image:loc>\n      <image:title>${escapeXml(titleStr)}</image:title>\n    </image:image>\n`
-            }
-            
             for (const l of activeLangs) {
+                let imagesHTML = ''
+                if (n.cover_image) {
+                    const titleStr = (tMap[l.code] && tMap[l.code][n.id]) ? tMap[l.code][n.id] : (n.title_en || n.title || 'news article')
+                    const imgUrl = String(n.cover_image).startsWith('http') ? n.cover_image : BASE_URL + n.cover_image
+                    imagesHTML = `    <image:image>\n      <image:loc>${escapeXml(imgUrl)}</image:loc>\n      <image:title>${escapeXml(titleStr)}</image:title>\n    </image:image>\n`
+                }
+                
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + newsPath,
                     lastmod,
