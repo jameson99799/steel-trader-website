@@ -263,16 +263,28 @@ const getYoutubeEmbedUrl = (url, autoplay) => {
 
 async function loadPageData() {
   try {
+    hero.value = await api.getHero()
     const productsRes = await api.getProducts({ featured: '1', limit: 12 })
     featuredProducts.value = productsRes.data
     const tree = await api.getCategoryTree()
     categories.value = tree.slice(0, 6)
+    const [textsRes, companyRes] = await Promise.all([
+      api.getPageTexts(),
+      api.getCompany()
+    ])
+    pageTexts.value = textsRes
+    company.value = companyRes
   } catch (e) {
     console.error(e)
   }
 }
 
 onMounted(loadPageData)
+
+// Re-fetch hero when language changes so stat labels update immediately
+watch(lang, () => {
+  api.getHero().then(data => { hero.value = data }).catch(() => {})
+})
 
 </script>
 
