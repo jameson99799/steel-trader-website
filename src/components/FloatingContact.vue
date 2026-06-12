@@ -11,8 +11,9 @@
     <div class="panel-header">
       <span>Contact Us</span>
       <button class="minimize-btn" @click.stop="isMinimized = true" aria-label="Minimize" title="Minimize">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="5" y1="12" x2="19" y2="12"></line>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
         </svg>
       </button>
     </div>
@@ -209,18 +210,18 @@ onUnmounted(() => {
 .minimize-btn {
   background: transparent;
   border: none;
-  color: white;
+  color: #ef4444; /* Bright Red */
   cursor: pointer;
   padding: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.8;
-  transition: opacity 0.2s, transform 0.2s;
+  opacity: 1;
+  transition: all 0.2s ease;
 }
 .minimize-btn:hover {
-  opacity: 1;
-  transform: scale(1.1);
+  color: #f87171;
+  transform: scale(1.15);
 }
 .minimize-btn svg {
   width: 16px;
