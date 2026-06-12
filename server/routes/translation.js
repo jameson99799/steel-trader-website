@@ -190,11 +190,12 @@ router.post('/models', authMiddleware, async (req, res) => {
     const apiUrl = baseApiUrl + '/models'
     const apiKey = (req.body.api_key && !req.body.api_key.includes('****')) ? req.body.api_key : (s?.api_key || '')
     if (!apiKey) return res.status(400).json({ error: 'API key not configured' })
+    const defaultModels = ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo', 'gpt-4', 'claude-3-5-sonnet-20240620', 'claude-3-opus-20240229', 'claude-3-haiku-20240307', 'gemini-1.5-pro', 'gemini-1.5-flash', 'deepseek-chat', 'deepseek-coder']
     try {
         const result = await httpRequest(apiUrl, {
             headers: { 'Authorization': `Bearer ${apiKey}` }
         })
-        if (result.status !== 200) return res.status(502).json({ error: `AI API ${result.status}: ${JSON.stringify(result.body)}` })
+        if (result.status !== 200) return res.json({ models: defaultModels })
         let body = result.body
         if (typeof body === 'string') {
             try { body = JSON.parse(body) } catch(e) {}
@@ -202,9 +203,9 @@ router.post('/models', authMiddleware, async (req, res) => {
         let modelsList = body?.data || body || []
         if (!Array.isArray(modelsList) && Array.isArray(body?.models)) modelsList = body.models
         const models = (Array.isArray(modelsList) ? modelsList : []).map(m => m.id || m).filter(Boolean).sort()
-        res.json({ models })
+        res.json({ models: models.length > 0 ? models : defaultModels })
     } catch (e) {
-        res.status(500).json({ error: e.message })
+        res.json({ models: defaultModels })
     }
 })
 
