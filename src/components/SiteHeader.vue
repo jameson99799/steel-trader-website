@@ -294,7 +294,9 @@ onMounted(async () => {
       api.getNewsCategories().catch(() => [])
     ])
     if (!window.__INITIAL_STATE__?.languages) {
-        multilingualEnabled.value = !!status?.multilingual_enabled
+        if (status) {
+          multilingualEnabled.value = !!status.enabled
+        }
         activeLanguages.value = langs || []
     }
     productCategories.value = pcats
