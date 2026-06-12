@@ -454,7 +454,16 @@ onUnmounted(() => {
   justify-content: center;
   position: relative;
   transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.chat-toggle::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  border-radius: 50%;
+  border: 4px solid rgba(37, 99, 235, 0.5);
   animation: pulse-ring 2s ease-out infinite;
+  z-index: -1;
 }
 
 .chat-toggle.has-logo {
@@ -462,6 +471,10 @@ onUnmounted(() => {
   border: 1px solid #e2e8f0;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   padding: 4px;
+}
+
+.chat-toggle.has-logo::before {
+  border: 4px solid rgba(100, 116, 139, 0.3);
 }
 
 .chat-toggle.has-logo .chat-icon {
@@ -480,9 +493,9 @@ onUnmounted(() => {
 }
 
 @keyframes pulse-ring {
-  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
-  70% { box-shadow: 0 0 0 12px rgba(37, 99, 235, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+  0% { transform: scale(1); opacity: 0.8; }
+  70% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1.5); opacity: 0; }
 }
 
 .chat-toggle:hover {
