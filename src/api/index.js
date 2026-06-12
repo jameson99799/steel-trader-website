@@ -108,8 +108,12 @@ async function cachedGet(url) {
 
   const cached = readCache(fullUrl)
   if (cached) {
-    // Return cached data immediately, refresh in background
-    request(fullUrl).then(fresh => writeCache(fullUrl, fresh)).catch(() => { })
+    if (!inflightRequests.has(fullUrl)) {
+      const promise = request(fullUrl)
+        .then(fresh => { writeCache(fullUrl, fresh); inflightRequests.delete(fullUrl); return fresh })
+        .catch(() => { inflightRequests.delete(fullUrl) })
+      inflightRequests.set(fullUrl, promise)
+    }
     return cached
   }
 

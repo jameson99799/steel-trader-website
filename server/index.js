@@ -416,7 +416,25 @@ async function startServer() {
     if (NODE_ENV === 'production') {
       const distIndexPath = join(__dirname, '..', 'dist', 'index.html')
       let indexHtmlTemplate = ''
-      try { indexHtmlTemplate = readFileSync(distIndexPath, 'utf8') } catch (e) { console.error('Failed to read dist/index.html:', e) }
+      try { 
+        indexHtmlTemplate = readFileSync(distIndexPath, 'utf8')
+        // Inline render-blocking CSS
+        const assetsDir = join(__dirname, '..', 'dist', 'assets')
+        if (existsSync(assetsDir)) {
+          readdirSync(assetsDir).forEach(file => {
+            if (file.endsWith('.css')) {
+              // Only inline CSS that actually blocks render (exists as a <link> in HTML)
+              const linkRegex = new RegExp(`<link[^>]*href="/assets/${file}"[^>]*>`)
+              if (linkRegex.test(indexHtmlTemplate)) {
+                const cssContent = readFileSync(join(assetsDir, file), 'utf8')
+                indexHtmlTemplate = indexHtmlTemplate.replace(linkRegex, `<style>${cssContent}</style>`)
+              }
+            }
+          })
+        }
+      } catch (e) {
+        console.error('Failed to read or process dist/index.html:', e)
+      }
 
       // ── Server-side 301 redirects for bare paths (no language prefix) ───────
       // This replaces client-side redirects in Vue Router, making them proper 301s
