@@ -112,10 +112,21 @@ async function cachedGet(url) {
     request(fullUrl).then(fresh => writeCache(fullUrl, fresh)).catch(() => { })
     return cached
   }
-  // No cache: fetch and cache
-  const data = await request(fullUrl)
-  writeCache(fullUrl, data)
-  return data
+
+  // No cache: fetch and cache (deduplicating concurrent requests)
+  const promise = request(fullUrl)
+    .then(data => {
+      writeCache(fullUrl, data)
+      inflightRequests.delete(fullUrl)
+      return data
+    })
+    .catch(e => {
+      inflightRequests.delete(fullUrl)
+      throw e
+    })
+
+  inflightRequests.set(fullUrl, promise)
+  return promise
 }
 
 // ─── API methods ──────────────────────────────────────────────────────────────
