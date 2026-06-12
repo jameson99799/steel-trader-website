@@ -196,22 +196,26 @@ async function callAI(settings, messages, maxTokens = 8000) {
     const limit = parseInt(settings.rpm_limit) || 0
     if (limit > 0) {
         const channelKey = `${settings.api_key}_${settings.api_url}`
-        let tracker = channelRpmTrackers.get(channelKey)
-        const now = Date.now()
-        if (!tracker || (now - tracker.minuteStart) >= 60000) {
-            tracker = { minuteStart: now, count: 0 }
-            channelRpmTrackers.set(channelKey, tracker)
-        }
-        if (tracker.count >= limit) {
+        while (true) {
+            let tracker = channelRpmTrackers.get(channelKey)
+            const now = Date.now()
+            if (!tracker || (now - tracker.minuteStart) >= 60000) {
+                tracker = { minuteStart: now, count: 0 }
+                channelRpmTrackers.set(channelKey, tracker)
+            }
+            if (tracker.count < limit) {
+                tracker.count++
+                break
+            }
             const waitTime = 60000 - (now - tracker.minuteStart)
-            console.log(`[RateLimit] API 请求已达该渠道阈值 (${limit}次/分钟)，低功耗休眠排队中... 需等待 ${Math.round(waitTime/1000)} 秒`)
-            await new Promise(resolve => setTimeout(resolve, waitTime))
-            // Refresh tracker block after waking up
-            tracker.minuteStart = Date.now()
-            tracker.count = 0
-            channelRpmTrackers.set(channelKey, tracker)
+            if (waitTime > 0) {
+                console.log(`[RateLimit] API 请求已达该渠道阈值 (${limit}次/分钟)，休眠 ${Math.round(waitTime/1000)} 秒后重新检查...`)
+                await new Promise(resolve => setTimeout(resolve, waitTime + 50))
+            } else {
+                tracker.minuteStart = Date.now()
+                tracker.count = 0
+            }
         }
-        tracker.count++
     }
 
     const apiUrl = (settings.api_url || 'https://api.openai.com/v1').replace(/\/$/, '') + '/chat/completions'
@@ -993,8 +997,11 @@ ${strictRule}
                     { role: 'user', content: numberedInput }
                 ], 16000)
 
-                // Parse numbered response: "1. text\n2. text\n..."
-                const lines = aiContent.split('\n').map(l => l.trim()).filter(Boolean)
+                // Clean DeepSeek R1 <think> blocks and markdown ticks, then split
+                let cleanedContent = aiContent.replace(/<think>[\s\S]*?<\/think>/gi, '')
+                cleanedContent = cleanedContent.replace(/```[a-z]*\n/gi, '').replace(/```/g, '')
+                
+                const lines = cleanedContent.split('\n').map(l => l.trim()).filter(Boolean)
                 const translatedArr = []
                 for (const line of lines) {
                     const m = line.match(/^\d+\.\s+(.+)$/)
