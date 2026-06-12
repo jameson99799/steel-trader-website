@@ -259,16 +259,14 @@ async function runJobInBackground(jobId) {
                 const ok = results.length
                 const errs = errors.length
 
-                okTotal += ok
                 if (errs > 0 && ok === 0) {
-                    errTotal += errs
                     const errMsg = errors[0]?.error || '未知错误'
                     throw new Error(errMsg)
                 } else if (errs > 0) {
-                    errTotal += errs
                     const errMsg = `部分成功: ${ok}成功, ${errs}错误`
                     throw new Error(errMsg)
                 } else if (ok > 0) {
+                    okTotal++
                     jobLog(jobId, 'ok', `${item.itemName}翻译${langRow.name}语言成功`)
                     run('UPDATE languages SET ai_translated=1 WHERE code=?', [item.targetLang])
                 } else {
@@ -524,9 +522,9 @@ router.post('/:id/retry-failed', authMiddleware, async (req, res) => {
         }
 
         const result = run(
-            `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items, is_retry)
-             VALUES ('pending', ?, '[]', ?, 1)`,
-            [parentJob.target_lang, JSON.stringify(failedItems)]
+            `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items, is_retry, concurrency, prompt_id)
+             VALUES ('pending', ?, '[]', ?, 1, ?, ?)`,
+            [parentJob.target_lang, JSON.stringify(failedItems), parentJob.concurrency || 1, parentJob.prompt_id || null]
         )
         const jobId = result.lastInsertRowid
 
