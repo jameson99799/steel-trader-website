@@ -234,12 +234,14 @@ async function runJobInBackground(jobId) {
                 continue
             }
 
-            // Determine if we should skip already translated fields (to save tokens) or force full re-translation
-            const isExplicitManual = explicitItems && explicitItems.length > 0 && !job.is_retry && !(item._retryCount > 0)
+            // Determine if we should skip already translated fields.
+            // As per user request: "Fresh translation commands should always re-translate everything.
+            // ONLY skip already translated strings if this is an automatic or manual retry."
+            const isRetry = job.is_retry || item._retryCount > 0
             
             let items = itemsRaw
             
-            if (!isExplicitManual) {
+            if (isRetry) {
                 const alreadyTranslated = getAll(
                     'SELECT content_field FROM translations WHERE language_code=? AND content_type=? AND content_id=?',
                     [item.targetLang, item.type, item.id]
