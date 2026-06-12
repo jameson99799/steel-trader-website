@@ -459,6 +459,20 @@ async function startServer() {
         const lang = langMatch ? langMatch[1] : 'en'
         const subPath = langMatch ? (langMatch[2] || '') : url
 
+        // ── Verify Language Prefix Validity ──
+        // To prevent Soft 404s and SEO duplicate content issues, we must ensure
+        // that if a two-letter prefix is detected, it actually exists in our supported languages.
+        const dbLangs = getAll('SELECT code FROM languages WHERE status=1') || []
+        const validLangCodes = new Set(dbLangs.map(l => l.code))
+        validLangCodes.add('en') // English is always valid as default
+        
+        // If a 2-letter language prefix was matched but it's NOT in our database, it's a dead link!
+        // Immediately trigger 404 to block Google from indexing garbage URLs like /xx/products
+        if (langMatch && !validLangCodes.has(lang)) {
+          isNotFound = true
+          matchedRoute = false
+        }
+
         // 301 Redirect old standalone paths to tabbed /news/ paths
         if (subPath === '/ral-colors' || subPath === '/ral-colors/') {
           return res.redirect(301, `/${lang}/news/ral-colors`)
@@ -653,11 +667,11 @@ async function startServer() {
                 .replace(/<h1[^>]*>[\s\S]*?<\/h1>/gi, '')
                 .replace(/<span[^>]*class=["\']?(hero-tip|replace-tip)["\']?[^>]*>.*?<\/span>/ig, '')
                 .replace(/👉\s*替换图提示：.*?(<\/p>|<br>|\n|$)/ig, '$1')
-                .replace(/\{\{email\}\}/g, company.email || '')
-                .replace(/\{\{phone\}\}/g, company.phone || '')
-                .replace(/\{\{whatsapp\}\}/g, company.whatsapp || '')
-                .replace(/\{\{whatsapp_link\}\}/g, waLink)
-                .replace(/\{\{company_name\}\}/g, companyNameTranslated)
+                .replace(/(%7B%7B|\{\{)email(%7D%7D|\}\})/gi, company.email || '')
+                .replace(/(%7B%7B|\{\{)phone(%7D%7D|\}\})/gi, company.phone || '')
+                .replace(/(%7B%7B|\{\{)whatsapp(%7D%7D|\}\})/gi, company.whatsapp || '')
+                .replace(/(%7B%7B|\{\{)whatsapp_link(%7D%7D|\}\})/gi, waLink)
+                .replace(/(%7B%7B|\{\{)company_name(%7D%7D|\}\})/gi, companyNameTranslated)
               detailHtml = formatSsrMailtoLinks(detailHtml, company.email || '')
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
               const hasFaqInDetail = /frequently asked|<h[23][^>]*>\\s*faq/i.test(detailHtml)
@@ -749,11 +763,11 @@ async function startServer() {
                 .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
                 .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
                 .replace(/<h1[^>]*>[\s\S]*?<\/h1>/gi, '')
-                .replace(/\{\{email\}\}/g, company.email || '')
-                .replace(/\{\{phone\}\}/g, company.phone || company.whatsapp || '')
-                .replace(/\{\{whatsapp_link\}\}/g, whatsappLink)
-                .replace(/\{\{whatsapp\}\}/g, company.whatsapp || '')
-                .replace(/\{\{company_name\}\}/g, companyNameTranslated)
+                .replace(/(%7B%7B|\{\{)email(%7D%7D|\}\})/gi, company.email || '')
+                .replace(/(%7B%7B|\{\{)phone(%7D%7D|\}\})/gi, company.phone || company.whatsapp || '')
+                .replace(/(%7B%7B|\{\{)whatsapp_link(%7D%7D|\}\})/gi, whatsappLink)
+                .replace(/(%7B%7B|\{\{)whatsapp(%7D%7D|\}\})/gi, company.whatsapp || '')
+                .replace(/(%7B%7B|\{\{)company_name(%7D%7D|\}\})/gi, companyNameTranslated)
               
               articleBody = formatSsrMailtoLinks(articleBody, company.email || '')
 
