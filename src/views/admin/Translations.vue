@@ -857,7 +857,11 @@ const saving = ref(false)
 const savedMsg = ref(false)
 
 const selectedLang = ref('')
-const selectedPromptId = ref('')
+const selectedPromptId = ref(localStorage.getItem('last_selected_prompt_id') || '')
+import { watch } from 'vue'
+watch(selectedPromptId, (newVal) => {
+  localStorage.setItem('last_selected_prompt_id', newVal || '')
+})
 const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero', 'ui_texts_static', 'ral_colors', 'roofing_categories', 'factory', 'futures', 'chat']
 const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字', ral_colors: '🎨 RAL颜色', roofing_categories: '🏠 瓦型分组', factory: '🏭 工厂展示', futures: '📈 期货行情', chat: '💬 在线客服' }
 const selectedPages = ref([...allPages])
