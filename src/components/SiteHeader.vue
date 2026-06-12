@@ -317,7 +317,6 @@ onUnmounted(() => {
   position: sticky;
   top: 0;
   z-index: 100;
-  min-height: 111px;
 }
 
 /* Language Switcher Dropdown */
@@ -397,6 +396,8 @@ onUnmounted(() => {
   color: var(--white);
   padding: 10px 0;
   font-size: 0.95rem;
+  height: 42px; /* Strict fixed height */
+  contain: layout;
 }
 
 .header-top-content {
@@ -512,7 +513,8 @@ onUnmounted(() => {
 .header-main {
   background: var(--white);
   padding: 16px 0;
-  min-height: 72px; /* prevent CLS */
+  height: 92px; /* Strict fixed height */
+  contain: layout;
 }
 
 .header-main-content {

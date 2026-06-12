@@ -7,6 +7,7 @@ import rateLimit from 'express-rate-limit'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { readFileSync, existsSync, unlinkSync, readdirSync } from 'fs'
+import { parse } from 'node-html-parser'
 import sharp from 'sharp'
 
 import { initDb, getAll, getOne, run } from './db.js'
@@ -432,7 +433,7 @@ async function startServer() {
       let indexHtmlTemplate = ''
       try { 
         indexHtmlTemplate = readFileSync(distIndexPath, 'utf8')
-        // Bulletproof CSS Inlining: Read all CSS chunks, inject them into head, and strip all standard stylesheet links
+        // Bulletproof CSS Inlining via DOM Parser
         const assetsDir = join(__dirname, '..', 'dist', 'assets')
         if (existsSync(assetsDir)) {
           let injectedCss = ''
@@ -447,10 +448,18 @@ async function startServer() {
             }
           })
           if (injectedCss) {
-            // Remove the original <link rel="stylesheet"> entirely
-            indexHtmlTemplate = indexHtmlTemplate.replace(/<link[^>]*rel="stylesheet"[^>]*>/gi, '')
-            // Inject styles instantly before </head> closes to prioritize parser execution
-            indexHtmlTemplate = indexHtmlTemplate.replace('</head>', `${injectedCss}</head>`)
+            // Parse HTML, physically remove link tags, and inject style tags
+            const root = parse(indexHtmlTemplate)
+            root.querySelectorAll('link').forEach(node => {
+              if (node.getAttribute('rel') === 'stylesheet' || node.getAttribute('href')?.endsWith('.css')) {
+                node.remove()
+              }
+            })
+            const head = root.querySelector('head')
+            if (head) {
+              head.insertAdjacentHTML('beforeend', injectedCss)
+            }
+            indexHtmlTemplate = root.toString()
           }
         }
       } catch (e) {
