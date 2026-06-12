@@ -1,12 +1,12 @@
 <template>
   <div class="site-layout">
-    <SiteHeader :key="'header-' + lang" />
+    <SiteHeader />
     <main class="site-main">
-      <router-view :key="lang" />
+      <router-view :key="$route.fullPath" />
     </main>
-    <SiteFooter :key="'footer-' + lang" />
-    <FloatingContact :key="'float-' + lang" />
-    <LiveChatWidget :key="'chat-' + lang" />
+    <SiteFooter />
+    <FloatingContact />
+    <LiveChatWidget />
   </div>
 </template>
 
