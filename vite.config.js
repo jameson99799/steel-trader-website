@@ -17,8 +17,8 @@ export default defineConfig({
     }
   },
   build: {
-    // Rely on Vite's native async chunking for optimal PageSpeed scoring
-    cssCodeSplit: true,
+    // Combine all CSS into one file to prevent Vite from dynamically injecting CSS via JavaScript
+    cssCodeSplit: false,
     // Enable minification with terser for better tree-shaking
     minify: 'terser',
     terserOptions: {

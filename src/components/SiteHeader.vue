@@ -988,4 +988,18 @@ onUnmounted(() => {
     gap: 4px;
   }
 }
+/* Fix CLS strictly on Desktop */
+@media (min-width: 1025px) {
+  .site-header {
+    contain: layout;
+  }
+  .header-main {
+    height: 92px !important;
+    contain: layout size;
+  }
+  .header-top {
+    height: 44px !important;
+    contain: layout size;
+  }
+}
 </style>

@@ -7,7 +7,6 @@ import rateLimit from 'express-rate-limit'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { readFileSync, existsSync, unlinkSync, readdirSync } from 'fs'
-import { parse } from 'node-html-parser'
 import sharp from 'sharp'
 
 import { initDb, getAll, getOne, run } from './db.js'
@@ -448,20 +447,10 @@ async function startServer() {
             }
           })
           if (injectedCss) {
-            // Parse HTML, physically remove link tags, and inject style tags
-            const root = parse(indexHtmlTemplate)
-            root.querySelectorAll('link').forEach(node => {
-              if (node.getAttribute('rel') === 'stylesheet' || node.getAttribute('href')?.endsWith('.css')) {
-                // Defer loading to bypass Lighthouse render-blocking, but KEEP it in DOM so Vite won't dynamically re-inject it!
-                node.setAttribute('media', 'print')
-                node.setAttribute('onload', "this.media='all'")
-              }
-            })
-            const head = root.querySelector('head')
-            if (head) {
-              head.insertAdjacentHTML('beforeend', injectedCss)
-            }
-            indexHtmlTemplate = root.toString()
+            // Remove DOM-blocking CSS links completely with rigorous regex
+            indexHtmlTemplate = indexHtmlTemplate.replace(/<link[^>]+(?:rel="stylesheet"|href="[^"]+\.css")[^>]*>/gi, '')
+            // Safely inject styles before final head closing
+            indexHtmlTemplate = indexHtmlTemplate.replace('</head>', `${injectedCss}</head>`)
           }
         }
       } catch (e) {
