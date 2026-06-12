@@ -309,29 +309,43 @@ async function startServer() {
     // ── Next-Gen Image Auto-Conversion (WebP) ──
     app.use('/uploads', async (req, res, next) => {
       if (req.method !== 'GET') return next()
-      const extMatch = req.path.match(/\.(jpg|jpeg|png)$/i)
+      const extMatch = req.path.match(/\.(jpg|jpeg|png|webp)$/i)
       if (!extMatch) return next()
 
-      const accept = req.headers.accept || ''
-      if (!accept.includes('image/webp')) return next()
-
-      const originalPath = join(__dirname, '..', 'uploads', req.path)
-      const webpPath = originalPath + '.webp'
-
+      let originalPath = join(__dirname, '..', 'uploads', req.path)
       if (!existsSync(originalPath)) return next()
 
+      const targetWidth = parseInt(req.query.w, 10)
+      
       try {
-        if (!existsSync(webpPath)) {
-          console.log(`[Images] Compressing ${req.path} to WebP format...`)
-          await sharp(originalPath).webp({ quality: 80, effort: 4 }).toFile(webpPath)
+        // Handle explicit width resizing (like ?w=500)
+        if (targetWidth && targetWidth > 0 && targetWidth <= 2500) {
+          const cachedResizedPath = originalPath + `_w${targetWidth}.webp`
+          if (!existsSync(cachedResizedPath)) {
+            let s = sharp(originalPath)
+            // Fix transparency loss/black backgrounds for PNG/GIF -> WebP conversions
+            if (!req.path.match(/\.webp$/i)) s = s.ensureAlpha()
+            await s.resize(targetWidth).webp({ quality: 75, effort: 4 }).toFile(cachedResizedPath)
+          }
+          res.setHeader('Content-Type', 'image/webp')
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+          return res.sendFile(cachedResizedPath)
         }
-        res.setHeader('Content-Type', 'image/webp')
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
-        return res.sendFile(webpPath)
+
+        // Standard next-gen auto conversion if browser simply requested jpg/png natively
+        if (!req.path.match(/\.webp$/i) && (req.headers.accept || '').includes('image/webp')) {
+          const webpPath = originalPath + '.webp'
+          if (!existsSync(webpPath)) {
+            await sharp(originalPath).ensureAlpha().webp({ quality: 80, effort: 4 }).toFile(webpPath)
+          }
+          res.setHeader('Content-Type', 'image/webp')
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+          return res.sendFile(webpPath)
+        }
       } catch (e) {
-        console.error('WebP conversion failed for', req.path, e)
-        next()
+        console.error('Image processing failed for', req.path, e)
       }
+      next()
     })
 
     // 静态文件

@@ -28,7 +28,8 @@ function readCache(url) {
     const raw = localStorage.getItem(cacheKey(url))
     if (!raw) return null
     const { data, ts } = JSON.parse(raw)
-    if (Date.now() - ts < CACHE_TTL) return data
+    const age = Date.now() - ts
+    if (age < CACHE_TTL) return { data, age }
     localStorage.removeItem(cacheKey(url))
   } catch { }
   return null
@@ -108,13 +109,14 @@ async function cachedGet(url) {
 
   const cached = readCache(fullUrl)
   if (cached) {
-    if (!inflightRequests.has(fullUrl)) {
+    // Only refresh in background if cache is older than 30 seconds (prevent network choke)
+    if (cached.age > 30000 && !inflightRequests.has(fullUrl)) {
       const promise = request(fullUrl)
         .then(fresh => { writeCache(fullUrl, fresh); inflightRequests.delete(fullUrl); return fresh })
         .catch(() => { inflightRequests.delete(fullUrl) })
       inflightRequests.set(fullUrl, promise)
     }
-    return cached
+    return cached.data
   }
 
   // No cache: fetch and cache (deduplicating concurrent requests)

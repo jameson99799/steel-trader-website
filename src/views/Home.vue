@@ -65,7 +65,7 @@
           >
             <div class="product-image">
               <img
-                :src="product.images?.split(',')[0] || '/placeholder.svg'"
+                :src="(product.images?.split(',')[0] || '/placeholder.svg') + (product.images?.split(',')[0] ? '?w=400' : '')"
                 :alt="localizedValue(product, 'name')"
                 :loading="index < 3 ? 'eager' : 'lazy'"
                 :fetchpriority="index < 3 ? 'high' : 'auto'"
@@ -112,7 +112,7 @@
             class="category-card"
           >
             <div class="category-image">
-              <img :src="cat.image || '/placeholder.svg'" :alt="localizedValue(cat, 'name')" loading="lazy" decoding="async" width="400" height="300" />
+              <img :src="(cat.image || '/placeholder.svg') + (cat.image ? '?w=400' : '')" :alt="localizedValue(cat, 'name')" loading="lazy" decoding="async" width="400" height="300" />
               <div class="category-overlay">
                 <div class="category-icon">
                   <svg viewBox="0 0 20 20" fill="currentColor">
@@ -263,29 +263,16 @@ const getYoutubeEmbedUrl = (url, autoplay) => {
 
 async function loadPageData() {
   try {
-    // Always fetch hero with ?lang= param so translated stat labels are applied
-    hero.value = await api.getHero()
     const productsRes = await api.getProducts({ featured: '1', limit: 12 })
     featuredProducts.value = productsRes.data
     const tree = await api.getCategoryTree()
     categories.value = tree.slice(0, 6)
-    const [textsRes, companyRes] = await Promise.all([
-      api.getPageTexts(),
-      api.getCompany()
-    ])
-    pageTexts.value = textsRes
-    company.value = companyRes
   } catch (e) {
     console.error(e)
   }
 }
 
 onMounted(loadPageData)
-
-// Re-fetch hero when language changes so stat labels update immediately
-watch(lang, () => {
-  api.getHero().then(data => { hero.value = data }).catch(() => {})
-})
 
 </script>
 
