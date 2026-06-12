@@ -1234,6 +1234,20 @@ async function startServer() {
         delete lightweightCompany.history_content;
         delete lightweightCompany.history_content_en;
 
+        // Server side fetch for grids to obliterate CLS
+        let ssrFeaturedProducts = [], ssrCategories = [];
+        try {
+          ssrFeaturedProducts = getAll('SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description, p.description_en, p.is_featured, p.status, p.sort_order, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.is_featured = 1 AND p.status = 1 ORDER BY p.sort_order DESC, p.id DESC LIMIT 12') || [];
+          
+          const rawCats = getAll('SELECT * FROM categories ORDER BY sort_order, id') || [];
+          const productCounts = getAll('SELECT category_id, COUNT(*) as count FROM products WHERE status = 1 GROUP BY category_id') || [];
+          const countMap = {}; productCounts.forEach(pc => { countMap[pc.category_id] = pc.count; });
+          
+          ssrCategories = rawCats.filter(c => c.parent_id === 0).map(c => ({
+            ...c, product_count: countMap[c.id] || 0
+          })).slice(0, 6);
+        } catch(e) {}
+
         const initialState = {
           hero: getOne('SELECT * FROM hero_content WHERE id = 1') || {},
           company: lightweightCompany,
@@ -1242,7 +1256,9 @@ async function startServer() {
           ssrProduct: req.ssrProduct || null,
           seoSettings: seoSettings,
           languages: getAll('SELECT * FROM languages WHERE status=1 ORDER BY sort_order, code') || [],
-          translationSettings: getOne('SELECT enabled, multilingual_enabled FROM translation_settings WHERE id = 1') || {}
+          translationSettings: getOne('SELECT enabled, multilingual_enabled FROM translation_settings WHERE id = 1') || {},
+          featuredProducts: ssrFeaturedProducts,
+          categories: ssrCategories
         }
         const stateTag = `<script>window.__INITIAL_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')}</script>`
         html = html.replace('</head>', `${canonicalTag}\n  ${extraMeta}\n  ${extraSchemas}\n  ${stateTag}\n</head>`)

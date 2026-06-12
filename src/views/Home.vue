@@ -235,8 +235,8 @@ import api from '../api'
 
 const { t, localizedValue, langPath, lang } = useLang()
 const hero = ref(window.__INITIAL_STATE__?.hero || {})
-const featuredProducts = ref([])
-const categories = ref([])
+const featuredProducts = ref(window.__INITIAL_STATE__?.featuredProducts || [])
+const categories = ref(window.__INITIAL_STATE__?.categories || [])
 const pageTexts = ref({})
 const company = ref({})
 
@@ -263,17 +263,27 @@ const getYoutubeEmbedUrl = (url, autoplay) => {
 
 async function loadPageData() {
   try {
-    hero.value = await api.getHero()
-    const productsRes = await api.getProducts({ featured: '1', limit: 12 })
-    featuredProducts.value = productsRes.data
-    const tree = await api.getCategoryTree()
-    categories.value = tree.slice(0, 6)
-    const [textsRes, companyRes] = await Promise.all([
-      api.getPageTexts(),
-      api.getCompany()
-    ])
-    pageTexts.value = textsRes
-    company.value = companyRes
+    if (!hero.value.id) {
+      hero.value = await api.getHero()
+    }
+    if (!featuredProducts.value.length) {
+      const productsRes = await api.getProducts({ featured: '1', limit: 12 })
+      featuredProducts.value = productsRes.data
+    }
+    
+    if (!categories.value.length) {
+      const tree = await api.getCategoryTree()
+      categories.value = tree.slice(0, 6)
+    }
+    
+    if (!pageTexts.value.id || !company.value.id) {
+      const [textsRes, companyRes] = await Promise.all([
+        api.getPageTexts(),
+        api.getCompany()
+      ])
+      if (!pageTexts.value.id) pageTexts.value = textsRes
+      if (!company.value.id) company.value = companyRes
+    }
   } catch (e) {
     console.error(e)
   }
