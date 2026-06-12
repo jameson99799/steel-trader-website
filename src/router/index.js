@@ -1,8 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useLang } from '../composables/useLang'
 
+import Home from '../views/Home.vue'
+import Layout from '../views/Layout.vue'
+
 const publicRoutes = [
-  { path: '', name: 'Home', component: () => import('../views/Home.vue') },
+  { path: '', name: 'Home', component: Home },
   { path: 'products', name: 'Products', component: () => import('../views/Products.vue') },
   { path: 'products/category/:catSlug', name: 'ProductsCategory', component: () => import('../views/Products.vue') },
   { path: 'products/:slug', name: 'ProductDetail', component: () => import('../views/ProductDetail.vue') },
@@ -24,7 +27,7 @@ const routes = [
   // All public routes require language prefix: /en/products, /es/about, /zh/news, etc.
   {
     path: '/:lang([a-z]{2})',
-    component: () => import('../views/Layout.vue'),
+    component: Layout,
     children: publicRoutes
   },
   // Root redirects to /en/ (default language)

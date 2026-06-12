@@ -15,12 +15,12 @@ import { onMounted, watch, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import SiteHeader from '../components/SiteHeader.vue'
-import LiveChatWidget from '../components/LiveChatWidget.vue'
 import api from '../api'
 
 // Async load below-the-fold components to reduce Total Blocking Time
 const SiteFooter = defineAsyncComponent(() => import('../components/SiteFooter.vue'))
 const FloatingContact = defineAsyncComponent(() => import('../components/FloatingContact.vue'))
+const LiveChatWidget = defineAsyncComponent(() => import('../components/LiveChatWidget.vue'))
 
 const route = useRoute()
 const router = useRouter()
