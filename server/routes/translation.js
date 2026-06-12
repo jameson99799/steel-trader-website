@@ -945,6 +945,8 @@ ${strictRule}
                                                 upsertTranslation(targetLang, item.type, item.id, subField, origVal, trans)
                                                 results.push({ original: origVal.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: subField, itemName: item.itemName })
                                                 anySuccess = true
+                                            } else {
+                                                errors.push({ item: subField, error: 'Missing JSON translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
                                             }
                                         }
                                     } catch {}
@@ -954,6 +956,8 @@ ${strictRule}
                                         upsertTranslation(targetLang, item.type, item.id, realField, item.text, trans)
                                         results.push({ original: item.text.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
                                         anySuccess = true
+                                    } else {
+                                        errors.push({ item: item.field, error: 'Missing JSON translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
                                     }
                                 }
                             }

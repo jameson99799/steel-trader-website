@@ -225,12 +225,51 @@ async function runJobInBackground(jobId) {
             }
 
             const pageItems = PAGES[pageKey]()
-            const items = pageItems.filter(pi => String(pi.id) === String(item.id))
+            const itemsRaw = pageItems.filter(pi => String(pi.id) === String(item.id))
 
-            if (items.length === 0) {
+            if (itemsRaw.length === 0) {
                 processingItems.delete(item)
                 doneTotal++
                 updateJobProgress(jobId, { done_items: doneTotal, ok_items: okTotal, error_items: errTotal })
+                continue
+            }
+
+            // ONLY translate missing fields on retry
+            const alreadyTranslated = getAll(
+                'SELECT content_field FROM translations WHERE language_code=? AND content_type=? AND content_id=?',
+                [item.targetLang, item.type, item.id]
+            )
+            const translatedFieldsSet = new Set(alreadyTranslated.map(r => r.content_field))
+
+            const items = itemsRaw.map(pi => {
+                if (pi.combined) {
+                    try {
+                        const subObj = JSON.parse(pi.text)
+                        const remainingSubObj = {}
+                        let hasRemaining = false
+                        for (const [subField, val] of Object.entries(subObj)) {
+                            if (!translatedFieldsSet.has(subField)) {
+                                remainingSubObj[subField] = val
+                                hasRemaining = true
+                            }
+                        }
+                        if (!hasRemaining) return null
+                        return { ...pi, text: JSON.stringify(remainingSubObj) }
+                    } catch (e) {}
+                } else {
+                    const realField = pi.field.startsWith('name_NC_') || pi.field.startsWith('name_RC_') ? 'name' : pi.field
+                    if (translatedFieldsSet.has(realField)) return null
+                }
+                return pi
+            }).filter(Boolean)
+
+            if (items.length === 0) {
+                // Already fully translated!
+                okTotal++
+                processingItems.delete(item)
+                doneTotal++
+                updateJobProgress(jobId, { done_items: doneTotal, ok_items: okTotal, error_items: errTotal })
+                run('UPDATE languages SET ai_translated=1 WHERE code=?', [item.targetLang])
                 continue
             }
 
@@ -278,7 +317,7 @@ async function runJobInBackground(jobId) {
                     item._retryCount = (item._retryCount || 0) + 1
                     pendingItems.push(item) // put it back to queue
                     updateJobProgress(jobId, { auto_retried: 1 })
-                    jobLog(jobId, 'warn', `${item.itemName} 翻译失败（${(e.message || '').slice(0, 80)}），已加入重试队列`)
+                    jobLog(jobId, 'warn', `${item.itemName} 翻译 ${langRow.name} 失败（${(e.message || '').slice(0, 80)}），已加入重试队列`)
                     continue
                 }
 
