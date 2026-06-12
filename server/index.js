@@ -306,6 +306,34 @@ async function startServer() {
       }
     })
 
+    // ── Next-Gen Image Auto-Conversion (WebP) ──
+    app.use('/uploads', async (req, res, next) => {
+      if (req.method !== 'GET') return next()
+      const extMatch = req.path.match(/\.(jpg|jpeg|png)$/i)
+      if (!extMatch) return next()
+
+      const accept = req.headers.accept || ''
+      if (!accept.includes('image/webp')) return next()
+
+      const originalPath = join(__dirname, '..', 'uploads', req.path)
+      const webpPath = originalPath + '.webp'
+
+      if (!existsSync(originalPath)) return next()
+
+      try {
+        if (!existsSync(webpPath)) {
+          console.log(`[Images] Compressing ${req.path} to WebP format...`)
+          await sharp(originalPath).webp({ quality: 80, effort: 4 }).toFile(webpPath)
+        }
+        res.setHeader('Content-Type', 'image/webp')
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+        return res.sendFile(webpPath)
+      } catch (e) {
+        console.error('WebP conversion failed for', req.path, e)
+        next()
+      }
+    })
+
     // 静态文件
     app.use('/uploads', express.static(join(__dirname, '..', 'uploads'), {
       maxAge: '1y',
