@@ -327,9 +327,10 @@ async function initDb() {
   `)
 
 
-  // Migration: add default_model and is_image_default to ai_channels
+  // Migration: add default_model, is_image_default and rpm_limit to ai_channels
   try { db.exec("ALTER TABLE ai_channels ADD COLUMN default_model TEXT DEFAULT ''") } catch (e) { }
   try { db.exec("ALTER TABLE ai_channels ADD COLUMN is_image_default INTEGER DEFAULT 0") } catch (e) { }
+  try { db.exec("ALTER TABLE ai_channels ADD COLUMN rpm_limit INTEGER DEFAULT 0") } catch (e) { }
 
   // AI Generated Images table
   db.exec(`

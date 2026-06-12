@@ -15,6 +15,7 @@ function enhanceWithDefaultChannel(settings) {
     // Use channel's API url and key if translation_settings has defaults or empty
     if (ch.api_url) s.api_url = ch.api_url
     if (ch.api_key) s.api_key = ch.api_key
+    if (ch.rpm_limit !== undefined && ch.rpm_limit !== null) s.rpm_limit = ch.rpm_limit
     // Use channel's default_model, or first model in list
     if (ch.default_model) s.model_name = ch.default_model
     else {
@@ -193,18 +194,17 @@ const channelRpmTrackers = new Map() // key -> { minuteStart, count }
 
 async function callAI(settings, messages, maxTokens = 8000) {
     const limit = parseInt(settings.rpm_limit) || 0
-    const intervalWindow = (parseInt(settings.rpm_interval) || 60) * 1000
     if (limit > 0) {
         const channelKey = `${settings.api_key}_${settings.api_url}`
         let tracker = channelRpmTrackers.get(channelKey)
         const now = Date.now()
-        if (!tracker || (now - tracker.minuteStart) >= intervalWindow) {
+        if (!tracker || (now - tracker.minuteStart) >= 60000) {
             tracker = { minuteStart: now, count: 0 }
             channelRpmTrackers.set(channelKey, tracker)
         }
         if (tracker.count >= limit) {
-            const waitTime = intervalWindow - (now - tracker.minuteStart)
-            console.log(`[RateLimit] API 请求已达该渠道阈值 (${limit}次/${intervalWindow/1000}秒)，低功耗休眠排队中... 需等待 ${Math.round(waitTime/1000)} 秒`)
+            const waitTime = 60000 - (now - tracker.minuteStart)
+            console.log(`[RateLimit] API 请求已达该渠道阈值 (${limit}次/分钟)，低功耗休眠排队中... 需等待 ${Math.round(waitTime/1000)} 秒`)
             await new Promise(resolve => setTimeout(resolve, waitTime))
             // Refresh tracker block after waking up
             tracker.minuteStart = Date.now()

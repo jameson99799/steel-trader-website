@@ -39,6 +39,7 @@ function getAISettings() {
     if (ch) {
         if (ch.api_url) s.api_url = ch.api_url
         if (ch.api_key) s.api_key = ch.api_key
+        if (ch.rpm_limit !== undefined && ch.rpm_limit !== null) s.rpm_limit = ch.rpm_limit
         if (ch.default_model) s.model_name = ch.default_model
         else {
             const models = JSON.parse(ch.models || '[]')
@@ -53,18 +54,17 @@ const channelRpmTrackers = new Map() // key -> { minuteStart, count }
 
 async function callAI(settings, messages, maxTokens = 4000) {
     const limit = parseInt(settings.rpm_limit) || 0
-    const intervalWindow = (parseInt(settings.rpm_interval) || 60) * 1000
     if (limit > 0) {
         const channelKey = `${settings.api_key}_${settings.api_url}`
         let tracker = channelRpmTrackers.get(channelKey)
         const now = Date.now()
-        if (!tracker || (now - tracker.minuteStart) >= intervalWindow) {
+        if (!tracker || (now - tracker.minuteStart) >= 60000) {
             tracker = { minuteStart: now, count: 0 }
             channelRpmTrackers.set(channelKey, tracker)
         }
         if (tracker.count >= limit) {
-            const waitTime = intervalWindow - (now - tracker.minuteStart)
-            console.log(`[RateLimit/News] API 请求已达阈值 (${limit}次/${intervalWindow/1000}秒)，自动休眠排队中... 需等待 ${Math.round(waitTime/1000)} 秒`)
+            const waitTime = 60000 - (now - tracker.minuteStart)
+            console.log(`[RateLimit/News] API 请求已达阈值 (${limit}次/分钟)，自动休眠排队中... 需等待 ${Math.round(waitTime/1000)} 秒`)
             await new Promise(resolve => setTimeout(resolve, waitTime))
             tracker.minuteStart = Date.now()
             tracker.count = 0

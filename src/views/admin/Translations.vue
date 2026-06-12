@@ -53,6 +53,7 @@
                 <span v-else class="ch-no-model">未选择模型</span>
               </div>
               <div v-if="ch.default_model"><span class="ch-label">默认模型:</span> <span class="model-tag" style="background:#dcfce7;color:#166534">{{ ch.default_model }}</span></div>
+              <div v-if="ch.rpm_limit > 0"><span class="ch-label">频率限制:</span> {{ ch.rpm_limit }} 次 / 分钟</div>
             </div>
           </div>
         </div>
@@ -97,12 +98,28 @@
             <span v-for="m in channelForm.models" :key="m" class="model-tag removable" @click="removeModel(m)">{{ m }} ×</span>
           </div>
         </div>
-        <div class="form-group" v-if="channelForm.models.length">
-          <label>默认翻译模型</label>
-          <select v-model="channelForm.default_model" class="form-control">
-            <option value="">自动选择（使用列表第一个）</option>
-            <option v-for="m in channelForm.models" :key="m" :value="m">{{ m }}</option>
-          </select>
+        <div class="grid-2" v-if="channelForm.models.length">
+          <div class="form-group">
+            <label>默认翻译模型</label>
+            <select v-model="channelForm.default_model" class="form-control">
+              <option value="">自动选择（首个模型）</option>
+              <option v-for="m in channelForm.models" :key="m" :value="m">{{ m }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>API 请求频率限制</label>
+            <div style="display:flex;align-items:center;">
+              <input type="number" v-model.number="channelForm.rpm_limit" class="form-control" min="0" placeholder="0" style="width:100px;margin-right:8px" />
+              <span>次 / 分钟 (0为不限)</span>
+            </div>
+          </div>
+        </div>
+        <div class="form-group" v-if="!channelForm.models.length">
+          <label>API 请求频率限制</label>
+          <div style="display:flex;align-items:center;">
+            <input type="number" v-model.number="channelForm.rpm_limit" class="form-control" min="0" placeholder="0" style="width:100px;margin-right:8px" />
+            <span>次 / 分钟 (0为不限制频率)</span>
+          </div>
         </div>
         <div class="form-group">
           <label class="checkbox-label" style="display: block;">
@@ -185,18 +202,13 @@
     <!-- ── Rate Limit Settings ── -->
     <div class="card" style="margin-top:20px">
       <div class="card-body">
-        <h3 class="section-title">⏱️ AI 请求频率限制 (RPM)</h3>
-        <p class="page-desc">设置指定间隔时间内最多允许请求 AI 翻译接口的次数。如果超出限制，系统会自动挂起排队等待解封后再继续。如果您主动或被动切换了渠道，则不同渠道不会叠加累计次数。填写 <code>0</code> 表示不限制。</p>
+        <h3 class="section-title">⏱️ 全局 AI 请求频率限制 (RPM)</h3>
+        <p class="page-desc">如果在渠道配置中未单独设置频率限制，则会回退使用此处的全局默认限制（单位：次/分钟）。如果超出限制，系统会自动挂起排队等待下一分钟后再继续。填写 <code>0</code> 表示不限制。</p>
         <div class="form-group" style="max-width: 500px; margin-bottom: 0;">
           <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
-             <span>最多请求：</span>
+             <span>每分钟最多请求：</span>
              <input type="number" class="form-control" v-model.number="settings.rpm_limit" @change="saveSettings" min="0" placeholder="0" style="width:100px" />
              <span>次</span>
-          </div>
-          <div style="display:flex; gap:10px; align-items:center;">
-             <span>间隔时间：</span>
-             <input type="number" class="form-control" v-model.number="settings.rpm_interval" @change="saveSettings" min="1" placeholder="60" style="width:100px" />
-             <span>秒 (控制周期的时长，默认 60 秒即 1 分钟)</span>
           </div>
           <p style="font-size:12px; color:#10b981; margin-top:6px; margin-bottom:0;" v-if="savedMsg">✅ 已自动保存生效</p>
         </div>
@@ -742,8 +754,7 @@ const settings = reactive({
   model_name: 'gpt-3.5-turbo',
   multilingual_enabled: true,
   source_lang: 'en',
-  rpm_limit: 0,
-  rpm_interval: 60
+  rpm_limit: 0
 })
 
 // AI Channel CRUD
@@ -773,7 +784,7 @@ function addManualModel() {
 const fetchingChModels = ref(false)
 const savingChannel = ref(false)
 const channelForm = reactive({
-  name: '', api_url: 'https://api.openai.com/v1', api_key: '', models: [], is_default: false, default_model: ''
+  name: '', api_url: 'https://api.openai.com/v1', api_key: '', models: [], is_default: false, default_model: '', rpm_limit: 0
 })
 
 // Channel expand state — separate reactive to avoid recomputing the list
@@ -1081,7 +1092,6 @@ onMounted(async () => {
       settings.model_name = s.model_name || 'gpt-3.5-turbo'
       settings.multilingual_enabled = !!s.multilingual_enabled
       settings.rpm_limit = s.rpm_limit || 0
-      settings.rpm_interval = s.rpm_interval || 60
     }
     languages.value = langs || []
     await loadChannels()
@@ -1117,8 +1127,7 @@ const saveSettings = async () => {
       api_key: settings.api_key,
       model_name: settings.model_name,
       multilingual_enabled: settings.multilingual_enabled ? 1 : 0,
-      rpm_limit: settings.rpm_limit || 0,
-      rpm_interval: settings.rpm_interval || 60
+      rpm_limit: settings.rpm_limit || 0
     })
     savedMsg.value = true
     setTimeout(() => { savedMsg.value = false }, 3000)
@@ -1178,6 +1187,7 @@ function openChannelDialog(ch = null) {
     channelForm.is_default = !!ch.is_default
     channelForm.is_image_default = !!ch.is_image_default
     channelForm.default_model = ch.default_model || ''
+    channelForm.rpm_limit = ch.rpm_limit || 0
   } else {
     channelForm.name = ''
     channelForm.api_url = 'https://api.openai.com/v1'
@@ -1186,6 +1196,7 @@ function openChannelDialog(ch = null) {
     channelForm.is_default = channels.value.length === 0
     channelForm.is_image_default = channels.value.length === 0
     channelForm.default_model = ''
+    channelForm.rpm_limit = 0
   }
   showChannelDialog.value = true
 }
@@ -1234,7 +1245,7 @@ async function saveChannel() {
   if (!editingChannel.value && !channelForm.api_key) return alert('请填入 API 密钥')
   savingChannel.value = true
   try {
-    const body = { name: channelForm.name, api_url: channelForm.api_url, models: channelForm.models, is_default: channelForm.is_default, is_image_default: channelForm.is_image_default, default_model: channelForm.default_model }
+    const body = { name: channelForm.name, api_url: channelForm.api_url, models: channelForm.models, is_default: channelForm.is_default, is_image_default: channelForm.is_image_default, default_model: channelForm.default_model, rpm_limit: channelForm.rpm_limit }
     if (channelForm.api_key) body.api_key = channelForm.api_key
     const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') }
     if (editingChannel.value) {
