@@ -132,8 +132,16 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
-  scrollBehavior() {
-    return { top: 0 }
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    }
+    return new Promise((resolve) => {
+      // Delay scrolling until after browser paints to prevent Forced Synchronous Layout
+      setTimeout(() => {
+        resolve({ top: 0 })
+      }, 10) // 10ms is enough to let the rendering pipeline flush
+    })
   }
 })
 
