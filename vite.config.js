@@ -17,6 +17,8 @@ export default defineConfig({
     }
   },
   build: {
+    // Disable CSS code splitting to prevent Lighthouse mobile 3G simulation from timing out on small CSS chunk files
+    cssCodeSplit: false,
     // Enable minification with terser for better tree-shaking
     minify: 'terser',
     terserOptions: {
