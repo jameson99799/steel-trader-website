@@ -200,16 +200,24 @@ router.post('/upload', authMiddleware, upload.array('files', 50), async (req, re
     // Compress to WebP if sharp available
     if (sharp && !skipExts.includes(ext)) {
       try {
+        const isWebp = filename.toLowerCase().endsWith('.webp')
         const newFilename = filename.replace(/\.[^.]+$/, '.webp')
-        const newPath = join(uploadDir, newFilename)
+        const newPath = isWebp ? `${file.path}.tmp` : join(uploadDir, newFilename)
+
         const meta = await sharp(file.path)
           .rotate() // Auto-orient based on EXIF
           .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
-          .webp({ quality: 82, effort: 4 })
+          .webp({ quality: 75, effort: 5 })
           .toFile(newPath)
-        fs.unlinkSync(file.path)
-        filename = newFilename
-        filepath = `/uploads/${newFilename}`
+          
+        if (isWebp) {
+          fs.renameSync(newPath, file.path)
+        } else {
+          fs.unlinkSync(file.path)
+          filename = newFilename
+          filepath = `/uploads/${newFilename}`
+        }
+        
         width = meta.width
         height = meta.height
         filesize = meta.size
@@ -326,16 +334,23 @@ router.post('/:id/replace', authMiddleware, upload.single('file'), async (req, r
 
     if (sharp && !['.svg', '.gif', '.ico'].includes(ext)) {
       try {
+        const isWebp = filename.toLowerCase().endsWith('.webp')
         const newFilename = filename.replace(/\.[^.]+$/, '.webp')
-        const newPath = join(uploadDir, newFilename)
+        const newPath = isWebp ? `${req.file.path}.tmp` : join(uploadDir, newFilename)
+
         const meta = await sharp(req.file.path)
           .rotate() // Auto-orient based on EXIF
           .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
-          .webp({ quality: 82, effort: 4 })
+          .webp({ quality: 75, effort: 5 })
           .toFile(newPath)
-        fs.unlinkSync(req.file.path)
-        filename = newFilename
-        filepath = `/uploads/${newFilename}`
+          
+        if (isWebp) {
+          fs.renameSync(newPath, req.file.path)
+        } else {
+          fs.unlinkSync(req.file.path)
+          filename = newFilename
+          filepath = `/uploads/${newFilename}`
+        }
         width = meta.width; height = meta.height; filesize = meta.size
       } catch {}
     }

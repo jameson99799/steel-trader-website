@@ -71,19 +71,24 @@ export async function compressImage(req, res, next) {
 
   try {
     const originalPath = req.file.path
+    const isWebp = req.file.filename.toLowerCase().endsWith('.webp')
     const newFilename = req.file.filename.replace(/\.[^.]+$/, '.webp')
-    const newPath = join(uploadDir, newFilename)
+    const newPath = isWebp ? `${originalPath}.tmp` : join(uploadDir, newFilename)
 
     await sharp(originalPath)
       .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
-      .webp({ quality: 82, effort: 4 })
+      .webp({ quality: 75, effort: 5 })
       .toFile(newPath)
 
-    // Remove original, replace with webp
-    fs.unlinkSync(originalPath)
-    req.file.filename = newFilename
-    req.file.path = newPath
-    req.file.mimetype = 'image/webp'
+    if (isWebp) {
+      fs.renameSync(newPath, originalPath)
+    } else {
+      // Remove original, replace with webp
+      fs.unlinkSync(originalPath)
+      req.file.filename = newFilename
+      req.file.path = newPath
+      req.file.mimetype = 'image/webp'
+    }
   } catch (err) {
     // If sharp fails leave the original disk file as-is
     console.warn('sharp compress failed, using original:', err.message)
