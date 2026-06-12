@@ -234,34 +234,40 @@ async function runJobInBackground(jobId) {
                 continue
             }
 
-            // ONLY translate missing fields on retry
-            const alreadyTranslated = getAll(
-                'SELECT content_field FROM translations WHERE language_code=? AND content_type=? AND content_id=?',
-                [item.targetLang, item.type, item.id]
-            )
-            const translatedFieldsSet = new Set(alreadyTranslated.map(r => r.content_field))
-
-            const items = itemsRaw.map(pi => {
-                if (pi.combined) {
-                    try {
-                        const subObj = JSON.parse(pi.text)
-                        const remainingSubObj = {}
-                        let hasRemaining = false
-                        for (const [subField, val] of Object.entries(subObj)) {
-                            if (!translatedFieldsSet.has(subField)) {
-                                remainingSubObj[subField] = val
-                                hasRemaining = true
+            // Determine if we should skip already translated fields (to save tokens) or force full re-translation
+            const isExplicitManual = explicitItems && explicitItems.length > 0 && !job.is_retry && !(item._retryCount > 0)
+            
+            let items = itemsRaw
+            
+            if (!isExplicitManual) {
+                const alreadyTranslated = getAll(
+                    'SELECT content_field FROM translations WHERE language_code=? AND content_type=? AND content_id=?',
+                    [item.targetLang, item.type, item.id]
+                )
+                const translatedFieldsSet = new Set(alreadyTranslated.map(r => r.content_field))
+    
+                items = itemsRaw.map(pi => {
+                    if (pi.combined) {
+                        try {
+                            const subObj = JSON.parse(pi.text)
+                            const remainingSubObj = {}
+                            let hasRemaining = false
+                            for (const [subField, val] of Object.entries(subObj)) {
+                                if (!translatedFieldsSet.has(subField)) {
+                                    remainingSubObj[subField] = val
+                                    hasRemaining = true
+                                }
                             }
-                        }
-                        if (!hasRemaining) return null
-                        return { ...pi, text: JSON.stringify(remainingSubObj) }
-                    } catch (e) {}
-                } else {
-                    const realField = pi.field.startsWith('name_NC_') || pi.field.startsWith('name_RC_') ? 'name' : pi.field
-                    if (translatedFieldsSet.has(realField)) return null
-                }
-                return pi
-            }).filter(Boolean)
+                            if (!hasRemaining) return null
+                            return { ...pi, text: JSON.stringify(remainingSubObj) }
+                        } catch (e) {}
+                    } else {
+                        const realField = pi.field.startsWith('name_NC_') || pi.field.startsWith('name_RC_') ? 'name' : pi.field
+                        if (translatedFieldsSet.has(realField)) return null
+                    }
+                    return pi
+                }).filter(Boolean)
+            }
 
             if (items.length === 0) {
                 // Already fully translated!
