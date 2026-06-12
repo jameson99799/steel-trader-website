@@ -1278,6 +1278,7 @@ Requirements:
   `)
   // Index for fast per-job log retrieval
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tjl_job_id ON translation_job_logs(job_id)') } catch (e) { }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tjl_job_id_id ON translation_job_logs(job_id, id)') } catch (e) { }
   // Migrate: add explicit items column for retry jobs that target specific items
   try { db.exec("ALTER TABLE translation_jobs ADD COLUMN explicit_items TEXT DEFAULT '[]'") } catch (e) { }
   // Migrate: add concurrency and pending_items

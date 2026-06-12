@@ -949,11 +949,20 @@ function stopJobPolling() {
   if (jobPollTimer) { clearInterval(jobPollTimer); jobPollTimer = null }
 }
 
+let lastLogId = 0
+let isPolling = false
+
 async function pollJobStatus(jobId) {
+  if (isPolling) return
+  isPolling = true
   try {
     const res = await api.getTranslationJobLogsSince(jobId, lastLogId)
     if (res.logs?.length) {
       activeJobLogs.value.push(...res.logs)
+      // Cap log array to prevent UI DOM freezing on huge tasks
+      if (activeJobLogs.value.length > 2000) {
+         activeJobLogs.value = activeJobLogs.value.slice(-2000)
+      }
       lastLogId = res.logs[res.logs.length - 1].id
       // Auto-scroll log panel
       await nextTick()
@@ -969,6 +978,9 @@ async function pollJobStatus(jobId) {
       }
     }
   } catch (e) { /* silent */ }
+  finally {
+    isPolling = false
+  }
 }
 
 async function viewJobLogs(jobId) {

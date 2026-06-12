@@ -415,14 +415,16 @@ router.get('/active', authMiddleware, (req, res) => {
 // GET /translation-jobs/:id — get job detail + logs
 router.get('/:id', authMiddleware, (req, res) => {
     try {
-        const job = getOne('SELECT * FROM translation_jobs WHERE id=?', [req.params.id])
+        const jobId = parseInt(req.params.id)
+        const job = getOne('SELECT * FROM translation_jobs WHERE id=?', [jobId])
         if (!job) return res.status(404).json({ error: 'Job not found' })
 
-        // Get last 1000 log lines for this job
+        // Limit to 300 initial logs to prevent UI freeze and DB slowdown
         const logs = getAll(
-            'SELECT id, level, message, created_at FROM translation_job_logs WHERE job_id=? ORDER BY id ASC LIMIT 1000',
+            'SELECT id, level, message, created_at FROM translation_job_logs WHERE job_id=? ORDER BY id DESC LIMIT 300',
             [job.id]
         )
+        logs.reverse()
 
         res.json({
             ...job,
@@ -439,7 +441,8 @@ router.get('/:id', authMiddleware, (req, res) => {
 // GET /translation-jobs/:id/logs-since/:logId — poll for new logs since last seen log id
 router.get('/:id/logs-since/:logId', authMiddleware, (req, res) => {
     try {
-        const { id, logId } = req.params
+        const id = parseInt(req.params.id)
+        const logId = parseInt(req.params.logId)
         const logs = getAll(
             'SELECT id, level, message, created_at FROM translation_job_logs WHERE job_id=? AND id>? ORDER BY id ASC LIMIT 200',
             [id, logId]
