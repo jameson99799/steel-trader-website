@@ -710,7 +710,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, nextTick } from 'vue'
+import { ref, reactive, onMounted, computed, nextTick, watch } from 'vue'
 import api from '../../api'
 
 defineOptions({ name: 'TranslationsPage' })
@@ -858,7 +858,6 @@ const savedMsg = ref(false)
 
 const selectedLang = ref('')
 const selectedPromptId = ref(localStorage.getItem('last_selected_prompt_id') || '')
-import { watch } from 'vue'
 watch(selectedPromptId, (newVal) => {
   localStorage.setItem('last_selected_prompt_id', newVal || '')
 })
@@ -1080,7 +1079,6 @@ onMounted(async () => {
   }
 })
 
-import { watch } from 'vue'
 watch(concurrency, async (newVal) => {
   try {
     await api.setTranslationConcurrency(newVal)
