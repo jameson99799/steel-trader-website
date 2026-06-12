@@ -294,8 +294,7 @@ async function fetchFolders(groupId) {
 
 watch(batchGroupTarget, async (newVal) => {
   if (newVal) {
-    if (newVal === filterGroup.value && folders.value) targetGroupFolders.value = folders.value
-    else targetGroupFolders.value = await fetchFolders(newVal)
+    targetGroupFolders.value = await fetchFolders(newVal)
   } else {
     targetGroupFolders.value = []
   }
@@ -303,8 +302,7 @@ watch(batchGroupTarget, async (newVal) => {
 
 watch(uploadGroupId, async (newVal) => {
   if (newVal) {
-    if (newVal === filterGroup.value && folders.value) targetUploadFolders.value = folders.value
-    else targetUploadFolders.value = await fetchFolders(newVal)
+    targetUploadFolders.value = await fetchFolders(newVal)
   } else {
     targetUploadFolders.value = []
   }
@@ -374,8 +372,14 @@ function copyUrl(item) {
 }
 
 // Upload
-function openUploadModal() {
+async function openUploadModal() {
   uploadGroupId.value = filterGroup.value || ''
+  if (uploadGroupId.value) {
+    targetUploadFolders.value = await fetchFolders(uploadGroupId.value)
+  } else {
+    targetUploadFolders.value = []
+  }
+  uploadFolderId.value = filterFolder.value || ''
   showUploadModal.value = true
 }
 
