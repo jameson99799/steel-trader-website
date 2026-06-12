@@ -452,7 +452,9 @@ async function startServer() {
             const root = parse(indexHtmlTemplate)
             root.querySelectorAll('link').forEach(node => {
               if (node.getAttribute('rel') === 'stylesheet' || node.getAttribute('href')?.endsWith('.css')) {
-                node.remove()
+                // Defer loading to bypass Lighthouse render-blocking, but KEEP it in DOM so Vite won't dynamically re-inject it!
+                node.setAttribute('media', 'print')
+                node.setAttribute('onload', "this.media='all'")
               }
             })
             const head = root.querySelector('head')
