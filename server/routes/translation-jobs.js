@@ -34,6 +34,9 @@ setTimeout(cleanupOldLogs, 5000)
 // Run daily at ~02:00
 setInterval(cleanupOldLogs, 24 * 60 * 60 * 1000)
 
+// Ensure prompt_id column exists
+try { run('ALTER TABLE translation_jobs ADD COLUMN prompt_id INTEGER') } catch (e) {}
+
 // ── Reset any jobs stuck in 'running' state at startup (crashed jobs) ──
 export function resetStaleJobs() {
     try {
@@ -243,10 +246,19 @@ async function runJobInBackground(jobId) {
                 manualOverrides.slice(0, 8).map(o => `"${o.original_text}" → "${o.translated_text}"`).join('\n')
                 : ''
 
+            // Fetch custom rules
+            let customRules = null;
+            if (job.prompt_id) {
+                const promptRow = getOne('SELECT content FROM translation_prompts WHERE id=?', [job.prompt_id])
+                if (promptRow && promptRow.content) {
+                    customRules = `\n\n[Translation Rules]:\n${promptRow.content}`
+                }
+            }
+
             jobLog(jobId, 'info', `正在翻译${item.itemName}至${langRow.name}语言`)
 
             try {
-                const { results, errors } = await translateBatch(enhanced, items, item.targetLang, langRow.name, overrideNote)
+                const { results, errors } = await translateBatch(enhanced, items, item.targetLang, langRow.name, overrideNote, 3, customRules)
                 const ok = results.length
                 const errs = errors.length
 
@@ -254,24 +266,31 @@ async function runJobInBackground(jobId) {
                 if (errs > 0 && ok === 0) {
                     errTotal += errs
                     const errMsg = errors[0]?.error || '未知错误'
-                    newFailed.push({ ...item, error: errMsg })
-                    jobLog(jobId, 'error', `${item.itemName}翻译${langRow.name}语言失败（${errMsg.slice(0, 150)}）`)
+                    throw new Error(errMsg)
                 } else if (errs > 0) {
                     errTotal += errs
                     const errMsg = `部分成功: ${ok}成功, ${errs}错误`
-                    newFailed.push({ ...item, error: errMsg })
-                    jobLog(jobId, 'warn', `${item.itemName}翻译${langRow.name}语言失败（${errMsg}）`)
+                    throw new Error(errMsg)
                 } else if (ok > 0) {
                     jobLog(jobId, 'ok', `${item.itemName}翻译${langRow.name}语言成功`)
                     run('UPDATE languages SET ai_translated=1 WHERE code=?', [item.targetLang])
                 } else {
-                    jobLog(jobId, 'ok', `${item.itemName}翻译${langRow.name}语言成功`)
+                    throw new Error('AI 无返回结果 (可能为空或格式错误)')
                 }
             } catch (e) {
+                // Auto-retry once inside the worker
+                if (!isRetry && (item._retryCount || 0) < 1) {
+                    item._retryCount = (item._retryCount || 0) + 1
+                    pendingItems.push(item) // put it back to queue
+                    updateJobProgress(jobId, { auto_retried: 1 })
+                    jobLog(jobId, 'warn', `${item.itemName} 翻译失败（${(e.message || '').slice(0, 80)}），已加入重试队列`)
+                    continue
+                }
+
                 errTotal++
                 const errMsg = e.message || '未知错误'
                 newFailed.push({ ...item, error: errMsg })
-                jobLog(jobId, 'error', `${item.itemName}翻译${langRow.name}语言失败（${errMsg.slice(0, 150)}）`)
+                jobLog(jobId, 'error', `${item.itemName}翻译${langRow.name}语言最终失败（${errMsg.slice(0, 150)}）`)
             }
 
             processingItems.delete(item)
@@ -294,88 +313,17 @@ async function runJobInBackground(jobId) {
     }
 
     if (abortReason === 'abort') {
-        jobLog(jobId, 'warn', `🛑 用户已中止任务，已处理 ${doneTotal}/${job.total_items}`)
-        updateJobProgress(jobId, { status: 'aborted', finished_at: new Date().toISOString() })
+        // Status is immediately set to 'aborted' by the API route already.
+        // We just skip overwriting it to 'done'.
         return
     }
 
-    // ── Auto-retry failed items once (only for non-retry jobs) ──
-    if (!isRetry && newFailed.length > 0) {
-        jobLog(jobId, 'info', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-        jobLog(jobId, 'info', `${okTotal}个产品或者文章翻译成功，${newFailed.length}个产品或者文章翻译失败，开始重试翻译失败的产品或者文章`)
-        // Mark this job as having done auto-retry
-        updateJobProgress(jobId, { auto_retried: 1 })
-
-        const stillFailed = []
-        for (const item of newFailed) {
-            const flag = abortFlags.get(jobId)
-            if (flag) {
-                stillFailed.push(item) // Keep it as failed if aborted/paused during retry
-                if (flag === 'pause') {
-                     // During retry, if paused, we just keep remaining in stillFailed and abort
-                     // Actually, pause during retry is an edge case, we'll just treat it as aborted/failed
-                }
-                continue
-            }
-            const langRow = getOne('SELECT name FROM languages WHERE code=?', [item.targetLang])
-            if (!langRow) continue
-            const pageKey = TYPE_TO_PAGE[item.type] || item.type
-            if (!PAGES[pageKey]) continue
-            const pageItems = PAGES[pageKey]()
-            const items = pageItems.filter(pi => String(pi.id) === String(item.id))
-            if (!items.length) continue
-
-            jobLog(jobId, 'info', `正在翻译${item.itemName}至${langRow.name}语言`)
-
-            try {
-                const { results, errors } = await translateBatch(enhanced, items, item.targetLang, langRow.name, '')
-                if (results.length > 0) {
-                    jobLog(jobId, 'ok', `${item.itemName}翻译${langRow.name}语言成功`)
-                    okTotal++
-                    errTotal = Math.max(0, errTotal - errors.length)
-                    run('UPDATE languages SET ai_translated=1 WHERE code=?', [item.targetLang])
-                } else {
-                    const errMsg = errors[0]?.error || '重试无返回结果'
-                    jobLog(jobId, 'error', `${item.itemName}翻译${langRow.name}语言失败（${errMsg.slice(0, 150)}）`)
-                    stillFailed.push({ ...item, error: errMsg })
-                }
-            } catch (e) {
-                const errMsg = e.message || '未知错误'
-                jobLog(jobId, 'error', `${item.itemName}翻译${langRow.name}语言失败（${errMsg.slice(0, 100)}）`)
-                stillFailed.push({ ...item, error: errMsg })
-            }
-        }
-        
-        const retryAbortReason = abortFlags.get(jobId)
-        abortFlags.delete(jobId)
-
-        // Update final failed_items
-        updateJobProgress(jobId, {
-            failed_items: JSON.stringify(stillFailed),
-            ok_items: okTotal,
-            error_items: stillFailed.length
-        })
-        
-        if (retryAbortReason === 'pause') {
-            updateJobProgress(jobId, { status: 'paused' })
-            jobLog(jobId, 'warn', `⏸ 重试过程被暂停`)
-            return
-        }
-
-        if (stillFailed.length > 0) {
-            const firstErr = stillFailed[0]?.error || '未知错误'
-            jobLog(jobId, 'warn', `${okTotal}个产品或者文章翻译成功，${stillFailed.length}个产品翻译失败，请手动重试，失败原因：${firstErr.slice(0, 80)}`)
-        } else {
-            jobLog(jobId, 'ok', `${okTotal}个产品或者文章翻译成功，现在已经全部完整的翻译完成`)
-        }
+    updateJobProgress(jobId, { failed_items: JSON.stringify(newFailed) })
+    if (newFailed.length > 0) {
+        const firstErr = newFailed[0]?.error || '未知错误'
+        jobLog(jobId, 'warn', `${okTotal}个产品或者文章翻译成功，${newFailed.length}个产品翻译失败，请手动重试，失败原因：${firstErr.slice(0, 80)}`)
     } else {
-        updateJobProgress(jobId, { failed_items: JSON.stringify(newFailed) })
-        if (newFailed.length > 0) {
-            const firstErr = newFailed[0]?.error || '未知错误'
-            jobLog(jobId, 'warn', `${okTotal}个产品或者文章翻译成功，${newFailed.length}个产品翻译失败，请手动重试，失败原因：${firstErr.slice(0, 80)}`)
-        } else {
-            jobLog(jobId, 'ok', `${okTotal}个产品或者文章翻译成功，现在已经全部完整的翻译完成`)
-        }
+        jobLog(jobId, 'ok', `${okTotal}个项目翻译成功，现在已经全部完整的翻译完成`)
     }
 
     updateJobProgress(jobId, {
@@ -467,12 +415,12 @@ router.get('/:id/logs-since/:logId', authMiddleware, (req, res) => {
 // POST /translation-jobs — create & start a new background job
 router.post('/', authMiddleware, async (req, res) => {
     try {
-        const { lang, pages, concurrency, explicitItems } = req.body
+        const { lang, pages, concurrency, explicitItems, promptId } = req.body
         if (!lang) return res.status(400).json({ error: 'lang is required' })
         if ((!pages || !pages.length) && (!explicitItems || !explicitItems.length)) return res.status(400).json({ error: 'pages or explicitItems is required' })
 
         // Only allow one running job at a time
-        const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('running', 'pausing', 'aborting')")
+        const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('running', 'pausing')")
         if (running) {
             return res.status(409).json({
                 error: `当前已有正在运行的翻译任务（ID: ${running.id}），请等待完成或中止后再创建新任务`,
@@ -481,8 +429,8 @@ router.post('/', authMiddleware, async (req, res) => {
         }
 
         const result = run(
-            `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items, concurrency) VALUES ('pending', ?, ?, ?, ?)`,
-            [lang, JSON.stringify(pages || []), JSON.stringify(explicitItems || []), concurrency || 1]
+            `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items, concurrency, prompt_id) VALUES ('pending', ?, ?, ?, ?, ?)`,
+            [lang, JSON.stringify(pages || []), JSON.stringify(explicitItems || []), concurrency || 1, promptId || null]
         )
         const jobId = result.lastInsertRowid
 
@@ -506,8 +454,8 @@ router.post('/:id/abort', authMiddleware, (req, res) => {
     try {
         const id = parseInt(req.params.id)
         abortFlags.set(id, 'abort')
-        updateJobProgress(id, { status: 'aborting' })
-        jobLog(id, 'warn', '🛑 已收到中止指令，正在等待当前翻译完成并退出...')
+        updateJobProgress(id, { status: 'aborted', finished_at: new Date().toISOString() })
+        jobLog(id, 'warn', '🛑 用户已中止任务，当前正在进行的请求完成前不再发送新请求，已放弃当前任务...')
         res.json({ success: true })
     } catch (e) {
         res.status(500).json({ error: e.message })
@@ -535,7 +483,7 @@ router.post('/:id/resume', authMiddleware, async (req, res) => {
         if (!job) return res.status(404).json({ error: 'Job not found' })
         if (job.status !== 'paused') return res.status(400).json({ error: '任务不是暂停状态' })
 
-        const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('running', 'pausing', 'aborting')")
+        const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('running', 'pausing')")
         if (running) {
             return res.status(409).json({
                 error: `当前已有正在运行的翻译任务（ID: ${running.id}），请等待完成后再恢复`,
@@ -604,7 +552,7 @@ router.post('/:id/retry-failed', authMiddleware, async (req, res) => {
 router.delete('/logs', authMiddleware, (req, res) => {
     try {
         const resultLogs = run('DELETE FROM translation_job_logs')
-        const resultJobs = run(`DELETE FROM translation_jobs WHERE status NOT IN ('running', 'pausing', 'aborting')`)
+        const resultJobs = run(`DELETE FROM translation_jobs WHERE status NOT IN ('running', 'pausing')`)
         res.json({ success: true, deletedLogs: resultLogs.changes, deletedJobs: resultJobs.changes })
     } catch (e) {
         res.status(500).json({ error: e.message })

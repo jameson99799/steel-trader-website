@@ -243,7 +243,7 @@ export const api = {
   runTranslation: (lang) => request(`/translation/run/${lang}`, { method: 'POST' }),
   runTranslationPage: (lang, page) => request('/translation/run', { method: 'POST', body: JSON.stringify({ lang, page }) }),
   getTranslationItems: (page) => request('/translation/items', { method: 'POST', body: JSON.stringify({ page }) }),
-  runTranslationOne: (lang, content_type, content_id, signal) => request('/translation/run-one', { method: 'POST', body: JSON.stringify({ lang, content_type, content_id }), signal }),
+  runTranslationOne: (lang, content_type, content_id, promptId, signal) => request('/translation/run-one', { method: 'POST', body: JSON.stringify({ lang, content_type, content_id, promptId }), signal }),
   runTranslationBulk: (lang, items) => request('/translation/run-bulk', { method: 'POST', body: JSON.stringify({ lang, items }) }),
   getTranslationProgress: (lang) => request(`/translation/progress/${lang}`),
   searchUntranslated: (lang, q = '', page = 'all') => request(`/translation/search-untranslated/${lang}?q=${encodeURIComponent(q)}&page=${page}`),

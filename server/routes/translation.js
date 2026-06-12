@@ -847,16 +847,20 @@ const PAGES = {
 // Long HTML is sent as complete text, not split into tiny blocks.
 // This maximizes token efficiency and translation coherence.
 
-async function translateBatch(settings, items, targetLang, langName, overrideNote, aiConcurrency = 3) {
+async function translateBatch(settings, items, targetLang, langName, overrideNote, aiConcurrency = 3, customRules = null) {
     const results = []
     const errors = []
     
     // Fetch custom rules
     let businessRules = ''
     try {
-        const defaultPromptRow = getOne('SELECT content FROM translation_prompts WHERE is_default = 1')
-        if (defaultPromptRow && defaultPromptRow.content) {
-            businessRules = `\n\n[Translation Rules]:\n${defaultPromptRow.content}`
+        if (customRules !== null) {
+            businessRules = customRules;
+        } else {
+            const defaultPromptRow = getOne('SELECT content FROM translation_prompts WHERE is_default = 1')
+            if (defaultPromptRow && defaultPromptRow.content) {
+                businessRules = `\n\n[Translation Rules]:\n${defaultPromptRow.content}`
+            }
         }
     } catch (e) {}
     const fullOverride = businessRules + (overrideNote ? `\n\n${overrideNote}` : '')
@@ -1237,9 +1241,14 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
 
     let businessRules = ''
     try {
-        const defaultPromptRow = getOne('SELECT content FROM translation_prompts WHERE is_default = 1')
-        if (defaultPromptRow && defaultPromptRow.content) {
-            businessRules = `\n\n[Translation Rules]:\n${defaultPromptRow.content}`
+        if (req.body.promptId) {
+            const row = getOne('SELECT content FROM translation_prompts WHERE id = ?', [req.body.promptId])
+            if (row && row.content) businessRules = `\n\n[Translation Rules]:\n${row.content}`
+        } else {
+            const defaultPromptRow = getOne('SELECT content FROM translation_prompts WHERE is_default = 1')
+            if (defaultPromptRow && defaultPromptRow.content) {
+                businessRules = `\n\n[Translation Rules]:\n${defaultPromptRow.content}`
+            }
         }
     } catch (e) {}
     overrideNote = businessRules + overrideNote
@@ -1419,9 +1428,23 @@ router.post('/run-one', authMiddleware, async (req, res) => {
         try { res.write(' ') } catch (e) { clearInterval(keepAlive) }
     }, 25000)
 
+    // Fetch custom rules
+    let businessRules = ''
+    try {
+        if (req.body.promptId) {
+            const row = getOne('SELECT content FROM translation_prompts WHERE id = ?', [req.body.promptId])
+            if (row && row.content) businessRules = `\n\n[Translation Rules]:\n${row.content}`
+        } else {
+            const defaultPromptRow = getOne('SELECT content FROM translation_prompts WHERE is_default = 1')
+            if (defaultPromptRow && defaultPromptRow.content) {
+                businessRules = `\n\n[Translation Rules]:\n${defaultPromptRow.content}`
+            }
+        }
+    } catch (e) {}
+
     try {
         // Directly use translateBatch — the EXACT same function as full-site translation
-        const { results, errors } = await translateBatch(enhanceWithDefaultChannel(s), items, targetLang, langRow.name, overrideNote)
+        const { results, errors } = await translateBatch(enhanceWithDefaultChannel(s), items, targetLang, langRow.name, overrideNote, 3, businessRules)
         if (results.length > 0) {
             run('UPDATE languages SET ai_translated=1 WHERE code=?', [targetLang])
         }
@@ -1462,7 +1485,21 @@ router.post('/run', authMiddleware, async (req, res) => {
         manualOverrides.slice(0, 8).map(o => `"${o.original_text}" → "${o.translated_text}"`).join('\n')
         : ''
 
-    const { results, errors } = await translateBatch(enhanceWithDefaultChannel(s), items, targetLang, langRow.name, overrideNote)
+    // Fetch custom rules
+    let businessRules = ''
+    try {
+        if (req.body.promptId) {
+            const row = getOne('SELECT content FROM translation_prompts WHERE id = ?', [req.body.promptId])
+            if (row && row.content) businessRules = `\n\n[Translation Rules]:\n${row.content}`
+        } else {
+            const defaultPromptRow = getOne('SELECT content FROM translation_prompts WHERE is_default = 1')
+            if (defaultPromptRow && defaultPromptRow.content) {
+                businessRules = `\n\n[Translation Rules]:\n${defaultPromptRow.content}`
+            }
+        }
+    } catch (e) {}
+
+    const { results, errors } = await translateBatch(enhanceWithDefaultChannel(s), items, targetLang, langRow.name, overrideNote, 3, businessRules)
 
     if (results.length > 0) {
         run('UPDATE languages SET ai_translated=1 WHERE code=?', [targetLang])

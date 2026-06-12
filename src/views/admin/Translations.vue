@@ -342,6 +342,13 @@
                 <option v-for="n in 10" :key="n" :value="n">{{ n }} 并发</option>
               </select>
             </div>
+            <div class="form-group" style="min-width:160px">
+              <label>使用提示词规则</label>
+              <select v-model="selectedPromptId" class="form-control">
+                <option value="">(使用默认规则)</option>
+                <option v-for="p in prompts" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+            </div>
           </div>
           <div class="btn-row" style="gap:8px; margin-bottom:8px">
             <button class="btn btn-primary" @click="startBackgroundTranslate" :disabled="!!activeJob || !selectedLang">
@@ -850,6 +857,7 @@ const saving = ref(false)
 const savedMsg = ref(false)
 
 const selectedLang = ref('')
+const selectedPromptId = ref('')
 const allPages = ['products', 'news', 'company', 'page_texts', 'categories', 'hero', 'ui_texts_static', 'ral_colors', 'roofing_categories', 'factory', 'futures', 'chat']
 const pageLabels = { products: '产品', news: '新闻', company: '公司信息', page_texts: '页面文字', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字', ral_colors: '🎨 RAL颜色', roofing_categories: '🏠 瓦型分组', factory: '🏭 工厂展示', futures: '📈 期货行情', chat: '💬 在线客服' }
 const selectedPages = ref([...allPages])
@@ -960,7 +968,8 @@ async function startBackgroundTranslate() {
       lang: selectedLang.value, 
       pages: selectedPages.value, 
       concurrency: concurrency.value,
-      explicitItems: explicitItems.value.length ? explicitItems.value : null
+      explicitItems: explicitItems.value.length ? explicitItems.value : null,
+      promptId: selectedPromptId.value || undefined
     })
     jobPanelCollapsed.value = false
     // Immediately reflect new running state
@@ -1364,7 +1373,7 @@ async function runItems(itemsList) {
 
       try {
         const item = chunk[0]
-        const res = await api.runTranslationOne(item.targetLang, item.type, item.id)
+        const res = await api.runTranslationOne(item.targetLang, item.type, item.id, selectedPromptId.value || undefined)
         const ok = res.results?.length || 0
         const errs = res.errors?.length || 0
         progressOk.value += ok
