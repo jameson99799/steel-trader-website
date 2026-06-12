@@ -130,7 +130,28 @@ router.put('/concurrency', authMiddleware, (req, res) => {
 
 // ─── HTTP helper (no external deps) ─────────────────────────────────────────
 
-function httpRequest(urlStr, options = {}, body = null) {
+function httpRequest(urlStr, options = {}, body = null, timeoutMs = 120000) {
+    if (typeof fetch === 'function') {
+        const fetchOpts = {
+            method: options.method || 'GET',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+                ...(options.headers || {})
+            },
+            redirect: 'follow',
+            signal: AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined
+        }
+        if (body) {
+            fetchOpts.body = typeof body === 'string' ? body : JSON.stringify(body)
+        }
+        return fetch(urlStr, fetchOpts).then(async res => {
+            const raw = await res.text()
+            try { return { status: res.status, body: JSON.parse(raw) } }
+            catch (e) { return { status: res.status, body: raw } }
+        })
+    }
+
     return new Promise((resolve, reject) => {
         const url = new URL(urlStr)
         const lib = url.protocol === 'https:' ? https : http
@@ -139,16 +160,27 @@ function httpRequest(urlStr, options = {}, body = null) {
             port: url.port || (url.protocol === 'https:' ? 443 : 80),
             path: url.pathname + url.search,
             method: options.method || 'GET',
-            headers: options.headers || {}
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                'Accept': 'application/json',
+                ...(options.headers || {})
+            },
+            timeout: timeoutMs
         }
         const req = lib.request(reqOptions, (res) => {
+            res.setEncoding('utf8')
             let data = ''
             res.on('data', chunk => { data += chunk })
             res.on('end', () => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    httpRequest(new URL(res.headers.location, urlStr).toString(), options, body, timeoutMs).then(resolve).catch(reject)
+                    return
+                }
                 try { resolve({ status: res.statusCode, body: JSON.parse(data) }) }
                 catch (e) { resolve({ status: res.statusCode, body: data }) }
             })
         })
+        req.on('timeout', () => { req.destroy(); reject(new Error('请求超时（120秒）')) })
         req.on('error', reject)
         req.setTimeout(300000, () => { req.destroy(new Error('Request timeout 300s')) })
         if (body) req.write(typeof body === 'string' ? body : JSON.stringify(body))
@@ -187,25 +219,42 @@ router.post('/models', authMiddleware, async (req, res) => {
     if (baseApiUrl.endsWith('/chat/completions')) {
         baseApiUrl = baseApiUrl.replace(/\/chat\/completions$/, '')
     }
-    const apiUrl = baseApiUrl + '/models'
     const apiKey = (req.body.api_key && !req.body.api_key.includes('****')) ? req.body.api_key : (s?.api_key || '')
     if (!apiKey) return res.status(400).json({ error: 'API key not configured' })
-    const defaultModels = ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo', 'gpt-4', 'claude-3-5-sonnet-20240620', 'claude-3-opus-20240229', 'claude-3-haiku-20240307', 'gemini-1.5-pro', 'gemini-1.5-flash', 'deepseek-chat', 'deepseek-coder']
+
     try {
-        const result = await httpRequest(apiUrl, {
+        const fetchModels = async (bUrl) => httpRequest(bUrl + '/models', {
             headers: { 'Authorization': `Bearer ${apiKey}` }
         })
-        if (result.status !== 200) return res.json({ models: defaultModels })
+
+        let result = await fetchModels(baseApiUrl)
+        
+        if ((result.status === 404 || result.status === 401 || result.status === 405) && !baseApiUrl.endsWith('/v1')) {
+            const v1Result = await fetchModels(baseApiUrl + '/v1')
+            if (v1Result.status === 200) {
+                result = v1Result
+            }
+        }
+
+        if (result.status !== 200) {
+            const errBody = typeof result.body === 'object' ? JSON.stringify(result.body) : result.body
+            return res.status(502).json({ error: `无法获取模型 (${result.status}): ${errBody || '端点未开放或密钥无效'}` })
+        }
         let body = result.body
         if (typeof body === 'string') {
             try { body = JSON.parse(body) } catch(e) {}
         }
-        let modelsList = body?.data || body || []
-        if (!Array.isArray(modelsList) && Array.isArray(body?.models)) modelsList = body.models
-        const models = (Array.isArray(modelsList) ? modelsList : []).map(m => m.id || m).filter(Boolean).sort()
-        res.json({ models: models.length > 0 ? models : defaultModels })
+        let modelsList = body?.data || body?.models || body || []
+        if (!Array.isArray(modelsList)) {
+            return res.status(502).json({ error: 'API返回的模型列表格式不可识别', raw: body })
+        }
+        const models = modelsList.map(m => m.id || m).filter(m => typeof m === 'string').sort()
+        if (models.length === 0) {
+            return res.status(502).json({ error: '该 API 地址获取到的模型列表为空' })
+        }
+        res.json({ models })
     } catch (e) {
-        res.json({ models: defaultModels })
+        res.status(500).json({ error: e.message })
     }
 })
 
