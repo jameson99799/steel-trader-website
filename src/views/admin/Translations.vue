@@ -949,7 +949,6 @@ function stopJobPolling() {
   if (jobPollTimer) { clearInterval(jobPollTimer); jobPollTimer = null }
 }
 
-let lastLogId = 0
 let isPolling = false
 
 async function pollJobStatus(jobId) {
