@@ -1280,6 +1280,7 @@ Requirements:
   // Migrate: add concurrency and pending_items
   try { db.exec("ALTER TABLE translation_jobs ADD COLUMN concurrency INTEGER DEFAULT 1") } catch (e) { }
   try { db.exec("ALTER TABLE translation_jobs ADD COLUMN pending_items TEXT") } catch (e) { }
+  try { db.exec("ALTER TABLE translation_jobs ADD COLUMN prompt_id INTEGER") } catch (e) { }
 
   // ── Futures Watchlist ────────────────────────────────────────────────────
   db.exec(`

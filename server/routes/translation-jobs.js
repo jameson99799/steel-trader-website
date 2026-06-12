@@ -34,15 +34,12 @@ setTimeout(cleanupOldLogs, 5000)
 // Run daily at ~02:00
 setInterval(cleanupOldLogs, 24 * 60 * 60 * 1000)
 
-// Ensure prompt_id column exists
-try { run('ALTER TABLE translation_jobs ADD COLUMN prompt_id INTEGER') } catch (e) {}
-
 // ── Reset any jobs stuck in 'running' state at startup (crashed jobs) ──
 export function resetStaleJobs() {
     try {
         const stale = run(
             `UPDATE translation_jobs SET status='aborted', finished_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
-             WHERE status='running'`
+             WHERE status IN ('running', 'pausing', 'aborting')`
         )
         if (stale?.changes > 0) {
             console.log(`[translation-jobs] Reset ${stale.changes} stale running jobs to 'aborted'`)
