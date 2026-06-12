@@ -977,8 +977,8 @@ async function translateBatch(settings, items, targetLang, langName, overrideNot
             ? `- You MUST translate the text into ${langName}.`
             : `- DO NOT output the original Chinese or English text. You MUST translate it into ${langName}.`
 
-        const systemPrompt = `Translate the following numbered items into ${langName} (the source text may be in English or Chinese). This is content for a steel products company website.
-Return ONLY numbered lines in the SAME order:
+        const systemPrompt = `Translate the following ${fieldVals.length} numbered items into ${langName} (the source text may be in English or Chinese). This is content for a steel products company website.
+Return ONLY numbered lines in the SAME order. YOU MUST OUTPUT EXACTLY ${fieldVals.length} NUMBERED ITEMS. Do not merge or skip items.
 1. [translation of item 1]
 2. [translation of item 2]
 ...
@@ -987,7 +987,7 @@ Rules:
 ${strictRule}
 - Keep HTML tags, product codes, units (mm, kg, MPa) unchanged
 - Keep URLs, email addresses unchanged
-- DO NOT skip any numbered item${fullOverride}`
+- DO NOT merge identical items. Each input number MUST have an output number.${fullOverride}`
 
         const MAX_RETRIES = 2
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -1004,7 +1004,7 @@ ${strictRule}
                 const lines = cleanedContent.split('\n').map(l => l.trim()).filter(Boolean)
                 const translatedArr = []
                 for (const line of lines) {
-                    const m = line.match(/^\d+\.\s+(.+)$/)
+                    const m = line.match(/^[\*\s\[\(]*\d+[\*\s\]\)\.]+(.+)$/)
                     if (m) translatedArr.push(m[1].trim())
                 }
 
