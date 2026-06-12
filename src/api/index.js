@@ -219,7 +219,7 @@ export const api = {
   },
 
   // SEO
-  getSeoSettings: () => request('/seo'),
+  getSeoSettings: () => cachedGet('/seo'),
   updateSeoSettings: (data) => request('/seo', { method: 'PUT', body: data }),
   seoAudit: () => request('/seo/audit'),
 

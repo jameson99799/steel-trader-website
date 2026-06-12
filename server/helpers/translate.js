@@ -1,5 +1,8 @@
 import { getAll } from '../db.js'
 
+const translationCache = new Map()
+const CACHE_TTL = 5000 // 5 seconds
+
 /**
  * Server-side translation helper.
  * Loads all translations for a given language and provides
@@ -7,6 +10,13 @@ import { getAll } from '../db.js'
  */
 export function loadTranslationsForLang(langCode) {
     if (!langCode || langCode === 'en') return null
+
+    const now = Date.now()
+    const cached = translationCache.get(langCode)
+    if (cached && (now - cached.ts < CACHE_TTL)) {
+        return cached.map
+    }
+
     const rows = getAll(
         'SELECT content_type, content_id, content_field, translated_text FROM translations WHERE language_code=?',
         [langCode]
@@ -18,6 +28,8 @@ export function loadTranslationsForLang(langCode) {
         if (!map[key]) map[key] = {}
         map[key][r.content_field] = r.translated_text
     }
+    
+    translationCache.set(langCode, { map, ts: now })
     return map
 }
 

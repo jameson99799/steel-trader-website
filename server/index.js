@@ -1200,7 +1200,8 @@ async function startServer() {
           ssrArticle: req.ssrArticle || null,
           ssrProduct: req.ssrProduct || null,
           seoSettings: seoSettings,
-          languages: getAll('SELECT * FROM languages WHERE status=1 ORDER BY sort_order, code') || []
+          languages: getAll('SELECT * FROM languages WHERE status=1 ORDER BY sort_order, code') || [],
+          translationSettings: getOne('SELECT enabled, multilingual_enabled FROM translation_settings WHERE id = 1') || {}
         }
         const stateTag = `<script>window.__INITIAL_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')}</script>`
         html = html.replace('</head>', `${canonicalTag}\n  ${extraMeta}\n  ${extraSchemas}\n  ${stateTag}\n</head>`)

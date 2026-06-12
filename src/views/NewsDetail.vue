@@ -387,7 +387,7 @@ async function loadArticle(slug) {
       api.getCategories(),
       isHydrating ? Promise.resolve(pageTexts.value) : api.getPageTexts(),
       isHydrating ? Promise.resolve(company.value) : api.getCompany(),
-      fetch('/api/seo').then(r => r.json()).catch(() => ({}))
+      window.__INITIAL_STATE__?.seoSettings ? Promise.resolve(window.__INITIAL_STATE__.seoSettings) : api.getSeoSettings().catch(() => ({}))
     ]
     
     const [art, cats, texts, comp, seoRes] = await Promise.all(promises)

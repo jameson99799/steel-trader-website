@@ -210,8 +210,8 @@ const { lang, setLang, toggleLang, t, localizedValue, langPath } = useLang()
 const menuOpen = ref(false)
 const company = ref(window.__INITIAL_STATE__?.company || null)
 const pageTexts = ref(window.__INITIAL_STATE__?.pageTexts || null)
-const multilingualEnabled = ref(true)
-const activeLanguages = ref([])
+const multilingualEnabled = ref(window.__INITIAL_STATE__?.translationSettings?.multilingual_enabled || false)
+const activeLanguages = ref(window.__INITIAL_STATE__?.languages || [])
 const langDropOpen = ref(false)
 const langSwitcherRef = ref(null)
 const mobileLangOpen = ref(false)
@@ -292,8 +292,10 @@ onMounted(async () => {
       api.getCategoryTree().catch(() => []),
       api.getNewsCategories().catch(() => [])
     ])
-    multilingualEnabled.value = !!status?.enabled
-    activeLanguages.value = langs || []
+    if (!window.__INITIAL_STATE__?.languages) {
+        multilingualEnabled.value = !!status?.enabled
+        activeLanguages.value = langs || []
+    }
     productCategories.value = pcats
     newsCategories.value = ncats
   } catch (e) {}
