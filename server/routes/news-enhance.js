@@ -45,10 +45,34 @@ function getAISettings() {
             if (models.length > 0) s.model_name = models[0]
         }
     }
+    s.rpm_limit = s.rpm_limit || 0
     return s
 }
 
+const channelRpmTrackers = new Map() // key -> { minuteStart, count }
+
 async function callAI(settings, messages, maxTokens = 4000) {
+    const limit = parseInt(settings.rpm_limit) || 0
+    const intervalWindow = (parseInt(settings.rpm_interval) || 60) * 1000
+    if (limit > 0) {
+        const channelKey = `${settings.api_key}_${settings.api_url}`
+        let tracker = channelRpmTrackers.get(channelKey)
+        const now = Date.now()
+        if (!tracker || (now - tracker.minuteStart) >= intervalWindow) {
+            tracker = { minuteStart: now, count: 0 }
+            channelRpmTrackers.set(channelKey, tracker)
+        }
+        if (tracker.count >= limit) {
+            const waitTime = intervalWindow - (now - tracker.minuteStart)
+            console.log(`[RateLimit/News] API 请求已达阈值 (${limit}次/${intervalWindow/1000}秒)，自动休眠排队中... 需等待 ${Math.round(waitTime/1000)} 秒`)
+            await new Promise(resolve => setTimeout(resolve, waitTime))
+            tracker.minuteStart = Date.now()
+            tracker.count = 0
+            channelRpmTrackers.set(channelKey, tracker)
+        }
+        tracker.count++
+    }
+
     const apiUrl = (settings.api_url || 'https://api.openai.com/v1').replace(/\/$/, '') + '/chat/completions'
     const result = await httpRequest(apiUrl, {
         method: 'POST',

@@ -182,6 +182,27 @@
       </div>
     </div>
 
+    <!-- ── Rate Limit Settings ── -->
+    <div class="card" style="margin-top:20px">
+      <div class="card-body">
+        <h3 class="section-title">⏱️ AI 请求频率限制 (RPM)</h3>
+        <p class="page-desc">设置指定间隔时间内最多允许请求 AI 翻译接口的次数。如果超出限制，系统会自动挂起排队等待解封后再继续。如果您主动或被动切换了渠道，则不同渠道不会叠加累计次数。填写 <code>0</code> 表示不限制。</p>
+        <div class="form-group" style="max-width: 500px; margin-bottom: 0;">
+          <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+             <span>最多请求：</span>
+             <input type="number" class="form-control" v-model.number="settings.rpm_limit" @change="saveSettings" min="0" placeholder="0" style="width:100px" />
+             <span>次</span>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center;">
+             <span>间隔时间：</span>
+             <input type="number" class="form-control" v-model.number="settings.rpm_interval" @change="saveSettings" min="1" placeholder="60" style="width:100px" />
+             <span>秒 (控制周期的时长，默认 60 秒即 1 分钟)</span>
+          </div>
+          <p style="font-size:12px; color:#10b981; margin-top:6px; margin-bottom:0;" v-if="savedMsg">✅ 已自动保存生效</p>
+        </div>
+      </div>
+    </div>
+
     <!-- ── 后台翻译任务面板 ── -->
     <div class="card" style="margin-top:20px">
       <div class="card-header-row" style="cursor:pointer" @click="jobPanelCollapsed = !jobPanelCollapsed">
@@ -720,7 +741,9 @@ const settings = reactive({
   api_key: '',
   model_name: 'gpt-3.5-turbo',
   multilingual_enabled: true,
-  source_lang: 'en'
+  source_lang: 'en',
+  rpm_limit: 0,
+  rpm_interval: 60
 })
 
 // AI Channel CRUD
@@ -1057,6 +1080,8 @@ onMounted(async () => {
       settings.api_key = ''
       settings.model_name = s.model_name || 'gpt-3.5-turbo'
       settings.multilingual_enabled = !!s.multilingual_enabled
+      settings.rpm_limit = s.rpm_limit || 0
+      settings.rpm_interval = s.rpm_interval || 60
     }
     languages.value = langs || []
     await loadChannels()
@@ -1091,7 +1116,9 @@ const saveSettings = async () => {
       api_url: settings.api_url,
       api_key: settings.api_key,
       model_name: settings.model_name,
-      multilingual_enabled: settings.multilingual_enabled ? 1 : 0
+      multilingual_enabled: settings.multilingual_enabled ? 1 : 0,
+      rpm_limit: settings.rpm_limit || 0,
+      rpm_interval: settings.rpm_interval || 60
     })
     savedMsg.value = true
     setTimeout(() => { savedMsg.value = false }, 3000)

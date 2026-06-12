@@ -97,12 +97,12 @@ router.get('/settings', (req, res) => {
 })
 
 router.put('/settings', authMiddleware, (req, res) => {
-    const { api_url, api_key, model_name, multilingual_enabled } = req.body
+    const { api_url, api_key, model_name, multilingual_enabled, rpm_limit, rpm_interval } = req.body
     const existing = getOne('SELECT * FROM translation_settings WHERE id = 1')
     const finalKey = (api_key && !api_key.includes('****')) ? api_key : (existing?.api_key || '')
     run(
-        'UPDATE translation_settings SET api_url=?, api_key=?, model_name=?, multilingual_enabled=?, updated_at=CURRENT_TIMESTAMP WHERE id=1',
-        [api_url || 'https://api.openai.com/v1', finalKey, model_name || 'gpt-3.5-turbo', multilingual_enabled != null ? (multilingual_enabled ? 1 : 0) : 1]
+        'UPDATE translation_settings SET api_url=?, api_key=?, model_name=?, multilingual_enabled=?, rpm_limit=?, rpm_interval=?, updated_at=CURRENT_TIMESTAMP WHERE id=1',
+        [api_url || 'https://api.openai.com/v1', finalKey, model_name || 'gpt-3.5-turbo', multilingual_enabled != null ? (multilingual_enabled ? 1 : 0) : 1, parseInt(rpm_limit) || 0, parseInt(rpm_interval) || 60]
     )
     res.json({ message: 'Saved' })
 })
@@ -188,7 +188,32 @@ function httpRequest(urlStr, options = {}, body = null, timeoutMs = 120000) {
     })
 }
 
+// ─── Global RPM Tracker ───
+const channelRpmTrackers = new Map() // key -> { minuteStart, count }
+
 async function callAI(settings, messages, maxTokens = 8000) {
+    const limit = parseInt(settings.rpm_limit) || 0
+    const intervalWindow = (parseInt(settings.rpm_interval) || 60) * 1000
+    if (limit > 0) {
+        const channelKey = `${settings.api_key}_${settings.api_url}`
+        let tracker = channelRpmTrackers.get(channelKey)
+        const now = Date.now()
+        if (!tracker || (now - tracker.minuteStart) >= intervalWindow) {
+            tracker = { minuteStart: now, count: 0 }
+            channelRpmTrackers.set(channelKey, tracker)
+        }
+        if (tracker.count >= limit) {
+            const waitTime = intervalWindow - (now - tracker.minuteStart)
+            console.log(`[RateLimit] API 请求已达该渠道阈值 (${limit}次/${intervalWindow/1000}秒)，低功耗休眠排队中... 需等待 ${Math.round(waitTime/1000)} 秒`)
+            await new Promise(resolve => setTimeout(resolve, waitTime))
+            // Refresh tracker block after waking up
+            tracker.minuteStart = Date.now()
+            tracker.count = 0
+            channelRpmTrackers.set(channelKey, tracker)
+        }
+        tracker.count++
+    }
+
     const apiUrl = (settings.api_url || 'https://api.openai.com/v1').replace(/\/$/, '') + '/chat/completions'
     const result = await httpRequest(apiUrl, {
         method: 'POST',
