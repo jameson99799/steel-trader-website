@@ -567,6 +567,7 @@ onUnmounted(() => {
   border-radius: 50%;
   margin-right: 4px;
   animation: blink 2s infinite;
+  will-change: opacity, transform;
 }
 @keyframes blink {
   0%, 100% { opacity: 1; }

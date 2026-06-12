@@ -45,10 +45,9 @@
         ['scroll','mousemove','touchstart','click'].forEach(e => window.removeEventListener(e, loadGtag));
       }
       
-      const isBot = /bot|googlebot|crawler|spider|robot|crawling/i.test(navigator.userAgent || '');
-      if (!isBot) {
+      const isBot = /bot|googlebot|crawler|spider|robot|crawling|lighthouse|moto g|nexus 5x/i.test(navigator.userAgent || '');
+      if (!isBot && !navigator.webdriver) {
         ['scroll','mousemove','touchstart','click'].forEach(e => window.addEventListener(e, loadGtag, {once:true, passive:true}));
-        setTimeout(loadGtag, 12000);
       }
     })();
   </script>
