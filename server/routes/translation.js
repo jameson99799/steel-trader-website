@@ -15,7 +15,7 @@ function enhanceWithDefaultChannel(settings) {
     // Use channel's API url and key if translation_settings has defaults or empty
     if (ch.api_url) s.api_url = ch.api_url
     if (ch.api_key) s.api_key = ch.api_key
-    if (ch.rpm_limit !== undefined && ch.rpm_limit !== null) s.rpm_limit = ch.rpm_limit
+    s.rpm_limit = ch.rpm_limit || 0
     // Use channel's default_model, or first model in list
     if (ch.default_model) s.model_name = ch.default_model
     else {

@@ -39,14 +39,15 @@ function getAISettings() {
     if (ch) {
         if (ch.api_url) s.api_url = ch.api_url
         if (ch.api_key) s.api_key = ch.api_key
-        if (ch.rpm_limit !== undefined && ch.rpm_limit !== null) s.rpm_limit = ch.rpm_limit
+        s.rpm_limit = ch.rpm_limit || 0
         if (ch.default_model) s.model_name = ch.default_model
         else {
             const models = JSON.parse(ch.models || '[]')
             if (models.length > 0) s.model_name = models[0]
         }
+    } else {
+        s.rpm_limit = 0
     }
-    s.rpm_limit = s.rpm_limit || 0
     return s
 }
 
