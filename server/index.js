@@ -438,10 +438,10 @@ async function startServer() {
           readdirSync(assetsDir).forEach(file => {
             if (file.endsWith('.css')) {
               // Only inline CSS that actually blocks render (exists as a <link> in HTML)
-              const linkRegex = new RegExp(`<link[^>]*href="/assets/${file}"[^>]*>`)
+              const linkRegex = new RegExp(`<link[^>]*href="/assets/${file.replace('.', '\\\\.')}"[^>]*>`)
               if (linkRegex.test(indexHtmlTemplate)) {
                 const cssContent = readFileSync(join(assetsDir, file), 'utf8')
-                indexHtmlTemplate = indexHtmlTemplate.replace(linkRegex, `<style>${cssContent}</style>`)
+                indexHtmlTemplate = indexHtmlTemplate.replace(linkRegex, () => `<style>${cssContent}</style>`)
               }
             }
           })

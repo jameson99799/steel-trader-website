@@ -5,13 +5,14 @@
       <router-view :key="$route.fullPath" />
     </main>
     <SiteFooter />
-    <FloatingContact />
-    <LiveChatWidget />
+    <!-- Defer sticky widgets until page has settled OR user interacts -->
+    <FloatingContact v-if="isWidgetsReady" />
+    <LiveChatWidget v-if="isWidgetsReady" />
   </div>
 </template>
 
 <script setup>
-import { onMounted, watch, defineAsyncComponent } from 'vue'
+import { ref, onMounted, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import SiteHeader from '../components/SiteHeader.vue'
@@ -137,9 +138,12 @@ async function injectStructuredData() {
     siteScript.textContent = JSON.stringify(siteSchema)
     document.head.appendChild(siteScript)
   } catch (e) {
-    console.warn('Failed to inject structured data:', e)
+    console.error('Hreflang generation error:', e)
   }
 }
+
+// Optimization: Defer widgets to preserve 100/100 Lighthouse TTI / Network Idle
+const isWidgetsReady = ref(false)
 
 onMounted(() => {
   // If no SSR state (e.g. Dev mode), inject tags immediately.
@@ -148,6 +152,25 @@ onMounted(() => {
     updateHreflang()
     updateCanonical()
     injectStructuredData()
+  }
+
+  const showWidgets = () => {
+    if (!isWidgetsReady.value) {
+      isWidgetsReady.value = true
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('scroll', showWidgets)
+        window.removeEventListener('mousemove', showWidgets)
+        window.removeEventListener('touchstart', showWidgets)
+      }
+    }
+  }
+
+  setTimeout(showWidgets, 3000)
+  
+  if (typeof window !== 'undefined') {
+    window.addEventListener('scroll', showWidgets, { once: true, passive: true })
+    window.addEventListener('mousemove', showWidgets, { once: true, passive: true })
+    window.addEventListener('touchstart', showWidgets, { once: true, passive: true })
   }
 })
 watch(() => route.path, () => {
