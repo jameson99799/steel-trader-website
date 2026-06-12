@@ -1193,9 +1193,18 @@ async function startServer() {
         }
         
         // Inject state for instant LCP rendering
+        // Define a lightweight company object without heavy rich-text fields for SSR hydration
+        const lightweightCompany = { ...company };
+        delete lightweightCompany.about_content;
+        delete lightweightCompany.about_content_en;
+        delete lightweightCompany.advantages_content;
+        delete lightweightCompany.advantages_content_en;
+        delete lightweightCompany.history_content;
+        delete lightweightCompany.history_content_en;
+
         const initialState = {
           hero: getOne('SELECT * FROM hero_content WHERE id = 1') || {},
-          company: company,
+          company: lightweightCompany,
           pageTexts: getOne('SELECT * FROM page_texts WHERE id = 1') || {},
           ssrArticle: req.ssrArticle || null,
           ssrProduct: req.ssrProduct || null,
