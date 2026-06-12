@@ -432,19 +432,26 @@ async function startServer() {
       let indexHtmlTemplate = ''
       try { 
         indexHtmlTemplate = readFileSync(distIndexPath, 'utf8')
-        // Inline render-blocking CSS
+        // Bulletproof CSS Inlining: Read all CSS chunks, inject them into head, and strip all standard stylesheet links
         const assetsDir = join(__dirname, '..', 'dist', 'assets')
         if (existsSync(assetsDir)) {
+          let injectedCss = ''
           readdirSync(assetsDir).forEach(file => {
             if (file.endsWith('.css')) {
-              // Only inline CSS that actually blocks render (exists as a <link> in HTML)
-              const linkRegex = new RegExp(`<link[^>]*href="/assets/${file.replace('.', '\\\\.')}"[^>]*>`)
-              if (linkRegex.test(indexHtmlTemplate)) {
-                const cssContent = readFileSync(join(assetsDir, file), 'utf8')
-                indexHtmlTemplate = indexHtmlTemplate.replace(linkRegex, () => `<style>${cssContent}</style>`)
+              const cssPath = join(assetsDir, file)
+              try {
+                injectedCss += `<style>${readFileSync(cssPath, 'utf8')}</style>\n`
+              } catch (e) {
+                console.error('Failed to read CSS file:', cssPath, e)
               }
             }
           })
+          if (injectedCss) {
+            // Remove the original <link rel="stylesheet"> entirely
+            indexHtmlTemplate = indexHtmlTemplate.replace(/<link[^>]*rel="stylesheet"[^>]*>/gi, '')
+            // Inject styles instantly before </head> closes to prioritize parser execution
+            indexHtmlTemplate = indexHtmlTemplate.replace('</head>', `${injectedCss}</head>`)
+          }
         }
       } catch (e) {
         console.error('Failed to read or process dist/index.html:', e)

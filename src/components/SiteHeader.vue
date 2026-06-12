@@ -317,6 +317,7 @@ onUnmounted(() => {
   position: sticky;
   top: 0;
   z-index: 100;
+  min-height: 111px;
 }
 
 /* Language Switcher Dropdown */
