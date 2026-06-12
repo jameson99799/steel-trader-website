@@ -930,8 +930,11 @@ async function loadJobList() {
       activeJob.value = null
       stopJobPolling()
       if (jobs.length) {
-        latestJob.value = jobs[0]
-        if (!latestJobLogs.value.length) await viewJobLogs(jobs[0].id)
+        if (!latestJob.value || latestJob.value.id !== jobs[0].id) {
+           await viewJobLogs(jobs[0].id)
+        } else {
+           latestJob.value = jobs[0]
+        }
       }
     }
   } catch (e) { /* silent */ }

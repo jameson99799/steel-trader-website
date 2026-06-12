@@ -419,9 +419,9 @@ router.get('/:id', authMiddleware, (req, res) => {
         const job = getOne('SELECT * FROM translation_jobs WHERE id=?', [jobId])
         if (!job) return res.status(404).json({ error: 'Job not found' })
 
-        // Limit to 300 initial logs to prevent UI freeze and DB slowdown
+        // Limit to 1500 logs. If it's too small, users won't see early warnings/timeouts in the history view
         const logs = getAll(
-            'SELECT id, level, message, created_at FROM translation_job_logs WHERE job_id=? ORDER BY id DESC LIMIT 300',
+            'SELECT id, level, message, created_at FROM translation_job_logs WHERE job_id=? ORDER BY id DESC LIMIT 1500',
             [job.id]
         )
         logs.reverse()
