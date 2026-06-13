@@ -463,7 +463,7 @@ router.post('/products', apiKeyMiddleware, (req, res) => {
     const {
         name, name_en, category_id, description, description_en, specs,
         detail_content, images, is_featured, sort_order, status,
-        seo_title, seo_description, seo_keywords, faq_items
+        seo_title, seo_description, seo_keywords, faq_items, slug
     } = req.body
 
     if (!name && !name_en) return res.status(400).json({ error: 'name or name_en is required' })
@@ -490,12 +490,22 @@ router.post('/products', apiKeyMiddleware, (req, res) => {
 
     const newId = result.lastInsertRowid
     const base = slugify(name_en || name, newId)
-    run('UPDATE products SET slug = ? WHERE id = ?', [base, newId])
+    const finalSlug = slug || uniqueSlug(base, newId)
+    try {
+        run('UPDATE products SET slug = ? WHERE id = ?', [finalSlug, newId])
+    } catch (err) {
+        if (err.message && err.message.includes('UNIQUE constraint failed')) {
+            run('DELETE FROM products WHERE id = ?', [newId])
+            return res.status(400).json({ error: 'Slug already exists' })
+        }
+        run('DELETE FROM products WHERE id = ?', [newId])
+        return res.status(500).json({ error: err.message })
+    }
 
     res.json({
         success: true,
         id: newId,
-        slug: base,
+        slug: finalSlug,
         seo_title: finalSeoTitle,
         seo_description: finalSeoDesc,
         seo_auto_generated: !seo_title,
@@ -508,7 +518,7 @@ router.post('/news', apiKeyMiddleware, (req, res) => {
     const {
         title, title_en, summary, summary_en, content, cover_image,
         seo_title, seo_description, seo_keywords, status, render_mode,
-        faq_items, category_name, category_id
+        faq_items, category_name, category_id, slug
     } = req.body
 
     if (!title && !title_en) return res.status(400).json({ error: 'title or title_en is required' })
@@ -545,13 +555,23 @@ router.post('/news', apiKeyMiddleware, (req, res) => {
     ])
 
     const newId = result.lastInsertRowid
-    const cleanSlug = slugify(title_en || title, newId)
-    run('UPDATE news SET slug = ? WHERE id = ?', [cleanSlug, newId])
+    const baseSlug = slugify(title_en || title, newId)
+    const finalSlug = slug || uniqueSlug(baseSlug, newId)
+    try {
+        run('UPDATE news SET slug = ? WHERE id = ?', [finalSlug, newId])
+    } catch (err) {
+        if (err.message && err.message.includes('UNIQUE constraint failed')) {
+            run('DELETE FROM news WHERE id = ?', [newId])
+            return res.status(400).json({ error: 'Slug already exists' })
+        }
+        run('DELETE FROM news WHERE id = ?', [newId])
+        return res.status(500).json({ error: err.message })
+    }
 
     res.json({
         success: true,
         id: newId,
-        slug: cleanSlug,
+        slug: finalSlug,
         category_id: resolvedCatId,
         seo_title: finalSeoTitle,
         seo_description: finalSeoDesc,
@@ -568,7 +588,7 @@ router.put('/products/:id', apiKeyMiddleware, (req, res) => {
     const {
         name, name_en, category_id, description, description_en, specs,
         detail_content, images, is_featured, sort_order, status,
-        seo_title, seo_description, seo_keywords, faq_items
+        seo_title, seo_description, seo_keywords, faq_items, slug
     } = req.body
 
     const sets = []
@@ -588,6 +608,8 @@ router.put('/products/:id', apiKeyMiddleware, (req, res) => {
     if (seo_description !== undefined) { sets.push('seo_description=?'); vals.push(seo_description) }
     if (seo_keywords !== undefined) { sets.push('seo_keywords=?'); vals.push(seo_keywords) }
     if (faq_items !== undefined) { sets.push('faq_items=?'); vals.push(faq_items) }
+    if (slug !== undefined) { sets.push('slug=?'); vals.push(slug) }
+    if (slug !== undefined) { sets.push('slug=?'); vals.push(slug) }
 
     if (!sets.length) return res.status(400).json({ error: 'No fields to update' })
     vals.push(id)
@@ -609,7 +631,7 @@ router.put('/news/:id', apiKeyMiddleware, (req, res) => {
     const {
         title, title_en, summary, summary_en, content, cover_image,
         seo_title, seo_description, seo_keywords, status, render_mode,
-        faq_items, category_name, category_id
+        faq_items, category_name, category_id, slug
     } = req.body
 
     const sets = []
@@ -626,6 +648,8 @@ router.put('/news/:id', apiKeyMiddleware, (req, res) => {
     if (status !== undefined) { sets.push('status=?'); vals.push(parseInt(status)) }
     if (render_mode !== undefined) { sets.push('render_mode=?'); vals.push(render_mode) }
     if (faq_items !== undefined) { sets.push('faq_items=?'); vals.push(faq_items) }
+    if (slug !== undefined) { sets.push('slug=?'); vals.push(slug) }
+    if (slug !== undefined) { sets.push('slug=?'); vals.push(slug) }
     // category_name resolution
     if (category_name !== undefined) {
         let resolvedCatId = category_id || null
@@ -983,7 +1007,7 @@ router.get('/docs', (req, res) => {
                         faq_items: '(JSON string) FAQ数组，参考field_formats.faq_items'
                     }
                 },
-                update: { method: 'PUT', path: '/api/external/products/:id', note: '只传需要更新的字段' },
+                update: { method: 'PUT', path: '/api/external/products/:id', note: '只传需要更新的字段. Supports slug.' },
                 delete: { method: 'DELETE', path: '/api/external/products/:id' }
             },
             news: {
@@ -1039,7 +1063,7 @@ router.get('/docs', (req, res) => {
                     },
                     faq_requirement: 'Always include faq_items — it generates FAQPage JSON-LD schema for Google SGE, ChatGPT, Perplexity. FAQ must match article product type (GI article = GI FAQs, not GL/PPGI).'
                 },
-                update: { method: 'PUT', path: '/api/external/news/:id', note: 'Pass only fields to update. faq_items and category_name supported.' },
+                update: { method: 'PUT', path: '/api/external/news/:id', note: 'Pass only fields to update. slug, faq_items, category_name supported.' },
                 delete: { method: 'DELETE', path: '/api/external/news/:id' }
             },
             media: {
