@@ -1223,7 +1223,6 @@ async function save() {
     fd.append('title', form.value.title)
     fd.append('title_en', form.value.title_en || '')
     fd.append('slug', form.value.slug || '')
-    fd.append('slug', form.value.slug || '')
     fd.append('summary', form.value.summary || '')
     fd.append('summary_en', form.value.summary_en || '')
     fd.append('content', form.value.content || '')
