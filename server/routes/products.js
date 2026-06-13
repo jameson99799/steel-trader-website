@@ -140,11 +140,19 @@ router.post('/', authMiddleware, upload.array('images', 10), async (req, res) =>
     req.body.detail_content || null, parseInt(is_featured), parseInt(sort_order), parseInt(status),
     seo_title || null, seo_description || null, seo_keywords || null, req.body.faq_items || '[]'])
 
-  // Auto-generate slug from name_en or name + id
   const newId = result.lastInsertRowid
   const base = slugify(name_en || name)
-  const slug = uniqueSlug(base, newId)
-  run('UPDATE products SET slug = ? WHERE id = ?', [slug, newId])
+  const slug = req.body.slug || uniqueSlug(base, newId)
+  try {
+    run('UPDATE products SET slug = ? WHERE id = ?', [slug, newId])
+  } catch (err) {
+    if (err.message && err.message.includes('UNIQUE constraint failed')) {
+      run('DELETE FROM products WHERE id = ?', [newId]) // rollback
+      return res.status(400).json({ error: '保存失败：自定义链接(Slug)已经被其他产品使用，请留空或修改后重试！' })
+    }
+    run('DELETE FROM products WHERE id = ?', [newId]) // rollback
+    return res.status(500).json({ error: '服务器内部错误：' + err.message })
+  }
 
   res.json({ id: newId, slug, message: '创建成功' })
 })
@@ -177,15 +185,22 @@ router.put('/:id', authMiddleware, upload.array('images', 10), async (req, res) 
   const newBase = slugify(name_en || name)
   const newSlug = req.body.slug || product.slug || uniqueSlug(newBase, id)
 
-  run(`
-    UPDATE products SET name=?, name_en=?, category_id=?, description=?, description_en=?, specs=?, images=?, detail_content=?,
-    is_featured=?, sort_order=?, status=?, seo_title=?, seo_description=?, seo_keywords=?, slug=?, faq_items=?
-    WHERE id=?
-  `, [name, name_en || null, category_id || null, description || null, description_en || null, specs || null, images,
-    req.body.detail_content || null, parseInt(is_featured || 0), parseInt(sort_order || 0), parseInt(status || 1),
-    seo_title || null, seo_description || null, seo_keywords || null, newSlug, req.body.faq_items || '[]', id])
+  try {
+    run(`
+      UPDATE products SET name=?, name_en=?, category_id=?, description=?, description_en=?, specs=?, images=?, detail_content=?,
+      is_featured=?, sort_order=?, status=?, seo_title=?, seo_description=?, seo_keywords=?, slug=?, faq_items=?
+      WHERE id=?
+    `, [name, name_en || null, category_id || null, description || null, description_en || null, specs || null, images,
+      req.body.detail_content || null, parseInt(is_featured || 0), parseInt(sort_order || 0), parseInt(status || 1),
+      seo_title || null, seo_description || null, seo_keywords || null, newSlug, req.body.faq_items || '[]', id])
 
-  res.json({ message: '更新成功', slug: newSlug })
+    res.json({ message: '更新成功', slug: newSlug })
+  } catch (err) {
+    if (err.message && err.message.includes('UNIQUE constraint failed')) {
+      return res.status(400).json({ error: '保存失败：自定义链接(Slug)已经被其他产品使用，请修改后重试！' })
+    }
+    return res.status(500).json({ error: '服务器内部错误：' + err.message })
+  }
 })
 
 router.delete('/:id', authMiddleware, (req, res) => {

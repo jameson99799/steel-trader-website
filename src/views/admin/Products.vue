@@ -1221,6 +1221,7 @@ const handleSubmit = async () => {
     formData.append('seo_title', form.seo_title || '')
     formData.append('seo_description', form.seo_description || '')
     formData.append('seo_keywords', form.seo_keywords || '')
+    formData.append('slug', form.slug || '')
     formData.append('faq_items', JSON.stringify(faqItems.value.filter(f => f.question && f.answer)))
     formData.append('existing_images', existingImages.value.join(','))
     

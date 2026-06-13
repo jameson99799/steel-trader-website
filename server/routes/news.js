@@ -122,8 +122,18 @@ router.post('/', authMiddleware, upload.single('cover_image'), (req, res) => {
     )
     // Generate clean SEO slug without ID
     const newId = result.lastInsertRowid
-    const cleanSlug = uniqueSlug(slugify(title_en || title), newId)
-    run('UPDATE news SET slug = ? WHERE id = ?', [cleanSlug, newId])
+    const cleanSlug = req.body.slug || uniqueSlug(slugify(title_en || title), newId)
+    try {
+        run('UPDATE news SET slug = ? WHERE id = ?', [cleanSlug, newId])
+    } catch (err) {
+        if (err.message && err.message.includes('UNIQUE constraint failed')) {
+            run('DELETE FROM news WHERE id = ?', [newId]) // rollback
+            return res.status(400).json({ error: '保存失败：自定义链接(Slug)已经被其他文章使用，请留空或修改后重试！' })
+        }
+        run('DELETE FROM news WHERE id = ?', [newId]) // rollback
+        return res.status(500).json({ error: '服务器内部错误：' + err.message })
+    }
+    
     res.json({ id: newId, slug: cleanSlug, category_id: resolvedCatId, message: '创建成功' })
 })
 
