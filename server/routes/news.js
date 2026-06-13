@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { getAll, getOne, run } from '../db.js'
+import { getAll, getOne, run, findFuzzyBySlug } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { upload } from '../middleware/upload.js'
 import { loadTranslationsForLang, translateNews } from '../helpers/translate.js'
@@ -87,18 +87,14 @@ router.get('/', (req, res) => {
 router.get('/:slug', (req, res) => {
     const { slug } = req.params
     const isId = /^\d+$/.test(slug)
-    let news = isId
-        ? getOne('SELECT * FROM news WHERE id = ?', [slug])
-        : getOne('SELECT * FROM news WHERE slug = ?', [slug])
+  let news
+  if (isId) {
+    news = getOne('SELECT * FROM news WHERE id = ?', [slug])
+  } else {
+    news = findFuzzyBySlug('news', slug)
+  }
 
-    if (!news && !isId) {
-        const idMatch = slug.match(/-(\d+)$/)
-        if (idMatch) {
-            news = getOne('SELECT * FROM news WHERE id = ?', [idMatch[1]])
-        }
-    }
-
-    if (!news) return res.status(404).json({ error: '文章不存在' })
+  if (!news) return res.status(404).json({ error: '文章不存在' })
 
     // Inject translations if lang param is provided
     const lang = req.query.lang
@@ -140,8 +136,8 @@ router.put('/:id', authMiddleware, upload.single('cover_image'), (req, res) => {
     const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, category_id, category_name } = req.body
     const resolvedCatId = resolveCategoryId(category_id, category_name) ?? existing.category_id
     const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || existing.cover_image)
-    // Regenerate clean SEO slug without ID
-    const updatedSlug = uniqueSlug(slugify(title_en || title), id)
+    // Preserve existing SEO slug unless explicitly modified
+    const updatedSlug = req.body.slug || existing.slug || uniqueSlug(slugify(title_en || title), id)
 
     run(
         `UPDATE news SET title=?, title_en=?, slug=?, summary=?, summary_en=?, content=?, cover_image=?, seo_title=?, seo_description=?, seo_keywords=?, status=?, sort_order=?, render_mode=?, category_id=?, updated_at=CURRENT_TIMESTAMP

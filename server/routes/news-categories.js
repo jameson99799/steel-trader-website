@@ -56,7 +56,7 @@ router.put('/:id', authMiddleware, (req, res) => {
   if (!existing) return res.status(404).json({ error: '分组不存在' })
   const newNameEn = name_en ?? existing.name_en
   const newName = name || existing.name
-  const slug = (newNameEn || newName).toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_]+/g, '-').replace(/^-+|-+$/g, '')
+  const slug = req.body.slug || existing.slug || (newNameEn || newName).toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_]+/g, '-').replace(/^-+|-+$/g, '')
   run(
     'UPDATE news_categories SET name=?, name_en=?, slug=?, sort_order=? WHERE id=?',
     [newName, newNameEn, slug, sort_order ?? existing.sort_order, req.params.id]

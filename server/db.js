@@ -1739,5 +1739,50 @@ async function backupDb(destPath) {
   }
 }
 
-export { initDb, getAll, getOne, run, saveDb, closeDb, backupDb }
-export default { initDb, getAll, getOne, run, saveDb, closeDb, backupDb }
+function findFuzzyBySlug(tableName, requestedSlug) {
+  if (!requestedSlug) return null;
+  // 1. Exact match
+  let item = getOne(`SELECT * FROM ${tableName} WHERE slug = ?`, [requestedSlug]);
+  if (item) return item;
+
+  // 2. ID fallback match
+  const idMatch = requestedSlug.match(/-(\d+)$/);
+  if (idMatch) {
+    item = getOne(`SELECT * FROM ${tableName} WHERE id = ?`, [idMatch[1]]);
+    if (item) return item;
+  }
+
+  // 3. Fuzzy prefix match
+  if (requestedSlug.length >= 30) {
+    const prefix = requestedSlug.substring(0, 30);
+    const candidates = getAll(`SELECT * FROM ${tableName} WHERE slug LIKE ? LIMIT 50`, [`${prefix}%`]);
+
+    if (candidates.length === 1) {
+      return candidates[0];
+    } else if (candidates.length > 1) {
+      // Disambiguate if multiple match
+      let bestMatch = candidates[0];
+      let maxScore = -1;
+
+      for (const c of candidates) {
+        let score = 0;
+        const minLen = Math.min(requestedSlug.length, c.slug.length);
+        for (let i = 0; i < minLen; i++) {
+          if (requestedSlug[i] === c.slug[i]) score++;
+          else break;
+        }
+        score -= Math.abs(requestedSlug.length - c.slug.length) * 0.1;
+
+        if (score > maxScore) {
+          maxScore = score;
+          bestMatch = c;
+        }
+      }
+      return bestMatch;
+    }
+  }
+  return null;
+}
+
+export { initDb, getAll, getOne, run, saveDb, closeDb, backupDb, findFuzzyBySlug }
+export default { initDb, getAll, getOne, run, saveDb, closeDb, backupDb, findFuzzyBySlug }

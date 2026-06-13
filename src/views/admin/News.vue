@@ -132,6 +132,10 @@
               <input v-model="form.title_en" class="form-control" placeholder="Article title in English" />
             </div>
             <div class="form-group">
+              <label>自定义链接 (Slug) - 留空自动生成</label>
+              <input v-model="form.slug" class="form-control" placeholder="例如: galvanized-steel-coil" />
+            </div>
+            <div class="form-group">
               <label>摘要（中文）</label>
               <textarea v-model="form.summary" class="form-control" rows="3" placeholder="文章简介"></textarea>
             </div>
@@ -868,7 +872,7 @@ function enterNewsFolder(folder) {
 let newsImgChooserMode = 'content' // 'content' or 'cover'
 
 const form = ref({
-  title: '', title_en: '',
+  title: '', title_en: '', slug: '', slug: '',
   summary: '', summary_en: '',
   cover_image: null, cover_preview: null,
   status: 1, sort_order: 0,
@@ -1168,7 +1172,7 @@ async function handleNewsImgUpload(e) {
 // ─── Modal open/close ─────────────────────────────────────────────────────────
 async function openCreate() {
   editId.value = null
-  form.value = { title: '', title_en: '', summary: '', summary_en: '', cover_image: null, cover_preview: null, status: 1, sort_order: 0, seo_title: '', seo_description: '', seo_keywords: '', content: '', render_mode: 'direct', category_id: filterCatId.value || null }
+  form.value = { title: '', title_en: '', slug: '', slug: '', summary: '', summary_en: '', cover_image: null, cover_preview: null, status: 1, sort_order: 0, seo_title: '', seo_description: '', seo_keywords: '', content: '', render_mode: 'direct', category_id: filterCatId.value || null }
   activeTab.value = 'basic'
   newsEditorMode.value = 'visual'
   newsReplacingImg = null
@@ -1186,7 +1190,7 @@ async function openEdit(item) {
   }
 
   form.value = {
-    title: fullItem.title || '', title_en: fullItem.title_en || '',
+    title: fullItem.title || '', title_en: fullItem.title_en || '', slug: fullItem.slug || '',
     summary: fullItem.summary || '', summary_en: fullItem.summary_en || '',
     cover_image: null, cover_preview: fullItem.cover_image || null,
     status: fullItem.status ?? 1, sort_order: fullItem.sort_order || 0,
@@ -1218,6 +1222,8 @@ async function save() {
     const fd = new FormData()
     fd.append('title', form.value.title)
     fd.append('title_en', form.value.title_en || '')
+    fd.append('slug', form.value.slug || '')
+    fd.append('slug', form.value.slug || '')
     fd.append('summary', form.value.summary || '')
     fd.append('summary_en', form.value.summary_en || '')
     fd.append('content', form.value.content || '')

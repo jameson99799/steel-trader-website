@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { getAll, getOne, run } from '../db.js'
+import { getAll, getOne, run, findFuzzyBySlug } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { upload, compressImage } from '../middleware/upload.js'
 import { loadTranslationsForLang, translateProduct } from '../helpers/translate.js'
@@ -96,9 +96,9 @@ router.get('/:slug', (req, res) => {
     : getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.slug = ?`, [slug])
 
   if (!product && !isId) {
-    const idMatch = slug.match(/-(\d+)$/)
-    if (idMatch) {
-      product = getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`, [idMatch[1]])
+    const fallbackProduct = findFuzzyBySlug('products', slug)
+    if (fallbackProduct) {
+      product = getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`, [fallbackProduct.id])
     }
   }
 
@@ -175,7 +175,7 @@ router.put('/:id', authMiddleware, upload.array('images', 10), async (req, res) 
   }
 
   const newBase = slugify(name_en || name)
-  const newSlug = uniqueSlug(newBase, id)
+  const newSlug = req.body.slug || product.slug || uniqueSlug(newBase, id)
 
   run(`
     UPDATE products SET name=?, name_en=?, category_id=?, description=?, description_en=?, specs=?, images=?, detail_content=?,

@@ -77,10 +77,9 @@ router.put('/:id', authMiddleware, upload.single('image'), (req, res) => {
   }
 
   const image = req.file ? `/uploads/${req.file.filename}` : category.image
-
+  const updatedSlug = req.body.slug || category.slug || slugify(name_en || name, id)
   run('UPDATE categories SET name = ?, name_en = ?, parent_id = ?, sort_order = ?, image = ?, slug = ? WHERE id = ?',
-    [name, name_en || null, parseInt(parent_id || 0), parseInt(sort_order || 0), image, slugify(name_en || name, id), id])
-
+    [name, name_en || null, parseInt(parent_id || 0), parseInt(sort_order || 0), image, updatedSlug, id])
   res.json({ message: '更新成功' })
 })
 

@@ -9,7 +9,7 @@ import { dirname, join } from 'path'
 import { readFileSync, existsSync, unlinkSync, readdirSync } from 'fs'
 import sharp from 'sharp'
 
-import { initDb, getAll, getOne, run } from './db.js'
+import { initDb, getAll, getOne, run, findFuzzyBySlug } from './db.js'
 import { loadTranslationsForLang, translateProduct, translateNews, translateCompany } from './helpers/translate.js'
 import authRoutes from './routes/auth.js'
 import securityRoutes from './routes/security.js'
@@ -612,8 +612,10 @@ async function startServer() {
             const slug = productMatch[1]
             let product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.slug=? AND p.status=1', [slug])
             if (!product) {
-              const idMatch = slug.match(/-(\d+)$/)
-              if (idMatch) product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.id=? AND p.status=1', [idMatch[1]])
+              const fallbackProduct = findFuzzyBySlug('products', slug)
+              if (fallbackProduct) {
+                product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.id=? AND p.status=1', [fallbackProduct.id])
+              }
             }
             if (product) {
               // Redirect mismatched slugs (Soft 404 / duplicate fix)
@@ -774,8 +776,10 @@ async function startServer() {
             const slug = newsMatch[1]
             let article = getOne('SELECT * FROM news WHERE slug=? AND status=1', [slug])
             if (!article) {
-              const idMatch = slug.match(/-(\d+)$/)
-              if (idMatch) article = getOne('SELECT * FROM news WHERE id=? AND status=1', [idMatch[1]])
+              const fallbackArticle = findFuzzyBySlug('news', slug)
+              if (fallbackArticle) {
+                article = getOne('SELECT * FROM news WHERE id=? AND status=1', [fallbackArticle.id])
+              }
             }
             if (article) {
               // Redirect mismatched slugs (Soft 404 / duplicate fix)
