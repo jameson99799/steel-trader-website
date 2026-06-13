@@ -1763,7 +1763,7 @@ function findFuzzyBySlug(tableName, requestedSlug) {
     if (item) return item;
   }
 
-  const candidates = getAll(`SELECT * FROM ${tableName} WHERE status = 1`);
+  const candidates = getAll(`SELECT * FROM ${tableName} WHERE status = 1 ORDER BY id DESC`);
 
   // 3. Perfect Prefix Match against any URL forms (Requires at least 25 shared chars)
   let bestPrefixMatch = null;

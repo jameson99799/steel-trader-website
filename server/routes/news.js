@@ -139,12 +139,20 @@ router.put('/:id', authMiddleware, upload.single('cover_image'), (req, res) => {
     // Preserve existing SEO slug unless explicitly modified
     const updatedSlug = req.body.slug || existing.slug || uniqueSlug(slugify(title_en || title), id)
 
-    run(
+    try {
+      run(
         `UPDATE news SET title=?, title_en=?, slug=?, summary=?, summary_en=?, content=?, cover_image=?, seo_title=?, seo_description=?, seo_keywords=?, status=?, sort_order=?, render_mode=?, category_id=?, updated_at=CURRENT_TIMESTAMP
      WHERE id=?`,
         [title, title_en || null, updatedSlug, summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status || 1), parseInt(sort_order || 0), render_mode || 'direct', resolvedCatId, id]
-    )
-    res.json({ message: '更新成功', slug: updatedSlug, category_id: resolvedCatId })
+      )
+      res.json({ message: '更新成功', slug: updatedSlug, category_id: resolvedCatId })
+
+    } catch (err) {
+      if (err.message && err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: '保存失败：自定义链接(Slug)或标题已经被其他文章使用，请修改后重试！' })
+      }
+      return res.status(500).json({ error: '服务器内部错误：' + err.message })
+    }
 })
 
 // DELETE news (admin only)
