@@ -136,6 +136,23 @@ const router = createRouter({
     if (savedPosition) {
       return savedPosition
     }
+    if (to.hash) {
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          const id = to.hash.slice(1);
+          const el = document.getElementById(id) || document.getElementById(decodeURIComponent(id));
+          if (el) {
+            resolve({
+              el: to.hash,
+              top: 90,
+              behavior: 'smooth'
+            })
+          } else {
+            resolve({ top: 0 })
+          }
+        }, 50)
+      })
+    }
     return new Promise((resolve) => {
       // Delay scrolling until after browser paints to prevent Forced Synchronous Layout
       setTimeout(() => {
