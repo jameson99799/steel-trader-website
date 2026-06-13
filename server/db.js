@@ -1783,13 +1783,6 @@ function findFuzzyBySlug(tableName, requestedSlug) {
     
     let bestP = Math.max(p1, p2, p3, p4);
     
-    // SEO CRITICAL FIX: If Google indexed Article A, the requested URL is a heavily truncated version of Article A's exact slug.
-    // We give a microscopic 0.5 bonus to the score if the match came from the ACTUAL slug, rather than just the SEO title.
-    // This ensures that between two articles with identical SEO titles, the one holding the historically closest URL slug ALWAYS wins!
-    if (p4 === bestP) {
-      bestP += 0.5;
-    }
-    
     if (bestP > maxPrefix && bestP >= 22) { // 22 chars is extremely safe for exact match
       maxPrefix = bestP;
       bestPrefixMatch = c;
