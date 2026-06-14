@@ -139,7 +139,6 @@
     <div class="lightbox-top-bar" @click.stop v-if="lightboxImages.length > 0 || lightboxActiveVideo">
       <div class="lightbox-center-controls">
         <div class="lightbox-title" v-if="lightboxImages.length > 0">{{ lightboxIndex + 1 }} / {{ lightboxImages.length }}</div>
-        <div class="lightbox-title" v-else>Video Playback</div>
       </div>
       <button class="lightbox-close" @click="closeLightbox">&times;</button>
     </div>

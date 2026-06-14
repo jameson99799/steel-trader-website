@@ -1188,8 +1188,9 @@ function selectNewsVideoFromLib() {
   newsMediaGroup.value = localStorage.getItem('_lastMediaGroup') || ''
   newsMediaFolder.value = localStorage.getItem('_lastMediaFolder') || ''
   newsMediaCurrentFolderName.value = localStorage.getItem('_lastMediaFolderName') || ''
-  newsMediaWatermark.value = ''
+  newsMediaWatermark.value = localStorage.getItem('_lastWatermarkTemplate') || ''
   loadNewsMediaGroups()
+  loadWatermarkTemplates()
   loadNewsMedia()
   showNewsMediaBrowser.value = true
 }
