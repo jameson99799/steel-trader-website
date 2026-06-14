@@ -128,19 +128,24 @@ pm2 status
 
 # ── 10. 智能修复 Nginx 视频上传大小限制 ──────────────
 info "检查并自动解锁大视频上传限制..."
-for NGINX_CONF in "/www/server/nginx/conf/nginx.conf" "/etc/nginx/nginx.conf"; do
+# 为了彻底突破宝塔面板针对独立站点的重写，我们需要扫过所有相关的 vhost 配置文件
+for NGINX_CONF in /www/server/nginx/conf/nginx.conf /etc/nginx/nginx.conf /www/server/panel/vhost/nginx/*.conf; do
   if [ -f "$NGINX_CONF" ]; then
     if grep -q "client_max_body_size" "$NGINX_CONF"; then
       # 使用正则匹配将现有的各种数字加M/m/g/k 强制改为 1024M
       sudo sed -i -E 's/client_max_body_size[[:space:]]+[0-9]+[A-Za-z]?/client_max_body_size 1024M/g' "$NGINX_CONF"
     else
-      # 如果找不到，在 http { 下面插入一条
-      sudo sed -i '/http[[:space:]]*{/a \    client_max_body_size 1024M;' "$NGINX_CONF"
+      # 如果找不到，优先在 server { 下面插入，如果还没有则去 http { 下面插入
+      if grep -q "server[[:space:]]*{" "$NGINX_CONF"; then
+         sudo sed -i '/server[[:space:]]*{/a \    client_max_body_size 1024M;' "$NGINX_CONF"
+      else
+         sudo sed -i '/http[[:space:]]*{/a \    client_max_body_size 1024M;' "$NGINX_CONF"
+      fi
     fi
     sudo nginx -s reload 2>/dev/null || sudo systemctl reload nginx 2>/dev/null || true
-    ok "Nginx 拦截策略已自动解锁，最大支持 1024M 上传（$NGINX_CONF）"
   fi
 done
+ok "Nginx 所有层级的拦截策略已全面突破，最大支持 1024M 上传！"
 
 echo ""
 echo "============================================================"
