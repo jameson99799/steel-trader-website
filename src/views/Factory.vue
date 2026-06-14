@@ -266,7 +266,7 @@ const getYoutubeEmbedUrl = (url, autoplay, mute = false) => {
   } else {
     return url;
   }
-  return `https://www.youtube.com/embed/${videoId}?rel=0${autoplay ? `&autoplay=1${mute ? '&mute=1' : ''}` : ''}`;
+  return `https://www.youtube.com/embed/${videoId}?rel=0&enablejsapi=1&playsinline=1${autoplay ? `&autoplay=1${mute ? '&mute=1' : ''}` : ''}`;
 }
 
 const openLightbox = (group, index) => {
