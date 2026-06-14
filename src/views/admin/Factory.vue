@@ -240,7 +240,7 @@
     <!-- Global Loading Overlay -->
     <div v-if="globalProcessing" class="loading-overlay">
       <div class="loader"></div>
-      <div style="margin-top:16px;color:white;">系统处理中，请稍候...</div>
+      <div style="margin-top:16px;color:white;max-width:300px;text-align:center;">{{ globalProcessingText || '系统处理中，请稍候...' }}</div>
     </div>
 
     <!-- Admin Preview Modal -->
@@ -271,7 +271,7 @@
     <!-- Global Loading Overlay -->
     <div v-if="globalProcessing" class="loading-overlay">
       <div class="loader"></div>
-      <div style="margin-top:16px;color:white;">系统处理中，请稍候...</div>
+      <div style="margin-top:16px;color:white;max-width:300px;text-align:center;">{{ globalProcessingText || '系统处理中，请稍候...' }}</div>
     </div>
   </div>
 </template>
@@ -303,6 +303,7 @@ function enterMediaPickerFolder(folder) {
 }
 
 const globalProcessing = ref(false)
+const globalProcessingText = ref('')
 
 async function loadWatermarkTemplates() {
   if (watermarkTemplates.value.length) return
@@ -534,6 +535,7 @@ const doAddSelectedMedia = async () => {
   let urlsToAdd = mediaPickerSelected.value
 
   if (mediaPickerWatermark.value) {
+    globalProcessingText.value = '正在为媒体添加水印，视频文件可能需要几十秒至数分钟，请耐心等待...'
     globalProcessing.value = true
     try {
       const res = await fetch('/api/media/apply-watermark-batch', {
@@ -545,6 +547,7 @@ const doAddSelectedMedia = async () => {
       if (res.ok && data.urls) urlsToAdd = data.urls
     } catch (e) { console.error(e) }
     globalProcessing.value = false
+    globalProcessingText.value = ''
   }
 
   for (const url of urlsToAdd) {

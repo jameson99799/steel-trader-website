@@ -463,7 +463,7 @@
     <!-- Global Loading Overlay -->
     <div v-if="globalProcessing" class="loading-overlay">
       <div class="loader"></div>
-      <div style="margin-top:16px;color:white;">系统处理中，请稍候...</div>
+      <div style="margin-top:16px;color:white;max-width:300px;text-align:center;">{{ globalProcessingText || '系统处理中，请稍候...' }}</div>
     </div>
   </div>
 
@@ -480,6 +480,7 @@ const showModal = ref(false)
 const showAiAutoPostConfig = ref(false)
 const editId = ref(null)
 const syncing = ref(false)
+const globalProcessingText = ref('')
 
 async function syncImagesAndLinks() {
   if (syncing.value) return
@@ -1256,6 +1257,11 @@ async function selectNewsMediaImage(item) {
   showNewsMediaBrowser.value = false
 
   if (newsMediaWatermark.value) {
+    if (url.toLowerCase().endsWith('.mp4') || url.toLowerCase().endsWith('.webm')) {
+      globalProcessingText.value = '正在为视频渲染添加水印，此过程可能需要几十秒至数分钟，请耐心等待...'
+    } else {
+      globalProcessingText.value = '正在为图片添加水印，请稍候...'
+    }
     globalProcessing.value = true
     try {
       const res = await fetch('/api/media/apply-watermark-batch', {
@@ -1267,6 +1273,7 @@ async function selectNewsMediaImage(item) {
       if (res.ok && data.urls?.length) url = data.urls[0]
     } catch (e) { console.error(e) }
     globalProcessing.value = false
+    globalProcessingText.value = ''
   }
 
   if (newsImgChooserMode === 'cover') {
