@@ -259,6 +259,8 @@
 
                 <button type="button" class="editor-btn" @click="insertNewsImage">📷 插入单图</button>
                 <button type="button" class="editor-btn" @click="insertImageGrid" style="color:#059669; border-color:#d1fae5; background:#ecfdf5; font-weight: 500;">🔲 插入多图排版</button>
+                <button type="button" class="editor-btn" @click="insertNewsVideo" style="color:#ef4444; border-color:#fee2e2; background:#fef2f2; font-weight: 500;">🎥 插入单视频</button>
+                <button type="button" class="editor-btn" @click="insertVideoGrid" style="color:#2563eb; border-color:#dbeafe; background:#eff6ff; font-weight: 500;">🎞️ 插入多视频</button>
                 <button type="button" class="fullscreen-btn" @click="isFullscreen = !isFullscreen">
                   {{ isFullscreen ? '✕ 退出全屏' : '⛶ 全屏' }}
                 </button>
@@ -423,6 +425,34 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline" @click="showNewsMediaBrowser=false">取消</button>
+        </div>
+      </div>
+    <!-- Video Settings Modal -->
+    <div v-if="showVideoSettings" class="modal-overlay" @click.self="showVideoSettings=false" style="z-index:10300">
+      <div class="modal-wrap" style="max-width:400px;">
+        <div class="modal-header" style="background:#eff6ff;color:#2563eb;">
+          <h3>🎬 视频配置</h3>
+          <button class="modal-close" @click="showVideoSettings=false">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>视频链接 (支持 YouTube / 本地文件)</label>
+            <div style="display:flex;gap:8px;">
+              <input v-model="tempVideoSettings.url" class="form-control" placeholder="输入超链接或从图库选择..." style="flex:1" />
+              <button class="btn btn-sm btn-outline" @click="selectNewsVideoFromLib" style="white-space:nowrap;color:#2563eb;border-color:#bfdbfe;">📂 图库</button>
+            </div>
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:12px;margin-top:20px;">
+            <label style="margin:0;font-weight:700;">是否开启直接无声自动播放：</label>
+            <input type="checkbox" :checked="tempVideoSettings.autoplay === 1" @change="e => tempVideoSettings.autoplay = e.target.checked ? 1 : 0" style="width:18px;height:18px;accent-color:#2563eb;" />
+          </div>
+          <p class="form-hint" style="margin-top:16px;">
+            <b>提示：</b>当开启此项后，视频会在网页打开时静音自动循环播放。前台用户点击视频区域时，均会弹出<b>带有完整进度条、声音控制组件的独立高级弹窗</b>。
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" @click="showVideoSettings=false">取消</button>
+          <button class="btn btn-primary" style="background:#2563eb;border-color:#2563eb;" @click="saveVideoSettings">保存配置</button>
         </div>
       </div>
     </div>
@@ -853,9 +883,12 @@ const newsVisualEl = ref(null)
 const newsImgInput = ref(null)
 let newsReplacingImg = null
 
-// Image chooser state for news content editor
+// Image and Video chooser state for news content editor
 const showNewsImgChooser = ref(false)
 const showNewsMediaBrowser = ref(false)
+const showVideoSettings = ref(false)
+const activeVideoNode = ref(null)
+const tempVideoSettings = ref({ url: '', autoplay: 0 })
 const newsMediaSearch = ref('')
 const newsMediaGroup = ref('')
 const newsMediaWatermark = ref('')
@@ -947,6 +980,14 @@ function onNewsVisualInput() { syncNewsFromVisual() }
 function onNewsVisualClick(e) {
   const img = e.target.closest('img')
   const tip = e.target.closest('.replace-tip')
+  const videoContainer = e.target.closest('.video-container')
+
+  if (videoContainer) {
+    e.preventDefault()
+    openVideoSettings(videoContainer)
+    return
+  }
+
   if (tip) {
     e.preventDefault()
     const parent = tip.parentElement
@@ -1030,6 +1071,128 @@ function insertImageGrid() {
   }
 }
 
+// ─── Video Injection Logic ──────────────────────────────────────────────────
+const getYoutubeEmbedUrl = (url, autoplay = false, mute = false, thumbnailOnly = false) => {
+  if (!url) return '';
+  let videoId = '';
+  if (url.includes('youtube.com/watch?v=')) {
+    videoId = url.split('v=')[1];
+    const ampersandPosition = videoId.indexOf('&');
+    if(ampersandPosition !== -1) videoId = videoId.substring(0, ampersandPosition);
+  } else if (url.includes('youtube.com/shorts/')) {
+    videoId = url.split('shorts/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
+  } else if (url.includes('youtu.be/')) {
+    videoId = url.split('youtu.be/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
+  } else if (url.includes('youtube.com/embed/')) {
+    videoId = url.split('embed/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
+  } else {
+    return url;
+  }
+  if (thumbnailOnly) return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+  return `https://www.youtube.com/embed/${videoId}?vq=hd2160&enablejsapi=1&playsinline=1${autoplay ? `&autoplay=1${mute ? '&mute=1' : ''}` : ''}`;
+}
+
+function generateVideoHtmlTemplate(cols) {
+  let html = `<div class="image-grid-layout grid-cols-${cols}">\n`
+  for (let i = 0; i < cols; i++) {
+    html += `  <div class="video-item" contenteditable="false">
+    <div class="video-container" data-autoplay="0" data-media-url="" style="background:#334155;aspect-ratio:4/3;position:relative;border-radius:6px;overflow:hidden;cursor:pointer;">
+      <div class="video-placeholder" style="color:white;display:flex;align-items:center;justify-content:center;height:100%;font-size:14px;font-weight:bold;">🎬点击配置视频</div>
+    </div>
+    <div class="video-desc" contenteditable="true" style="text-align: center; margin-top: 10px; font-weight: 500; min-height: 20px; outline: none;">填写视频说明</div>
+  </div>\n`
+  }
+  html += `</div><p><br/></p>`
+  return html
+}
+
+function injectHtmlToVisual(html) {
+  if (newsEditorMode.value === 'visual' && newsVisualEl.value) {
+    newsVisualEl.value.focus()
+    document.execCommand('insertHTML', false, html)
+    setTimeout(() => {
+      if (newsVisualEl.value) {
+        newsVisualEl.value.querySelectorAll('.video-item').forEach(item => item.setAttribute('contenteditable', 'false'));
+        syncNewsFromVisual();
+      }
+    }, 50);
+  } else {
+    form.value.content = (form.value.content || '') + html
+  }
+}
+
+function insertNewsVideo() {
+  const html = generateVideoHtmlTemplate(1).replace('grid-cols-1', 'grid-cols-1 single-video-layout')
+  injectHtmlToVisual(html)
+}
+
+function insertVideoGrid() {
+  const colsStr = prompt('请输入想要几列视频排版？（建议 2 到 3 之间，例如：2）：', '2')
+  if (!colsStr) return
+  const cols = parseInt(colsStr) || 2
+  injectHtmlToVisual(generateVideoHtmlTemplate(cols))
+}
+
+function openVideoSettings(node) {
+  activeVideoNode.value = node
+  tempVideoSettings.value.url = node.getAttribute('data-media-url') || ''
+  tempVideoSettings.value.autoplay = parseInt(node.getAttribute('data-autoplay') || '0')
+  showVideoSettings.value = true
+}
+
+function saveVideoSettings() {
+  if (!activeVideoNode.value) return
+  const node = activeVideoNode.value
+  const url = tempVideoSettings.value.url
+  const autoplay = tempVideoSettings.value.autoplay
+  node.setAttribute('data-media-url', url)
+  node.setAttribute('data-autoplay', autoplay.toString())
+
+  if (url) {
+    const isYt = url.includes('youtube') || url.includes('youtu.be')
+    if (autoplay === 1) {
+      if (isYt) {
+        node.innerHTML = `<iframe src="${getYoutubeEmbedUrl(url, true, true)}" style="width:100%;height:100%;pointer-events:none;border:none;" allow="autoplay; encrypted-media" allowfullscreen></iframe>`
+      } else {
+        node.innerHTML = `<video src="${url}" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover;pointer-events:none;"></video>`
+      }
+    } else {
+      const thumb = isYt ? getYoutubeEmbedUrl(url, false, false, true) : `${url}#t=0.1`
+      const overlayHtml = `<div class="video-play-overlay" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:50px;height:50px;background:rgba(0,0,0,0.6);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;pointer-events:none;">▶</div>`
+      if (isYt) {
+        node.innerHTML = `<img class="video-thumbnail" src="${thumb}" style="width:100%;height:100%;object-fit:cover;" />${overlayHtml}`
+      } else {
+        node.innerHTML = `<video class="video-thumbnail" src="${thumb}" preload="metadata" style="width:100%;height:100%;object-fit:cover;"></video>${overlayHtml}`
+      }
+    }
+    node.style.background = '#000'
+  } else {
+    node.innerHTML = `<div class="video-placeholder" style="color:white;display:flex;align-items:center;justify-content:center;height:100%;font-size:14px;font-weight:bold;">🎬点击配置视频</div>`
+    node.style.background = '#334155'
+  }
+  syncNewsFromVisual()
+  showVideoSettings.value = false
+}
+
+function selectNewsVideoFromLib() {
+  newsImgChooserMode = 'video'
+  showVideoSettings.value = false
+  newsMediaSearch.value = ''
+  newsMediaGroup.value = localStorage.getItem('_lastMediaGroup') || ''
+  newsMediaFolder.value = localStorage.getItem('_lastMediaFolder') || ''
+  newsMediaCurrentFolderName.value = localStorage.getItem('_lastMediaFolderName') || ''
+  newsMediaWatermark.value = ''
+  loadNewsMediaGroups()
+  loadNewsMedia()
+  showNewsMediaBrowser.value = true
+}
+
 function openNewsImgChooser(mode) {
   newsImgChooserMode = mode
   showNewsImgChooser.value = true
@@ -1108,6 +1271,12 @@ async function selectNewsMediaImage(item) {
     form.value.cover_preview = url
     form.value.cover_image = null // not a file, it's a URL
     form.value.cover_url = url   // store URL separately for save
+    return
+  }
+  
+  if (newsImgChooserMode === 'video') {
+    tempVideoSettings.value.url = url
+    showVideoSettings.value = true
     return
   }
 

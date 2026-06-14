@@ -136,9 +136,10 @@
 
   <!-- Lightbox -->
   <div class="lightbox" :class="{ 'active': lightboxActive }" @click="closeLightbox">
-    <div class="lightbox-top-bar" @click.stop v-if="lightboxImages.length > 0">
+    <div class="lightbox-top-bar" @click.stop v-if="lightboxImages.length > 0 || lightboxActiveVideo">
       <div class="lightbox-center-controls">
-        <div class="lightbox-title">{{ lightboxIndex + 1 }} / {{ lightboxImages.length }}</div>
+        <div class="lightbox-title" v-if="lightboxImages.length > 0">{{ lightboxIndex + 1 }} / {{ lightboxImages.length }}</div>
+        <div class="lightbox-title" v-else>Video Playback</div>
       </div>
       <button class="lightbox-close" @click="closeLightbox">&times;</button>
     </div>
@@ -147,9 +148,22 @@
       <img :src="lightboxImages[lightboxIndex]" @click="closeLightbox" />
     </div>
 
+    <div class="lightbox-content" @click.stop v-if="lightboxActiveVideo">
+      <iframe v-if="lightboxActiveVideo.media_url.includes('youtube') || lightboxActiveVideo.media_url.includes('youtu.be')"
+        :src="getYoutubeEmbedUrl(lightboxActiveVideo.media_url, true, false)"
+        frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen>
+      </iframe>
+      <video v-else
+        :src="lightboxActiveVideo.media_url"
+        controls autoplay playsinline preload="auto">
+      </video>
+    </div>
+
     <div class="lightbox-bottom-bar" @click.stop v-if="lightboxImages.length > 0">
-      <button class="lightbox-bottom-nav prev" @click="lightboxPrev" :disabled="lightboxIndex === 0">❮</button>
-      <button class="lightbox-bottom-nav next" @click="lightboxNext" :disabled="lightboxIndex === lightboxImages.length - 1">❯</button>
+      <button class="lightbox-bottom-nav prev" @click="lightboxPrev" :disabled="lightboxIndex === 0">◀</button>
+      <button class="lightbox-bottom-nav next" @click="lightboxNext" :disabled="lightboxIndex === lightboxImages.length - 1">▶</button>
     </div>
   </div>
 </template>
@@ -176,6 +190,7 @@ const seoSettings = ref(null)
 const lightboxActive = ref(false)
 const lightboxImages = ref([])
 const lightboxIndex = ref(0)
+const lightboxActiveVideo = ref(null)
 
 // ── Template variable substitution helper ────────────────────────────────
 function resolveTemplateVars(html) {
@@ -282,6 +297,17 @@ function handleMailtoClick(href, event) {
 }
 
 function handleBodyClick(e) {
+  const videoContainer = e.target.closest('.video-container')
+  if (videoContainer) {
+    e.preventDefault()
+    const url = videoContainer.getAttribute('data-media-url')
+    if (url) {
+      lightboxActiveVideo.value = { media_url: url }
+      lightboxActive.value = true
+    }
+    return
+  }
+
   if (e.target.tagName === 'IMG') {
     const container = e.currentTarget
     const images = Array.from(container.querySelectorAll('img')).map(img => img.src)
@@ -326,7 +352,34 @@ const closeLightbox = () => {
   lightboxActive.value = false
   setTimeout(() => {
     lightboxImages.value = []
+    lightboxActiveVideo.value = null
   }, 300)
+}
+
+const getYoutubeEmbedUrl = (url, autoplay = false, mute = false, thumbnailOnly = false) => {
+  if (!url) return '';
+  let videoId = '';
+  if (url.includes('youtube.com/watch?v=')) {
+    videoId = url.split('v=')[1];
+    const ampersandPosition = videoId.indexOf('&');
+    if(ampersandPosition !== -1) videoId = videoId.substring(0, ampersandPosition);
+  } else if (url.includes('youtube.com/shorts/')) {
+    videoId = url.split('shorts/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
+  } else if (url.includes('youtu.be/')) {
+    videoId = url.split('youtu.be/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
+  } else if (url.includes('youtube.com/embed/')) {
+    videoId = url.split('embed/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
+  } else {
+    return url;
+  }
+  if (thumbnailOnly) return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+  return `https://www.youtube.com/embed/${videoId}?vq=hd2160&enablejsapi=1&playsinline=1${autoplay ? `&autoplay=1${mute ? '&mute=1' : ''}` : ''}`;
 }
 
 const lightboxPrev = () => {
