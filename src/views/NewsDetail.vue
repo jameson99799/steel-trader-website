@@ -148,16 +148,17 @@
       <img :src="lightboxImages[lightboxIndex]" @click="closeLightbox" />
     </div>
 
-    <div class="lightbox-content" @click.stop v-if="lightboxActiveVideo">
+    <div class="lightbox-content" @click.stop v-if="lightboxActiveVideo" style="width:100%; display:flex; flex-direction:column; align-items:center;">
       <iframe v-if="lightboxActiveVideo.media_url.includes('youtube') || lightboxActiveVideo.media_url.includes('youtu.be')"
         :src="getYoutubeEmbedUrl(lightboxActiveVideo.media_url, true, false)"
-        frameborder="0"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        style="width:100%;height:80vh;max-width:1100px;border:none;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowfullscreen>
       </iframe>
       <video v-else
         :src="lightboxActiveVideo.media_url"
-        controls autoplay playsinline preload="auto">
+        controls controlsList="nodownload" disablePictureInPicture autoplay playsinline preload="auto"
+        style="width:100%;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
       </video>
     </div>
 
