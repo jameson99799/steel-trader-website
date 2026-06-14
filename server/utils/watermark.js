@@ -62,8 +62,25 @@ export async function applyWatermark(originalFilepath, templateId = null) {
       inputWidth = originalMeta.width
       inputHeight = originalMeta.height
     } else {
-      inputWidth = 1920
-      inputHeight = 1080
+      try {
+        const { stderr } = await execAsync(`"${ffmpegPath}" -i "${originalAbsPath}"`).catch(e => e)
+        const match = stderr.match(/Video:.*?, (\d+)x(\d+)/)
+        if (match) {
+          inputWidth = parseInt(match[1])
+          inputHeight = parseInt(match[2])
+          const rotMatch = stderr.match(/rotate\s*:\s*(\d+)/i)
+          if (rotMatch) {
+            const rot = parseInt(rotMatch[1])
+            if (rot === 90 || rot === 270) {
+                const tmp = inputWidth; inputWidth = inputHeight; inputHeight = tmp;
+            }
+          }
+        } else {
+          inputWidth = 1920; inputHeight = 1080;
+        }
+      } catch(e) {
+        inputWidth = 1920; inputHeight = 1080;
+      }
     }
 
     if (!inputWidth || !inputHeight) return originalFilepath
@@ -99,8 +116,8 @@ export async function applyWatermark(originalFilepath, templateId = null) {
       const scaleFactor = settings.font_size || 0.05
       const fontSizePx = Math.round(inputWidth * scaleFactor)
       
-      compositeWidth = Math.round(settings.text_content.length * fontSizePx)
-      compositeHeight = Math.round(fontSizePx * 1.5)
+      compositeWidth = Math.round(settings.text_content.length * fontSizePx * 1.5) // Added 1.5x padding to prevent SVG cropping
+      compositeHeight = Math.round(fontSizePx * 2) 
       
       const escapeHtml = (unsafe) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;")
       const text = escapeHtml(settings.text_content)
@@ -115,7 +132,7 @@ export async function applyWatermark(originalFilepath, templateId = null) {
       const svgImage = `
         <svg width="${compositeWidth}" height="${compositeHeight}" viewBox="0 0 ${compositeWidth} ${compositeHeight}">
           <style>
-            .title { fill: ${color}; font-size: ${fontSizePx}px; font-family: ${font}; font-weight: bold; stroke: ${stroke}; stroke-width: ${strokeWidthPx}px; opacity: ${opacity}; }
+            .title { fill: ${color}; font-size: ${fontSizePx}px; font-family: ${font}; font-weight: bold; stroke: ${stroke}; stroke-width: ${strokeWidthPx}px; opacity: ${opacity}; paint-order: stroke fill; stroke-linejoin: round; }
           </style>
           <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" class="title">${text}</text>
         </svg>
