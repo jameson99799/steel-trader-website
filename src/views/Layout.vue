@@ -5,8 +5,9 @@
       <router-view :key="$route.fullPath" />
     </main>
     <SiteFooter />
-    <!-- Defer sticky widgets until page has settled OR user interacts -->
-    <FloatingContact v-if="isWidgetsReady" />
+    <!-- Floating contact is core UI on mobile, load immediately -->
+    <FloatingContact />
+    <!-- Defer sticky third-party widgets until page has settled OR user interacts -->
     <LiveChatWidget v-if="isWidgetsReady" />
   </div>
 </template>
