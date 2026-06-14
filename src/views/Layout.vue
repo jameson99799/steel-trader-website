@@ -21,7 +21,7 @@ import api from '../api'
 
 // Async load below-the-fold components to reduce Total Blocking Time
 import SiteFooter from '../components/SiteFooter.vue'
-const FloatingContact = defineAsyncComponent(() => import('../components/FloatingContact.vue'))
+import FloatingContact from '../components/FloatingContact.vue'
 const LiveChatWidget = defineAsyncComponent(() => import('../components/LiveChatWidget.vue'))
 
 const route = useRoute()

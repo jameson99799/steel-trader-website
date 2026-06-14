@@ -162,8 +162,8 @@
     </div>
 
     <div class="lightbox-bottom-bar" @click.stop v-if="lightboxImages.length > 0">
-      <button class="lightbox-bottom-nav prev" @click="lightboxPrev" :disabled="lightboxIndex === 0">◀</button>
-      <button class="lightbox-bottom-nav next" @click="lightboxNext" :disabled="lightboxIndex === lightboxImages.length - 1">▶</button>
+      <button class="lightbox-bottom-nav prev" @click="lightboxPrev" :disabled="lightboxIndex === 0">❮</button>
+      <button class="lightbox-bottom-nav next" @click="lightboxNext" :disabled="lightboxIndex === lightboxImages.length - 1">❯</button>
     </div>
   </div>
 </template>
@@ -728,18 +728,6 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
   .article-body-direct .image-gallery { grid-template-columns: repeat(2, 1fr); }
   .article-body-direct .grid-cols-3, .article-body-direct .grid-cols-4, .article-body-direct .grid-cols-5, .article-body-direct .grid-cols-6 { grid-template-columns: repeat(2, 1fr); }
 }
-@media (max-width: 1024px) {
-  .lightbox-bottom-bar { gap: 40px; bottom: 80px; }
-  .lightbox-bottom-nav { width: 50px; height: 50px; font-size: 24px; }
-  .lightbox-close { right: 10px; font-size: 36px; z-index: 20; }
-  .lightbox-center-controls { padding: 0 40px; }
-  .lightbox-title { font-size: 20px; }
-}
-
-@media (max-width: 480px) {
-  .article-body-direct .image-gallery { grid-template-columns: 1fr; }
-  .article-body-direct .grid-cols-2, .article-body-direct .grid-cols-3, .article-body-direct .grid-cols-4 { grid-template-columns: 1fr; }
-}
 
 .article-body-direct .cta-box {
   background-color: #f8f9fa;
@@ -990,4 +978,17 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
   background: rgba(255, 255, 255, 0.3); transform: scale(1.05);
 }
 .lightbox-bottom-nav:disabled { opacity: 0.3; cursor: not-allowed; }
+
+@media (max-width: 1024px) {
+  .lightbox-bottom-bar { gap: 40px; bottom: 80px; }
+  .lightbox-bottom-nav { width: 50px; height: 50px; font-size: 24px; }
+  .lightbox-close { right: 10px; font-size: 36px; z-index: 20; }
+  .lightbox-center-controls { padding: 0 40px; }
+  .lightbox-title { font-size: 20px; }
+}
+
+@media (max-width: 480px) {
+  .article-body-direct .image-gallery { grid-template-columns: 1fr; }
+  .article-body-direct .grid-cols-2, .article-body-direct .grid-cols-3, .article-body-direct .grid-cols-4 { grid-template-columns: 1fr; }
+}
 </style>
