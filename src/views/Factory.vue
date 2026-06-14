@@ -43,7 +43,7 @@
               <div v-if="getVideos(group).length > 0" class="videos-grid">
                 <div v-for="video in getVideos(group)" :key="video.id" class="video-item">
                   <template v-if="video.media_url && (video.media_url.toLowerCase().endsWith('.mp4') || video.media_url.toLowerCase().endsWith('.webm'))">
-                    <video v-if="video.autoplay === 1" :src="video.media_url" autoplay controls muted loop playsinline style="width:100%;height:100%;object-fit:contain;background-color:#000;"></video>
+                    <video v-if="video.autoplay === 1" :src="video.media_url" autoplay controls controlsList="nodownload" disablePictureInPicture muted loop playsinline style="width:100%;height:100%;object-fit:contain;background-color:#000;"></video>
                     <div v-else class="yt-video-cover" @click="openVideoLightbox(video)">
                       <video :src="video.media_url" preload="metadata" style="width:100%;height:100%;object-fit:contain;background-color:#000;pointer-events:none;"></video>
                       <div class="yt-play-button"><svg viewBox="0 0 68 48"><path class="yt-play-bg" d="M66.52,7.74c-0.78-2.93-2.49-5.41-5.42-6.19C55.79,.13,34,0,34,0S12.21,.13,6.9,1.55 C3.97,2.33,2.27,4.81,1.48,7.74C0.06,13.05,0,24,0,24s0.06,10.95,1.48,16.26c0.78,2.93,2.49,5.41,5.42,6.19 C12.21,47.87,34,48,34,48s21.79-0.13,27.1-1.55c2.93-0.78,4.64-3.26,5.42-6.19C67.94,34.95,68,24,68,24S67.94,13.05,66.52,7.74z" fill="#f00"></path><path d="M 45,24 27,14 27,34" fill="#fff"></path></svg></div>
@@ -118,8 +118,8 @@
         <button class="video-lightbox-close" @click="closeVideoLightbox">&times;</button>
       </div>
       <div class="video-lightbox-content" @click.stop v-if="videoLightboxActive">
-        <video v-if="videoLightboxIsMp4" :src="videoLightboxUrl" controls autoplay style="width:100%;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);"></video>
-        <iframe v-else :src="getYoutubeEmbedUrl(videoLightboxUrl, true, false)" style="width:100%;height:80vh;max-width:1100px;border:none;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
+        <video v-if="videoLightboxIsMp4" :src="videoLightboxUrl" controls controlsList="nodownload" disablePictureInPicture autoplay style="width:100%;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);"></video>
+        <iframe v-else :src="getYoutubeEmbedUrl(videoLightboxUrl, true, false)" style="width:100%;height:80vh;max-width:1100px;border:none;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
       </div>
     </div>
 
@@ -264,9 +264,9 @@ const getYoutubeEmbedUrl = (url, autoplay, mute = false) => {
     const questionPosition = videoId.indexOf('?');
     if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
   } else {
-    return url;
+    return url + (url.includes('?') ? '&' : '?') + (autoplay ? `autoplay=1${mute ? '&mute=1' : ''}&` : '') + 'enablejsapi=1&playsinline=1&vq=hd1080';
   }
-  return `https://www.youtube.com/embed/${videoId}?rel=0&enablejsapi=1&playsinline=1${autoplay ? `&autoplay=1${mute ? '&mute=1' : ''}` : ''}`;
+  return `https://www.youtube.com/embed/${videoId}?vq=hd1080&enablejsapi=1&playsinline=1${autoplay ? `&autoplay=1${mute ? '&mute=1' : ''}` : ''}`;
 }
 
 const openLightbox = (group, index) => {
