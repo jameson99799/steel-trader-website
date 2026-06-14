@@ -160,11 +160,19 @@ const lightboxImages = ref([])
 const lightboxIndex = ref(0)
 const lightboxGroup = ref(null)
 
+watch(lightboxActive, (newVal) => {
+  window.dispatchEvent(new CustomEvent('lightbox-toggle', { detail: { active: newVal } }))
+})
+
 const carousels = {} // track intervals
 
 const videoLightboxActive = ref(false)
 const videoLightboxUrl = ref('')
 const videoLightboxIsMp4 = ref(false)
+
+watch(videoLightboxActive, (newVal) => {
+  window.dispatchEvent(new CustomEvent('lightbox-toggle', { detail: { active: newVal } }))
+})
 
 const openVideoLightbox = (video) => {
   videoLightboxUrl.value = video.media_url

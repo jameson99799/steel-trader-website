@@ -194,6 +194,8 @@ const lightboxActiveVideo = ref(null)
 
 // ── Template variable substitution helper ────────────────────────────────
 function resolveTemplateVars(html) {
+  if (!html) return ''
+  html = html.replace(/contenteditable="true"/g, 'contenteditable="false"')
   const co = company.value || {}
   const email       = co.email || ''
   const phone       = co.phone || ''
@@ -346,6 +348,11 @@ function handleBodyClick(e) {
     handleMailtoClick(href, e)
   }
 }
+
+// Lightbox state event emitter
+watch(lightboxActive, (newVal) => {
+  window.dispatchEvent(new CustomEvent('lightbox-toggle', { detail: { active: newVal } }))
+})
 
 // Lightbox functions
 const closeLightbox = () => {
@@ -724,6 +731,11 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
 @media (max-width: 480px) {
   .article-body-direct .image-gallery { grid-template-columns: 1fr; }
   .article-body-direct .grid-cols-2, .article-body-direct .grid-cols-3, .article-body-direct .grid-cols-4 { grid-template-columns: 1fr; }
+  .lightbox-bottom-bar { gap: 40px; bottom: 80px; }
+  .lightbox-bottom-nav { width: 50px; height: 50px; font-size: 24px; }
+  .lightbox-close { right: 10px; font-size: 36px; z-index: 20; }
+  .lightbox-center-controls { padding: 0 40px; }
+  .lightbox-title { font-size: 20px; }
 }
 
 .article-body-direct .cta-box {

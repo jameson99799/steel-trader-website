@@ -1,6 +1,6 @@
 <template>
   <!-- Minimized Toggle Button -->
-  <div v-if="company && isMinimized && !isMobile" class="float-panel is-minimized" @click="isMinimized = false" title="Expand Contact Panel">
+  <div v-if="company && isMinimized && !isMobile" class="float-panel is-minimized" @click="handleManualExpand" title="Expand Contact Panel">
     <svg class="chat-icon" viewBox="0 0 24 24" fill="currentColor">
       <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
     </svg>
@@ -10,7 +10,7 @@
   <div class="float-panel" v-if="company && (!isMinimized || isMobile)">
     <div class="panel-header">
       <span>Contact Us</span>
-      <button class="minimize-btn" @click.stop="isMinimized = true" aria-label="Minimize" title="Minimize">
+      <button class="minimize-btn" @click.stop="handleManualMinimize" aria-label="Minimize" title="Minimize">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -105,7 +105,18 @@ const company = ref(null)
 const toastVisible = ref(false)
 const zoomed = ref(null) // 'wa' | 'wc' | null
 const isMinimized = ref(false)
+const wasManuallyMinimized = ref(false)
 const isMobile = ref(false)
+
+function handleManualMinimize() {
+  wasManuallyMinimized.value = true
+  isMinimized.value = true
+}
+
+function handleManualExpand() {
+  wasManuallyMinimized.value = false
+  isMinimized.value = false
+}
 
 function checkMobile() {
   isMobile.value = window.innerWidth <= 1024
@@ -146,14 +157,33 @@ function fallbackCopy(text) {
   document.body.removeChild(el)
 }
 
+function handleLightboxToggle(e) {
+  if (isMobile.value) return
+  const active = e.detail?.active
+  if (active) {
+    if (!isMinimized.value) {
+      isMinimized.value = true
+      wasManuallyMinimized.value = false
+    } else {
+      wasManuallyMinimized.value = true
+    }
+  } else {
+    if (!wasManuallyMinimized.value) {
+      isMinimized.value = false
+    }
+  }
+}
+
 onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
+  window.addEventListener('lightbox-toggle', handleLightboxToggle)
   try { company.value = await api.getCompany() } catch (e) {}
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
+  window.removeEventListener('lightbox-toggle', handleLightboxToggle)
 })
 </script>
 
