@@ -160,7 +160,8 @@ async function startServer() {
     // ── Security Firewalls ──────────────────────────────────────────────────
     app.use(helmet({
       contentSecurityPolicy: false,
-      crossOriginEmbedderPolicy: false
+      crossOriginEmbedderPolicy: false,
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
     }))
 
     app.use((req, res, next) => {
