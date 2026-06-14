@@ -43,8 +43,8 @@
               <div v-if="getVideos(group).length > 0" class="videos-grid">
                 <div v-for="video in getVideos(group)" :key="video.id" class="video-item">
                   <template v-if="video.media_url && (video.media_url.toLowerCase().endsWith('.mp4') || video.media_url.toLowerCase().endsWith('.webm'))">
-                    <div class="yt-video-active" v-if="video.autoplay === 1">
-                      <video :src="video.media_url" autoplay controls controlsList="nodownload" disablePictureInPicture muted loop playsinline style="width:100%;height:100%;object-fit:contain;background-color:#000;"></video>
+                    <div class="yt-video-active" v-if="video.autoplay === 1" @click="openVideoLightbox(video)" style="cursor: pointer;">
+                      <video :src="video.media_url" autoplay controlsList="nodownload" disablePictureInPicture muted loop playsinline style="width:100%;height:100%;object-fit:contain;background-color:#000;pointer-events:none;"></video>
                     </div>
                     <div v-else class="yt-video-cover" @click="openVideoLightbox(video)">
                       <video :src="video.media_url" preload="metadata" style="width:100%;height:100%;object-fit:contain;background-color:#000;pointer-events:none;"></video>
