@@ -427,6 +427,7 @@
           <button class="btn btn-outline" @click="showNewsMediaBrowser=false">取消</button>
         </div>
       </div>
+    </div>
     <!-- Video Settings Modal -->
     <div v-if="showVideoSettings" class="modal-overlay" @click.self="showVideoSettings=false" style="z-index:10300">
       <div class="modal-wrap" style="max-width:400px;">
