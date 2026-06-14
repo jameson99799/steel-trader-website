@@ -52,12 +52,10 @@
                     </div>
                   </template>
                   <template v-else>
-                    <div v-if="video.autoplay === 1" class="yt-video-active">
+                    <div v-if="video.autoplay === 1" class="yt-video-active" @click="openVideoLightbox(video)" style="cursor: pointer;">
                       <iframe 
                         :src="getYoutubeEmbedUrl(video.media_url, true, true)" 
-                        width="100%" 
-                        height="100%" 
-                        style="border:0;" 
+                        style="width:100%;height:100%;border:none;pointer-events:none;" 
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
                         allowfullscreen>
                       </iframe>
