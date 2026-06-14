@@ -126,6 +126,22 @@ ok "PM2 已启动（NODE_ENV=production）"
 echo ""
 pm2 status
 
+# ── 10. 智能修复 Nginx 视频上传大小限制 ──────────────
+info "检查并自动解锁大视频上传限制..."
+for NGINX_CONF in "/www/server/nginx/conf/nginx.conf" "/etc/nginx/nginx.conf"; do
+  if [ -f "$NGINX_CONF" ]; then
+    if grep -q "client_max_body_size" "$NGINX_CONF"; then
+      # 使用正则匹配将现有的各种数字加M/m/g/k 强制改为 1024M
+      sudo sed -i -E 's/client_max_body_size[[:space:]]+[0-9]+[A-Za-z]?/client_max_body_size 1024M/g' "$NGINX_CONF"
+    else
+      # 如果找不到，在 http { 下面插入一条
+      sudo sed -i '/http[[:space:]]*{/a \    client_max_body_size 1024M;' "$NGINX_CONF"
+    fi
+    sudo nginx -s reload 2>/dev/null || sudo systemctl reload nginx 2>/dev/null || true
+    ok "Nginx 拦截策略已自动解锁，最大支持 1024M 上传（$NGINX_CONF）"
+  fi
+done
+
 echo ""
 echo "============================================================"
 ok "🎉 更新完成！$(date '+%H:%M:%S')"
