@@ -123,10 +123,6 @@
         <video v-if="videoLightboxIsMp4" :src="videoLightboxUrl" controls controlsList="nodownload" disablePictureInPicture autoplay style="width:100%;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);"></video>
         <div v-else style="width:100%; display:flex; flex-direction:column; align-items:center;">
           <iframe :src="getYoutubeEmbedUrl(videoLightboxUrl, true, false)" style="width:100%;height:80vh;max-width:1100px;border:none;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
-          <a :href="videoLightboxUrl" target="_blank" style="color:#aaa; font-size:14px; margin-top:12px; text-decoration:none; display:flex; align-items:center; gap:6px;">
-            <svg viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-            视频无法播放 (Error 153)？点击直接前往 YouTube 观看
-          </a>
         </div>
       </div>
     </div>
@@ -272,9 +268,9 @@ const getYoutubeEmbedUrl = (url, autoplay, mute = false) => {
     const questionPosition = videoId.indexOf('?');
     if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
   } else {
-    return url + (url.includes('?') ? '&' : '?') + (autoplay ? `autoplay=1${mute ? '&mute=1' : ''}&` : '') + 'enablejsapi=1&playsinline=1&vq=hd1080';
+    return url + (url.includes('?') ? '&' : '?') + (autoplay ? `autoplay=1${mute ? '&mute=1' : ''}&` : '') + 'enablejsapi=1&playsinline=1&vq=hd2160';
   }
-  return `https://www.youtube.com/embed/${videoId}?vq=hd1080&enablejsapi=1&playsinline=1${autoplay ? `&autoplay=1${mute ? '&mute=1' : ''}` : ''}`;
+  return `https://www.youtube.com/embed/${videoId}?vq=hd2160&enablejsapi=1&playsinline=1${autoplay ? `&autoplay=1${mute ? '&mute=1' : ''}` : ''}`;
 }
 
 const openLightbox = (group, index) => {
