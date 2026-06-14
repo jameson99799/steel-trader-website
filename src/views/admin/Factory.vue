@@ -553,8 +553,9 @@ const doAddSelectedMedia = async () => {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
       body: JSON.stringify({
         group_id: currentGroupIdForMedia.value,
-        type: 'image',
+        type: (url.toLowerCase().endsWith('.mp4') || url.toLowerCase().endsWith('.webm')) ? 'video' : 'image',
         media_url: url,
+        autoplay: mediaPickerVideoAutoplay.value ? 1 : 0,
         apply_watermark: false
       })
     })
