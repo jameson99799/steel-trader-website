@@ -1790,7 +1790,7 @@ function findFuzzyBySlug(tableName, requestedSlug) {
       bestP += 0.5;
     }
     
-    if (bestP > maxPrefix && bestP >= 15) { // 15 chars allows partial matches on long keywords like galvanized-steel-coil
+    if (bestP > maxPrefix && bestP >= 22) { // 22 chars is extremely safe for exact match
       maxPrefix = bestP;
       bestPrefixMatch = c;
     }

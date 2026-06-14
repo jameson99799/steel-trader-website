@@ -474,7 +474,8 @@
               <div style="font-size: 12px; margin-top:8px; text-align:center; line-height:1.2;">{{ folder.name }}</div>
             </div>
             <div v-for="item in mediaPickerItems" :key="item.id" :class="['import-item', { selected: mediaPickerSelected.includes(item.filepath) }]" @click="toggleMediaPickerSelect(item.filepath)">
-              <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
+              <video v-if="item.filepath && (item.filepath.toLowerCase().endsWith('.mp4') || item.filepath.toLowerCase().endsWith('.webm'))" :src="item.filepath" style="width:100%;aspect-ratio:1;object-fit:cover;" preload="metadata"></video>
+                <img v-else :src="item.filepath" @error="item.filepath='/placeholder.png'" />
               <div class="import-check">✓</div>
             </div>
           </div>
@@ -550,7 +551,8 @@
               <div style="font-size: 12px; margin-top:8px; text-align:center; line-height:1.2;">{{ folder.name }}</div>
             </div>
             <div v-for="item in detailMediaItems" :key="item.id" class="import-item" style="cursor:pointer;" @click="selectDetailMediaImage(item)">
-              <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
+              <video v-if="item.filepath && (item.filepath.toLowerCase().endsWith('.mp4') || item.filepath.toLowerCase().endsWith('.webm'))" :src="item.filepath" style="width:100%;aspect-ratio:1;object-fit:cover;" preload="metadata"></video>
+                <img v-else :src="item.filepath" @error="item.filepath='/placeholder.png'" />
             </div>
           </div>
           <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
@@ -633,6 +635,7 @@ const showDetailMediaBrowser = ref(false)
 const detailMediaSearch = ref('')
 const detailMediaGroup = ref('')
 const detailMediaWatermark = ref('')
+const detailMediaVideoAutoplay = ref(true)
 const detailMediaItems = ref([])
 const detailMediaGroups = ref([])
 const detailMediaFolders = ref([])

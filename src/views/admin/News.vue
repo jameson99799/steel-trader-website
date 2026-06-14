@@ -414,7 +414,8 @@
               <div class="news-media-name">{{ folder.name }}</div>
             </div>
             <div v-for="item in newsMediaItems" :key="item.id" class="news-media-item" @click="selectNewsMediaImage(item)">
-              <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
+              <video v-if="item.filepath && (item.filepath.toLowerCase().endsWith('.mp4') || item.filepath.toLowerCase().endsWith('.webm'))" :src="item.filepath" style="width:100%;aspect-ratio:1;object-fit:cover;" preload="metadata"></video>
+                <img v-else :src="item.filepath" @error="item.filepath='/placeholder.png'" />
               <div class="news-media-name">{{ item.original_filename || item.filename }}</div>
             </div>
           </div>
@@ -858,6 +859,7 @@ const showNewsMediaBrowser = ref(false)
 const newsMediaSearch = ref('')
 const newsMediaGroup = ref('')
 const newsMediaWatermark = ref('')
+const newsMediaVideoAutoplay = ref(true)
 const newsMediaItems = ref([])
 const newsMediaFolders = ref([])
 const newsMediaFolder = ref('')

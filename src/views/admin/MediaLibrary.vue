@@ -127,7 +127,8 @@
       <div v-for="item in items" :key="item.id" :class="['media-card', { selected: selectedIds.includes(item.id) }]"
            @click="toggleSelect(item.id)">
         <div class="media-thumb">
-          <img :src="item.filepath" :alt="item.alt || item.original_filename" loading="lazy" />
+          <video v-if="item.filepath.toLowerCase().endsWith('.mp4') || item.filepath.toLowerCase().endsWith('.webm')" :src="item.filepath" style="width:100%;height:100%;object-fit:cover;" preload="metadata"></video>
+          <img v-else :src="item.filepath" :alt="item.alt || item.original_filename" loading="lazy" />
           <div class="media-check"><input type="checkbox" :checked="selectedIds.includes(item.id)" @click.stop="toggleSelect(item.id)" /></div>
           <div class="media-badge" v-if="item.ref_count">引用 {{ item.ref_count }}</div>
         </div>
@@ -161,7 +162,7 @@
     <!-- Upload Modal -->
     <div v-if="showUploadModal" class="modal-overlay" @click.self="showUploadModal=false">
       <div class="modal" style="max-width:520px;">
-        <div class="modal-header"><h3>📤 上传图片</h3><button class="modal-close" @click="showUploadModal=false">&times;</button></div>
+        <div class="modal-header"><h3>📤 上传图片/视频</h3><button class="modal-close" @click="showUploadModal=false">&times;</button></div>
         <div class="modal-body">
           <div class="form-group">
             <label>上传到分组</label>
@@ -179,7 +180,7 @@
           </div>
           <div class="form-group">
             <label>选择图片（支持多选）</label>
-            <input type="file" multiple accept="image/*" @change="handleUploadFiles" class="form-control" />
+            <input type="file" multiple accept="image/*,video/mp4,video/webm" @change="handleUploadFiles" class="form-control" />
           </div>
           <div v-if="uploadProgress" class="upload-progress">
             <div class="prog-bar-wrap"><div class="prog-bar" :style="{width: uploadProgress+'%'}"></div></div>
@@ -198,7 +199,8 @@
       <div class="modal" style="max-width:600px;">
         <div class="modal-header"><h3>图片详情</h3><button class="modal-close" @click="detailItem=null">&times;</button></div>
         <div class="modal-body">
-          <img :src="detailItem.filepath" style="max-width:100%;border-radius:8px;margin-bottom:16px;" />
+          <video v-if="detailItem.filepath.toLowerCase().endsWith('.mp4') || detailItem.filepath.toLowerCase().endsWith('.webm')" :src="detailItem.filepath" controls style="max-width:100%;border-radius:8px;margin-bottom:16px;"></video>
+          <img v-else :src="detailItem.filepath" style="max-width:100%;border-radius:8px;margin-bottom:16px;" />
           <table class="detail-table">
             <tr><th>文件名</th><td>{{ detailItem.original_filename }}</td></tr>
             <tr><th>尺寸</th><td>{{ detailItem.width }}×{{ detailItem.height }}</td></tr>
@@ -228,7 +230,7 @@
     </div>
 
     <!-- Replace file input (hidden) -->
-    <input type="file" ref="replaceInput" accept="image/*" style="display:none" @change="handleReplaceFile" />
+    <input type="file" ref="replaceInput" accept="image/*,video/mp4,video/webm" style="display:none" @change="handleReplaceFile" />
   </div>
 </template>
 

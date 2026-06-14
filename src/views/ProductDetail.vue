@@ -25,7 +25,8 @@
           <div class="product-images">
             <div class="main-image-container">
               <div class="main-image">
-                <img :src="currentImage" :alt="localizedValue(product, 'name')" />
+                <video v-if="currentImage && (currentImage.toLowerCase().endsWith('.mp4') || currentImage.toLowerCase().endsWith('.webm'))" :src="currentImage" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:contain;"></video>
+                <img v-else :src="currentImage" :alt="localizedValue(product, 'name')" />
                 <div class="image-zoom-hint">
                   <svg viewBox="0 0 20 20" fill="currentColor">
                     <path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z" />
@@ -47,14 +48,12 @@
               </div>
             </div>
             <div class="thumbnails" v-if="images.length > 1">
-              <button 
-                v-for="(img, index) in images" 
-                :key="index"
-                :class="['thumbnail-btn', { active: currentImage === img }]"
-                @click="currentImage = img"
-              >
-                <img :src="img" :alt="`Product image ${index + 1}`" />
-              </button>
+              <button v-for="(img, index) in galleryImages" :key="index" 
+                  :class="['thumb-btn', { active: currentImage === img }]" 
+                  @click="currentImage = img">
+                  <video v-if="img && (img.toLowerCase().endsWith('.mp4') || img.toLowerCase().endsWith('.webm'))" :src="img" style="width:100%;height:100%;object-fit:cover;" preload="metadata"></video>
+                  <img v-else :src="img" :alt="`Product image ${index + 1}`" />
+                </button>
             </div>
           </div>
 
@@ -192,7 +191,8 @@
                 class="related-product-card"
               >
                 <div class="rp-image">
-                  <img :src="(rp.images || '').split(',')[0]" :alt="localizedValue(rp, 'name') || 'Related product image'" v-if="rp.images" loading="lazy" />
+                  <video v-if="rp.images && (rp.images.split(',')[0].toLowerCase().endsWith('.mp4') || rp.images.split(',')[0].toLowerCase().endsWith('.webm'))" :src="rp.images.split(',')[0]" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>
+                    <img v-else-if="rp.images" :src="rp.images.split(',')[0]" :alt="localizedValue(rp, 'name') || 'Related product image'" loading="lazy" />
                   <div class="rp-placeholder" v-else>
                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
                   </div>

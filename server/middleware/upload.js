@@ -33,9 +33,10 @@ const storage = multer.diskStorage({
 const fileFilter = (req, file, cb) => {
   const allowedTypes = [
     'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-    'image/x-icon', 'image/vnd.microsoft.icon', 'image/svg+xml', 'image/bmp'
+    'image/x-icon', 'image/vnd.microsoft.icon', 'image/svg+xml', 'image/bmp',
+    'video/mp4', 'video/webm'
   ]
-  const allowedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.ico', '.svg', '.bmp']
+  const allowedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.ico', '.svg', '.bmp', '.mp4', '.webm']
   const ext = extname(file.originalname).toLowerCase()
   if (allowedTypes.includes(file.mimetype) || allowedExts.includes(ext)) {
     cb(null, true)
@@ -47,7 +48,7 @@ const fileFilter = (req, file, cb) => {
 export const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 20 * 1024 * 1024 } // 20MB
+  limits: { fileSize: 100 * 1024 * 1024 } // 20MB
 })
 
 // Attachment upload — accepts ALL file types (for email attachments)

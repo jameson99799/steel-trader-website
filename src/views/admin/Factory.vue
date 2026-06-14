@@ -140,7 +140,8 @@
             <div v-for="item in mediaPickerItems" :key="item.id" 
                  :class="['lib-item', { selected: mediaPickerSelected.includes(item.filepath) }]" 
                  @click="toggleMediaSelect(item.filepath)">
-              <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
+              <video v-if="item.filepath && (item.filepath.toLowerCase().endsWith('.mp4') || item.filepath.toLowerCase().endsWith('.webm'))" :src="item.filepath" style="width:100%;height:100%;object-fit:cover;" preload="metadata"></video>
+                <img v-else :src="item.filepath" @error="item.filepath='/placeholder.png'" />
               <div class="check-icon">✓</div>
             </div>
           </div>
@@ -256,7 +257,8 @@
           <img v-if="adminPreviewItem.type === 'image'" :src="adminPreviewItem.media_url" style="max-width: 100%; max-height: 80vh; object-fit: contain; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);" @click="closeAdminPreview" />
           
           <div v-else-if="adminPreviewItem.type === 'video'" style="width: 100%; max-width: 800px; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
-            <iframe :src="getYoutubeEmbedUrl(adminPreviewItem.media_url)" style="width: 100%; height: 100%; border: none;" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+            <video v-if="adminPreviewItem.media_url.toLowerCase().endsWith('.mp4') || adminPreviewItem.media_url.toLowerCase().endsWith('.webm')" :src="adminPreviewItem.media_url" controls autoplay style="width:100%;height:100%;"></video>
+            <iframe v-else :src="getYoutubeEmbedUrl(adminPreviewItem.media_url)" style="width: 100%; height: 100%; border: none;" allow="autoplay; encrypted-media" allowfullscreen></iframe>
           </div>
 
           <!-- Navigation Buttons -->
@@ -285,6 +287,7 @@ const showMediaPicker = ref(false)
 const mediaPickerSearch = ref('')
 const mediaPickerGroup = ref('')
 const mediaPickerWatermark = ref('')
+const mediaPickerVideoAutoplay = ref(true)
 const mediaPickerItems = ref([])
 const mediaPickerSelected = ref([])
 const mediaGroups = ref([])
