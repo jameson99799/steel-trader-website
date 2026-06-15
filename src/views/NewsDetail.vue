@@ -361,8 +361,31 @@ function handleBodyClick(e) {
     
     // Exactly like ProductDetail: robust case-insensitive ID matching for AI-translated anchors
     let targetEl = document.getElementById(targetId) || document.getElementById(decodeURIComponent(targetId))
+    
     if (!targetEl) {
-      targetEl = document.querySelector(`[id="${targetId}" i]`) || document.querySelector(`[id="${decodeURIComponent(targetId)}" i]`)
+      try {
+        let escapedId = targetId.replace(/"/g, '\\"')
+        let escapedDecoded = decodeURIComponent(targetId).replace(/"/g, '\\"')
+        targetEl = document.querySelector(`[id="${escapedId}" i]`) || document.querySelector(`[id="${escapedDecoded}" i]`)
+      } catch (e) {
+        console.warn("Invalid ID selector for anchor:", targetId)
+      }
+    }
+
+    // Final bulletproof fallback: AI translation might translate href and id differently, but the text is often identical
+    if (!targetEl) {
+      const linkText = anchor.textContent.trim().toLowerCase()
+      if (linkText && linkText.length > 2) {
+        const headers = document.querySelectorAll('.article-body-direct h1, .article-body-direct h2, .article-body-direct h3, .article-body-direct h4, .article-body-direct h5, .article-body-direct h6')
+        for (const h of headers) {
+          const hText = h.textContent.trim().toLowerCase()
+          // Check if texts match or if the link text drops the number prefix (e.g. "1. Overview" vs "Overview")
+          if (hText === linkText || hText.endsWith(linkText) || linkText.endsWith(hText)) {
+            targetEl = h
+            break
+          }
+        }
+      }
     }
     
     if (targetEl) {
