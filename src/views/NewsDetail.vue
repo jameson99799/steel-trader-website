@@ -299,6 +299,22 @@ function handleMailtoClick(href, event) {
 }
 
 function handleBodyClick(e) {
+  const anchor = e.target.closest('a')
+  if (anchor) {
+    const href = anchor.getAttribute('href')
+    if (href && href.startsWith('#')) {
+      e.preventDefault()
+      const id = href.slice(1)
+      const el = document.getElementById(id) || document.getElementById(decodeURIComponent(id))
+      if (el) {
+        const top = el.getBoundingClientRect().top + window.scrollY - 100 // 100px fixed header offset
+        window.scrollTo({ top, behavior: 'smooth' })
+        history.pushState(null, null, href)
+      }
+      return
+    }
+  }
+
   const videoContainer = e.target.closest('.video-container')
   if (videoContainer) {
     e.preventDefault()

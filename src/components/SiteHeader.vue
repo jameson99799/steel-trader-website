@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <header class="site-header">
     <div class="header-top">
       <div class="container">
@@ -45,7 +45,7 @@
                   @click="selectLang(l.code)">
                   <span class="lang-flag">{{ l.flag }}</span>
                   <span>{{ l.name }}</span>
-                  <span v-if="lang === l.code" class="lang-check">✓</span>
+                  <span v-if="lang === l.code" class="lang-check">鉁?/span>
                 </button>
               </div>
             </div>
@@ -103,7 +103,7 @@
                   @click="selectLang(l.code); tabletLangOpen = false">
                   <span class="lang-flag">{{ l.flag }}</span>
                   <span>{{ l.name }}</span>
-                  <span v-if="lang === l.code" class="lang-check">✓</span>
+                  <span v-if="lang === l.code" class="lang-check">鉁?/span>
                 </button>
               </div>
             </div>
@@ -185,7 +185,7 @@
                 >
                   <span class="lang-flag">{{ l.flag }}</span>
                   <span>{{ l.name }}</span>
-                  <span v-if="lang === l.code" class="lang-check">✓</span>
+                  <span v-if="lang === l.code" class="lang-check">鉁?/span>
                 </button>
               </div>
             </div>
@@ -351,7 +351,9 @@ onUnmounted(() => {
   background: white;
   border-radius: 10px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.15);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 60vh;
   z-index: 200;
   border: 1px solid #e2e8f0;
 }
@@ -525,7 +527,7 @@ onUnmounted(() => {
   gap: var(--spacing);
   text-decoration: none;
   color: inherit;
-  min-height: 48px; /* prevent CLS — reserve logo space */
+  min-height: 48px; /* prevent CLS 鈥?reserve logo space */
 }
 
 .logo-image {
@@ -737,12 +739,12 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-/* ── Tablet (769px – 1024px) ────────────────────────────────────────────── */
+/* 鈹€鈹€ Tablet (769px 鈥?1024px) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
 @media (min-width: 769px) and (max-width: 1024px) {
   /* Hide top black bar */
   .header-top { display: none; }
 
-  /* Compact logo – same size as mobile */
+  /* Compact logo 鈥?same size as mobile */
   .logo-image { width: 40px !important; height: 40px !important; flex-shrink: 0; }
 
   /* Switch to compact brand text */
@@ -760,14 +762,14 @@ onUnmounted(() => {
   /* Hide 'Get in Touch' button */
   .header-cta .btn-primary { display: none !important; }
 
-  /* Hide the header-cta globe – nav globe handles it */
+  /* Hide the header-cta globe 鈥?nav globe handles it */
   .mobile-lang-globe { display: none !important; }
 
-  /* Show tablet nav globe — override the default display:none */
+  /* Show tablet nav globe 鈥?override the default display:none */
   .tablet-nav-lang { display: flex !important; align-items: center; }
 }
 
-/* ── Shared: all breakpoints ≤ 1024px ────────────────────────────────────── */
+/* 鈹€鈹€ Shared: all breakpoints 鈮?1024px 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
 @media (max-width: 1024px) {
   .header-top { display: none; }
   .logo-title { font-size: var(--text-xl); }
@@ -908,7 +910,9 @@ onUnmounted(() => {
   background: white;
   border-radius: 10px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.15);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 60vh;
   z-index: 200;
   border: 1px solid #e2e8f0;
 }
@@ -931,7 +935,7 @@ onUnmounted(() => {
 .mobile-lang-item .lang-flag { font-size: 18px; }
 .mobile-lang-item .lang-check { margin-left: auto; color: #22c55e; font-weight: 700; }
 
-/* ── Tablet nav globe (left of Home) — hidden by default ── */
+/* 鈹€鈹€ Tablet nav globe (left of Home) 鈥?hidden by default 鈹€鈹€ */
 .tablet-nav-lang {
   display: none;
   position: relative;
@@ -960,12 +964,14 @@ onUnmounted(() => {
   background: white;
   border-radius: 10px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.15);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 60vh;
   z-index: 300;
   border: 1px solid #e2e8f0;
 }
 
-/* ── Mobile (≤ 768px) ───────────────────────────────────────────────────── */
+/* 鈹€鈹€ Mobile (鈮?768px) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
 @media (max-width: 768px) {
   /* Show the header-cta globe on mobile (hamburger menu hides the nav globe) */
   .mobile-lang-globe { display: block; }

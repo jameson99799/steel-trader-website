@@ -173,7 +173,7 @@
             </svg>
             <h2>{{ t('productDetails') }}</h2>
           </div>
-          <div class="detail-content product-detail-html" v-html="sanitizedDetailContent"></div>
+          <div class="detail-content product-detail-html" @click="handleAnchorClick" v-html="sanitizedDetailContent"></div>
         </div>
 
         <!-- Related Products Section (SEO internal linking) -->
@@ -270,6 +270,24 @@ const pageTexts = ref(null)
 const lightboxImg = ref(null)
 const allCategories = ref([])
 const relatedProducts = ref([])
+
+// Handle generic anchor hashes inside v-html
+const handleAnchorClick = (e) => {
+  const target = e.target.closest('a')
+  if (target) {
+    const href = target.getAttribute('href')
+    if (href && href.startsWith('#')) {
+      e.preventDefault()
+      const id = href.slice(1)
+      const el = document.getElementById(id) || document.getElementById(decodeURIComponent(id))
+      if (el) {
+        const top = el.getBoundingClientRect().top + window.scrollY - 100 // 100px fixed header offset
+        window.scrollTo({ top, behavior: 'smooth' })
+        history.pushState(null, null, href)
+      }
+    }
+  }
+}
 
 // Grid: 3 cols with contact panel, 2 cols without
 const layoutColumns = computed(() =>
