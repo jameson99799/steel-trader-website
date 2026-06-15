@@ -45,7 +45,7 @@
                   @click="selectLang(l.code)">
                   <span class="lang-flag">{{ l.flag }}</span>
                   <span>{{ l.name }}</span>
-                  <span v-if="lang === l.code" class="lang-check">鉁?/span>
+                  <span v-if="lang === l.code" class="lang-check">✓</span>
                 </button>
               </div>
             </div>
@@ -103,7 +103,7 @@
                   @click="selectLang(l.code); tabletLangOpen = false">
                   <span class="lang-flag">{{ l.flag }}</span>
                   <span>{{ l.name }}</span>
-                  <span v-if="lang === l.code" class="lang-check">鉁?/span>
+                  <span v-if="lang === l.code" class="lang-check">✓</span>
                 </button>
               </div>
             </div>
@@ -185,7 +185,7 @@
                 >
                   <span class="lang-flag">{{ l.flag }}</span>
                   <span>{{ l.name }}</span>
-                  <span v-if="lang === l.code" class="lang-check">鉁?/span>
+                  <span v-if="lang === l.code" class="lang-check">✓</span>
                 </button>
               </div>
             </div>
