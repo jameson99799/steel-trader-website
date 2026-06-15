@@ -284,7 +284,24 @@ const handleAnchorClick = (e) => {
       // Exact match first, then case-insensitive match
       let el = document.getElementById(id) || document.getElementById(decodeURIComponent(id))
       if (!el) {
-        el = document.querySelector(`[id="${id}" i]`) || document.querySelector(`[id="${decodeURIComponent(id)}" i]`)
+        try {
+          el = document.querySelector(`[id="${id}" i]`) || document.querySelector(`[id="${decodeURIComponent(id)}" i]`)
+        } catch(ex) {}
+      }
+
+      // Ultimate Fallback for AI Translation Discrepancies
+      if (!el) {
+        const linkText = target.innerText.trim().toLowerCase()
+        if (linkText) {
+          const headings = document.querySelectorAll('.product-detail-html h1, .product-detail-html h2, .product-detail-html h3, .product-detail-html h4, .product-detail-html h5, .product-detail-html h6')
+          for (const h of headings) {
+            const headingText = h.innerText.trim().toLowerCase()
+            if (headingText === linkText || headingText.includes(linkText) || linkText.includes(headingText)) {
+              el = h
+              break
+            }
+          }
+        }
       }
       
       if (el) {

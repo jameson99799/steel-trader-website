@@ -330,7 +330,33 @@ function handleBodyClick(e) {
   if (href.startsWith('#') && href.length > 1) {
     e.preventDefault()
     const targetId = href.substring(1)
-    const targetEl = document.getElementById(targetId) || document.getElementById(decodeURIComponent(targetId))
+    
+    // 1. Precise Match
+    let targetEl = document.getElementById(targetId) || document.getElementById(decodeURIComponent(targetId))
+    
+    // 2. Case-insensitive Match
+    if (!targetEl) {
+      try {
+        targetEl = document.querySelector(`[id="${targetId}" i]`) || document.querySelector(`[id="${decodeURIComponent(targetId)}" i]`)
+      } catch(ex) {}
+    }
+
+    // 3. Ultimate Fallback for AI Translation Discrepancies
+    if (!targetEl) {
+      const linkText = anchor.innerText.trim().toLowerCase()
+      if (linkText) {
+        const headings = document.querySelectorAll('.article-body-direct h1, .article-body-direct h2, .article-body-direct h3, .article-body-direct h4, .article-body-direct h5, .article-body-direct h6')
+        for (const h of headings) {
+          const headingText = h.innerText.trim().toLowerCase()
+          // Check for exact equality or substantive overlap (to handle "1. xxx" prefixes added by AI)
+          if (headingText === linkText || headingText.includes(linkText) || linkText.includes(headingText)) {
+            targetEl = h
+            break
+          }
+        }
+      }
+    }
+
     if (targetEl) {
       const topPos = targetEl.getBoundingClientRect().top + window.scrollY - 90
       window.scrollTo({
