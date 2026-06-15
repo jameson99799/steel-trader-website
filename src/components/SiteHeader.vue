@@ -1002,10 +1002,14 @@ onUnmounted(() => {
   .header-main {
     height: 92px !important;
     contain: layout size;
+      position: relative;
+      z-index: 10;
   }
   .header-top {
     height: 44px !important;
     contain: layout size;
+      position: relative;
+      z-index: 20;
   }
 }
 </style>
