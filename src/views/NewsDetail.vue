@@ -705,7 +705,25 @@ watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
   -webkit-overflow-scrolling: touch; 
 }
 .article-body-direct td, .article-body-direct th { border: 1px solid var(--border); padding: 8px 12px; }
-.article-body-direct th { background: var(--gray-50); font-weight: 600; }
+.article-body-direct th, .article-body-direct table th { background: var(--gray-50) !important; font-weight: 600 !important; color: var(--text-primary) !important; text-align: left; }
+
+/* Force safe backgrounds on common AI generated content blocks (like TOC) to prevent them from becoming unexpectedly dark */
+.article-body-direct .table-of-contents,
+.article-body-direct .toc,
+.article-body-direct #toc-container {
+    background: var(--gray-50) !important;
+    color: var(--text-primary) !important;
+}
+.article-body-direct .table-of-contents *,
+.article-body-direct .toc *,
+.article-body-direct #toc-container * {
+    color: inherit;
+}
+.article-body-direct .table-of-contents a,
+.article-body-direct .toc a,
+.article-body-direct #toc-container a {
+    color: var(--primary) !important;
+}
 
 /* Custom Article Layout Utilities */
 .article-body-direct .image-gallery {
