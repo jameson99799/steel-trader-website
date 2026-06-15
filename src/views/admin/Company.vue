@@ -184,8 +184,11 @@
           </div>
 
           <div class="form-group" style="margin-top: 20px; border-top: 1px dashed #e2e8f0; padding-top: 20px;">
-            <label>YouTube 视频嵌入链接 (Embed URL) <span class="form-hint-inline">（从 YouTube → Share → Embed → 复制 src="" 里的链接）</span></label>
-            <input v-model="form.company_video_embed" type="url" class="form-control" placeholder="https://www.youtube.com/embed/XXXXXX" />
+            <label>视频展示链接（YouTube 或 图库本地视频） <span class="form-hint-inline">（可粘贴 YouTube Embed 链接，或直接从图库选择）</span></label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input v-model="form.company_video_embed" type="url" class="form-control" placeholder="https://www.youtube.com/embed/XXXXXX 或 点击选用本地视频" />
+              <button type="button" class="btn btn-sm btn-outline" @click="openMediaPicker('company_video_embed')" style="color:#7c3aed;border-color:#7c3aed;">📷 从图库选择</button>
+            </div>
             <p class="form-hint">填写后，系统可以使用该视频替换图片进行展示。如果不填，则不会显示视频选项。</p>
             
             <div v-if="form.company_video_embed" style="margin-top: 15px; padding: 15px; background: #f8fafc; border-radius: 8px;">
@@ -250,7 +253,8 @@
               <div style="font-size: 12px; margin-top:8px; text-align:center; line-height:1.2;">{{ folder.name }}</div>
             </div>
             <div v-for="item in mediaPickerItems" :key="item.id" :class="['media-item', { selected: mediaPickerSelected === item.filepath }]" @click="mediaPickerSelected = item.filepath">
-              <img :src="item.filepath" @error="item.filepath='/placeholder.png'" />
+              <video v-if="item.filepath && (item.filepath.toLowerCase().endsWith('.mp4') || item.filepath.toLowerCase().endsWith('.webm'))" :src="item.filepath" style="width:100%;height:100%;object-fit:cover;" preload="metadata"></video>
+              <img v-else :src="item.filepath" @error="item.filepath='/placeholder.png'" />
             </div>
           </div>
           <p v-else style="color:#94a3b8;text-align:center;padding:20px;">暂无图片</p>
@@ -384,6 +388,8 @@ const doSelectMedia = async () => {
     } else if (mediaPickerTarget.value === 'about_image') {
       form.about_image = url
       aboutImageFile.value = null
+    } else if (mediaPickerTarget.value === 'company_video_embed') {
+      form.company_video_embed = url
     }
   }
   showMediaPicker.value = false
