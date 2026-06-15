@@ -279,32 +279,23 @@ const handleAnchorClick = (e) => {
     if (href && href.startsWith('#')) {
       e.preventDefault()
       const id = href.slice(1)
-      if (!id) return
-
-      // Find by ID or Name (case-insensitive)
-      let el = document.getElementById(id) || document.getElementsByName(id)[0]
+      if (!id) return;
       
-      // Full fallback: search all elements for case-insensitive ID or name
+      // Exact match first, then case-insensitive match
+      let el = document.getElementById(id) || document.getElementById(decodeURIComponent(id))
       if (!el) {
-        const all = document.querySelectorAll('.product-detail-html [id], .product-detail-html [name]')
-        const lowerId = id.toLowerCase()
-        for (const item of all) {
-          if ((item.id && item.id.toLowerCase() === lowerId) || 
-              (item.getAttribute('name') && item.getAttribute('name').toLowerCase() === lowerId)) {
-            el = item
-            break
-          }
-        }
+        el = document.querySelector(`[id="${id}" i]`) || document.querySelector(`[id="${decodeURIComponent(id)}" i]`)
       }
       
       if (el) {
-        // Adjust for fixed header (approx 100px)
-        const offset = 120 
-        const top = el.getBoundingClientRect().top + window.scrollY - offset
+        // Native smooth scroll, CSS handles scroll-margin if needed
+        const top = el.getBoundingClientRect().top + window.scrollY - 100 // 100px fixed header offset
         window.scrollTo({ top, behavior: 'smooth' })
         
-        // Update URL hash without jumping
-        history.pushState(null, null, href)
+        // Update URL without triggering router reload
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState(null, null, href)
+        }
       }
     }
   }

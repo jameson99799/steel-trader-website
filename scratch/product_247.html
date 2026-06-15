@@ -1,0 +1,288 @@
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<style>
+:root{--primary:#1d4f73;--primary-dark:#12354d;--secondary:#e74c3c;--bg:#f8fafc;--white:#ffffff;--text:#334155;--heading:#0f172a;--muted:#64748b;--border:#e2e8f0;--soft:#f1f5f9;--img-window-h:360px}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;line-height:1.75;color:var(--text);background:var(--bg)}
+img{display:block;max-width:100%;height:auto;border-radius:8px}
+a{color:var(--primary);text-decoration:none;font-weight:500}a:hover{text-decoration:underline}
+.container{max-width:1200px;margin:0 auto;background:var(--white);box-shadow:0 10px 30px rgba(0,0,0,0.05);padding-bottom:40px}
+.hero{position:relative;text-align:center;color:#fff;background:#111;height:520px;display:flex;align-items:center;justify-content:center}
+.hero>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.5;border-radius:0;z-index:1}
+.hero-content{position:relative;z-index:2;width:90%;max-width:980px}
+.hero h1{font-size:48px;line-height:1.2;margin:0 0 16px;font-weight:800;text-shadow:0 2px 4px rgba(0,0,0,0.8)}
+.hero p{font-size:18px;color:#f8fafc;text-shadow:0 1px 3px rgba(0,0,0,0.8);margin-bottom:20px}
+.hero-tip{background:rgba(230,126,34,0.92);padding:8px 16px;border-radius:4px;font-size:14px;font-weight:bold;color:#fff;display:none}
+.content{padding:0 48px}
+.quick-links{background:var(--white);border:1px solid var(--border);border-left:5px solid var(--secondary);border-radius:8px;padding:20px 24px;margin:-30px auto 40px;position:relative;z-index:10;box-shadow:0 4px 15px rgba(0,0,0,0.05);display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.quick-links strong{color:var(--heading);font-size:18px;margin-right:12px}
+.quick-links a{background:var(--soft);color:var(--primary);padding:8px 16px;border-radius:50px;font-size:14px;transition:0.3s;border:1px solid var(--border)}
+.quick-links a:hover{background:var(--primary);color:#fff;text-decoration:none;border-color:var(--primary)}
+h2{color:var(--heading);font-size:30px;margin:50px 0 20px;padding-bottom:10px;border-bottom:2px solid var(--soft);position:relative}
+h2::after{content:'';position:absolute;left:0;bottom:-2px;width:60px;height:3px;background:var(--primary)}
+h3{color:var(--primary);font-size:22px;margin-top:30px;margin-bottom:12px}
+p{font-size:16px;margin-bottom:18px}
+ul{margin:10px 0 24px 20px;padding:0}li{margin-bottom:10px}
+.split-section{display:flex;flex-wrap:wrap;gap:40px;align-items:center;margin:40px 0}
+.split-text{flex:1 1 420px}.split-image{flex:1 1 420px}
+.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:30px;margin:30px 0}
+.grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;margin:30px 0}
+.card{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:24px;box-shadow:0 4px 10px rgba(0,0,0,0.03)}
+.card h3{margin-top:0;color:var(--heading);font-size:20px;border-bottom:1px solid var(--soft);padding-bottom:10px}
+.image-box{background:#e2e8f0;border:2px dashed #94a3b8;border-radius:8px;padding:20px;text-align:center;margin:30px 0;position:relative}
+.image-box img{width:auto;max-width:100%;max-height:520px;margin:0 auto;background:#fff;object-fit:contain;outline:1px solid #cbd5e1}
+.compare-image-grid,.shipping-image-grid,.qc-image-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:30px;margin:30px 0}
+.fixed-image-card{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:18px;box-shadow:0 4px 10px rgba(0,0,0,0.03)}
+.fixed-image-frame{width:100%;height:var(--img-window-h);background:#fff;border:1px solid #d8dee6;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.fixed-image-frame img{width:100%;height:100%;background:#fff;object-fit:contain;border-radius:6px}
+.replace-tip{background:#fffbeb;color:#d97706;font-weight:bold;padding:10px;margin-top:15px;border-radius:4px;border:1px solid #fcd34d;font-size:15px;display:none}
+.table-responsive{overflow-x:auto;margin:30px 0}
+table{width:100%;border-collapse:collapse;background:var(--white);font-size:15px;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
+th,td{border:1px solid var(--border);padding:14px 18px;text-align:left;vertical-align:top}
+th{background:#f8fafc;color:var(--heading);font-weight:700}
+.info-box{background:#f0f9ff;border-left:4px solid #0284c7;padding:20px 24px;border-radius:0 8px 8px 0;margin:30px 0;color:#0369a1}
+.check-list li{position:relative;padding-left:20px;margin-bottom:12px;list-style:none}
+.check-list li::before{content:'✓';position:absolute;left:0;color:var(--secondary);font-weight:bold}
+.pack-steps li{position:relative;padding-left:20px;margin-bottom:12px;list-style:none}
+.pack-steps li::before{content:'✓';position:absolute;left:0;color:var(--secondary);font-weight:bold}
+.faq-list{margin-top:30px}
+.faq-item{background:#fff;border:1px solid var(--border);border-radius:10px;padding:22px 24px;margin-bottom:18px;box-shadow:0 4px 10px rgba(0,0,0,0.03)}
+.faq-item h3{margin:0 0 10px;font-size:20px;color:var(--heading);border:none;padding:0}
+.faq-item p{margin:0}
+.simple-adv-box{background:#f8fbfe;border:1px solid var(--border);border-radius:12px;padding:24px;margin-top:30px}
+.cta-section{background:linear-gradient(135deg,var(--primary) 0%,var(--primary-dark) 100%);color:#fff;text-align:center;padding:60px 48px;border-radius:12px;margin:40px 48px 0}
+.cta-section h2{border:none;padding:0;margin:0 0 16px;color:#fff}.cta-section h2::after{display:none}
+.cta-section p{font-size:18px;color:#cbd5e1;max-width:780px;margin:0 auto 30px}
+.btn{display:inline-block;padding:16px 36px;border-radius:6px;font-weight:bold;font-size:16px;margin:0 10px 10px;transition:0.3s;text-decoration:none}
+.btn-primary{background:var(--secondary);color:#fff;border:2px solid var(--secondary)}
+.btn-primary:hover{background:transparent;color:var(--secondary);text-decoration:none}
+.btn-white{background:#fff;color:var(--primary);border:2px solid #fff}
+.btn-white:hover{background:transparent;color:#fff;text-decoration:none}
+.hero>img[src*="placeholder"]~.hero-content .hero-tip{display:inline-block}
+.image-box img[src*="placeholder"]~.replace-tip{display:block}
+.fixed-image-card img[src*="placeholder"]+.replace-tip{display:block}
+@media(max-width:768px){.hero{height:430px}.hero h1{font-size:32px}.content,.cta-section{padding-left:20px;padding-right:20px}.quick-links{margin:-20px 20px 30px;padding:15px}.cta-section{margin-left:20px;margin-right:20px}.compare-image-grid,.shipping-image-grid,.qc-image-grid,.grid-2,.grid-3{grid-template-columns:1fr}.fixed-image-frame{height:280px}.split-section{flex-direction:column}}
+</style>
+
+<div class="container">
+
+<header class="hero">
+  <img src="/uploads/steel-coil-warehouse-and-stock-76.webp" alt="Corrugated Roofing Sheet - Wave Profile Metal Roof Panel supplier manufacturer" style="--focus-x: 50%; --focus-y: 50%;">
+  <div class="hero-content">
+    <h1>Corrugated Roofing Sheet</h1>
+    <p>Classic Wave Profile — Universal Metal Roof — Proven Performance Worldwide</p>
+    <span class="hero-tip">👉 替换图提示：请替换为波纹屋顶钢板横幅大图，建议展示钢卷仓库、生产线或成品库存场景。</span>
+  </div>
+</header>
+
+<main class="content">
+
+<nav class="quick-links" aria-label="Quick Navigation">
+  <strong>Quick Links:</strong>
+  <a href="#overview">Overview</a><a href="#specifications">Specifications</a><a href="#applications">Applications</a><a href="#comparison">Corrugated vs Trapezoidal Roofing</a><a href="#advantages">Advantages</a><a href="#why-choose-us">Why Choose Us</a><a href="#factory-strength">Factory Strength</a><a href="#quality-control">Quality Control</a><a href="#packaging">Packaging</a><a href="#shipping">Shipping</a><a href="#faq">FAQ</a>
+</nav>
+
+<!-- ═══ OVERVIEW ═══ -->
+<section id="overview" class="split-section" style="margin-top:20px;">
+  <div class="split-text">
+    <h2 style="margin-top:0;">What Is Corrugated Roofing Sheet?</h2>
+    <p><strong>Corrugated roofing sheet</strong> is the most traditional and widely recognized metal roof profile in global construction. The sinusoidal wave pattern provides a natural combination of strength, flexibility and water drainage that has proven effective across decades of use in every climate zone.</p><p>Corrugated sheets are roll-formed from GI, GL, PPGI or PPGL coil stock, with profile pitch typically 76mm and rib depth 18-25mm. The wave pattern creates structural rigidity while allowing the sheet to flex slightly during thermal expansion and contraction without fatigue cracking.</p><p>From residential homes to industrial warehouses, agricultural barns to commercial buildings, corrugated roofing remains the world's most popular metal roof profile due to its proven reliability, simple installation, competitive cost and universal availability.</p>
+  </div>
+  <div class="split-image image-box">
+    <img src="/uploads/roofing-sheet-13.webp" alt="Corrugated Roofing Sheet - Wave Profile Metal Roof Panel surface close up" loading="lazy" style="">
+    
+  </div>
+</section>
+
+<!-- ═══ SPECIFICATIONS ═══ -->
+<section id="specifications">
+  <h2>Technical Specifications</h2>
+  <p>Available in various thicknesses, widths and coating options. Common standards include <strong>ASTM</strong>, <strong>JIS</strong>, <strong>EN</strong> and <strong>GB/T</strong>. Different industries may choose different specifications depending on service life, corrosion requirements and fabrication method.</p>
+  <div class="table-responsive">
+    <table><tbody><tr><th>Product</th><td>Metal Roofing Sheet</td></tr><tr><th>Profile</th><td>Corrugated (sinusoidal wave), pitch 76mm, depth 18-25mm</td></tr><tr><th>Substrate</th><td>GI / GL / PPGI / PPGL</td></tr><tr><th>Thickness</th><td>0.12 – 0.80 mm</td></tr><tr><th>Effective Width</th><td>750 – 1050 mm (profile dependent)</td></tr><tr><th>Length</th><td>1000 – 12000 mm (custom)</td></tr><tr><th>Standard</th><td>AS 1397, ASTM A653/A792, EN 10346, JIS G3302/3321</td></tr><tr><th>Coating</th><td>Z40-Z275 / AZ50-AZ185 / PE/SMP/HDP/PVDF paint</td></tr></tbody></table>
+  </div>
+  <div class="info-box">
+    <strong>Specification Advice:</strong>
+    <p style="margin:10px 0 0">Contact our technical team for specific grade and coating recommendations based on your application environment and processing requirements.</p>
+  </div>
+</section>
+
+<!-- ═══ APPLICATIONS ═══ -->
+<section id="applications">
+  <h2>Applications</h2>
+  <p>Thanks to its corrosion resistance, processing flexibility and cost-performance ratio, this product is widely used across construction, manufacturing and industrial sectors.</p>
+  <div class="grid-2"><div class="image-box" style="margin:0;">
+    <img src="/uploads/roofing-sheet-3.webp" alt="Residential Roofing application for Corrugated Roofing Sheet - Wave Profile Metal Roof Panel" loading="lazy" style="">
+    
+    <h3 style="margin-top:15px;color:var(--heading);">🏠 Residential Roofing</h3>
+    <p>Villas, townhouses, rural houses. Color-matched roofing sheets with 15-25+ year life. Lightweight, easy installation.</p>
+  </div><div class="image-box" style="margin:0;">
+    <img src="/uploads/roofing-sheet-9.webp" alt="Commercial Building application for Corrugated Roofing Sheet - Wave Profile Metal Roof Panel" loading="lazy" style="">
+    
+    <h3 style="margin-top:15px;color:var(--heading);">🏗️ Commercial Building</h3>
+    <p>Warehouses, factories, shopping centers, airports. Large-span roofing with excellent drainage and wind resistance.</p>
+  </div><div class="image-box" style="margin:0;">
+    <img src="/uploads/roofing-sheet-15.webp" alt="Industrial Facility application for Corrugated Roofing Sheet - Wave Profile Metal Roof Panel" loading="lazy" style="">
+    
+    <h3 style="margin-top:15px;color:var(--heading);">🏭 Industrial Facility</h3>
+    <p>Steel structure workshops, PEB buildings, cold storage, logistics parks. Cost-effective metal cladding solutions.</p>
+  </div><div class="image-box" style="margin:0;">
+    <img src="/uploads/corrugated-roofing-sheet-8.webp" alt="Agricultural application for Corrugated Roofing Sheet - Wave Profile Metal Roof Panel" loading="lazy" style="">
+    
+    <h3 style="margin-top:15px;color:var(--heading);">🌾 Agricultural</h3>
+    <p>Poultry houses, barns, grain silos, greenhouses. Corrosion-resistant roofing for high-humidity environments.</p>
+  </div></div>
+</section>
+
+<!-- ═══ COMPARISON ═══ -->
+<section id="comparison">
+  <h2>Corrugated vs Trapezoidal Roofing</h2>
+  <p>The two most common metal roofing profiles. Choice depends on span requirements, aesthetics and application.</p>
+  <div class="compare-image-grid">
+    <div class="fixed-image-card">
+      <div class="fixed-image-frame">
+        <img src="/uploads/corrugated-roofing-sheet-4.webp" alt="Corrugated (Wave) Profile appearance" loading="lazy" style="">
+      </div>
+      <span class="replace-tip">👉 替换为Corrugated (Wave) Profile实拍图</span>
+      <h3 style="margin-top:15px;color:var(--heading);">Corrugated (Wave) Profile</h3>
+      <p>The classic, proven roofing profile with excellent drainage and universal acceptance.</p>
+    </div>
+    <div class="fixed-image-card">
+      <div class="fixed-image-frame">
+        <img src="/uploads/roofing-sheet-24.webp" alt="Trapezoidal (IBR/T) Profile appearance" loading="lazy" style="">
+      </div>
+      <span class="replace-tip">👉 替换为Trapezoidal (IBR/T) Profile实拍图</span>
+      <h3 style="margin-top:15px;color:var(--heading);">Trapezoidal (IBR/T) Profile</h3>
+      <p>Modern industrial standard with superior spanning capability and clean architectural lines.</p>
+    </div>
+  </div>
+  <div class="table-responsive"><table><thead><tr><th>Comparison Item</th><th>Corrugated (Wave) Profile</th><th>Trapezoidal (IBR/T) Profile</th></tr></thead><tbody><tr><td>Profile</td><td>Sinusoidal wave pattern</td><td>IBR / trapezoidal ribs</td></tr><tr><td>Visual</td><td>Traditional, classic look</td><td>Modern, clean lines</td></tr><tr><td>Spanning</td><td>Shorter spans</td><td>Longer spanning capability</td></tr><tr><td>Strength</td><td>Standard structural performance</td><td>Higher section modulus per unit width</td></tr><tr><td>Drainage</td><td>Excellent water flow</td><td>Good drainage with flat pans</td></tr><tr><td>Installation</td><td>Simple, well-known technique</td><td>May require specific fastening</td></tr><tr><td>Cost</td><td>Generally lower</td><td>Slightly higher for equivalent thickness</td></tr><tr><td>Best For</td><td>Residential, agricultural, light commercial</td><td>Industrial, commercial, long-span</td></tr></tbody></table></div>
+</section>
+
+<!-- ═══ ADVANTAGES ═══ -->
+<section id="advantages" class="split-section">
+  <div class="split-image image-box">
+    <img src="/uploads/corrugated-roofing-sheet-10.webp" alt="Corrugated Roofing Sheet - Wave Profile Metal Roof Panel advantages" loading="lazy" style="">
+    
+  </div>
+  <div class="split-text">
+    <h2 style="margin-top:0;">Main Advantages</h2>
+    <p>This product combines durability, processing flexibility and cost-effectiveness for a wide range of applications.</p>
+    <ul class="check-list"><li><strong>Multiple substrate options</strong> — GI, GL, PPGI, PPGL — matched to performance requirement and budget</li><li><strong>Custom profiles and lengths</strong> — Corrugated, trapezoidal, tile, standing seam and custom profiles up to 12m length</li><li><strong>Factory roll-formed</strong> — Precision roll-formed from certified coil stock — consistent profile dimensions and quality</li><li><strong>Color and finish options</strong> — Metallic (GI/GL), RAL colors (PPGI/PPGL), wrinkle/textured, wood-grain print</li><li><strong>Wind and weather tested</strong> — Profiles designed and tested for wind uplift, rain penetration and thermal movement resistance</li><li><strong>Export packaging</strong> — Bundle-packed with plastic interleaving, steel strapping and container-optimized loading</li></ul>
+  </div>
+</section>
+
+<!-- ═══ WHY CHOOSE US ═══ -->
+<section id="why-choose-us">
+  <h2>Why Choose SunSea Steel?</h2>
+  <p>Choosing the right supplier means more than buying steel. It also means stable quality, export experience, efficient communication and reliable delivery support.</p>
+  <div class="grid-2"><div class="card"><h3>Stable Product Quality</h3><p>Uniform coating mass, reliable base steel quality and stable surface condition help ensure consistent performance in export orders.</p></div><div class="card"><h3>Custom Specification Support</h3><p>Thickness, width, coating mass, steel grade, surface treatment and packing can be customized according to project requirements.</p></div><div class="card"><h3>Professional Export Service</h3><p>Support for packing, loading, shipping documents and delivery coordination helps customers manage international orders more efficiently.</p></div><div class="card"><h3>Fast Response and Quotation</h3><p>Buyers can quickly get specification confirmation, technical support and quotation feedback for distribution, project procurement and manufacturing use.</p></div></div>
+</section>
+
+<!-- ═══ FACTORY STRENGTH ═══ -->
+<section id="factory-strength" class="split-section">
+  <div class="split-text">
+    <h2 style="margin-top:0;">Factory Strength and Production Capability</h2>
+    <p>Our production system focuses on coating uniformity, thickness control, clean surface quality and export-standard packing. From raw material selection to final inspection and shipment preparation, every stage is managed to improve product consistency and reduce customer risk.</p>
+    <p>For buyers, factory capability means more than output volume. It also means communication efficiency, documentation support, shipment coordination and the ability to provide stable product supply over time.</p>
+    <ul class="check-list">
+      <li>Stable production planning for export orders</li>
+      <li>Support for customized sizes and coating requirements</li>
+      <li>Professional handling of packing and shipment preparation</li>
+      <li>Inspection and tolerance control before delivery</li>
+    </ul>
+  </div>
+  <div class="split-image image-box">
+    <img src="/uploads/corrugated-roofing-sheet-75.webp" alt="Corrugated Roofing Sheet - Wave Profile Metal Roof Panel factory production line" loading="lazy" style="">
+    
+  </div>
+</section>
+
+<!-- ═══ QUALITY CONTROL ═══ -->
+<section id="quality-control">
+  <h2>Quality Control and Inspection</h2>
+  <p>Product quality is one of the key concerns for overseas buyers. Quality should be controlled not only by final visual inspection, but also by process stability, specification verification and export packing inspection.</p>
+  <div class="qc-image-grid">
+    <div class="fixed-image-card">
+      <div class="fixed-image-frame">
+        <img src="/uploads/roofing-sheet-13.webp" alt="Quality inspection for Corrugated Roofing Sheet - Wave Profile Metal Roof Panel" loading="lazy" style="">
+      </div>
+      <span class="replace-tip">👉 替换为质检人员检查表面图片</span>
+      <h3 style="margin-top:15px;color:var(--heading);">Surface and Dimension Inspection</h3>
+      <p>Surface condition, width, edge quality and dimensional tolerance are checked before delivery.</p>
+    </div>
+    <div class="fixed-image-card">
+      <div class="fixed-image-frame">
+        <img src="/uploads/roofing-sheet-12.webp" alt="Pre-shipment quality control for Corrugated Roofing Sheet - Wave Profile Metal Roof Panel" loading="lazy" style="">
+      </div>
+      <span class="replace-tip">👉 替换为出货前检验或实验室图片</span>
+      <h3 style="margin-top:15px;color:var(--heading);">Pre-Shipment Quality Control</h3>
+      <p>Packing condition, identification, quantity confirmation and shipment readiness are reviewed before export.</p>
+    </div>
+  </div>
+  <div class="grid-2"><div class="card"><h3>Thickness and Width Verification</h3><p>Thickness tolerance, width and coil dimensions are checked to ensure the material is suitable for roll forming, profiling and project processing needs.</p></div><div class="card"><h3>Coating and Surface Checking</h3><p>Coating weight requirements and surface appearance are reviewed before packing and shipment.</p></div><div class="card"><h3>Packing Inspection</h3><p>Export packing is examined to ensure moisture-proof protection, steel straps and edge protectors are correctly applied.</p></div><div class="card"><h3>Shipment Preparation</h3><p>Quantity, identification, loading readiness and related documentation are confirmed before export delivery.</p></div></div>
+</section>
+
+<!-- ═══ PACKAGING ═══ -->
+<section id="packaging" class="split-section" style="background:#f1f5f9;padding:40px;border-radius:12px;">
+  <div class="split-image image-box" style="background:#fff;margin:0;">
+    <img src="/uploads/steel-coil-warehouse-and-stock-76.webp" alt="Seaworthy export packaging of Corrugated Roofing Sheet - Wave Profile Metal Roof Panel" loading="lazy" style="">
+    
+  </div>
+  <div class="split-text">
+    <h2 style="margin-top:0;border-bottom:none;">Standard Export Seaworthy Packaging</h2>
+    <p>For steel export, correct packaging is extremely important. Even high-quality product can suffer surface damage, moisture exposure or edge deformation if packing is not suitable for sea shipment.</p>
+    <ul class="pack-steps">
+      <li><strong>Inner Moisture Protection:</strong> Waterproof kraft paper and plastic film help reduce moisture contact.</li>
+      <li><strong>Outer Steel Cover:</strong> Additional outer steel sheet gives stronger protection during handling.</li>
+      <li><strong>Edge Protection:</strong> Edge protectors reduce impact damage during lifting and stacking.</li>
+      <li><strong>Steel Strapping:</strong> Radial and circumferential straps help keep the coil stable.</li>
+      <li><strong>Pallet Support:</strong> Wooden or steel pallets can be used according to shipping requirements.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══ SHIPPING ═══ -->
+<section id="shipping">
+  <h2>Shipping, Loading and Delivery Solutions</h2>
+  <p>Shipping method depends on order quantity, coil size and destination requirements. Container shipment and break bulk vessel are the most common methods for steel coil export.</p>
+  <div class="shipping-image-grid">
+    <div class="fixed-image-card">
+      <div class="fixed-image-frame">
+        <img src="/uploads/transportation-of-sunsea-steel-19.webp" alt="Container shipment of Corrugated Roofing Sheet - Wave Profile Metal Roof Panel" loading="lazy" style="">
+      </div>
+      <span class="replace-tip">👉 替换为集装箱装运图片</span>
+      <h3 style="margin-top:15px;color:var(--heading);">Container Shipment</h3>
+      <p>Suitable for regular export orders. Coils packed on pallets and loaded into containers for safe sea transport. FOB/CIF/CFR available.</p>
+    </div>
+    <div class="fixed-image-card">
+      <div class="fixed-image-frame">
+        <img src="/uploads/transportation-of-sunsea-steel-31.webp" alt="Break bulk vessel shipment of Corrugated Roofing Sheet - Wave Profile Metal Roof Panel" loading="lazy" style="">
+      </div>
+      <span class="replace-tip">👉 替换为散货船运输图片</span>
+      <h3 style="margin-top:15px;color:var(--heading);">Break Bulk Vessel Shipment</h3>
+      <p>For large volume orders or oversized coils. Professional lifting, lashing and port handling for bulk steel procurement.</p>
+    </div>
+  </div>
+  <div class="info-box">
+    <strong>Shipping Advice:</strong>
+    <p style="margin:10px 0 0">Small to medium orders: container shipment is preferred. Large-scale or project orders: break bulk vessel may be more efficient.</p>
+  </div>
+</section>
+
+<!-- ═══ FAQ ═══ -->
+<section id="faq">
+  <h2>Frequently Asked Questions</h2>
+  <div class="faq-list"><div class="faq-item"><h3>What is the standard roofing sheet length?</h3><p>Standard: 1000-6000mm. Custom up to 12000mm. Most projects use 2000-4000mm to minimize end laps and leak risk.</p></div><div class="faq-item"><h3>What thickness for roofing?</h3><p>Residential: 0.35-0.50mm. Commercial: 0.40-0.60mm. Industrial: 0.50-0.80mm. Thicker = stronger wind uplift resistance.</p></div><div class="faq-item"><h3>What substrate is best for roofing?</h3><p>GL (Galvalume AZ150) is the industry standard — 2-4× longer than GI. PPGL for color + max corrosion resistance. Full-hard GI for economy.</p></div><div class="faq-item"><h3>Corrugated vs Trapezoidal — which is better?</h3><p>Corrugated (wave) is traditional, cost-effective, good drainage. Trapezoidal (IBR/T-profile) has better spanning capability, stronger, more modern.</p></div><div class="faq-item"><h3>What is the MOQ for roofing sheets?</h3><p>5,000 linear meters or 25 MT per profile/color. Mixed containers with 25 MT total minimum.</p></div><div class="faq-item"><h3>Can roofing sheets be customized?</h3><p>Yes. Profile, length, color, substrate, thickness, and packing can all be customized to project requirements.</p></div></div>
+</section>
+
+</main>
+
+<!-- ═══ CTA ═══ -->
+<section class="cta-section">
+  <h2>Looking for Quality Metal Roofing Sheets?</h2>
+  <p>Contact us for roofing sheet pricing, custom profiles, substrate options and export solutions. Factory direct worldwide.</p>
+  <a href="mailto:{{email}}" class="btn btn-primary">✉️ Send Email</a>
+  <a href="{{whatsapp_link}}" class="btn btn-white" target="_blank" rel="noopener">💬 Chat on WhatsApp</a>
+</section>
+
+</div>

@@ -329,27 +329,10 @@ function handleBodyClick(e) {
   
   if (href.startsWith('#') && href.length > 1) {
     e.preventDefault()
-    const id = href.substring(1)
-    if (!id) return
-
-    // Find by ID or Name (case-insensitive)
-    let targetEl = document.getElementById(id) || document.getElementsByName(id)[0]
-    
-    // Full fallback: search all elements for case-insensitive ID or name
-    if (!targetEl) {
-      const all = document.querySelectorAll('.article-body-direct [id], .article-body-direct [name]')
-      const lowerId = id.toLowerCase()
-      for (const item of all) {
-        if ((item.id && item.id.toLowerCase() === lowerId) || 
-            (item.getAttribute('name') && item.getAttribute('name').toLowerCase() === lowerId)) {
-          targetEl = item
-          break
-        }
-      }
-    }
-
+    const targetId = href.substring(1)
+    const targetEl = document.getElementById(targetId) || document.getElementById(decodeURIComponent(targetId))
     if (targetEl) {
-      const topPos = targetEl.getBoundingClientRect().top + window.scrollY - 100
+      const topPos = targetEl.getBoundingClientRect().top + window.scrollY - 90
       window.scrollTo({
         top: topPos,
         behavior: 'smooth'

@@ -212,16 +212,7 @@ const company = ref(window.__INITIAL_STATE__?.company || null)
 const pageTexts = ref(window.__INITIAL_STATE__?.pageTexts || null)
 const initialSettings = window.__INITIAL_STATE__?.translationSettings
 const multilingualEnabled = ref(initialSettings ? !!initialSettings.multilingual_enabled : true)
-const activeLanguages = ref([])
-// Ensure English is always the first option regardless of API/SSR state
-const ensureEnglish = (langs) => {
-  const list = langs || []
-  if (!list.find(l => l.code === 'en')) {
-    list.unshift({ code: 'en', name: 'English', flag: '🇺🇸' })
-  }
-  return list
-}
-activeLanguages.value = ensureEnglish(window.__INITIAL_STATE__?.languages)
+const activeLanguages = ref(window.__INITIAL_STATE__?.languages || [])
 const langDropOpen = ref(false)
 const langSwitcherRef = ref(null)
 const mobileLangOpen = ref(false)
@@ -306,7 +297,7 @@ onMounted(async () => {
         if (status) {
           multilingualEnabled.value = !!status.enabled
         }
-        activeLanguages.value = ensureEnglish(langs)
+        activeLanguages.value = langs || []
     }
     productCategories.value = pcats
     newsCategories.value = ncats
@@ -360,12 +351,11 @@ onUnmounted(() => {
   background: white;
   border-radius: 10px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.15);
-  overflow-x: hidden;
   overflow-y: auto;
-  max-height: 60vh;
+  max-height: 85vh;
+  padding-bottom: 4px;
   z-index: 200;
   border: 1px solid #e2e8f0;
-  padding: 8px 0;
 }
 .lang-drop-item {
   display: flex;
@@ -920,12 +910,11 @@ onUnmounted(() => {
   background: white;
   border-radius: 10px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.15);
-  overflow-x: hidden;
   overflow-y: auto;
-  max-height: 60vh;
+  max-height: 85vh;
+  padding-bottom: 4px;
   z-index: 200;
   border: 1px solid #e2e8f0;
-  padding: 8px 0;
 }
 .mobile-lang-item {
   display: flex;
@@ -946,7 +935,7 @@ onUnmounted(() => {
 .mobile-lang-item .lang-flag { font-size: 18px; }
 .mobile-lang-item .lang-check { margin-left: auto; color: #22c55e; font-weight: 700; }
 
-/* 鈹€鈹€ Tablet nav globe (left of Home) 鈥?hidden by default 鈹€鈹€ */
+/* ─ Tablet nav globe (left of Home) ─ hidden by default ─ */
 .tablet-nav-lang {
   display: none;
   position: relative;
@@ -975,15 +964,14 @@ onUnmounted(() => {
   background: white;
   border-radius: 10px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.15);
-  overflow-x: hidden;
   overflow-y: auto;
-  max-height: 60vh;
+  max-height: 85vh;
+  padding-bottom: 4px;
   z-index: 300;
   border: 1px solid #e2e8f0;
-  padding: 8px 0;
 }
 
-/* 鈹€鈹€ Mobile (鈮?768px) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ─ Mobile (≤ 768px) ────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   /* Show the header-cta globe on mobile (hamburger menu hides the nav globe) */
   .mobile-lang-globe { display: block; }
@@ -1009,17 +997,19 @@ onUnmounted(() => {
 /* Fix CLS strictly on Desktop */
 @media (min-width: 1025px) {
   .site-header {
-    /* Remove contain:layout to allow dropdowns to overflow */
+    contain: layout;
   }
   .header-main {
     height: 92px !important;
-    position: relative;
-    z-index: 10;
+    contain: layout size;
+      position: relative;
+      z-index: 10;
   }
   .header-top {
     height: 44px !important;
-    position: relative;
-    z-index: 20;
+    contain: layout size;
+      position: relative;
+      z-index: 20;
   }
 }
 </style>
