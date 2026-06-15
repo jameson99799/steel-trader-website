@@ -266,15 +266,43 @@ const iframeContent = computed(() => {
 
 // Sanitized content for direct render mode — strips <style>/<script> only, keeps inline styles for SEO
 const sanitizedContent = computed(() => {
-  const raw = localizedHtml(article.value, 'content') || ''
-  if (!raw) return ''
-  let html = resolveTemplateVars(raw)
-  html = formatMailtoLinks(html)
-  return html
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<span\s+class=["']replace-tip["'][^>]*>.*?<\/span>/gi, '')
-})
+    const raw = localizedHtml(article.value, 'content') || ''
+    if (!raw) return ''
+    let html = resolveTemplateVars(raw)
+    html = formatMailtoLinks(html)
+    
+    html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    html = html.replace(/<span\s+class=["'](?:hero-tip|replace-tip)["'][^>]*>.*?<\/span>/gi, '')
+    
+    // Extract <style> tags and scope them to .article-body-direct
+    html = html.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (match, css) => {
+      const scoped = css.replace(/([^{}]+)\{/g, (m, selector) => {
+        const trimmed = selector.trim()
+        if (!trimmed || trimmed.startsWith('@') || trimmed.startsWith('from') || trimmed.startsWith('to') || /^\d+%/.test(trimmed)) return m
+        const scopedSelectors = trimmed.split(',').map(s => {
+          s = s.trim()
+          if (s.startsWith('.article-body-direct') || s === 'body' || s === 'html' || s === '*') return s
+          return '.article-body-direct ' + s
+        }).join(', ')
+        return scopedSelectors + ' {'
+      })
+      return `<style>${scoped}</style>`
+    })
+
+    // Strip raw full-page HTML tags that might leak from AI generated content
+    html = html.replace(/<!DOCTYPE[^>]*>/gi, '')
+    html = html.replace(/<html[^>]*>/gi, '').replace(/<\/html>/gi, '')
+    html = html.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, (match) => {
+      // Keep <style> tags from head
+      const styles = match.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || []
+      return styles.join('')
+    })
+    html = html.replace(/<body[^>]*>/gi, '').replace(/<\/body>/gi, '')
+    html = html.replace(/<meta[^>]*>/gi, '')
+    html = html.replace(/<title[^>]*>[\s\S]*?<\/title>/gi, '')
+
+    return html
+  })
 
 function handleMailtoClick(href, event) {
   if (event) event.preventDefault()
@@ -331,40 +359,20 @@ function handleBodyClick(e) {
     e.preventDefault()
     const targetId = href.substring(1)
     
-    // 1. Precise Match
+    // Exactly like ProductDetail: robust case-insensitive ID matching for AI-translated anchors
     let targetEl = document.getElementById(targetId) || document.getElementById(decodeURIComponent(targetId))
+    if (!targetEl) {
+      targetEl = document.querySelector(`[id="${targetId}" i]`) || document.querySelector(`[id="${decodeURIComponent(targetId)}" i]`)
+    }
     
-    // 2. Case-insensitive Match
-    if (!targetEl) {
-      try {
-        targetEl = document.querySelector(`[id="${targetId}" i]`) || document.querySelector(`[id="${decodeURIComponent(targetId)}" i]`)
-      } catch(ex) {}
-    }
-
-    // 3. Ultimate Fallback for AI Translation Discrepancies
-    if (!targetEl) {
-      const linkText = anchor.innerText.trim().toLowerCase()
-      if (linkText) {
-        const headings = document.querySelectorAll('.article-body-direct h1, .article-body-direct h2, .article-body-direct h3, .article-body-direct h4, .article-body-direct h5, .article-body-direct h6')
-        for (const h of headings) {
-          const headingText = h.innerText.trim().toLowerCase()
-          // Check for exact equality or substantive overlap (to handle "1. xxx" prefixes added by AI)
-          if (headingText === linkText || headingText.includes(linkText) || linkText.includes(headingText)) {
-            targetEl = h
-            break
-          }
-        }
-      }
-    }
-
     if (targetEl) {
-      const topPos = targetEl.getBoundingClientRect().top + window.scrollY - 90
+      const topPos = targetEl.getBoundingClientRect().top + window.scrollY - 100 // Updated offset to match ProductDetail layout
       window.scrollTo({
         top: topPos,
         behavior: 'smooth'
       })
-      if (history && history.replaceState) {
-        history.replaceState(null, '', href)
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, null, href)
       }
     }
     return
