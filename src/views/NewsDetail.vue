@@ -376,7 +376,28 @@ function handleBodyClick(e) {
       const anchorText = cleanText(anchor.textContent)
       if (anchorText) {
         const headings = Array.from(document.querySelectorAll('.article-body-direct h1, .article-body-direct h2, .article-body-direct h3, .article-body-direct h4, .article-body-direct h5, .article-body-direct h6'))
+        
+        // 1. Exact Match
         targetEl = headings.find(h => cleanText(h.textContent) === anchorText)
+        
+        // 2. Substring Match (e.g., heading has prefix/suffix)
+        if (!targetEl) {
+          targetEl = headings.find(h => {
+             const ht = cleanText(h.textContent)
+             return (ht.length > 5 && anchorText.length > 5) && (ht.includes(anchorText) || anchorText.includes(ht))
+          })
+        }
+        
+        // 3. Fuzzy Token Overlap (e.g., AI used synonymous translations like "Por qué" vs "Para qué")
+        if (!targetEl) {
+          targetEl = headings.find(h => {
+             const aWords = anchorText.split(/\s+/).filter(w => w.length >= 3)
+             const hWords = cleanText(h.textContent).split(/\s+/)
+             if (aWords.length < 2) return false
+             const matchCount = aWords.filter(aw => hWords.some(hw => hw.includes(aw) || aw.includes(hw))).length
+             return (matchCount / aWords.length) >= 0.6 // 60% prominent keywords match
+          })
+        }
       }
     }
     
