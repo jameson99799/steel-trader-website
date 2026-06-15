@@ -986,6 +986,7 @@ Rules:
 - Translate ALL text completely and naturally into ${langName}.
 ${strictRule}
 - Keep HTML tags, product codes, units (mm, kg, MPa) unchanged
+- CRITICAL: DO NOT translate or modify values inside HTML attributes like href="#...", id="...", class="...", style="..." or src="...". They MUST remain exactly as in the original text to prevent link breaking.
 - Keep URLs, email addresses unchanged
 - DO NOT merge identical items. Each input number MUST have an output number.${fullOverride}`
 
