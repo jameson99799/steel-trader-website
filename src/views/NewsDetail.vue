@@ -361,30 +361,22 @@ function handleBodyClick(e) {
     
     // Exactly like ProductDetail: robust case-insensitive ID matching for AI-translated anchors
     let targetEl = document.getElementById(targetId) || document.getElementById(decodeURIComponent(targetId))
-    
     if (!targetEl) {
       try {
-        let escapedId = targetId.replace(/"/g, '\\"')
-        let escapedDecoded = decodeURIComponent(targetId).replace(/"/g, '\\"')
-        targetEl = document.querySelector(`[id="${escapedId}" i]`) || document.querySelector(`[id="${escapedDecoded}" i]`)
-      } catch (e) {
-        console.warn("Invalid ID selector for anchor:", targetId)
-      }
+        targetEl = document.querySelector(`[id="${targetId}" i]`) || document.querySelector(`[id="${decodeURIComponent(targetId)}" i]`)
+      } catch (err) {}
     }
-
-    // Final bulletproof fallback: AI translation might translate href and id differently, but the text is often identical
+    
+    // MULTI-LANGUAGE TOC FALLBACK: If the AI Translation API translated the href string but 
+    // left the target h2 ID untranslated (or vice versa), the strings will mismatch and ID lookups fail.
+    // However, the visual TEXT translated inside <a> and <h2> will likely be identical. 
+    // We match against article headings text to fix this organically!
     if (!targetEl) {
-      const linkText = anchor.textContent.trim().toLowerCase()
-      if (linkText && linkText.length > 2) {
-        const headers = document.querySelectorAll('.article-body-direct h1, .article-body-direct h2, .article-body-direct h3, .article-body-direct h4, .article-body-direct h5, .article-body-direct h6')
-        for (const h of headers) {
-          const hText = h.textContent.trim().toLowerCase()
-          // Check if texts match or if the link text drops the number prefix (e.g. "1. Overview" vs "Overview")
-          if (hText === linkText || hText.endsWith(linkText) || linkText.endsWith(hText)) {
-            targetEl = h
-            break
-          }
-        }
+      const cleanText = (t) => (t || '').replace(/^[\d\.\s\-\)]+/, '').trim().toLowerCase()
+      const anchorText = cleanText(anchor.textContent)
+      if (anchorText) {
+        const headings = Array.from(document.querySelectorAll('.article-body-direct h1, .article-body-direct h2, .article-body-direct h3, .article-body-direct h4, .article-body-direct h5, .article-body-direct h6'))
+        targetEl = headings.find(h => cleanText(h.textContent) === anchorText)
       }
     }
     
