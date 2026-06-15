@@ -226,6 +226,18 @@ const newsCategories = ref([])
 const mobileProductsExpanded = ref(false)
 const mobileNewsExpanded = ref(false)
 
+// Reload category lists when language changes so translated names are shown
+watch(lang, async () => {
+  try {
+    const [pcats, ncats] = await Promise.all([
+      api.getCategoryTree().catch(() => []),
+      api.getNewsCategories().catch(() => [])
+    ])
+    productCategories.value = pcats
+    newsCategories.value = ncats
+  } catch (e) {}
+})
+
 watch(menuOpen, (newVal) => {
   if (!newVal) {
     mobileProductsExpanded.value = false
