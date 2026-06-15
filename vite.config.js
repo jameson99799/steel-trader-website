@@ -17,8 +17,7 @@ export default defineConfig({
     }
   },
   build: {
-    // Combine all CSS into one file to prevent Vite from dynamically injecting CSS via JavaScript
-    cssCodeSplit: false,
+    // Default CSS code splitting enabled to reduce initial load blocking
     // Enable minification with terser for better tree-shaking
     minify: 'terser',
     terserOptions: {

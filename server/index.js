@@ -380,6 +380,16 @@ async function startServer() {
     }
 
     // API 路由
+    app.use('/api', (req, res, next) => {
+      // Fast-path caching for public APIs to improve LCP & TTFB scores (60 seconds)
+      if (req.method === 'GET') {
+        const path = req.path;
+        if (!path.startsWith('/admin') && !path.startsWith('/crm') && !path.startsWith('/auth') && !path.startsWith('/translation-jobs')) {
+          res.setHeader('Cache-Control', 'public, max-age=60');
+        }
+      }
+      next();
+    })
     app.use('/api/auth', authRoutes)
     app.use('/api/admin/security', securityRoutes)
     app.use('/api/categories', categoriesRoutes)
