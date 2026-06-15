@@ -960,7 +960,8 @@ async function translateBatch(settings, items, targetLang, langName, overrideNot
                     fieldsObj[item.field] = item.text
                 }
             } else {
-                fieldsObj[item.field] = item.text
+                item._uniqueFieldObjKey = `${item.type}_${item.id}_${item.field}_${Math.random().toString(36).substring(2,7)}`
+                fieldsObj[item._uniqueFieldObjKey] = item.text
             }
         }
         const fieldKeys = Object.keys(fieldsObj)
@@ -1034,7 +1035,7 @@ ${strictRule}
                                         }
                                     } catch {}
                                 } else {
-                                    const trans = jsonTranslations[item.field] || jsonTranslations[realField]
+                                    const trans = jsonTranslations[item._uniqueFieldObjKey] || jsonTranslations[item.field] || jsonTranslations[realField]
                                     if (trans && typeof trans === 'string') {
                                         upsertTranslation(targetLang, item.type, item.id, realField, item.text, trans)
                                         results.push({ original: item.text.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
