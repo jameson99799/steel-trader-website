@@ -58,8 +58,8 @@ function slugify(text, id) {
         .toLowerCase()
         .replace(/[^\w\s-]/g, '')
         .replace(/[\s_-]+/g, '-')
+        .substring(0, 150)
         .replace(/^-+|-+$/g, '')
-        .substring(0, 80)
     return id ? `${base}-${id}` : base
 }
 

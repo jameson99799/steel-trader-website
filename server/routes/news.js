@@ -12,8 +12,8 @@ function slugify(text) {
         .toLowerCase()
         .replace(/[^\w\s-]/g, '')
         .replace(/[\s_-]+/g, '-')
+        .substring(0, 150)
         .replace(/^-+|-+$/g, '')
-        .substring(0, 80)
 }
 
 // Generate unique slug for news (appends -2, -3 ... if slug already exists)
