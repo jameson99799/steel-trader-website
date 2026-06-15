@@ -127,7 +127,7 @@ import RalColors from './RalColors.vue'
 import RoofingProfiles from './RoofingProfiles.vue'
 import FuturesPrice from './FuturesPrice.vue'
 
-const { t, localizedValue, langPath } = useLang()
+const { lang, t, localizedValue, langPath } = useLang()
 const router = useRouter()
 const route = useRoute()
 
@@ -186,6 +186,8 @@ function changePage(p) {
 }
 
 watch(() => route.path, () => { page.value = 1; loadNews() })
+
+watch(lang, () => { loadCategories(); loadNews() })
 
 onMounted(() => { loadCategories(); loadNews() })
 </script>

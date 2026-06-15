@@ -158,7 +158,7 @@ import api from '../api'
 
 const route = useRoute()
 const router = useRouter()
-const { t, localizedValue, langPath } = useLang()
+const { lang, t, localizedValue, langPath } = useLang()
 
 const categoryTree = ref([])
 const products = ref([])
@@ -234,6 +234,13 @@ const selectCategory = (catIdOrSlug) => {
     router.push(langPath(`/products/category/${catIdOrSlug}`))
   }
 }
+
+watch(lang, async () => {
+  try {
+    categoryTree.value = await api.getCategoryTree()
+    await loadProducts()
+  } catch (e) {}
+})
 
 onMounted(async () => {
   try {

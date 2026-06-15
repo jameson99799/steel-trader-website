@@ -165,11 +165,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
-const { t, localizedValue, langPath } = useLang()
+const { lang, t, localizedValue, langPath } = useLang()
 const company = ref(null)
 const categories = ref([])
 const pageTexts = ref(null)
@@ -180,7 +180,7 @@ function showLegalModal(type) {
   activeModal.value = type
 }
 
-onMounted(async () => {
+const loadData = async () => {
   try {
     company.value = await api.getCompany()
     const tree = await api.getCategoryTree()
@@ -192,7 +192,10 @@ onMounted(async () => {
       latestNews.value = (newsData.data || newsData || []).slice(0, 5)
     } catch (e) {}
   } catch (e) {}
-})
+}
+
+watch(lang, loadData)
+onMounted(loadData)
 </script>
 
 <style scoped>

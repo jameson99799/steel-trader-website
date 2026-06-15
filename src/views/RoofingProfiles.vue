@@ -187,12 +187,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import RoofingProfileGenerator from '../components/RoofingProfileGenerator.vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
-const { t, localizedValue, langPath } = useLang()
+const { lang, t, localizedValue, langPath } = useLang()
 
 defineProps({
   hideHeader: {
@@ -345,7 +345,7 @@ const isLightColor = (hex) => {
   return yiq >= 128
 }
 
-onMounted(async () => {
+const loadData = async () => {
   try {
     const [profRes, catRes, ralRes] = await Promise.all([
       api.getRoofingProfilesPublic(),
@@ -382,7 +382,10 @@ onMounted(async () => {
   } catch (e) {
     console.error('Failed to load roofing data', e)
   }
-})
+}
+
+watch(lang, loadData)
+onMounted(loadData)
 </script>
 
 <style scoped>

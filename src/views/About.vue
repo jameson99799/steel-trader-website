@@ -180,7 +180,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
@@ -216,9 +216,9 @@ const advantages = computed(() => {
   return text?.split('\n').filter(Boolean) || []
 })
 
-onMounted(async () => {
+const loadData = async () => {
   try {
-    [company.value, hero.value, pageTexts.value] = await Promise.all([
+    ;[company.value, hero.value, pageTexts.value] = await Promise.all([
       api.getCompany(),
       api.getHero(),
       api.getPageTexts()
@@ -226,7 +226,10 @@ onMounted(async () => {
   } catch (e) {
     console.error(e)
   }
-})
+}
+
+watch(lang, loadData)
+onMounted(loadData)
 </script>
 
 <style scoped>

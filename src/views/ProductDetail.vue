@@ -253,14 +253,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 import InquiryModal from '../components/InquiryModal.vue'
 
 const route = useRoute()
-const { t, localizedValue, localizedHtml, langPath } = useLang()
+const { lang, t, localizedValue, localizedHtml, langPath } = useLang()
 
 const product = ref(null)
 const currentImage = ref('')
@@ -674,6 +674,23 @@ onMounted(async () => {
   } catch (e) {
     console.error(e)
   }
+})
+
+// Reload product and supporting data when language changes
+watch(lang, async () => {
+  try {
+    const slug = route.params.slug
+    if (!slug) return
+    const [p, comp, texts] = await Promise.all([
+      api.getProduct(slug),
+      api.getCompany(),
+      api.getPageTexts()
+    ])
+    product.value = p
+    company.value = comp
+    pageTexts.value = texts
+    if (p && images.value.length) currentImage.value = images.value[0]
+  } catch (e) {}
 })
 </script>
 

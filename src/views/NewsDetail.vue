@@ -632,6 +632,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
 })
 watch(() => route.params.slug, (slug) => { if (slug) loadArticle(slug) })
+watch(lang, () => { const slug = route.params.slug; if (slug) loadArticle(slug) })
 </script>
 
 <style scoped>
