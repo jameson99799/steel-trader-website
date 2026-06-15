@@ -121,6 +121,26 @@ router.post('/channels', authMiddleware, (req, res) => {
     res.json({ id: result.lastInsertRowid, message: '创建成功' })
 })
 
+router.put('/channels/:id/set-default', authMiddleware, (req, res) => {
+    try {
+        run('UPDATE ai_channels SET is_default = 0')
+        run('UPDATE ai_channels SET is_default = 1 WHERE id = ?', [req.params.id])
+        res.json({ message: '已设为默认文本渠道' })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+router.put('/channels/:id/set-image-default', authMiddleware, (req, res) => {
+    try {
+        run('UPDATE ai_channels SET is_image_default = 0')
+        run('UPDATE ai_channels SET is_image_default = 1 WHERE id = ?', [req.params.id])
+        res.json({ message: '已设为默认生图渠道' })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
 router.put('/channels/:id', authMiddleware, (req, res) => {
     const { id } = req.params
     const { name, api_url, api_key, models, is_default, default_model, is_image_default, rpm_limit } = req.body
@@ -139,18 +159,6 @@ router.put('/channels/:id', authMiddleware, (req, res) => {
 router.delete('/channels/:id', authMiddleware, (req, res) => {
     run('DELETE FROM ai_channels WHERE id = ?', [req.params.id])
     res.json({ message: '删除成功' })
-})
-
-router.put('/channels/:id/set-default', authMiddleware, (req, res) => {
-    run('UPDATE ai_channels SET is_default = 0')
-    run('UPDATE ai_channels SET is_default = 1 WHERE id = ?', [req.params.id])
-    res.json({ message: '已设为默认文本渠道' })
-})
-
-router.put('/channels/:id/set-image-default', authMiddleware, (req, res) => {
-    run('UPDATE ai_channels SET is_image_default = 0')
-    run('UPDATE ai_channels SET is_image_default = 1 WHERE id = ?', [req.params.id])
-    res.json({ message: '已设为默认生图渠道' })
 })
 
 // ─── Test channel connectivity ────────────────────────────────────────────────

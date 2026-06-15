@@ -1148,14 +1148,14 @@ const fetchModels = async () => {
 
 async function setDefaultChannel(id) {
   try {
-    await fetch('/api/ai/channels/' + id + '/set-default', { method: 'PUT', headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') } })
+    await api.setAIDefaultChannel(id)
     await loadChannels()
   } catch (e) { alert('设为默认失败: ' + e.message) }
 }
 
 async function setImageDefaultChannel(id) {
   try {
-    await fetch('/api/ai/channels/' + id + '/set-image-default', { method: 'PUT', headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') } })
+    await api.setAIImageDefaultChannel(id)
     await loadChannels()
   } catch (e) { alert('设为默认失败: ' + e.message) }
 }
