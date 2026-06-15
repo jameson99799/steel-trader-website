@@ -279,10 +279,31 @@ const handleAnchorClick = (e) => {
     if (href && href.startsWith('#')) {
       e.preventDefault()
       const id = href.slice(1)
-      const el = document.getElementById(id) || document.getElementById(decodeURIComponent(id))
+      if (!id) return
+
+      // Find by ID or Name (case-insensitive)
+      let el = document.getElementById(id) || document.getElementsByName(id)[0]
+      
+      // Full fallback: search all elements for case-insensitive ID or name
+      if (!el) {
+        const all = document.querySelectorAll('.product-detail-html [id], .product-detail-html [name]')
+        const lowerId = id.toLowerCase()
+        for (const item of all) {
+          if ((item.id && item.id.toLowerCase() === lowerId) || 
+              (item.getAttribute('name') && item.getAttribute('name').toLowerCase() === lowerId)) {
+            el = item
+            break
+          }
+        }
+      }
+      
       if (el) {
-        const top = el.getBoundingClientRect().top + window.scrollY - 100 // 100px fixed header offset
+        // Adjust for fixed header (approx 100px)
+        const offset = 120 
+        const top = el.getBoundingClientRect().top + window.scrollY - offset
         window.scrollTo({ top, behavior: 'smooth' })
+        
+        // Update URL hash without jumping
         history.pushState(null, null, href)
       }
     }

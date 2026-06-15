@@ -212,7 +212,16 @@ const company = ref(window.__INITIAL_STATE__?.company || null)
 const pageTexts = ref(window.__INITIAL_STATE__?.pageTexts || null)
 const initialSettings = window.__INITIAL_STATE__?.translationSettings
 const multilingualEnabled = ref(initialSettings ? !!initialSettings.multilingual_enabled : true)
-const activeLanguages = ref(window.__INITIAL_STATE__?.languages || [])
+const activeLanguages = ref([])
+// Ensure English is always the first option regardless of API/SSR state
+const ensureEnglish = (langs) => {
+  const list = langs || []
+  if (!list.find(l => l.code === 'en')) {
+    list.unshift({ code: 'en', name: 'English', flag: '🇺🇸' })
+  }
+  return list
+}
+activeLanguages.value = ensureEnglish(window.__INITIAL_STATE__?.languages)
 const langDropOpen = ref(false)
 const langSwitcherRef = ref(null)
 const mobileLangOpen = ref(false)
@@ -297,7 +306,7 @@ onMounted(async () => {
         if (status) {
           multilingualEnabled.value = !!status.enabled
         }
-        activeLanguages.value = langs || []
+        activeLanguages.value = ensureEnglish(langs)
     }
     productCategories.value = pcats
     newsCategories.value = ncats
@@ -356,6 +365,7 @@ onUnmounted(() => {
   max-height: 60vh;
   z-index: 200;
   border: 1px solid #e2e8f0;
+  padding: 8px 0;
 }
 .lang-drop-item {
   display: flex;
@@ -915,6 +925,7 @@ onUnmounted(() => {
   max-height: 60vh;
   z-index: 200;
   border: 1px solid #e2e8f0;
+  padding: 8px 0;
 }
 .mobile-lang-item {
   display: flex;
@@ -969,6 +980,7 @@ onUnmounted(() => {
   max-height: 60vh;
   z-index: 300;
   border: 1px solid #e2e8f0;
+  padding: 8px 0;
 }
 
 /* 鈹€鈹€ Mobile (鈮?768px) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
@@ -997,19 +1009,17 @@ onUnmounted(() => {
 /* Fix CLS strictly on Desktop */
 @media (min-width: 1025px) {
   .site-header {
-    contain: layout;
+    /* Remove contain:layout to allow dropdowns to overflow */
   }
   .header-main {
     height: 92px !important;
-    contain: layout size;
-      position: relative;
-      z-index: 10;
+    position: relative;
+    z-index: 10;
   }
   .header-top {
     height: 44px !important;
-    contain: layout size;
-      position: relative;
-      z-index: 20;
+    position: relative;
+    z-index: 20;
   }
 }
 </style>
