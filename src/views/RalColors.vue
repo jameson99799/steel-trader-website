@@ -93,11 +93,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 
-const { t, langPath } = useLang()
+const { lang, t, langPath } = useLang()
 
 defineProps({
   hideHeader: {
@@ -159,16 +159,41 @@ function onKey(e) {
   if (e.key === 'Escape') closeDetail()
 }
 
-onMounted(async () => {
-  window.addEventListener('keydown', onKey)
+const loadData = async () => {
   try {
     colors.value = await api.getRalColors()
-    filtered.value = colors.value
+    
+    // Normalize the current query if it exists
+    let rawQ = (searchQuery.value || '').trim().toLowerCase()
+    let codeQ = rawQ
+    if (codeQ.startsWith('ral')) {
+      codeQ = codeQ.replace(/^ral[\s-]?/, '')
+    }
+
+    // Re-filter with new data
+    filtered.value = colors.value.filter(c => {
+      if (rawQ === 'ral' || !rawQ) return true
+      const code = (c.code || '').toLowerCase()
+      const nZ = (c.name_zh || '').toLowerCase()
+      const nE = (c.name_en || '').toLowerCase()
+      const nLoc = (c.name || '').toLowerCase()
+      return code.includes(codeQ) || nZ.includes(rawQ) || nE.includes(rawQ) || nLoc.includes(rawQ)
+    })
   } catch (e) {
     console.error(e)
   } finally {
     loading.value = false
   }
+}
+
+watch(lang, () => {
+  loading.value = true
+  loadData()
+})
+
+onMounted(() => {
+  window.addEventListener('keydown', onKey)
+  loadData()
 })
 
 onUnmounted(() => {
