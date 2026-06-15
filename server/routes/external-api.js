@@ -677,6 +677,78 @@ router.delete('/news/:id', apiKeyMiddleware, (req, res) => {
     res.json({ success: true, message: 'News deleted' })
 })
 
+// ─── GET /api/external/translation-prompts ──────────────────────────────────
+router.get('/translation-prompts', apiKeyMiddleware, (req, res) => {
+    const { search, page = 1, limit = 50 } = req.query
+    let where = ['1=1'], params = []
+    if (search) {
+        where.push('(name LIKE ? OR content LIKE ?)')
+        const s = `%${search}%`; params.push(s, s)
+    }
+    const total = getOne(`SELECT COUNT(*) as c FROM translation_prompts WHERE ${where.join(' AND ')}`, params)?.c || 0
+    const offset = (parseInt(page) - 1) * parseInt(limit)
+    const prompts = getAll(
+        `SELECT id, name, content, is_system, is_default, created_at
+         FROM translation_prompts WHERE ${where.join(' AND ')} ORDER BY is_default DESC, id DESC LIMIT ? OFFSET ?`,
+        [...params, parseInt(limit), offset]
+    )
+    res.json({ prompts, total, page: parseInt(page), limit: parseInt(limit) })
+})
+
+// ─── GET /api/external/translation-prompts/:id ──────────────────────────────
+router.get('/translation-prompts/:id', apiKeyMiddleware, (req, res) => {
+    const t = getOne('SELECT * FROM translation_prompts WHERE id = ?', [req.params.id])
+    if (!t) return res.status(404).json({ error: 'Prompt not found' })
+    res.json(t)
+})
+
+// ─── POST /api/external/translation-prompts ─────────────────────────────────
+router.post('/translation-prompts', apiKeyMiddleware, (req, res) => {
+    const { name, content, is_default } = req.body
+    if (!name || !content) return res.status(400).json({ error: 'name and content are required' })
+    
+    if (is_default) run('UPDATE translation_prompts SET is_default = 0')
+    const r = run('INSERT INTO translation_prompts (name, content, is_default) VALUES (?,?,?)',
+        [name, content, is_default ? 1 : 0])
+    res.json({ success: true, id: r.lastInsertRowid, message: 'Translation prompt created successfully' })
+})
+
+// ─── PUT /api/external/translation-prompts/:id ──────────────────────────────
+router.put('/translation-prompts/:id', apiKeyMiddleware, (req, res) => {
+    const { id } = req.params
+    const existing = getOne('SELECT * FROM translation_prompts WHERE id = ?', [id])
+    if (!existing) return res.status(404).json({ error: 'Prompt not found' })
+    
+    const { name, content, is_default } = req.body
+    const sets = []
+    const vals = []
+    
+    if (name !== undefined) { sets.push('name=?'); vals.push(name) }
+    if (content !== undefined) {
+        if (existing.is_system) return res.status(400).json({ error: 'Cannot modify system prompt content' })
+        sets.push('content=?'); vals.push(content)
+    }
+    if (is_default !== undefined) {
+        if (is_default) run('UPDATE translation_prompts SET is_default = 0')
+        sets.push('is_default=?'); vals.push(is_default ? 1 : 0)
+    }
+    
+    if (!sets.length) return res.status(400).json({ error: 'No fields to update' })
+    vals.push(id)
+    run(`UPDATE translation_prompts SET ${sets.join(',')} WHERE id = ?`, vals)
+    res.json({ success: true, message: 'Translation prompt updated' })
+})
+
+// ─── DELETE /api/external/translation-prompts/:id ───────────────────────────
+router.delete('/translation-prompts/:id', apiKeyMiddleware, (req, res) => {
+    const existing = getOne('SELECT * FROM translation_prompts WHERE id = ?', [req.params.id])
+    if (!existing) return res.status(404).json({ error: 'Prompt not found' })
+    if (existing.is_system) return res.status(400).json({ error: 'Cannot delete system prompt' })
+    
+    run('DELETE FROM translation_prompts WHERE id = ?', [req.params.id])
+    res.json({ success: true, message: 'Translation prompt deleted' })
+})
+
 // ─── POST /api/external/templates — create email template ────────────────────
 router.post('/templates', apiKeyMiddleware, (req, res) => {
     const { name, subject, html_body, note, template_type } = req.body
@@ -1109,6 +1181,32 @@ router.get('/docs', (req, res) => {
                 },
                 update: { method: 'PUT', path: '/api/external/templates/:id', note: '只传需要更新的字段' },
                 delete: { method: 'DELETE', path: '/api/external/templates/:id' }
+            },
+            translation_prompts: {
+                list: {
+                    method: 'GET', path: '/api/external/translation-prompts',
+                    query_params: { search: '搜索提示词名称/内容', page: '页码(默认1)', limit: '每页数量(默认50)' }
+                },
+                get_by_id: { method: 'GET', path: '/api/external/translation-prompts/:id', note: '获取单个提示词的详细内容' },
+                create: {
+                    method: 'POST',
+                    path: '/api/external/translation-prompts',
+                    body: {
+                        name: '(required) 提示词规则名称，如 "俄语小语种限制规则"',
+                        content: '(required) 规则的具体文本描述',
+                        is_default: '(integer) 是否作为默认提示词 (1=是, 0=否)'
+                    }
+                },
+                update: { 
+                    method: 'PUT', 
+                    path: '/api/external/translation-prompts/:id', 
+                    note: '只传需要更新的字段。注意：系统提示词 (is_system=1) 无法修改内容 (content)'
+                },
+                delete: { 
+                    method: 'DELETE', 
+                    path: '/api/external/translation-prompts/:id', 
+                    note: '注意：系统默认的核心提示词 (is_system=1) 无法删除'
+                }
             }
         },
 

@@ -283,30 +283,8 @@ const handleAnchorClick = (e) => {
       
       // Exact match first, then case-insensitive match
       let el = document.getElementById(id) || document.getElementById(decodeURIComponent(id))
-      
       if (!el) {
-        try {
-          let escapedId = id.replace(/"/g, '\\"')
-          let escapedDecoded = decodeURIComponent(id).replace(/"/g, '\\"')
-          el = document.querySelector(`[id="${escapedId}" i]`) || document.querySelector(`[id="${escapedDecoded}" i]`)
-        } catch (e) {
-          console.warn("Invalid ID selector for anchor:", id)
-        }
-      }
-
-      // Final bulletproof fallback: if ID is fundamentally broken by translation, match innerText
-      if (!el) {
-        const linkText = target.textContent.trim().toLowerCase()
-        if (linkText && linkText.length > 2) {
-          const headers = document.querySelectorAll('.product-detail-html h1, .product-detail-html h2, .product-detail-html h3, .product-detail-html h4, .product-detail-html h5, .product-detail-html h6')
-          for (const h of headers) {
-            const hText = h.textContent.trim().toLowerCase()
-            if (hText === linkText || hText.endsWith(linkText) || linkText.endsWith(hText)) {
-              el = h
-              break
-            }
-          }
-        }
+        el = document.querySelector(`[id="${id}" i]`) || document.querySelector(`[id="${decodeURIComponent(id)}" i]`)
       }
       
       if (el) {

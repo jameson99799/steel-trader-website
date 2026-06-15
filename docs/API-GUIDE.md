@@ -246,7 +246,73 @@ DELETE /api/external/templates/8
 
 ---
 
-## 四、模板变量说明
+## 四、翻译提示词管理 (Translation Prompts)
+
+### 4.1 获取提示词列表（支持搜索）
+
+```
+GET /api/external/translation-prompts?search=俄语&page=1&limit=20
+```
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `search` | string | 搜索名称或具体内容 |
+| `page` | integer | 页码，默认1 |
+| `limit` | integer | 每页数量，默认50 |
+
+**响应字段：** `id, name, content, is_system, is_default, created_at`
+
+### 4.2 获取单个提示词
+
+```
+GET /api/external/translation-prompts/2
+```
+
+获取单个提示词的详细信息。
+
+### 4.3 创建提示词
+
+```
+POST /api/external/translation-prompts
+Content-Type: application/json
+```
+
+```json
+{
+  "name": "法语强制要求规则",
+  "content": "在翻译为法语时，不允许改变源语言中钢卷的专业名词缩写，例如保留 PPGI 不可翻译为缩写...",
+  "is_default": 1
+}
+```
+
+**必填字段：** `name`, `content`
+
+### 4.4 更新提示词
+
+```
+PUT /api/external/translation-prompts/2
+Content-Type: application/json
+```
+
+只传需要更新的字段：
+```json
+{
+  "name": "修改后的名称",
+  "is_default": 0
+}
+```
+**注意：** 如果是系统默认的基础提示词 (`is_system=1`)，修改其 `content` 会报 `400 Bad Request`，只能修改是否为全局默认项。
+
+### 4.5 删除提示词
+
+```
+DELETE /api/external/translation-prompts/2
+```
+**注意：** 禁止删除系统内部的基础依赖提示词 (`is_system=1`)。
+
+---
+
+## 五、模板变量说明
 
 所有模板中可使用以下变量，系统会在发送时自动替换：
 
@@ -380,6 +446,11 @@ curl -X DELETE -H "X-API-Key: ext_xxx" "https://your-domain.com/api/external/tem
 | POST | `/api/external/templates` | 创建模板 |
 | PUT | `/api/external/templates/:id` | 更新模板 |
 | DELETE | `/api/external/templates/:id` | 删除模板 |
+| GET | `/api/external/translation-prompts` | 提示词列表+搜索 |
+| GET | `/api/external/translation-prompts/:id` | 获取单个提示词 |
+| POST | `/api/external/translation-prompts` | 创建指定提示词 |
+| PUT | `/api/external/translation-prompts/:id` | 更新提示词规则 |
+| DELETE | `/api/external/translation-prompts/:id` | 删除自定义提示词 |
 | GET | `/api/external/docs` | API 文档(JSON格式) |
 
 ---
