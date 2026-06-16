@@ -168,6 +168,10 @@ async function initDb() {
     )
   `)
 
+  // Migration: add factory_media new columns if not exist
+  try { db.exec("ALTER TABLE factory_media ADD COLUMN description TEXT DEFAULT ''") } catch (e) { }
+  try { db.exec("ALTER TABLE factory_media ADD COLUMN show_desc INTEGER DEFAULT 0") } catch (e) { }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS watermark_settings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

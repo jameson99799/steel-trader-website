@@ -308,8 +308,9 @@ const globalProcessingText = ref('')
 async function loadWatermarkTemplates() {
   if (watermarkTemplates.value.length) return
   try {
-    const res = await fetch('/api/media/watermark-templates', {
-      headers: { 'Authorization': `Bearer ${token()}` }
+    const res = await fetch('/api/media/watermark-templates?t=' + Date.now(), {
+      headers: { 'Authorization': `Bearer ${token()}`, 'Cache-Control': 'no-cache' },
+      cache: 'no-store'
     })
     watermarkTemplates.value = await res.json()
   } catch (e) { console.error(e) }
@@ -331,8 +332,9 @@ const token = () => localStorage.getItem('token')
 
 const loadData = async () => {
   try {
-    const res = await fetch('/api/factory', {
-      headers: { 'Authorization': `Bearer ${token()}` }
+    const res = await fetch('/api/factory?t=' + Date.now(), {
+      headers: { 'Authorization': `Bearer ${token()}`, 'Cache-Control': 'no-cache' },
+      cache: 'no-store'
     })
     groups.value = await res.json()
   } catch (e) {
@@ -499,13 +501,14 @@ const openMediaPicker = (groupId) => {
 watch(mediaPickerWatermark, v => { if (v !== undefined) localStorage.setItem('_lastWatermarkTemplate', v) })
 
 const loadMediaPicker = async () => {
-  const params = new URLSearchParams({ per_page: '50' })
+  const params = new URLSearchParams({ per_page: '50', t: Date.now() })
   if (mediaPickerSearch.value) params.set('search', mediaPickerSearch.value)
   if (mediaPickerGroup.value) params.set('group_id', mediaPickerGroup.value)
   if (mediaPickerFolder.value) params.set('folder_id', mediaPickerFolder.value)
   try {
     const res = await fetch(`/api/media?${params}`, {
-      headers: { 'Authorization': `Bearer ${token()}` }
+      headers: { 'Authorization': `Bearer ${token()}`, 'Cache-Control': 'no-cache' },
+      cache: 'no-store'
     })
     const data = await res.json()
     mediaPickerItems.value = data.items || []
@@ -516,8 +519,9 @@ const loadMediaPicker = async () => {
 
 const loadMediaGroups = async () => {
   try {
-    const res = await fetch('/api/media/groups', {
-      headers: { 'Authorization': `Bearer ${token()}` }
+    const res = await fetch('/api/media/groups?t=' + Date.now(), {
+      headers: { 'Authorization': `Bearer ${token()}`, 'Cache-Control': 'no-cache' },
+      cache: 'no-store'
     })
     mediaGroups.value = await res.json()
   } catch (e) { console.error(e) }
