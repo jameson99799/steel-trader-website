@@ -399,6 +399,7 @@ async function doUpload() {
   const files = uploadFiles.value
   let successCount = 0
   let failCount = 0
+  const newItems = [] // Collect successfully uploaded items to prepend
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
@@ -424,6 +425,10 @@ async function doUpload() {
       xhr.onload = () => {
         if (xhr.status === 200) {
           successCount++
+          try {
+            const data = JSON.parse(xhr.responseText)
+            if (data.items) newItems.push(...data.items)
+          } catch {}
         } else {
           failCount++
           console.error(`上传失败 [${file.name}]:`, xhr.status, xhr.responseText)
@@ -439,11 +444,12 @@ async function doUpload() {
   uploadProgress.value = 100
   uploadStatusText.value = `完成！成功 ${successCount} 个${failCount ? '，失败 ' + failCount + ' 个' : ''}`
 
-  // Immediate UI refresh — reset list first so user sees new items at top
-  items.value = []
-  folders.value = []
-  await loadMedia(false)
-  await loadGroups()
+  // Prepend new items to top of list WITHOUT clearing existing items (avoids flash)
+  if (newItems.length > 0) {
+    items.value = [...newItems, ...items.value]
+    total.value += newItems.length
+  }
+  loadGroups() // Update group counts in sidebar
 
   // Close modal after short delay so user can read success message
   setTimeout(() => {
@@ -492,7 +498,7 @@ async function handleReplaceFile(e) {
   if (replaceInput.value) replaceInput.value.value = ''
 }
 
-// Delete — immediately remove from local list for instant visual feedback, then re-sync
+// Delete — immediately remove from local list for instant visual feedback (no full reload)
 async function deleteImage(item) {
   if (!confirm(`删除图片 "${item.original_filename || item.filename}"？`)) return
   // Optimistic: remove from list immediately
@@ -503,9 +509,7 @@ async function deleteImage(item) {
   const res = await fetch(`/api/media/${item.id}`, { method: 'DELETE', headers: headers() })
   const data = await res.json()
   if (res.ok) {
-    loadGroups()
-    // Quietly refresh in background to sync count/state
-    loadMedia(false)
+    loadGroups() // Only refresh group counts, NOT the full media list
   } else {
     // Rollback: re-insert item if delete failed
     if (idx !== -1) items.value.splice(idx, 0, item)
@@ -544,8 +548,9 @@ async function batchMove() {
 
 async function batchDelete() {
   if (!selectedIds.value.length || !confirm(`确定删除 ${selectedIds.value.length} 张图片？`)) return
-  // Optimistic: remove from list immediately
+  // Optimistic: remove from list immediately (no full reload to avoid flash)
   const deletedIds = [...selectedIds.value]
+  const removedItems = items.value.filter(i => deletedIds.includes(i.id))
   items.value = items.value.filter(i => !deletedIds.includes(i.id))
   total.value = Math.max(0, total.value - deletedIds.length)
   selectedIds.value = []
@@ -556,11 +561,12 @@ async function batchDelete() {
   })
   const data = await res.json()
   if (res.ok) {
-    loadGroups()
-    loadMedia(false) // Background sync
+    loadGroups() // Only refresh group counts
   } else {
+    // Rollback: restore removed items
+    items.value = [...removedItems, ...items.value]
+    total.value += removedItems.length
     alert(data.error)
-    loadMedia(false) // Rollback by re-loading
   }
 }
 
