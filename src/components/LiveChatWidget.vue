@@ -407,15 +407,24 @@ watch(lang, () => {
 onMounted(() => {
   if (typeof window === 'undefined') return
 
-  visitorId = localStorage.getItem('chat_visitor_id')
-  if (!visitorId) {
-    visitorId = generateId()
-    localStorage.setItem('chat_visitor_id', visitorId)
+  // Defer initialization to improve Total Blocking Time (TBT)
+  const init = () => {
+    visitorId = localStorage.getItem('chat_visitor_id')
+    if (!visitorId) {
+      visitorId = generateId()
+      localStorage.setItem('chat_visitor_id', visitorId)
+    }
+
+    fetchWidgetConfig()
+    pollMessages()
+    pollInterval = setInterval(pollMessages, 3000)
   }
 
-  fetchWidgetConfig()
-  pollMessages()
-  pollInterval = setInterval(pollMessages, 3000)
+  if (window.requestIdleCallback) {
+    window.requestIdleCallback(() => setTimeout(init, 1000))
+  } else {
+    setTimeout(init, 3000)
+  }
 })
 
 onUnmounted(() => {

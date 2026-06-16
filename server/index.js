@@ -354,10 +354,11 @@ async function startServer() {
       maxAge: '1y',
       etag: true,
       setHeaders: (res, path) => {
-        // Security: Prevent Stored XSS by forcing non-image files to download instead of executing in-browser
-        if (!/\\.(jpg|jpeg|png|webp|gif|svg|ico)$/i.test(path)) {
+        // Security: Prevent Stored XSS
+        if (!/\.(jpg|jpeg|png|webp|gif|svg|ico)$/i.test(path)) {
           res.setHeader('Content-Disposition', 'attachment')
         }
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
       }
     }))
 
@@ -367,13 +368,12 @@ async function startServer() {
       app.use(express.static(join(__dirname, '..', 'dist'), {
         maxAge: '1y',
         etag: true,
-        index: false, // Let Node SSR handler serve / so meta injection runs
+        index: false,
         setHeaders(res, path) {
-          // index.html must NOT be cached — it references hashed JS/CSS
           if (path.endsWith('.html') || path.endsWith('/')) {
             res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
-            res.setHeader('Pragma', 'no-cache')
-            res.setHeader('Expires', '0')
+          } else if (path.includes('/assets/')) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
           }
         }
       }))
@@ -437,44 +437,39 @@ async function startServer() {
       res.json({ status: 'ok', timestamp: new Date().toISOString() })
     })
 
-    // SPA 路由 — 动态SEO Meta注入
-    const distIndexPath = join(__dirname, '..', 'dist', 'index.html')
-    let indexHtmlTemplate = ''
-    
-    // Auto-reload function to read template (allows updates without PM2 restarts)
-    function loadTemplate() {
+    // 生产环境 SPA 路由 — 动态SEO Meta注入
+    if (NODE_ENV === 'production') {
+      const distIndexPath = join(__dirname, '..', 'dist', 'index.html')
+      let indexHtmlTemplate = ''
       try { 
-        if (!existsSync(distIndexPath)) return ''
-        let template = readFileSync(distIndexPath, 'utf8')
-        // Bulletproof CSS Inlining via DOM Parser
+        indexHtmlTemplate = readFileSync(distIndexPath, 'utf8')
+        // Preload hashed assets for faster discovery
         const assetsDir = join(__dirname, '..', 'dist', 'assets')
         if (existsSync(assetsDir)) {
           let injectedCss = ''
+          let preloads = ''
           readdirSync(assetsDir).forEach(file => {
             if (file.endsWith('.css')) {
               const cssPath = join(assetsDir, file)
               try {
                 injectedCss += `<style>${readFileSync(cssPath, 'utf8')}</style>\n`
               } catch (e) {}
+            } else if (file.endsWith('.js')) {
+              preloads += `<link rel="preload" href="/assets/${file}" as="script">\n`
             }
           })
           if (injectedCss) {
-            template = template.replace(/<link[^>]+(?:rel="stylesheet"|href="[^"]+\.css")[^>]*>/gi, '')
-            template = template.replace('</head>', `${injectedCss}</head>`)
+            indexHtmlTemplate = indexHtmlTemplate.replace(/<link[^>]+(?:rel="stylesheet"|href="[^"]+\.css")[^>]*>/gi, '')
+            indexHtmlTemplate = indexHtmlTemplate.replace('</head>', `${injectedCss}${preloads}</head>`)
           }
         }
-        return template
       } catch (e) {
-        return ''
+        console.error('Failed to read or process dist/index.html:', e)
       }
-    }
-    
-    // Load initially
-    indexHtmlTemplate = loadTemplate()
 
-
-
-    if (NODE_ENV === 'production' || existsSync(distIndexPath)) {
+      // ── Server-side 301 redirects for bare paths (no language prefix) ───────
+      // This replaces client-side redirects in Vue Router, making them proper 301s
+      // that Google treats as permanent redirects, not "redirect" pages
       const VALID_LANGS = new Set(['en','zh','es','fr','ru','ar','pt','tr','hi','th'])
       const SITE_PAGES = ['products', 'news', 'about', 'contact', 'factory', 'ral-colors', 'roofing-profiles']
       app.use((req, res, next) => {
@@ -525,11 +520,6 @@ async function startServer() {
       })
 
       app.get('*', (req, res) => {
-        // Reload template in non-prod mode so dev works smoothly, or if it was empty on first start
-        if (NODE_ENV !== 'production' || !indexHtmlTemplate) {
-           indexHtmlTemplate = loadTemplate()
-        }
-
         // Fast-fail for missing static assets to prevent heavy SSR fallback
         if (req.path.match(/\.(js|css|ico|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot|mp4|webm|pdf)$/)) {
           return res.status(404).send('Not Found')

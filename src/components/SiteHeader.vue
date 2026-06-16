@@ -71,7 +71,7 @@
         <div class="header-main-content">
           <router-link :to="langPath('/')" class="logo" aria-label="Home">
             <div class="logo-image" v-if="company?.logo">
-              <img :src="company.logo" :alt="localizedValue(company, 'name') || 'SUNSEA STEEL Logo'" width="60" height="60" />
+              <img :src="company.logo" :alt="localizedValue(company, 'name') || 'SUNSEA STEEL Logo'" width="60" height="60" fetchpriority="high" loading="eager" decoding="sync" />
             </div>
             <div class="logo-text">
               <span class="logo-title">{{ localizedValue(company, 'name') }}</span>

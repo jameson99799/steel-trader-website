@@ -69,7 +69,7 @@
                 :alt="localizedValue(product, 'name')"
                 :loading="index < 3 ? 'eager' : 'lazy'"
                 :fetchpriority="index < 3 ? 'high' : 'auto'"
-                :decoding="'async'"
+                :decoding="index < 3 ? 'sync' : 'async'"
                 width="400" height="300"
               />
               <div class="product-overlay">
@@ -544,8 +544,10 @@ watch(lang, () => {
 /* Featured Products */
 .featured-products {
   background: var(--gray-50);
-  min-height: 500px;
+  min-height: 800px;
   padding-bottom: var(--spacing-xl);
+  content-visibility: auto;
+  contain-intrinsic-size: 0 800px;
 }
 
 .products-grid {
@@ -661,7 +663,9 @@ watch(lang, () => {
 
 .categories-section {
   background: var(--white);
-  min-height: 400px;
+  min-height: 600px;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 600px;
 }
 
 .category-card {

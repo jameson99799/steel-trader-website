@@ -174,11 +174,21 @@ function handleLightboxToggle(e) {
   }
 }
 
-onMounted(async () => {
+onMounted(() => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
   window.addEventListener('lightbox-toggle', handleLightboxToggle)
-  try { company.value = await api.getCompany() } catch (e) {}
+  
+  // Defer non-critical data fetch
+  const fetchContactData = async () => {
+    try { company.value = await api.getCompany() } catch (e) {}
+  }
+  
+  if (window.requestIdleCallback) {
+    window.requestIdleCallback(() => setTimeout(fetchContactData, 1500))
+  } else {
+    setTimeout(fetchContactData, 3500)
+  }
 })
 
 onUnmounted(() => {
