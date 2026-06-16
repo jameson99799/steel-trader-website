@@ -25,7 +25,7 @@
               <input type="number" v-model="group.sort_order" class="form-control short-input" @blur="updateGroup(group)" />
             </label>
             <label class="setting-item checkbox-label">
-              <input type="checkbox" v-model="group.carousel_enabled" :true-value="1" :false-value="0" @change="updateGroup(group)" />
+              <input type="checkbox" v-model="group.carousel_enabled" :true-value="1" :false-value="0" @change="updateGroup(group, true)" />
               开启图片轮播
             </label>
             <label class="setting-item" v-if="group.carousel_enabled">
@@ -67,14 +67,14 @@
                   </label>
                   
                   <label class="setting-item checkbox-label" v-if="item.type === 'video'">
-                    <input type="checkbox" v-model="item.autoplay" :true-value="1" :false-value="0" @change="updateMedia(item)" />
+                    <input type="checkbox" v-model="item.autoplay" :true-value="1" :false-value="0" @change="updateMedia(item, true)" />
                     自动播放
                   </label>
                 </div>
 
                 <div v-if="item.type === 'video'" style="margin-top: 8px;">
                   <label class="setting-item checkbox-label" style="margin-bottom: 4px;">
-                    <input type="checkbox" v-model="item.show_desc" :true-value="1" :false-value="0" @change="updateMedia(item)" />
+                    <input type="checkbox" v-model="item.show_desc" :true-value="1" :false-value="0" @change="updateMedia(item, true)" />
                     在视频下方显示描述文本
                   </label>
                   <textarea 
@@ -355,13 +355,14 @@ const addGroup = async () => {
   } catch (e) { console.error(e) }
 }
 
-const updateGroup = async (group) => {
+const updateGroup = async (group, skipReload = false) => {
   try {
     await fetch(`/api/factory/groups/${group.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
       body: JSON.stringify(group)
     })
+    if (!skipReload) loadData()
   } catch (e) { console.error(e) }
 }
 
@@ -376,14 +377,14 @@ const deleteGroup = async (id) => {
   } catch (e) { console.error(e) }
 }
 
-const updateMedia = async (item) => {
+const updateMedia = async (item, skipReload = false) => {
   try {
     const res = await fetch(`/api/factory/media/${item.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
       body: JSON.stringify(item)
     })
-    if (res.ok) {
+    if (res.ok && !skipReload) {
       // Reload to reflect sorting changes
       loadData()
     }
@@ -555,20 +556,22 @@ const doAddSelectedMedia = async () => {
   }
 
   for (const url of urlsToAdd) {
-    await fetch('/api/factory/media', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
-      body: JSON.stringify({
-        group_id: currentGroupIdForMedia.value,
-        type: (url.toLowerCase().endsWith('.mp4') || url.toLowerCase().endsWith('.webm')) ? 'video' : 'image',
-        media_url: url,
-        autoplay: mediaPickerVideoAutoplay.value ? 1 : 0,
-        apply_watermark: false
+    try {
+      await fetch('/api/factory/media', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
+        body: JSON.stringify({
+          group_id: currentGroupIdForMedia.value,
+          type: (url.toLowerCase().endsWith('.mp4') || url.toLowerCase().endsWith('.webm')) ? 'video' : 'image',
+          media_url: url,
+          autoplay: mediaPickerVideoAutoplay.value ? 1 : 0,
+          apply_watermark: false
+        })
       })
-    })
+    } catch (e) { console.error(e) }
   }
   showMediaPicker.value = false
-  loadData()
+  await loadData()
 }
 
 // ─── Batch Rename ───────────────────────────────────────────────────────────
@@ -682,20 +685,22 @@ const openVideoModal = (groupId) => {
 
 const doAddVideo = async () => {
   if (!videoUrlInput.value || !currentGroupIdForVideo.value) return
-  await fetch('/api/factory/media', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
-    body: JSON.stringify({
-      group_id: currentGroupIdForVideo.value,
-      type: 'video',
-      media_url: videoUrlInput.value,
-      autoplay: videoAutoplayInput.value ? 1 : 0,
-      description: videoDescInput.value,
-      show_desc: videoShowDescInput.value ? 1 : 0
+  try {
+    await fetch('/api/factory/media', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
+      body: JSON.stringify({
+        group_id: currentGroupIdForVideo.value,
+        type: 'video',
+        media_url: videoUrlInput.value,
+        autoplay: videoAutoplayInput.value ? 1 : 0,
+        description: videoDescInput.value,
+        show_desc: videoShowDescInput.value ? 1 : 0
+      })
     })
-  })
-  showVideoModal.value = false
-  loadData()
+    showVideoModal.value = false
+    await loadData()
+  } catch (e) { console.error(e) }
 }
 
 onMounted(() => {

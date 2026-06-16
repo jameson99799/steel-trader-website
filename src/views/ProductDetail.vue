@@ -1681,6 +1681,52 @@ watch(lang, async () => {
 /* ─── Product detail content: uniform parallel images ─── */
 /* These rules MUST be non-scoped to reach v-html injected content */
 
+/* Banner/Hero section in detail content */
+.product-detail-html .hero {
+  height: 450px !important;
+  margin-bottom: 40px !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  background: #111 !important;
+}
+
+.product-detail-html .hero img {
+  object-fit: cover !important;
+  opacity: 0.7 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0 !important;
+}
+
+/* Semi-dark overlay for better text contrast */
+.product-detail-html .hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.3), rgba(0,0,0,0.6));
+  z-index: 2;
+}
+
+.product-detail-html .hero-content {
+  z-index: 3 !important;
+}
+
+.product-detail-html .hero h1 {
+  font-size: 42px !important;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.5) !important;
+}
+
+@media (max-width: 768px) {
+  .product-detail-html .hero {
+    height: 320px !important;
+    margin-bottom: 30px !important;
+  }
+  .product-detail-html .hero h1 {
+    font-size: 28px !important;
+  }
+}
+
+
 /* Grid images in compare/QC/shipping/applications — ALL fixed 360px */
 .product-detail-html .grid-2 .image-box img,
 .product-detail-html .grid-3 .image-box img {
