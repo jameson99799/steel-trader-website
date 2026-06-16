@@ -69,7 +69,7 @@
                 :alt="localizedValue(product, 'name')"
                 :loading="index < 3 ? 'eager' : 'lazy'"
                 :fetchpriority="index < 3 ? 'high' : 'auto'"
-                :decoding="index < 3 ? 'sync' : 'async'"
+                :decoding="'async'"
                 width="400" height="300"
               />
               <div class="product-overlay">

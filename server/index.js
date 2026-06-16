@@ -355,7 +355,7 @@ async function startServer() {
       etag: true,
       setHeaders: (res, path) => {
         // Security: Prevent Stored XSS by forcing non-image files to download instead of executing in-browser
-        if (!/\.(jpg|jpeg|png|webp|gif|svg|ico|mp4|webm|mov|ogg)$/i.test(path)) {
+        if (!/\\.(jpg|jpeg|png|webp|gif|svg|ico)$/i.test(path)) {
           res.setHeader('Content-Disposition', 'attachment')
         }
       }
@@ -437,12 +437,15 @@ async function startServer() {
       res.json({ status: 'ok', timestamp: new Date().toISOString() })
     })
 
-    // 生产环境 SPA 路由 — 动态SEO Meta注入
-    if (NODE_ENV === 'production') {
-      const distIndexPath = join(__dirname, '..', 'dist', 'index.html')
-      let indexHtmlTemplate = ''
+    // SPA 路由 — 动态SEO Meta注入
+    const distIndexPath = join(__dirname, '..', 'dist', 'index.html')
+    let indexHtmlTemplate = ''
+    
+    // Auto-reload function to read template (allows updates without PM2 restarts)
+    function loadTemplate() {
       try { 
-        indexHtmlTemplate = readFileSync(distIndexPath, 'utf8')
+        if (!existsSync(distIndexPath)) return ''
+        let template = readFileSync(distIndexPath, 'utf8')
         // Bulletproof CSS Inlining via DOM Parser
         const assetsDir = join(__dirname, '..', 'dist', 'assets')
         if (existsSync(assetsDir)) {
@@ -452,25 +455,26 @@ async function startServer() {
               const cssPath = join(assetsDir, file)
               try {
                 injectedCss += `<style>${readFileSync(cssPath, 'utf8')}</style>\n`
-              } catch (e) {
-                console.error('Failed to read CSS file:', cssPath, e)
-              }
+              } catch (e) {}
             }
           })
           if (injectedCss) {
-            // Remove DOM-blocking CSS links completely with rigorous regex
-            indexHtmlTemplate = indexHtmlTemplate.replace(/<link[^>]+(?:rel="stylesheet"|href="[^"]+\.css")[^>]*>/gi, '')
-            // Safely inject styles before final head closing
-            indexHtmlTemplate = indexHtmlTemplate.replace('</head>', `${injectedCss}</head>`)
+            template = template.replace(/<link[^>]+(?:rel="stylesheet"|href="[^"]+\.css")[^>]*>/gi, '')
+            template = template.replace('</head>', `${injectedCss}</head>`)
           }
         }
+        return template
       } catch (e) {
-        console.error('Failed to read or process dist/index.html:', e)
+        return ''
       }
+    }
+    
+    // Load initially
+    indexHtmlTemplate = loadTemplate()
 
-      // ── Server-side 301 redirects for bare paths (no language prefix) ───────
-      // This replaces client-side redirects in Vue Router, making them proper 301s
-      // that Google treats as permanent redirects, not "redirect" pages
+
+
+    if (NODE_ENV === 'production' || existsSync(distIndexPath)) {
       const VALID_LANGS = new Set(['en','zh','es','fr','ru','ar','pt','tr','hi','th'])
       const SITE_PAGES = ['products', 'news', 'about', 'contact', 'factory', 'ral-colors', 'roofing-profiles']
       app.use((req, res, next) => {
@@ -521,6 +525,11 @@ async function startServer() {
       })
 
       app.get('*', (req, res) => {
+        // Reload template in non-prod mode so dev works smoothly, or if it was empty on first start
+        if (NODE_ENV !== 'production' || !indexHtmlTemplate) {
+           indexHtmlTemplate = loadTemplate()
+        }
+
         // Fast-fail for missing static assets to prevent heavy SSR fallback
         if (req.path.match(/\.(js|css|ico|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot|mp4|webm|pdf)$/)) {
           return res.status(404).send('Not Found')
