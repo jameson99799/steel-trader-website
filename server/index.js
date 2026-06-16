@@ -355,7 +355,7 @@ async function startServer() {
       etag: true,
       setHeaders: (res, path) => {
         // Security: Prevent Stored XSS by forcing non-image files to download instead of executing in-browser
-        if (!/\\.(jpg|jpeg|png|webp|gif|svg|ico)$/i.test(path)) {
+        if (!/\\.(jpg|jpeg|png|webp|gif|svg|ico|mp4|webm|mov|ogg)$/i.test(path)) {
           res.setHeader('Content-Disposition', 'attachment')
         }
       }
