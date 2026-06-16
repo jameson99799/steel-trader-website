@@ -137,6 +137,11 @@ sqlite3 data/database.db "SELECT 'products:', COUNT(*) FROM products; SELECT 'ne
 - **修复**：将输入框移到条件外，始终显示
 - **教训**：后台可编辑字段不应依赖其他开关的显隐状态
 
+### Bug 6：服务器 npm run build 报错 (Babel Parser / .html 不存在) 
+- **原因**：使用 Python 配合 PowerShell 脚本注入 Vue 前端代码时，PowerShell 引擎会默认剥离 ES6 的模板字符串反引号 (`)，并把 `${变量}` 解析替换成了空值。这导致被注入的代码丢失反引号和变量，形成致命的 Vue 语法错误。
+- **修复**：查阅 `.vue` 修改记录，把丢失的模板反引号和变量重新补回去，此后必须专门使用 Node 的 AST 或安全专用文本替换工具（如大模型原生编辑 API）执行代码修改，而不是挂载 `python -c`。
+- **教训**：**绝对禁止**通过跨平台的终端命令（例如在 PowerShell 中执行携带多行字符串及特殊符号的 python 行内代码）去强行注入带有 `${var}` 或 \` 的复杂前端代码。
+
 ---
 
 ## 六、技术架构要点
