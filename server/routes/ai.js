@@ -151,7 +151,17 @@ router.put('/channels/:id', authMiddleware, (req, res) => {
     if (is_image_default) run('UPDATE ai_channels SET is_image_default = 0')
     run(
         'UPDATE ai_channels SET name=?, api_url=?, api_key=?, models=?, is_default=?, default_model=?, is_image_default=?, rpm_limit=? WHERE id=?',
-        [name || channel.name, api_url || channel.api_url, finalKey, JSON.stringify(models || JSON.parse(channel.models || '[]')), is_default ? 1 : 0, default_model || channel.default_model || '', is_image_default ? 1 : 0, parseInt(rpm_limit) || 0, id]
+        [
+            name || channel.name, 
+            api_url || channel.api_url, 
+            finalKey, 
+            JSON.stringify(models || JSON.parse(channel.models || '[]')), 
+            is_default ? 1 : 0, 
+            default_model !== undefined ? default_model : (channel.default_model || ''), 
+            is_image_default ? 1 : 0, 
+            parseInt(rpm_limit) || 0, 
+            id
+        ]
     )
     res.json({ message: '更新成功' })
 })

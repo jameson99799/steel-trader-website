@@ -35,9 +35,13 @@
               <div class="ch-actions">
                 <button class="btn btn-outline btn-xs" @click="testChannel(ch)" :disabled="ch._testing">🔌 {{ ch._testing ? '测试中...' : '测试' }}</button>
                 <button class="btn btn-outline btn-xs" @click="openChannelDialog(ch)">✏️ 编辑</button>
-                <button class="btn btn-outline btn-xs" @click="setDefaultChannel(ch.id)" v-if="!ch.is_default">⭐ 默认翻译</button>
-                <button class="btn btn-outline btn-xs" style="color:#d97706;border-color:#fcd34d;" @click="setImageDefaultChannel(ch.id)" v-if="!ch.is_image_default">🖼️ 默认生图</button>
-                <button class="btn btn-outline btn-xs btn-danger" @click="deleteChannel(ch.id)">🗑️</button>
+                <button class="btn btn-outline btn-xs" @click="setDefaultChannel(ch)" v-if="!ch.is_default" :disabled="ch._settingDefault">
+                  {{ ch._settingDefault ? '⏳ 设置中...' : '⭐ 默认翻译' }}
+                </button>
+                <button class="btn btn-outline btn-xs" style="color:#d97706;border-color:#fcd34d;" @click="setImageDefaultChannel(ch)" v-if="!ch.is_image_default" :disabled="ch._settingImageDefault">
+                  {{ ch._settingImageDefault ? '⏳ 设置中...' : '🖼️ 默认生图' }}
+                </button>
+                <button class="btn btn-outline btn-xs btn-danger" @click="deleteChannel(ch.id)" :disabled="ch._settingDefault || ch._settingImageDefault">🗑️</button>
               </div>
             </div>
             <div v-if="ch._testResult" class="ch-test-result" :class="ch._testResult.ok ? 'test-ok' : 'test-fail'">
@@ -1146,18 +1150,22 @@ const fetchModels = async () => {
   } finally { fetchingModels.value = false }
 }
 
-async function setDefaultChannel(id) {
+async function setDefaultChannel(ch) {
+  ch._settingDefault = true
   try {
-    await api.setAIDefaultChannel(id)
+    await api.setAIDefaultChannel(ch.id)
     await loadChannels()
   } catch (e) { alert('设为默认失败: ' + e.message) }
+  finally { ch._settingDefault = false }
 }
 
-async function setImageDefaultChannel(id) {
+async function setImageDefaultChannel(ch) {
+  ch._settingImageDefault = true
   try {
-    await api.setAIImageDefaultChannel(id)
+    await api.setAIImageDefaultChannel(ch.id)
     await loadChannels()
   } catch (e) { alert('设为默认失败: ' + e.message) }
+  finally { ch._settingImageDefault = false }
 }
 
 // Channel CRUD Methods
@@ -1167,7 +1175,7 @@ async function loadChannels() {
     // Sort newest first, add UI state
     channels.value = (data || [])
       .sort((a, b) => (b.id || 0) - (a.id || 0))
-      .map(ch => ({ ...ch, _testing: false, _testResult: null }))
+      .map(ch => ({ ...ch, _testing: false, _testResult: null, _settingDefault: false, _settingImageDefault: false }))
   } catch (e) { console.error('Load channels failed:', e) }
 }
 

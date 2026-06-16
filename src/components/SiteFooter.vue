@@ -170,9 +170,9 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const { lang, t, localizedValue, langPath } = useLang()
-const company = ref(window.__INITIAL_STATE__?.company || null)
-const categories = ref(window.__INITIAL_STATE__?.categories || [])
-const pageTexts = ref(window.__INITIAL_STATE__?.pageTexts || null)
+const company = ref(null)
+const categories = ref([])
+const pageTexts = ref(null)
 const latestNews = ref([])
 const activeModal = ref(null)
 
@@ -182,16 +182,10 @@ function showLegalModal(type) {
 
 const loadData = async () => {
   try {
-    if (!window.__INITIAL_STATE__?.company) {
-      company.value = await api.getCompany()
-    }
-    if (!window.__INITIAL_STATE__?.categories) {
-      const tree = await api.getCategoryTree()
-      categories.value = tree.slice(0, 5)
-    }
-    if (!window.__INITIAL_STATE__?.pageTexts) {
-      pageTexts.value = await api.getPageTexts()
-    }
+    company.value = await api.getCompany()
+    const tree = await api.getCategoryTree()
+    categories.value = tree.slice(0, 5)
+    pageTexts.value = await api.getPageTexts()
     // Fetch latest news for footer links (SEO)
     try {
       const newsData = await api.getNews({ status: 1 })
@@ -256,7 +250,6 @@ onMounted(loadData)
   font-weight: 700;
   color: var(--white);
   margin: 0 0 4px 0;
-  min-height: 28px; /* Prevent CLS */
 }
 
 .brand-tagline {
@@ -264,14 +257,12 @@ onMounted(loadData)
   color: var(--gray-400);
   margin: 0;
   font-weight: 500;
-  min-height: 20px; /* Prevent CLS */
 }
 
 .brand-desc {
   color: var(--gray-300);
   line-height: var(--leading-relaxed);
   margin-bottom: var(--spacing-md);
-  min-height: 72px; /* Prevent CLS */
 }
 
 .social-links {

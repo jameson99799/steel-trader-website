@@ -58,7 +58,18 @@ const request = async (url, options = {}) => {
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const response = await fetch(`${BASE_URL}${url}`, { ...options, headers, signal: options.signal })
+  const sep = url.includes('?') ? '&' : '?'
+  const response = await fetch(`${BASE_URL}${url}${sep}t=${Date.now()}`, { 
+    ...options, 
+    headers: {
+      ...headers,
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    },
+    cache: 'no-store',
+    signal: options.signal 
+  })
 
   // Auto-redirect to login on 401 (expired/invalid token)
   if (response.status === 401) {
