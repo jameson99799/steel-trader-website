@@ -282,7 +282,7 @@ const getYoutubeThumbnail = (url) => {
   } else {
     return '';
   }
-  return https://i.ytimg.com/vi//maxresdefault.jpg;
+  return `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
 }
 
 
