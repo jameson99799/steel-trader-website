@@ -186,7 +186,7 @@
           <div class="form-group" style="margin-top: 20px; border-top: 1px dashed #e2e8f0; padding-top: 20px;">
             <label>视频展示链接（YouTube 或 图库本地视频） <span class="form-hint-inline">（可粘贴 YouTube Embed 链接，或直接从图库选择）</span></label>
             <div style="display:flex;gap:8px;align-items:center;">
-              <input v-model="form.company_video_embed" type="url" class="form-control" placeholder="https://www.youtube.com/embed/XXXXXX 或 点击选用本地视频" />
+              <input v-model="form.company_video_embed" type="text" class="form-control" placeholder="https://www.youtube.com/embed/XXXXXX 或 点击选用本地视频" />
               <button type="button" class="btn btn-sm btn-outline" @click="openMediaPicker('company_video_embed')" style="color:#7c3aed;border-color:#7c3aed;">📷 从图库选择</button>
             </div>
             <p class="form-hint">填写后，系统可以使用该视频替换图片进行展示。如果不填，则不会显示视频选项。</p>
