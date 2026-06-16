@@ -53,7 +53,7 @@
               </template>
             </div>
             <div class="intro-image" v-else-if="company?.about_image">
-              <img :src="company.about_image" :alt="localizedValue(company, 'name')" />
+              <img :src="company.about_image" :alt="localizedValue(company, 'name')" @click="openImageLightbox" style="cursor: zoom-in;" />
               <div class="image-overlay">
                 <div class="overlay-content">
                   <h3>{{ localizedValue(company, 'name') }}</h3>
@@ -197,8 +197,22 @@
       <div class="video-lightbox-content" @click.stop v-if="videoLightboxActive">
         <video v-if="videoLightboxIsMp4" :src="videoLightboxUrl" controls controlsList="nodownload" disablePictureInPicture autoplay style="width:100%;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);"></video>
         <div v-else style="width:100%; display:flex; flex-direction:column; align-items:center;">
-          <iframe :src="getYoutubeEmbedUrl(videoLightboxUrl, true, false)" style="width:100%;height:80vh;max-width:1100px;border:none;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+          <iframe :src="getYoutubeEmbedUrl(videoLightboxUrl, true, false)" style="width:100%;aspect-ratio:16/9;max-height:85vh;height:auto;max-width:1100px;border:none;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
         </div>
+      </div>
+    </div>
+
+    <!-- Image Lightbox -->
+    <div class="lightbox" :class="{ 'active': imageLightboxActive }" @click="closeImageLightbox">
+      <div class="lightbox-top-bar" @click.stop v-if="imageLightboxActive">
+        <div class="lightbox-center-controls">
+          <div class="lightbox-title">{{ localizedValue(company, 'name') }}</div>
+        </div>
+        <button class="lightbox-close" @click="closeImageLightbox">&times;</button>
+      </div>
+
+      <div class="lightbox-content" @click.stop v-if="imageLightboxActive">
+        <img :src="company.about_image" @click="closeImageLightbox" />
       </div>
     </div>
   </div>
@@ -213,6 +227,55 @@ const { t, localizedValue, lang, langPath } = useLang()
 const company = ref(null)
 const hero = ref(null)
 const pageTexts = ref(null)
+
+const imageLightboxActive = ref(false)
+
+const openImageLightbox = () => {
+  imageLightboxActive.value = true
+  document.body.classList.add('no-scroll')
+}
+
+const closeImageLightbox = () => {
+  imageLightboxActive.value = false
+  document.body.classList.remove('no-scroll')
+}
+
+const videoLightboxActive = ref(false)
+const videoLightboxUrl = ref('')
+const videoLightboxIsMp4 = ref(false)
+
+const openVideoLightbox = (url) => {
+  videoLightboxUrl.value = url
+  videoLightboxIsMp4.value = url.toLowerCase().endsWith('.mp4') || url.toLowerCase().endsWith('.webm')
+  videoLightboxActive.value = true
+  document.body.classList.add('no-scroll')
+}
+
+const closeVideoLightbox = () => {
+  videoLightboxActive.value = false
+  document.body.classList.remove('no-scroll')
+  setTimeout(() => {
+    videoLightboxUrl.value = ''
+  }, 300)
+}
+
+const getYoutubeThumbnail = (url) => {
+  if (!url) return '';
+  let videoId = '';
+  if (url.includes('youtube.com/watch?v=')) {
+    videoId = url.split('v=')[1];
+    const ampersandPosition = videoId.indexOf('&');
+    if(ampersandPosition !== -1) videoId = videoId.substring(0, ampersandPosition);
+  } else if (url.includes('youtu.be/')) {
+    videoId = url.split('youtu.be/')[1];
+    const questionPosition = videoId.indexOf('?');
+    if(questionPosition !== -1) videoId = videoId.substring(0, questionPosition);
+  } else {
+    return '';
+  }
+  return https://i.ytimg.com/vi//maxresdefault.jpg;
+}
+
 
 const getYoutubeEmbedUrl = (url, autoplay, mute = false) => {
   if (!url) return '';
@@ -863,6 +926,105 @@ onMounted(loadData)
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+
+/* Lightbox */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  backdrop-filter: blur(5px);
+}
+
+.lightbox.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.lightbox-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 40px;
+}
+
+.lightbox-content img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  border-radius: 4px;
+}
+
+.lightbox-top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 60px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0 20px;
+  color: white;
+  z-index: 10;
+}
+
+.lightbox-center-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 800px;
+  padding: 0 80px; 
+}
+
+.lightbox-title {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  flex: 1;
+}
+
+.lightbox-close {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: white;
+  font-size: 44px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  padding: 0 10px;
+}
+
+.lightbox-close:hover {
+  opacity: 1;
+}
+
+@media (max-width: 768px) {
+  .lightbox-top-bar { padding: 0; height: 60px; }
+  .lightbox-center-controls { padding: 0 60px; }
+  .lightbox-title { font-size: 24px; }
+  .lightbox-close { right: 10px; font-size: 36px; z-index: 20; }
+  .lightbox-content { padding: 60px 10px; }
 }
 
 </style>

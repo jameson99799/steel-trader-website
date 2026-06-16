@@ -120,7 +120,7 @@
       <div class="video-lightbox-content" @click.stop v-if="videoLightboxActive">
         <video v-if="videoLightboxIsMp4" :src="videoLightboxUrl" controls controlsList="nodownload" disablePictureInPicture autoplay style="width:100%;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);"></video>
         <div v-else style="width:100%; display:flex; flex-direction:column; align-items:center;">
-          <iframe :src="getYoutubeEmbedUrl(videoLightboxUrl, true, false)" style="width:100%;height:80vh;max-width:1100px;border:none;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+          <iframe :src="getYoutubeEmbedUrl(videoLightboxUrl, true, false)" style="width:100%;aspect-ratio:16/9;max-height:85vh;height:auto;max-width:1100px;border:none;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
         </div>
       </div>
     </div>
@@ -178,10 +178,12 @@ const openVideoLightbox = (video) => {
   videoLightboxUrl.value = video.media_url
   videoLightboxIsMp4.value = video.media_url.toLowerCase().endsWith('.mp4') || video.media_url.toLowerCase().endsWith('.webm')
   videoLightboxActive.value = true
+  document.body.classList.add('no-scroll')
 }
 
 const closeVideoLightbox = () => {
   videoLightboxActive.value = false
+  document.body.classList.remove('no-scroll')
   setTimeout(() => {
     videoLightboxUrl.value = ''
   }, 300)
@@ -284,11 +286,13 @@ const openLightbox = (group, index) => {
   lightboxImages.value = getImages(group)
   lightboxIndex.value = index
   lightboxActive.value = true
+  document.body.classList.add('no-scroll')
   // document.body.style.overflow = 'hidden' // Removed to allow background scrolling syncing
 }
 
 const closeLightbox = () => {
   lightboxActive.value = false
+  document.body.classList.remove('no-scroll')
   setTimeout(() => {
     lightboxImages.value = []
     lightboxGroup.value = null
@@ -909,7 +913,8 @@ onUnmounted(() => {
   .lightbox-title { font-size: 24px; }
   .lightbox-bottom-nav { width: 50px; height: 50px; font-size: 24px; }
   /* Avoid overlapping with FloatingContact on mobile */
-  .lightbox-bottom-bar { gap: 40px; bottom: 80px; }
+  .lightbox-bottom-bar { top: 50%; bottom: auto; transform: translateY(-50%); justify-content: space-between; padding: 0 10px; width: 100%; pointer-events: none; }
+  .lightbox-bottom-nav { pointer-events: auto; background: rgba(0,0,0,0.4);border:none;box-shadow:none; }
   .lightbox-close { right: 10px; font-size: 36px; z-index: 20; }
   
   .page-title {

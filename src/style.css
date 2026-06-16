@@ -736,3 +736,17 @@ img {
   user-select: none;
   -webkit-touch-callout: none;
 }
+
+
+/* Global Lightbox Lock */
+.no-scroll {
+  overflow: hidden !important;
+  /* Prevent layout shift when scrollbar disappears, modern browsers support scrollbar-gutter */
+  scrollbar-gutter: stable;
+}
+
+/* Global Rich Text Image Constraint to prevent mobile overflow */
+.product-detail-html img, .news-detail-html img, .tiptap img, .ql-editor img {
+  max-width: 100% !important;
+  height: auto !important;
+}

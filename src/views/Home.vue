@@ -246,7 +246,7 @@
       <div class="video-lightbox-content" @click.stop v-if="videoLightboxActive">
         <video v-if="videoLightboxIsMp4" :src="videoLightboxUrl" controls controlsList="nodownload" disablePictureInPicture autoplay style="width:100%;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);"></video>
         <div v-else style="width:100%; display:flex; flex-direction:column; align-items:center;">
-          <iframe :src="getYoutubeEmbedUrl(videoLightboxUrl, true, false)" style="width:100%;height:80vh;max-width:1100px;border:none;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+          <iframe :src="getYoutubeEmbedUrl(videoLightboxUrl, true, false)" style="width:100%;aspect-ratio:16/9;max-height:85vh;height:auto;max-width:1100px;border:none;border-radius:8px;box-shadow: 0 10px 30px rgba(0,0,0,0.5);" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
         </div>
       </div>
     </div>
@@ -273,10 +273,12 @@ const openVideoLightbox = (url) => {
   videoLightboxUrl.value = url
   videoLightboxIsMp4.value = url.toLowerCase().endsWith('.mp4') || url.toLowerCase().endsWith('.webm')
   videoLightboxActive.value = true
+  document.body.classList.add('no-scroll')
 }
 
 const closeVideoLightbox = () => {
   videoLightboxActive.value = false
+  document.body.classList.remove('no-scroll')
   setTimeout(() => {
     videoLightboxUrl.value = ''
   }, 300)
