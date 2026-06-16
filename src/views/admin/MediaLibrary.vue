@@ -182,7 +182,8 @@
             <label>选择图片（支持多选）</label>
             <input type="file" multiple accept="image/*,video/mp4,video/webm" @change="handleUploadFiles" class="form-control" />
           </div>
-          <div v-if="uploadProgress" class="upload-progress">
+          <div v-if="uploading || uploadProgress > 0" class="upload-progress">
+            <div v-if="uploadStatusText" class="upload-status-text">{{ uploadStatusText }}</div>
             <div class="prog-bar-wrap"><div class="prog-bar" :style="{width: uploadProgress+'%'}"></div></div>
             <span>{{ uploadProgress }}%</span>
           </div>
@@ -257,6 +258,7 @@ const uploadGroupId = ref('')
 const uploadFiles = ref([])
 const uploading = ref(false)
 const uploadProgress = ref(0)
+const uploadStatusText = ref('')
 const detailItem = ref(null)
 const showGroupMgr = ref(false)
 const editGroupId = ref(null)
@@ -387,30 +389,69 @@ async function openUploadModal() {
 
 function handleUploadFiles(e) { uploadFiles.value = Array.from(e.target.files || []) }
 
+// Upload files one-by-one to avoid Nginx 413 (body too large) for large video files
 async function doUpload() {
   if (!uploadFiles.value.length) return
-  uploading.value = true; uploadProgress.value = 0
-  const formData = new FormData()
-  uploadFiles.value.forEach(f => formData.append('files', f))
-  if (uploadGroupId.value) formData.append('group_id', uploadGroupId.value)
-  if (uploadFolderId.value) formData.append('folder_id', uploadFolderId.value)
-  try {
-    const xhr = new XMLHttpRequest()
-    xhr.open('POST', '/api/media/upload')
-    xhr.setRequestHeader('Authorization', `Bearer ${token()}`)
-    xhr.upload.onprogress = (e) => { if (e.lengthComputable) uploadProgress.value = Math.round(e.loaded / e.total * 100) }
-    xhr.onload = () => {
-      uploading.value = false
-      if (xhr.status === 200) {
-        const data = JSON.parse(xhr.responseText)
-        alert(`✅ 成功上传 ${data.count} 张图片`)
-        showUploadModal.value = false; uploadFiles.value = []
-        loadMedia(); loadGroups()
-      } else { alert('上传失败: ' + xhr.responseText) }
-    }
-    xhr.onerror = () => { uploading.value = false; alert('上传失败') }
-    xhr.send(formData)
-  } catch (e) { uploading.value = false; alert('上传失败: ' + e.message) }
+  uploading.value = true
+  uploadProgress.value = 0
+  uploadStatusText.value = ''
+
+  const files = uploadFiles.value
+  let successCount = 0
+  let failCount = 0
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    uploadStatusText.value = `正在上传 ${i + 1} / ${files.length}: ${file.name}`
+    uploadProgress.value = Math.round((i / files.length) * 100)
+
+    const formData = new FormData()
+    formData.append('files', file)
+    if (uploadGroupId.value) formData.append('group_id', uploadGroupId.value)
+    if (uploadFolderId.value) formData.append('folder_id', uploadFolderId.value)
+
+    await new Promise(resolve => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', '/api/media/upload')
+      xhr.setRequestHeader('Authorization', `Bearer ${token()}`)
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const fileProgress = Math.round(e.loaded / e.total * 100)
+          const overall = Math.round(((i + fileProgress / 100) / files.length) * 100)
+          uploadProgress.value = overall
+        }
+      }
+      xhr.onload = () => {
+        if (xhr.status === 200) {
+          successCount++
+        } else {
+          failCount++
+          console.error(`上传失败 [${file.name}]:`, xhr.status, xhr.responseText)
+        }
+        resolve()
+      }
+      xhr.onerror = () => { failCount++; resolve() }
+      xhr.send(formData)
+    })
+  }
+
+  uploading.value = false
+  uploadProgress.value = 100
+  uploadStatusText.value = `完成！成功 ${successCount} 个${failCount ? '，失败 ' + failCount + ' 个' : ''}`
+
+  // Immediate UI refresh — reset list first so user sees new items at top
+  items.value = []
+  folders.value = []
+  await loadMedia(false)
+  await loadGroups()
+
+  // Close modal after short delay so user can read success message
+  setTimeout(() => {
+    showUploadModal.value = false
+    uploadFiles.value = []
+    uploadProgress.value = 0
+    uploadStatusText.value = ''
+  }, 1200)
 }
 
 // Detail
@@ -451,13 +492,26 @@ async function handleReplaceFile(e) {
   if (replaceInput.value) replaceInput.value.value = ''
 }
 
-// Delete
+// Delete — immediately remove from local list for instant visual feedback, then re-sync
 async function deleteImage(item) {
   if (!confirm(`删除图片 "${item.original_filename || item.filename}"？`)) return
+  // Optimistic: remove from list immediately
+  const idx = items.value.findIndex(i => i.id === item.id)
+  if (idx !== -1) items.value.splice(idx, 1)
+  total.value = Math.max(0, total.value - 1)
+
   const res = await fetch(`/api/media/${item.id}`, { method: 'DELETE', headers: headers() })
   const data = await res.json()
-  if (res.ok) { loadMedia(); loadGroups() }
-  else alert(data.error)
+  if (res.ok) {
+    loadGroups()
+    // Quietly refresh in background to sync count/state
+    loadMedia(false)
+  } else {
+    // Rollback: re-insert item if delete failed
+    if (idx !== -1) items.value.splice(idx, 0, item)
+    total.value++
+    alert(data.error)
+  }
 }
 
 // Batch
@@ -490,13 +544,24 @@ async function batchMove() {
 
 async function batchDelete() {
   if (!selectedIds.value.length || !confirm(`确定删除 ${selectedIds.value.length} 张图片？`)) return
+  // Optimistic: remove from list immediately
+  const deletedIds = [...selectedIds.value]
+  items.value = items.value.filter(i => !deletedIds.includes(i.id))
+  total.value = Math.max(0, total.value - deletedIds.length)
+  selectedIds.value = []
+
   const res = await fetch('/api/media/batch-delete', {
     method: 'POST', headers: headers(),
-    body: JSON.stringify({ ids: selectedIds.value })
+    body: JSON.stringify({ ids: deletedIds })
   })
   const data = await res.json()
-  if (res.ok) { selectedIds.value = []; loadMedia(); loadGroups() }
-  else alert(data.error)
+  if (res.ok) {
+    loadGroups()
+    loadMedia(false) // Background sync
+  } else {
+    alert(data.error)
+    loadMedia(false) // Rollback by re-loading
+  }
 }
 
 async function batchRename() {
@@ -752,9 +817,11 @@ onUnmounted(() => {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Upload */
-.upload-progress { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
-.prog-bar-wrap { flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
-.prog-bar { height: 100%; background: linear-gradient(90deg, #2563eb, #059669); border-radius: 4px; transition: width 0.3s; }
+.upload-progress { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.upload-status-text { font-size: 12px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.upload-progress > span { font-size: 13px; font-weight: 600; color: #334155; text-align: right; }
+.prog-bar-wrap { width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+.prog-bar { height: 100%; background: linear-gradient(90deg, #2563eb, #059669); border-radius: 4px; transition: width 0.2s; }
 
 /* Detail */
 .detail-table { width: 100%; font-size: 13px; }
