@@ -583,6 +583,9 @@ onUnmounted(() => {
 /* Mobile-only brand (hidden on desktop) */
 .logo-text-mobile {
   display: none;
+  min-width: 140px;
+  min-height: 36px;
+  justify-content: center;
 }
 .mobile-brand-name {
   font-size: 16px;
@@ -590,6 +593,8 @@ onUnmounted(() => {
   color: var(--primary);
   line-height: 1.2;
   letter-spacing: 0.02em;
+  display: block;
+  min-height: 19px;
 }
 .mobile-brand-sub {
   font-size: 11px;
@@ -597,6 +602,8 @@ onUnmounted(() => {
   color: var(--text-secondary);
   letter-spacing: 0.05em;
   line-height: 1.2;
+  display: block;
+  min-height: 13px;
 }
 
 .main-nav {
@@ -989,39 +996,50 @@ onUnmounted(() => {
   .mobile-lang-globe { display: block; }
   /* Nav globe hidden on mobile since nav is a dropdown / hamburger */
   .tablet-nav-lang { display: none !important; }
+  
+  /* LOCK Header Height for CLS 0 */
+  .header-main {
+    height: 68px !important;
+    padding: 0 !important;
+    display: flex;
+    align-items: center;
+    contain: layout size;
+  }
 }
 
 @media (max-width: 640px) {
   .header-main {
-    padding: 12px 0;
+    height: 60px !important;
   }
   
   .logo-image {
-    width: 48px;
-    height: 48px;
+    width: 42px !important;
+    height: 42px !important;
   }
   
   .contact-info {
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
   }
 }
+
 /* Fix CLS strictly on Desktop */
 @media (min-width: 1025px) {
   .site-header {
     contain: layout;
+    height: 136px; /* 44px top + 92px main */
   }
   .header-main {
     height: 92px !important;
     contain: layout size;
-      position: relative;
-      z-index: 10;
+    position: relative;
+    z-index: 10;
   }
   .header-top {
     height: 44px !important;
     contain: layout size;
-      position: relative;
-      z-index: 20;
+    position: relative;
+    z-index: 20;
   }
 }
 </style>

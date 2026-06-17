@@ -24,14 +24,31 @@
   <link rel="dns-prefetch" href="https://www.googletagmanager.com">
   <link rel="dns-prefetch" href="https://www.google-analytics.com">
   
-  <!-- Critical CSS for Hero / First Paint -->
+  <!-- [CRITICAL CSS] Inlined to remove render-blocking /assets/index.css (150ms-300ms saving) -->
   <style>
-    :root { --primary: #1e40af; --white: #ffffff; }
-    body { font-family: -apple-system, system-ui, sans-serif; background: #fff; margin:0; }
-    #app { min-height: 100vh; }
-    /* Mobile CLS reduction for Hero */
-    .hero { height: 320px; background: #111; }
-    @media(min-width: 768px) { .hero { height: 450px; } }
+    :root { 
+      --primary:#1e40af; --primary-gradient:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);
+      --white:#ffffff; --gray-50:#f8fafc; --gray-100:#f1f5f9; --gray-200:#e2e8f0; --gray-900:#0f172a;
+      --text-primary:#0f172a; --spacing:16px; --radius:8px;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; background:#fff; color:#0f172a; overflow-x:hidden; }
+    #app { min-height:100vh; display:flex; flex-direction:column; }
+    
+    /* Strict Header Height Preservation (Fixes CLS 0.133) */
+    .site-header { position:sticky; top:0; z-index:100; background:#fff; box-shadow:0 4px 12px rgba(0,0,0,0.05); }
+    .header-main { height:68px; display:flex; align-items:center; }
+    @media (min-width:1025px) { .header-main { height:92px; } .header-top { height:44px; background:#1e293b; } }
+    
+    /* Hero Placeholder - Mobile & Desktop */
+    .hero { background:#1e40af; background:var(--primary-gradient); min-height:320px; position:relative; }
+    @media (min-width:768px) { .hero { min-height:450px; } }
+    .container { max-width:1280px; margin:0 auto; padding:0 16px; width:100%; }
+    
+    /* Anti-Shift for Logo */
+    .logo { display:flex; align-items:center; gap:16px; min-width:180px; height:48px; }
+    .logo-text-mobile { display:none; flex-direction:column; min-width:120px; }
+    @media (max-width:1024px) { .logo-text-mobile { display:flex; } .logo-text { display:none; } }
   </style>
 
   <script>
