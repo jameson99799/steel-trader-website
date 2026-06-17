@@ -1724,14 +1724,39 @@ watch(lang, async () => {
   .product-detail-html .hero h1 {
     font-size: 28px !important;
   }
+  
+  .product-detail-html .grid-2 .image-box,
+  .product-detail-html .grid-3 .image-box {
+    min-height: 380px !important;
+  }
+  
+  .product-detail-html .grid-2 .image-box img,
+  .product-detail-html .grid-3 .image-box img {
+    height: 280px !important;
+  }
+  
+  .product-detail-html .compare-image-grid .fixed-image-frame,
+  .product-detail-html .qc-image-grid .fixed-image-frame,
+  .product-detail-html .shipping-image-grid .fixed-image-frame {
+    height: 280px !important;
+  }
 }
 
 
 /* Grid images in compare/QC/shipping/applications — ALL fixed 360px */
+.product-detail-html .grid-2 .image-box,
+.product-detail-html .grid-3 .image-box {
+  min-height: 420px; /* Reserve space for image + text to prevent CLS */
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+}
+
 .product-detail-html .grid-2 .image-box img,
 .product-detail-html .grid-3 .image-box img {
   width: 100% !important;
-  height: 360px !important;
+  height: 360px !important; /* Fixed height is key to 0 CLS */
   object-fit: contain !important;
   background: #fff !important;
   border-radius: 6px;
@@ -1739,6 +1764,20 @@ watch(lang, async () => {
   display: block;
   margin: 0 auto;
   outline: none !important;
+}
+
+.product-detail-html .image-box {
+  min-height: 300px;
+  content-visibility: auto; /* Performance optimization */
+}
+
+.product-detail-html .compare-image-grid .fixed-image-frame,
+.product-detail-html .qc-image-grid .fixed-image-frame,
+.product-detail-html .shipping-image-grid .fixed-image-frame {
+  height: 360px !important;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .product-detail-html .compare-image-grid .fixed-image-frame img,
