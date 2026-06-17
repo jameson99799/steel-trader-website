@@ -349,6 +349,42 @@ async function startServer() {
       next()
     })
 
+    // ── Dynamic SEO & AI Files ──────────────────────────────────────────────
+    // Served before static to ensure DB overrides dist files
+    app.get('/robots.txt', (req, res) => {
+      try {
+        const seo = getOne('SELECT robots_txt FROM seo_settings WHERE id = 1')
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+        let robotsTxt = (seo && seo.robots_txt) ? seo.robots_txt : 'User-agent: *\nAllow: /\n'
+        if (!robotsTxt.toLowerCase().includes('sitemap:')) {
+          robotsTxt += '\nSitemap: https://www.sunseasteel.com/sitemap.xml\n'
+        }
+        return res.send(robotsTxt.trim() + '\n')
+      } catch (e) {}
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+      res.send('User-agent: *\nAllow: /\nSitemap: https://www.sunseasteel.com/sitemap.xml\n')
+    })
+
+    app.get('/llms.txt', (req, res) => {
+      try {
+        const seo = getOne('SELECT llms_txt FROM seo_settings WHERE id = 1')
+        res.setHeader('Content-Type', 'text/markdown; charset=utf-8')
+        res.send(seo?.llms_txt || '# No content available')
+      } catch (e) {
+        res.status(404).send('Not Found')
+      }
+    })
+
+    app.get('/llms-full.txt', (req, res) => {
+      try {
+        const seo = getOne('SELECT llms_full_txt FROM seo_settings WHERE id = 1')
+        res.setHeader('Content-Type', 'text/markdown; charset=utf-8')
+        res.send(seo?.llms_full_txt || '# No content available')
+      } catch (e) {
+        res.status(404).send('Not Found')
+      }
+    })
+    
     // 静态文件
     app.use('/uploads', express.static(join(__dirname, '..', 'uploads'), {
       maxAge: '1y',
@@ -504,20 +540,6 @@ async function startServer() {
       // Helper: build JSON-LD script tag
       const jsonLd = (obj, idStr = '') => `<script type="application/ld+json"${idStr ? ` id="${idStr}"` : ''}>${JSON.stringify(obj).replace(/</g, '\\u003c')}</script>`
 
-      // Ensure robots.txt always serves text/plain, even if dist/robots.txt is missing
-      app.get('/robots.txt', (req, res) => {
-        try {
-          const seo = getOne('SELECT robots_txt FROM seo_settings WHERE id = 1')
-          res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-          let robotsTxt = (seo && seo.robots_txt) ? seo.robots_txt : 'User-agent: *\nAllow: /\n'
-          if (!robotsTxt.toLowerCase().includes('sitemap:')) {
-            robotsTxt += '\nSitemap: https://www.sunseasteel.com/sitemap.xml\n'
-          }
-          return res.send(robotsTxt.trim() + '\n')
-        } catch (e) {}
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-        res.send('User-agent: *\nAllow: /\nSitemap: https://www.sunseasteel.com/sitemap.xml\n')
-      })
 
       app.get('*', (req, res) => {
         // Fast-fail for missing static assets to prevent heavy SSR fallback

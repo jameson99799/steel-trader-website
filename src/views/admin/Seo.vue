@@ -109,6 +109,21 @@
         </div>
       </div>
 
+      <!-- AI accessibility (llms.txt) -->
+      <div class="seo-card">
+        <h3>🤖 AI Agent 访问规则 (llms.txt)</h3>
+        <div class="form-group">
+          <label>llms.txt (主要说明)</label>
+          <textarea v-model="form.llms_txt" class="form-control" rows="8" placeholder="# 标题&#10;&#10;欢迎访问...&#10;&#10;## 链接&#10;- [产品](/products)"></textarea>
+          <small>为 AI 爬虫（如 GPT-4, Claude）提供网站地图。必须包含 H1 标题 (#) 和链接。</small>
+        </div>
+        <div class="form-group">
+          <label>llms-full.txt (完整文档)</label>
+          <textarea v-model="form.llms_full_txt" class="form-control" rows="8" placeholder="# 完整文档&#10;&#10;详细说明..."></textarea>
+          <small>提供给 AI 的更详细的背景信息或全文索引。</small>
+        </div>
+      </div>
+
       <!-- GEO SEO Card -->
       <div class="seo-card geo-card" style="grid-column: 1 / -1;">
         <h3>🤖 GEO 生成式引擎优化（Generative Engine Optimization）</h3>
@@ -331,7 +346,9 @@ const form = ref({
   local_business_type: 'Manufacturer',
   local_business_address: '',
   article_refresh_days: 0,
-  product_refresh_days: 0
+  product_refresh_days: 0,
+  llms_txt: '',
+  llms_full_txt: ''
 })
 
 const scoreClass = computed(() => {
@@ -378,7 +395,9 @@ async function load() {
         local_business_type: data.local_business_type || 'Manufacturer',
         local_business_address: data.local_business_address || '',
         article_refresh_days: data.article_refresh_days || 0,
-        product_refresh_days: data.product_refresh_days || 0
+        product_refresh_days: data.product_refresh_days || 0,
+        llms_txt: data.llms_txt || '',
+        llms_full_txt: data.llms_full_txt || ''
       }
       if (data.og_image) ogPreview.value = data.og_image
     }

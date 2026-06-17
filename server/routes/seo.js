@@ -33,7 +33,9 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
         local_business_type = existing.local_business_type,
         local_business_address = existing.local_business_address,
         article_refresh_days = existing.article_refresh_days,
-        product_refresh_days = existing.product_refresh_days
+        product_refresh_days = existing.product_refresh_days,
+        llms_txt = existing.llms_txt,
+        llms_full_txt = existing.llms_full_txt
     } = req.body
     const og_image = req.file ? `/uploads/${req.file.filename}` : (req.body.og_image !== undefined ? req.body.og_image : existing?.og_image)
 
@@ -44,25 +46,28 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
             geo_region=?, geo_placename=?, geo_lat=?, geo_lng=?,
             hreflang_en=?, hreflang_zh=?, local_business_type=?, local_business_address=?,
             article_refresh_days=?, product_refresh_days=?,
+            llms_txt=?, llms_full_txt=?,
             updated_at=CURRENT_TIMESTAMP WHERE id=1`,
             [site_title, site_description, site_keywords, og_image,
                 google_analytics, google_search_console, robots_txt,
                 geo_region, geo_placename, geo_lat, geo_lng,
                 hreflang_en, hreflang_zh, local_business_type, local_business_address,
-                parseInt(article_refresh_days) || 0, parseInt(product_refresh_days) || 0]
+                parseInt(article_refresh_days) || 0, parseInt(product_refresh_days) || 0,
+                llms_txt, llms_full_txt]
         )
     } else {
         run(
             `INSERT INTO seo_settings
             (id, site_title, site_description, site_keywords, og_image, google_analytics, google_search_console, robots_txt,
              geo_region, geo_placename, geo_lat, geo_lng, hreflang_en, hreflang_zh, local_business_type, local_business_address,
-             article_refresh_days, product_refresh_days)
-            VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+             article_refresh_days, product_refresh_days, llms_txt, llms_full_txt)
+            VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [site_title, site_description, site_keywords, og_image,
                 google_analytics, google_search_console, robots_txt,
                 geo_region, geo_placename, geo_lat, geo_lng,
                 hreflang_en, hreflang_zh, local_business_type, local_business_address,
-                parseInt(article_refresh_days) || 0, parseInt(product_refresh_days) || 0]
+                parseInt(article_refresh_days) || 0, parseInt(product_refresh_days) || 0,
+                llms_txt, llms_full_txt]
         )
     }
     // Sync robots.txt to static file so it takes effect immediately
@@ -164,6 +169,19 @@ router.get('/audit', authMiddleware, (req, res) => {
     const blocksApi = robotsTxt.toLowerCase().includes('disallow: /api/')
     check('Google工具', 'Robots.txt 允许 API 访问', !blocksApi,
         '🔴 致命！robots.txt 禁止了 /api/ 路径，Google 无法渲染 SPA 页面！请立即删除 Disallow: /api/', 3)
+
+    // ── 2.5 AI Agent 优化 ────────────────────────────────────
+    const llmsTxt = seo.llms_txt || ''
+    const hasH1 = llmsTxt.trim().startsWith('# ')
+    const hasLinks = llmsTxt.includes('[') && llmsTxt.includes(']') && llmsTxt.includes('(') && llmsTxt.includes(')')
+    check('AI Agent 优化', 'llms.txt (AI 访问页)', !!llmsTxt,
+        '⚠️ 未配置 llms.txt，AI 爬虫（如 GPT-4）可能无法快速理解并引用您的网站内容。', 1)
+    if (llmsTxt) {
+        check('AI Agent 优化', 'llms.txt 格式规范 (H1)', hasH1,
+            '❌ llms.txt 缺少必需的 H1 标题（例如 "# 标题"），这会影响 AI 对内容的权重判断。', 1)
+        check('AI Agent 优化', 'llms.txt 包含链接', hasLinks,
+            '❌ llms.txt 似乎不包含任何 Markdown 链接，AI 代理将无法浏览您的产品页面。', 1)
+    }
 
     // ── 3. 公司信息 ──────────────────────────────────────────
     const company = getOne('SELECT * FROM company WHERE id = 1') || {}
