@@ -632,9 +632,10 @@ async function createFolder() {
       method: 'POST', headers: headers(),
       body: JSON.stringify({ name: name.trim(), group_id: filterGroup.value })
     })
-    if (res.ok) loadMedia()
-    else {
-      const data = await res.json()
+    const data = await res.json()
+    if (res.ok) {
+      folders.value.unshift({ id: data.id, group_id: filterGroup.value, name: name.trim(), image_count: 0 })
+    } else {
       alert('创建失败: ' + data.error)
     }
   } catch (e) { alert('创建失败: ' + e.message) }
@@ -676,15 +677,19 @@ async function saveRenameFolder(folder) {
 
 async function deleteFolder(folder) {
   if (!confirm(`确定删除文件夹 "${folder.name}" 吗？\n注意：只能删除空文件夹。`)) return
+  
+  const prevFolders = [...folders.value]
+  folders.value = folders.value.filter(f => f.id !== folder.id)
+  
   try {
     const res = await fetch(`/api/media/folders/${folder.id}`, { method: 'DELETE', headers: headers() })
     const data = await res.json()
-    if (res.ok) {
-      loadMedia()
-    } else {
+    if (!res.ok) {
+      folders.value = prevFolders
       alert('删除失败: ' + data.error)
     }
   } catch (e) {
+    folders.value = prevFolders
     alert('删除失败: ' + e.message)
   }
 }
