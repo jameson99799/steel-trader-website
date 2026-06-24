@@ -63,6 +63,18 @@ function slugify(text, id) {
     return id ? `${base}-${id}` : base
 }
 
+function uniqueSlug(table, base, excludeId = null) {
+    let slug = base || table
+    let counter = 2
+    while (true) {
+        const exists = excludeId
+            ? getOne(`SELECT id FROM ${table} WHERE slug = ? AND id != ?`, [slug, excludeId])
+            : getOne(`SELECT id FROM ${table} WHERE slug = ?`, [slug])
+        if (!exists) return slug
+        slug = `${base}-${counter++}`
+    }
+}
+
 // ─── Auto SEO helper ─────────────────────────────────────────────────────────
 function autoSeoProduct(name_en, description_en, categoryName) {
     const title = `${(name_en || '').substring(0, 40)} - ${categoryName || 'Steel Coil'} | SunSea Steel`
@@ -476,29 +488,27 @@ router.post('/products', apiKeyMiddleware, (req, res) => {
     const finalSeoDesc = seo_description || autoSeo.seo_description
     const finalSeoKw = seo_keywords || autoSeo.seo_keywords
 
-    const result = run(`
-        INSERT INTO products (name, name_en, category_id, description, description_en, specs, images, detail_content, is_featured, sort_order, status, seo_title, seo_description, seo_keywords, faq_items)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-        name || name_en, name_en || null, category_id || null,
-        description || null, description_en || null, specs || null,
-        images || '', detail_content || null,
-        parseInt(is_featured || 0), parseInt(sort_order || 0), parseInt(status ?? 1),
-        finalSeoTitle, finalSeoDesc, finalSeoKw,
-        faq_items || '[]'
-    ])
+    const baseSlugStr = slugify(name_en || name) || 'product'
+    const finalSlug = slug || uniqueSlug('products', baseSlugStr)
 
-    const newId = result.lastInsertRowid
-    const base = slugify(name_en || name, newId)
-    const finalSlug = slug || uniqueSlug(base, newId)
+    let newId
     try {
-        run('UPDATE products SET slug = ? WHERE id = ?', [finalSlug, newId])
+        const result = run(`
+            INSERT INTO products (name, name_en, slug, category_id, description, description_en, specs, images, detail_content, is_featured, sort_order, status, seo_title, seo_description, seo_keywords, faq_items)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            name || name_en, name_en || null, finalSlug, category_id || null,
+            description || null, description_en || null, specs || null,
+            images || '', detail_content || null,
+            parseInt(is_featured || 0), parseInt(sort_order || 0), parseInt(status ?? 1),
+            finalSeoTitle, finalSeoDesc, finalSeoKw,
+            faq_items || '[]'
+        ])
+        newId = result.lastInsertRowid
     } catch (err) {
         if (err.message && err.message.includes('UNIQUE constraint failed')) {
-            run('DELETE FROM products WHERE id = ?', [newId])
             return res.status(400).json({ error: 'Slug already exists' })
         }
-        run('DELETE FROM products WHERE id = ?', [newId])
         return res.status(500).json({ error: err.message })
     }
 
@@ -542,29 +552,27 @@ router.post('/news', apiKeyMiddleware, (req, res) => {
     const finalSeoDesc = seo_description || autoSeo.seo_description
     const finalSeoKw = seo_keywords || autoSeo.seo_keywords
 
-    const result = run(`
-        INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, faq_items, category_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `, [
-        title || title_en, title_en || null, 'temp',
-        summary || null, summary_en || null, content || null,
-        cover_image || null,
-        finalSeoTitle, finalSeoDesc, finalSeoKw,
-        parseInt(status ?? 1), 0, render_mode || 'direct',
-        faq_items || '[]', resolvedCatId
-    ])
+    const baseSlugStr = slugify(title_en || title) || 'news'
+    const finalSlug = slug || uniqueSlug('news', baseSlugStr)
 
-    const newId = result.lastInsertRowid
-    const baseSlug = slugify(title_en || title, newId)
-    const finalSlug = slug || uniqueSlug(baseSlug, newId)
+    let newId
     try {
-        run('UPDATE news SET slug = ? WHERE id = ?', [finalSlug, newId])
+        const result = run(`
+            INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, faq_items, category_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        `, [
+            title || title_en, title_en || null, finalSlug,
+            summary || null, summary_en || null, content || null,
+            cover_image || null,
+            finalSeoTitle, finalSeoDesc, finalSeoKw,
+            parseInt(status ?? 1), 0, render_mode || 'direct',
+            faq_items || '[]', resolvedCatId
+        ])
+        newId = result.lastInsertRowid
     } catch (err) {
         if (err.message && err.message.includes('UNIQUE constraint failed')) {
-            run('DELETE FROM news WHERE id = ?', [newId])
             return res.status(400).json({ error: 'Slug already exists' })
         }
-        run('DELETE FROM news WHERE id = ?', [newId])
         return res.status(500).json({ error: err.message })
     }
 
