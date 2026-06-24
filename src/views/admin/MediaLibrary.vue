@@ -248,8 +248,16 @@ const total = ref(0)
 const currentPage = ref(1)
 const perPage = 30
 const search = ref('')
-const filterGroup = ref('')
-const filterFolder = ref('')
+const filterGroup = ref(sessionStorage.getItem('mediaFilterGroup') || '')
+const filterFolder = ref(sessionStorage.getItem('mediaFilterFolder') ? parseInt(sessionStorage.getItem('mediaFilterFolder')) : '')
+
+watch([filterGroup, filterFolder], ([newGroup, newFolder]) => {
+  if (newGroup) sessionStorage.setItem('mediaFilterGroup', newGroup)
+  else sessionStorage.removeItem('mediaFilterGroup')
+  
+  if (newFolder) sessionStorage.setItem('mediaFilterFolder', newFolder)
+  else sessionStorage.removeItem('mediaFilterFolder')
+})
 const selectedIds = ref([])
 const batchGroupTarget = ref('')
 const batchFolderTarget = ref('')
@@ -274,7 +282,12 @@ const showNewFolderPrompt = ref(false)
 const renamingFolderId = ref(null)
 const renameFolderValue = ref('')
 const renameFolderInput = ref(null)
-const currentFolderName = ref('')
+const currentFolderName = ref(sessionStorage.getItem('mediaCurrentFolderName') || '')
+
+watch(currentFolderName, (val) => {
+  if (val) sessionStorage.setItem('mediaCurrentFolderName', val)
+  else sessionStorage.removeItem('mediaCurrentFolderName')
+})
 const uploadFolderId = ref('')
 
 const isBatchRenaming = ref(false)
@@ -644,6 +657,8 @@ async function createFolder() {
 function enterFolder(folder) {
   filterFolder.value = folder.id
   currentFolderName.value = folder.name
+  // Only changing filterFolder value triggers the loadMedia inside a change hook if it existed
+  // But here we need to manually trigger loadMedia for folder entry
   currentPage.value = 1
   loadMedia()
 }
