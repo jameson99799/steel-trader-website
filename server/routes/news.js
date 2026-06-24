@@ -108,60 +108,61 @@ router.get('/:slug', (req, res) => {
 
 // POST create news (admin only)
 router.post('/', authMiddleware, upload.single('cover_image'), (req, res) => {
-    const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status = 1, sort_order = 0, render_mode = 'direct', category_id, category_name } = req.body
-    if (!title) return res.status(400).json({ error: '标题不能为空' })
-
-    const resolvedCatId = resolveCategoryId(category_id, category_name)
-    const slug = slugify(title_en || title)
-    const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || null)
-
-    const result = run(
-        `INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, category_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [title, title_en || null, 'temp', summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status), parseInt(sort_order), render_mode, resolvedCatId]
-    )
-    // Generate clean SEO slug without ID
-    const newId = result.lastInsertRowid
-    const cleanSlug = req.body.slug || uniqueSlug(slugify(title_en || title), newId)
     try {
-        run('UPDATE news SET slug = ? WHERE id = ?', [cleanSlug, newId])
+        const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status = 1, sort_order = 0, render_mode = 'direct', category_id, category_name } = req.body
+        if (!title) return res.status(400).json({ error: '标题不能为空' })
+
+        const resolvedCatId = resolveCategoryId(category_id, category_name)
+        const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || null)
+
+        // Generate clean SEO slug before insertion to avoid UNIQUE constraint clashes on hardcoded strings like 'temp'
+        const baseSlug = slugify(title_en || title) || 'news'
+        const cleanSlug = req.body.slug || uniqueSlug(baseSlug)
+
+        const result = run(
+            `INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, category_id)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [title, title_en || null, cleanSlug, summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status), parseInt(sort_order), render_mode, resolvedCatId]
+        )
+        const newId = result.lastInsertRowid
+        
+        res.json({ id: newId, slug: cleanSlug, category_id: resolvedCatId, message: '创建成功' })
     } catch (err) {
         if (err.message && err.message.includes('UNIQUE constraint failed')) {
-            run('DELETE FROM news WHERE id = ?', [newId]) // rollback
-            return res.status(400).json({ error: '保存失败：自定义链接(Slug)已经被其他文章使用，请留空或修改后重试！' })
+            return res.status(400).json({ error: '保存失败：自定义链接(Slug)已经被其他文章使用，请填写其他专属链接！' })
         }
-        run('DELETE FROM news WHERE id = ?', [newId]) // rollback
+        console.error('[POST /news] Error:', err.message)
         return res.status(500).json({ error: '服务器内部错误：' + err.message })
     }
-    
-    res.json({ id: newId, slug: cleanSlug, category_id: resolvedCatId, message: '创建成功' })
 })
 
 // PUT update news (admin only)
 router.put('/:id', authMiddleware, upload.single('cover_image'), (req, res) => {
-    const { id } = req.params
-    const existing = getOne('SELECT * FROM news WHERE id = ?', [id])
-    if (!existing) return res.status(404).json({ error: '文章不存在' })
-
-    const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, category_id, category_name } = req.body
-    const resolvedCatId = resolveCategoryId(category_id, category_name) ?? existing.category_id
-    const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || existing.cover_image)
-    // Preserve existing SEO slug unless explicitly modified
-    const updatedSlug = req.body.slug || existing.slug || uniqueSlug(slugify(title_en || title), id)
-
     try {
-      run(
-        `UPDATE news SET title=?, title_en=?, slug=?, summary=?, summary_en=?, content=?, cover_image=?, seo_title=?, seo_description=?, seo_keywords=?, status=?, sort_order=?, render_mode=?, category_id=?, updated_at=CURRENT_TIMESTAMP
-     WHERE id=?`,
-        [title, title_en || null, updatedSlug, summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status || 1), parseInt(sort_order || 0), render_mode || 'direct', resolvedCatId, id]
-      )
-      res.json({ message: '更新成功', slug: updatedSlug, category_id: resolvedCatId })
+        const { id } = req.params
+        const existing = getOne('SELECT * FROM news WHERE id = ?', [id])
+        if (!existing) return res.status(404).json({ error: '文章不存在' })
+
+        const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, category_id, category_name } = req.body
+        const resolvedCatId = resolveCategoryId(category_id, category_name) ?? existing.category_id
+        const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || existing.cover_image)
+        // Preserve existing SEO slug unless explicitly modified
+        const baseSlug = slugify(title_en || title) || 'news'
+        const updatedSlug = req.body.slug || existing.slug || uniqueSlug(baseSlug, id)
+
+        run(
+            `UPDATE news SET title=?, title_en=?, slug=?, summary=?, summary_en=?, content=?, cover_image=?, seo_title=?, seo_description=?, seo_keywords=?, status=?, sort_order=?, render_mode=?, category_id=?, updated_at=CURRENT_TIMESTAMP
+         WHERE id=?`,
+            [title, title_en || null, updatedSlug, summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status || 1), parseInt(sort_order || 0), render_mode || 'direct', resolvedCatId, id]
+        )
+        res.json({ message: '更新成功', slug: updatedSlug, category_id: resolvedCatId })
 
     } catch (err) {
-      if (err.message && err.message.includes('UNIQUE constraint failed')) {
-        return res.status(400).json({ error: '保存失败：自定义链接(Slug)或标题已经被其他文章使用，请修改后重试！' })
-      }
-      return res.status(500).json({ error: '服务器内部错误：' + err.message })
+        if (err.message && err.message.includes('UNIQUE constraint failed')) {
+            return res.status(400).json({ error: '更新失败：自定义链接(Slug)已经被其他文章使用，请填写其他专属链接！' })
+        }
+        console.error('[PUT /news] Error:', err.message)
+        res.status(500).json({ error: '服务器内部错误：' + err.message })
     }
 })
 

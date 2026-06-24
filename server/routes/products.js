@@ -135,12 +135,18 @@ router.post('/', authMiddleware, upload.array('images', 10), async (req, res) =>
   }
   const images = imageUrls.join(',')
 
-  const result = run(`
-    INSERT INTO products (name, name_en, category_id, description, description_en, specs, images, detail_content, is_featured, sort_order, status, seo_title, seo_description, seo_keywords, faq_items)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [name, name_en || null, category_id || null, description || null, description_en || null, specs || null, images,
-    req.body.detail_content || null, parseInt(is_featured), parseInt(sort_order), parseInt(status),
-    seo_title || null, seo_description || null, seo_keywords || null, req.body.faq_items || '[]'])
+  let result
+  try {
+    result = run(`
+      INSERT INTO products (name, name_en, category_id, description, description_en, specs, images, detail_content, is_featured, sort_order, status, seo_title, seo_description, seo_keywords, faq_items)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [name, name_en || null, category_id || null, description || null, description_en || null, specs || null, images,
+      req.body.detail_content || null, parseInt(is_featured), parseInt(sort_order), parseInt(status),
+      seo_title || null, seo_description || null, seo_keywords || null, req.body.faq_items || '[]'])
+  } catch (err) {
+    console.error('[POST /products] Error during insert:', err)
+    return res.status(500).json({ error: '数据库记录创建失败：' + err.message })
+  }
 
   const newId = result.lastInsertRowid
   const base = slugify(name_en || name)
