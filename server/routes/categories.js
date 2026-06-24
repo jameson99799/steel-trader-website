@@ -53,34 +53,42 @@ router.get('/tree', (req, res) => {
 })
 
 router.post('/', authMiddleware, upload.single('image'), (req, res) => {
-  const { name, name_en, parent_id = 0, sort_order = 0 } = req.body
-  const image = req.file ? `/uploads/${req.file.filename}` : null
+  try {
+    const { name, name_en, parent_id = 0, sort_order = 0 } = req.body
+    const image = req.file ? `/uploads/${req.file.filename}` : null
 
-  if (!name) {
-    return res.status(400).json({ error: '分类名称不能为空' })
+    if (!name) {
+      return res.status(400).json({ error: '分类名称不能为空' })
+    }
+
+    const result = run('INSERT INTO categories (name, name_en, parent_id, sort_order, image) VALUES (?, ?, ?, ?, ?)',
+      [name, name_en || null, parseInt(parent_id), parseInt(sort_order), image])
+    const newId = result.lastInsertRowid
+    run('UPDATE categories SET slug = ? WHERE id = ?', [slugify(name_en || name, newId), newId])
+    res.json({ id: newId, message: '创建成功' })
+  } catch (err) {
+    res.status(500).json({ error: '分类创建失败：' + err.message })
   }
-
-  const result = run('INSERT INTO categories (name, name_en, parent_id, sort_order, image) VALUES (?, ?, ?, ?, ?)',
-    [name, name_en || null, parseInt(parent_id), parseInt(sort_order), image])
-  const newId = result.lastInsertRowid
-  run('UPDATE categories SET slug = ? WHERE id = ?', [slugify(name_en || name, newId), newId])
-  res.json({ id: newId, message: '创建成功' })
 })
 
 router.put('/:id', authMiddleware, upload.single('image'), (req, res) => {
-  const { id } = req.params
-  const { name, name_en, parent_id, sort_order } = req.body
+  try {
+    const { id } = req.params
+    const { name, name_en, parent_id, sort_order } = req.body
 
-  const category = getOne('SELECT * FROM categories WHERE id = ?', [id])
-  if (!category) {
-    return res.status(404).json({ error: '分类不存在' })
+    const category = getOne('SELECT * FROM categories WHERE id = ?', [id])
+    if (!category) {
+      return res.status(404).json({ error: '分类不存在' })
+    }
+
+    const image = req.file ? `/uploads/${req.file.filename}` : category.image
+    const updatedSlug = req.body.slug || category.slug || slugify(name_en || name, id)
+    run('UPDATE categories SET name = ?, name_en = ?, parent_id = ?, sort_order = ?, image = ?, slug = ? WHERE id = ?',
+      [name, name_en || null, parseInt(parent_id || 0), parseInt(sort_order || 0), image, updatedSlug, id])
+    res.json({ message: '更新成功' })
+  } catch (err) {
+    res.status(500).json({ error: '分类更新失败：' + err.message })
   }
-
-  const image = req.file ? `/uploads/${req.file.filename}` : category.image
-  const updatedSlug = req.body.slug || category.slug || slugify(name_en || name, id)
-  run('UPDATE categories SET name = ?, name_en = ?, parent_id = ?, sort_order = ?, image = ?, slug = ? WHERE id = ?',
-    [name, name_en || null, parseInt(parent_id || 0), parseInt(sort_order || 0), image, updatedSlug, id])
-  res.json({ message: '更新成功' })
 })
 
 router.delete('/:id', authMiddleware, (req, res) => {

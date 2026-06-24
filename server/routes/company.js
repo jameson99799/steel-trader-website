@@ -48,34 +48,38 @@ router.put('/', authMiddleware, upload.fields([
   const whatsapp_qr = fileUrl(req.files, 'whatsapp_qr', req.body.whatsapp_qr_url || company?.whatsapp_qr)
   const wechat_qr = fileUrl(req.files, 'wechat_qr', req.body.wechat_qr_url || company?.wechat_qr)
 
-  if (company) {
-    run(`
-      UPDATE company SET name=?, name_en=?, description=?, description_en=?, phone=?, email=?,
-        address=?, address_en=?, whatsapp=?, wechat=?, facebook=?, linkedin=?, instagram=?,
-        tiktok=?, twitter=?, youtube=?, whatsapp_qr=?, wechat_qr=?, logo=?, favicon=?, about_image=?,
-        advantages=?, advantages_en=?, map_embed_url=?, company_video_embed=?, 
-        about_show_video=?, about_video_autoplay=?, home_show_video=?, updated_at=CURRENT_TIMESTAMP
-      WHERE id=1
-    `, [name, name_en, description, description_en, phone, email, address, address_en,
-      whatsapp, wechat, facebook, linkedin, instagram, tiktok, twitter, youtube,
-      whatsapp_qr, wechat_qr, logo, favicon, about_image,
-      advantages, advantages_en, map_embed_url || null, company_video_embed || null,
-      about_show_video ? 1 : 0, about_video_autoplay ? 1 : 0, home_show_video ? 1 : 0])
-  } else {
-    run(`
-      INSERT INTO company (id, name, name_en, description, description_en, phone, email,
-        address, address_en, whatsapp, wechat, facebook, linkedin, instagram, tiktok, twitter, youtube,
-        whatsapp_qr, wechat_qr, logo, favicon, about_image, advantages, advantages_en, map_embed_url,
-        company_video_embed, about_show_video, about_video_autoplay, home_show_video)
-      VALUES (1, ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `, [name, name_en, description, description_en, phone, email, address, address_en,
-      whatsapp, wechat, facebook, linkedin, instagram, tiktok, twitter, youtube,
-      whatsapp_qr, wechat_qr, logo, favicon, about_image,
-      advantages, advantages_en, map_embed_url || null, company_video_embed || null,
-      about_show_video ? 1 : 0, about_video_autoplay ? 1 : 0, home_show_video ? 1 : 0])
-  }
+  try {
+    if (company) {
+      run(`
+        UPDATE company SET name=?, name_en=?, description=?, description_en=?, phone=?, email=?,
+          address=?, address_en=?, whatsapp=?, wechat=?, facebook=?, linkedin=?, instagram=?,
+          tiktok=?, twitter=?, youtube=?, whatsapp_qr=?, wechat_qr=?, logo=?, favicon=?, about_image=?,
+          advantages=?, advantages_en=?, map_embed_url=?, company_video_embed=?, 
+          about_show_video=?, about_video_autoplay=?, home_show_video=?, updated_at=CURRENT_TIMESTAMP
+        WHERE id=1
+      `, [name, name_en, description, description_en, phone, email, address, address_en,
+        whatsapp, wechat, facebook, linkedin, instagram, tiktok, twitter, youtube,
+        whatsapp_qr, wechat_qr, logo, favicon, about_image,
+        advantages, advantages_en, map_embed_url || null, company_video_embed || null,
+        about_show_video ? 1 : 0, about_video_autoplay ? 1 : 0, home_show_video ? 1 : 0])
+    } else {
+      run(`
+        INSERT INTO company (id, name, name_en, description, description_en, phone, email,
+          address, address_en, whatsapp, wechat, facebook, linkedin, instagram, tiktok, twitter, youtube,
+          whatsapp_qr, wechat_qr, logo, favicon, about_image, advantages, advantages_en, map_embed_url,
+          company_video_embed, about_show_video, about_video_autoplay, home_show_video)
+        VALUES (1, ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `, [name, name_en, description, description_en, phone, email, address, address_en,
+        whatsapp, wechat, facebook, linkedin, instagram, tiktok, twitter, youtube,
+        whatsapp_qr, wechat_qr, logo, favicon, about_image,
+        advantages, advantages_en, map_embed_url || null, company_video_embed || null,
+        about_show_video ? 1 : 0, about_video_autoplay ? 1 : 0, home_show_video ? 1 : 0])
+    }
 
-  res.json({ message: '更新成功' })
+    res.json({ message: '更新成功' })
+  } catch (err) {
+    res.status(500).json({ error: '保存失败：' + err.message })
+  }
 })
 
 export default router
