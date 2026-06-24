@@ -136,6 +136,8 @@ function lookupGeoIP(visitorId, ipAddress) {
 }
 
 let schemaHealed = false
+let isReadColumnMissing = false  // Track if is_read column is known to be absent (suppress log spam)
+
 function healSchema() {
   if (schemaHealed) return
   try { run('ALTER TABLE live_chat_messages ADD COLUMN is_read INTEGER DEFAULT 0') } catch(e) {}
@@ -145,7 +147,11 @@ function healSchema() {
   try { run("ALTER TABLE live_chat_messages ADD COLUMN buttons TEXT DEFAULT '[]'") } catch(e) {}
   try { run("ALTER TABLE chat_wechat_webhooks ADD COLUMN notify_type TEXT DEFAULT 'all'") } catch(e) {}
   schemaHealed = true
+  isReadColumnMissing = false  // Reset after schema heal attempt
 }
+
+// Run schema healing eagerly on module load so columns exist before first request
+healSchema()
 
 // Track round-robin index for auto-replies and welcome presets
 let autoReplyIndex = 0
@@ -575,8 +581,11 @@ router.all('/poll', (req, res) => {
       try {
         run("UPDATE live_chat_messages SET is_read = 1 WHERE visitor_id = ? AND sender_type = 'admin' AND id > ?", [visitor_id, queryLastId])
       } catch (updateErr) {
-        // Fallback: ignore if is_read column doesn't exist
-        fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] poll is_read update error: ${updateErr.message}\n`)
+        // Fallback: ignore if is_read column doesn't exist — only log once to avoid log spam
+        if (!isReadColumnMissing) {
+          isReadColumnMissing = true
+          fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] poll is_read update error (will suppress further): ${updateErr.message}\n`)
+        }
       }
     }
 

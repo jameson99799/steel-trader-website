@@ -120,18 +120,20 @@ router.post('/', authMiddleware, upload.array('images', 10), async (req, res) =>
   const { name, name_en, category_id, description, description_en, specs, is_featured = 0, sort_order = 0, status = 1,
     seo_title, seo_description, seo_keywords } = req.body
 
-  // Compress each uploaded image
-  const imageUrls = []
-  for (const f of (req.files || [])) {
-    req.file = f
-    await new Promise(r => compressImage(req, res, r))
-    imageUrls.push(`/uploads/${req.file.filename}`)
-  }
-  const images = imageUrls.join(',')
-
+  // Validate BEFORE processing files to avoid wasting resources on invalid requests
   if (!name) {
     return res.status(400).json({ error: '商品名称不能为空' })
   }
+
+  // Compress each uploaded image (use separate fileRef to avoid req.file race condition)
+  const imageUrls = []
+  for (const f of (req.files || [])) {
+    const fileRef = { file: f }
+    const mockReq = { ...req, file: f }
+    await new Promise(r => compressImage(mockReq, res, r))
+    imageUrls.push(`/uploads/${mockReq.file.filename}`)
+  }
+  const images = imageUrls.join(',')
 
   const result = run(`
     INSERT INTO products (name, name_en, category_id, description, description_en, specs, images, detail_content, is_featured, sort_order, status, seo_title, seo_description, seo_keywords, faq_items)
@@ -167,12 +169,12 @@ router.put('/:id', authMiddleware, upload.array('images', 10), async (req, res) 
     return res.status(404).json({ error: '商品不存在' })
   }
 
-  // Compress each uploaded image
+  // Compress each uploaded image (use mockReq to avoid req.file race condition)
   const imageUrls = []
   for (const f of (req.files || [])) {
-    req.file = f
-    await new Promise(r => compressImage(req, res, r))
-    imageUrls.push(`/uploads/${req.file.filename}`)
+    const mockReq = { ...req, file: f }
+    await new Promise(r => compressImage(mockReq, res, r))
+    imageUrls.push(`/uploads/${mockReq.file.filename}`)
   }
 
   // Use existing_images from frontend (may be empty string if all deleted)

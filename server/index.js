@@ -558,6 +558,11 @@ async function startServer() {
         const lang = langMatch ? langMatch[1] : 'en'
         const subPath = langMatch ? (langMatch[2] || '') : url
 
+        // ── MUST declare these variables before any early-exit branching ──
+        // (Fixes TDZ ReferenceError that caused 500 errors on unknown lang codes)
+        let isNotFound = false  // Track soft 404
+        let matchedRoute = false
+
         // ── Verify Language Prefix Validity ──
         // To prevent Soft 404s and SEO duplicate content issues, we must ensure
         // that if a two-letter prefix is detected, it actually exists in our supported languages.
@@ -631,10 +636,7 @@ async function startServer() {
         let pageImage = seoSettings.og_image ? `${siteUrl}${seoSettings.og_image}` : ''
         let ogType = 'website'
         let extraSchemas = ''
-        let isNotFound = false  // Track soft 404
-        
         const orgType = seoSettings.local_business_type || 'Organization'
-        let matchedRoute = false
         let ssrContent = ''    // Server-rendered content for SEO/GEO crawlers
 
           // ── Product detail page ──
