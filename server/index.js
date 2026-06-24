@@ -420,8 +420,10 @@ async function startServer() {
       // Fast-path caching for public APIs to improve LCP & TTFB scores (60 seconds)
       if (req.method === 'GET') {
         const path = req.path;
-        if (!path.startsWith('/admin') && !path.startsWith('/crm') && !path.startsWith('/auth') && !path.startsWith('/translation-jobs')) {
+        if (!path.startsWith('/admin') && !path.startsWith('/crm') && !path.startsWith('/auth') && !path.startsWith('/translation-jobs') && !path.startsWith('/media') && !path.startsWith('/upload')) {
           res.setHeader('Cache-Control', 'public, max-age=60');
+        } else {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         }
       }
       next();
