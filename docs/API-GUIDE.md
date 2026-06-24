@@ -13,6 +13,15 @@
 X-API-Key: ext_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
+> [!WARNING]
+> **Cloudflare WAF 拦截 (403 Error 1010)**  
+> 生产环境的 API 受 Cloudflare 保护。如果在请求时遭遇 `403` HTTP 状态码并且附带 `1010` 错误码，说明你的请求因缺少标准的浏览器指纹被判定为机器爬虫而被拦截。
+> 
+> **解决方案**：在发起所有的 API 请求时，除了 `X-API-Key` 之外，还必须在 Header 中伪装成正常浏览器，加入以下请求头：
+> - `User-Agent`: 例如 `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36`
+> - `Origin`: `https://www.sunseasteel.com`
+> - `Referer`: `https://www.sunseasteel.com/`
+
 获取/重新生成 API Key: 在网站后台 → 设置 → 外部 API 中操作，或通过管理员接口：
 - `GET /api/external/key` — 获取当前 Key（需管理员登录 Token）
 - `POST /api/external/key/generate` — 重新生成 Key（需管理员登录 Token）
@@ -463,6 +472,7 @@ curl -X DELETE -H "X-API-Key: ext_xxx" "https://your-domain.com/api/external/tem
 | 400 | 请求参数错误（缺少必填字段） |
 | 401 | 未提供 X-API-Key |
 | 403 | API Key 无效 |
+| 403 (Code 1010) | 根据浏览器指纹被 Cloudflare WAF 拦截（需补充完善 User-Agent、Origin 和 Referer 请求头） |
 | 404 | 资源不存在 |
 
 错误响应格式：

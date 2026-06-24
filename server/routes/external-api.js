@@ -883,7 +883,16 @@ router.get('/docs', (req, res) => {
         base_url: req.protocol + '://' + req.get('host') + '/api/external',
         auth: {
             method: 'Header: X-API-Key',
-            description: 'All write endpoints require X-API-Key in HTTP header. GET /media/groups and GET /media also require API key.'
+            description: 'All write endpoints require X-API-Key in HTTP header. GET /media/groups and GET /media also require API key.',
+            cloudflare_waf_bypass: {
+                warning: 'If you receive a 403 error with code 1010, you are being blocked by Cloudflare WAF (Bot Fight Mode).',
+                solution: 'You MUST provide standard browser-like headers in your requests: "User-Agent", "Referer", and "Origin".',
+                example_headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Origin': 'https://www.sunseasteel.com',
+                    'Referer': 'https://www.sunseasteel.com/'
+                }
+            }
         },
 
         // ═══ Product Categories ═══
