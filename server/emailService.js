@@ -4,6 +4,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { execSync } from 'child_process'
 import fs from 'fs'
+import crypto from 'crypto'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -127,10 +128,9 @@ export function getSslDaysRemaining() {
     const certFile = join(SSL_DIR, 'cert.pem')
     if (!fs.existsSync(certFile)) return null
     try {
-        const output = execSync(`openssl x509 -enddate -noout -in "${certFile}" 2>/dev/null`, { timeout: 5000 }).toString().trim()
-        const match = output.match(/notAfter=(.+)/)
-        if (!match) return null
-        const expiry = new Date(match[1])
+        const certBuffer = fs.readFileSync(certFile)
+        const x509 = new crypto.X509Certificate(certBuffer)
+        const expiry = new Date(x509.validTo)
         const days = Math.floor((expiry - new Date()) / (1000 * 60 * 60 * 24))
         return { days, expiry: expiry.toISOString(), expired: days < 0 }
     } catch (e) {

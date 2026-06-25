@@ -3,6 +3,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
 import { execSync } from 'child_process'
+import crypto from 'crypto'
 import { authMiddleware } from '../middleware/auth.js'
 
 const router = express.Router()
@@ -72,11 +73,10 @@ router.get('/ssl/status', authMiddleware, (req, res) => {
         certInfo = { size: stat.size, modified: stat.mtime }
         // Try to read cert expiry info
         try {
-            const output = execSync(`openssl x509 -enddate -subject -noout -in "${certFile}" 2>/dev/null`, { timeout: 5000 }).toString().trim()
-            const expiryMatch = output.match(/notAfter=(.+)/)
-            const subjectMatch = output.match(/subject=(.+)/)
-            if (expiryMatch) certInfo.expiry = expiryMatch[1]
-            if (subjectMatch) certInfo.subject = subjectMatch[1]
+            const certBuffer = fs.readFileSync(certFile)
+            const x509 = new crypto.X509Certificate(certBuffer)
+            certInfo.expiry = x509.validTo
+            certInfo.subject = x509.subject
         } catch (e) { }
     }
 

@@ -217,6 +217,9 @@
           <button class="btn btn-outline" style="color:#dc2626;border-color:#dc2626;" @click="triggerImport" :disabled="isImporting">
             {{ isImporting ? '恢复中，请勿关闭页面...' : '⬆️ 导入备份并覆盖全站' }}
           </button>
+          <button class="btn btn-outline" style="color:#ef4444;border-color:#ef4444;" @click="clearSiteData" :disabled="isClearing">
+            {{ isClearing ? '清理中...' : '🗑️ 清空本地数据' }}
+          </button>
           <input type="file" ref="fileInputRef" style="display:none" accept=".zip" @change="handleImport" />
         </div>
       </div>
@@ -544,7 +547,35 @@ const copyApiKey = () => {
 // Backup & Restore
 const isExporting = ref(false)
 const isImporting = ref(false)
+const isClearing = ref(false)
 const fileInputRef = ref(null)
+
+const clearSiteData = async () => {
+  if (!confirm('警告：此操作将永久清空本地所有产品、新闻、图片和账号数据，不可恢复！\n\n您在删除数据前，是否已经进行了备份？')) return;
+  if (!confirm('再次确认：如果要继续清空全站数据，点击“确认”。点击“取消”中止操作。')) return;
+
+  isClearing.value = true;
+  try {
+    const token = localStorage.getItem('token')
+    const res = await fetch('/api/backup/clear', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Clear failed')
+    
+    alert(data.message + '\n\n点击确定刷新页面。')
+    setTimeout(() => {
+      // Clear token since admin account is deleted
+      localStorage.removeItem('token')
+      window.location.href = '/admin'
+    }, 2000)
+  } catch (err) {
+    alert('清空失败: ' + err.message)
+  } finally {
+    isClearing.value = false;
+  }
+}
 
 const exportBackup = async () => {
   isExporting.value = true

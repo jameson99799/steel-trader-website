@@ -167,4 +167,46 @@ router.post('/import', authMiddleware, upload.single('file'), async (req, res) =
     }
 })
 
+router.delete('/clear', authMiddleware, async (req, res) => {
+    try {
+        console.log('[Backup Clear] Shutting down database and clearing all data...')
+        
+        res.json({ success: true, message: 'All site local data wiped successfully. Server will restart in a moment...' })
+        
+        // Wait for response to be sent before shutting down
+        setTimeout(() => {
+            closeDb()
+            
+            const targetDataDir = path.join(ROOT_DIR, 'data')
+            const targetUploadsDir = path.join(ROOT_DIR, 'uploads')
+            
+            // Delete all files in data/
+            if (fs.existsSync(targetDataDir)) {
+                fs.readdirSync(targetDataDir).forEach(file => {
+                    const fullPath = path.join(targetDataDir, file)
+                    if (fs.statSync(fullPath).isFile() && (file.endsWith('.db') || file.endsWith('.sqlite') || file.endsWith('-wal') || file.endsWith('-shm'))) {
+                        try { fs.unlinkSync(fullPath) } catch (e) {}
+                    }
+                })
+            }
+            
+            // Delete all files in uploads/
+            if (fs.existsSync(targetUploadsDir)) {
+                fs.readdirSync(targetUploadsDir).forEach(file => {
+                    const fullPath = path.join(targetUploadsDir, file)
+                    if (fs.statSync(fullPath).isFile() && file !== '.gitkeep') {
+                        try { fs.unlinkSync(fullPath) } catch (e) {}
+                    }
+                })
+            }
+            
+            console.log('[Backup Clear] Local data wiped. Exiting process to trigger auto-restart...')
+            process.exit(0)
+        }, 1000)
+    } catch (e) {
+        console.error('[Backup Clear Error]', e)
+        res.status(500).json({ error: e.message })
+    }
+})
+
 export default router

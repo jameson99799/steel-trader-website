@@ -11,6 +11,7 @@
     "start": "NODE_ENV=production node server/index.js"
   },
   "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@vue/compiler-core": "^3.5.31",
     "@vue/compiler-dom": "^3.5.31",
     "@vue/compiler-sfc": "^3.5.31",
@@ -21,7 +22,7 @@
     "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^12.11.1",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "echarts": "^6.1.0",
@@ -47,8 +48,7 @@
     "vue-router": "^4.2.5",
     "wechaty": "^1.20.2",
     "wechaty-puppet-wechat": "^1.18.4",
-    "wechaty-puppet-wechat4u": "^1.14.14",
-    "@ffmpeg-installer/ffmpeg": "^1.1.0"
+    "wechaty-puppet-wechat4u": "^1.14.14"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.3",
