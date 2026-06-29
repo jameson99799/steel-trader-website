@@ -30,7 +30,11 @@ export default defineConfig({
     // Rely on Vite's native async chunking
     rollupOptions: {
       output: {
-        // Let Vite handle it automatically
+        manualChunks: {
+          'vendor-vue': ['vue', 'vue-router', 'pinia'],
+          'vendor-chart': ['echarts'],
+          'vendor-editor': ['quill', 'quill-image-resize-module-react', 'quill-resize-image']
+        }
       }
     },
     // Reduce chunk size warnings threshold

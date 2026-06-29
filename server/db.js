@@ -1728,6 +1728,17 @@ Requirements:
     console.error('[db] Error migrating wechat_webhook_url:', e)
   }
 
+  // ── Database Performance Indexes ──────────────────────────────────────────
+  try {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_products_slug ON products(slug)`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_news_slug ON news(slug)`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_news_category ON news(category_id)`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug)`)
+  } catch (e) {
+    console.warn('[db] Note: Error executing index creations:', e.message)
+  }
+
   return db
 }
 
