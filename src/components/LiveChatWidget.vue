@@ -81,7 +81,7 @@ import { useLang } from '../composables/useLang'
 const router = useRouter()
 const route = useRoute()
 
-const widgetEnabled = ref(false)
+const widgetEnabled = ref(true)
 const isOpen = ref(false)
 const messages = ref([])
 const newMessage = ref('')
@@ -408,6 +408,7 @@ onMounted(() => {
   if (typeof window === 'undefined') return
 
   // Defer initialization slightly to improve Total Blocking Time (TBT), but without massive 3s stalls
+  // Initialize immediately without ANY delays to ensure it renders instantly
   const init = () => {
     visitorId = localStorage.getItem('chat_visitor_id')
     if (!visitorId) {
@@ -420,11 +421,8 @@ onMounted(() => {
     pollInterval = setInterval(pollMessages, 3000)
   }
 
-  if (window.requestIdleCallback) {
-    window.requestIdleCallback(init)
-  } else {
-    setTimeout(init, 300)
-  }
+  // Execute synchronously on mount, removing any browser idle stalling
+  init()
 })
 
 onUnmounted(() => {

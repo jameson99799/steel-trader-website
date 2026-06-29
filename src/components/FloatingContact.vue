@@ -184,11 +184,8 @@ onMounted(() => {
     try { company.value = await api.getCompany() } catch (e) {}
   }
   
-  if (window.requestIdleCallback) {
-    window.requestIdleCallback(fetchContactData)
-  } else {
-    setTimeout(fetchContactData, 200)
-  }
+  // Call it immediately on mount without browser stalling
+  fetchContactData()
 })
 
 onUnmounted(() => {
