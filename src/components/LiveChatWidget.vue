@@ -99,7 +99,8 @@ const messagesContainer = ref(null)
 const welcomePreset = ref(null)
 const autoCollapseSeconds = ref(10)
 const { lang } = useLang()
-const logoUrl = ref('')
+// Load logo instantly from cache if available to prevent SVG flash
+const logoUrl = ref(typeof window !== 'undefined' ? localStorage.getItem('chat_cached_logo') || '' : '')
 const textareaRef = ref(null)
 
 const localizedUiTexts = {
@@ -378,6 +379,13 @@ const fetchWidgetConfig = async () => {
 
       autoCollapseSeconds.value = config.auto_collapse_seconds || 10
       logoUrl.value = config.company_logo || ''
+      if (typeof window !== 'undefined') {
+        if (logoUrl.value) {
+          localStorage.setItem('chat_cached_logo', logoUrl.value)
+        } else {
+          localStorage.removeItem('chat_cached_logo')
+        }
+      }
       if (config.welcome_preset) {
         welcomePreset.value = config.welcome_preset
       }
