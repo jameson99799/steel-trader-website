@@ -233,9 +233,9 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const { t, localizedValue, lang, langPath } = useLang()
-const company = ref(null)
+const company = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.company || null : null)
 const hero = ref(null)
-const pageTexts = ref(null)
+const pageTexts = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.pageTexts || null : null)
 
 const imageLightboxActive = ref(false)
 

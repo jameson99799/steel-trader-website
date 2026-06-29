@@ -101,7 +101,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import api from '../api'
 
-const company = ref(null)
+const company = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.company || null : null)
 const toastVisible = ref(false)
 const zoomed = ref(null) // 'wa' | 'wc' | null
 const isMinimized = ref(false)

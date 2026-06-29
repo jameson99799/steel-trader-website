@@ -170,9 +170,9 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const { lang, t, localizedValue, langPath } = useLang()
-const company = ref(null)
+const company = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.company || null : null)
 const categories = ref([])
-const pageTexts = ref(null)
+const pageTexts = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.pageTexts || null : null)
 const latestNews = ref([])
 const activeModal = ref(null)
 

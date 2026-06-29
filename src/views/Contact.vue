@@ -280,8 +280,8 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 
 const { t, localizedValue, langPath } = useLang()
-const company = ref(null)
-const pageTexts = ref(null)
+const company = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.company || null : null)
+const pageTexts = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.pageTexts || null : null)
 const loading = ref(false)
 const mapLoaded = ref(false)
 

@@ -138,7 +138,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'success'])
 const { t, lang, localizedValue } = useLang()
 const loading = ref(false)
-const pageTexts = ref(null)
+const pageTexts = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.pageTexts || null : null)
 
 const inquirySubtitle = computed(() => {
   if (!pageTexts.value) return t('placeholderMessage')
