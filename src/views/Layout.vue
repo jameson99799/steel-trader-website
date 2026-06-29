@@ -7,8 +7,8 @@
     <SiteFooter />
     <!-- Floating contact is core UI on mobile, load immediately -->
     <FloatingContact />
-    <!-- Defer sticky third-party widgets until page has settled OR user interacts -->
-    <LiveChatWidget v-if="isWidgetsReady" />
+    <!-- Render live chat exactly on mount -->
+    <LiveChatWidget />
   </div>
 </template>
 
