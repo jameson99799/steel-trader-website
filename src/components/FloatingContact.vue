@@ -179,15 +179,15 @@ onMounted(() => {
   window.addEventListener('resize', checkMobile)
   window.addEventListener('lightbox-toggle', handleLightboxToggle)
   
-  // Defer non-critical data fetch
+  // Immediately fetch instead of heavily delaying
   const fetchContactData = async () => {
     try { company.value = await api.getCompany() } catch (e) {}
   }
   
   if (window.requestIdleCallback) {
-    window.requestIdleCallback(() => setTimeout(fetchContactData, 1500))
+    window.requestIdleCallback(fetchContactData)
   } else {
-    setTimeout(fetchContactData, 3500)
+    setTimeout(fetchContactData, 200)
   }
 })
 

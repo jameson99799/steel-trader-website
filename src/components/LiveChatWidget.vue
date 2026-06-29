@@ -407,7 +407,7 @@ watch(lang, () => {
 onMounted(() => {
   if (typeof window === 'undefined') return
 
-  // Defer initialization to improve Total Blocking Time (TBT)
+  // Defer initialization slightly to improve Total Blocking Time (TBT), but without massive 3s stalls
   const init = () => {
     visitorId = localStorage.getItem('chat_visitor_id')
     if (!visitorId) {
@@ -421,9 +421,9 @@ onMounted(() => {
   }
 
   if (window.requestIdleCallback) {
-    window.requestIdleCallback(() => setTimeout(init, 1000))
+    window.requestIdleCallback(init)
   } else {
-    setTimeout(init, 3000)
+    setTimeout(init, 300)
   }
 })
 
