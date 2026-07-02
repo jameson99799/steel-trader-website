@@ -198,13 +198,6 @@
             </button>
           </div>
         </div>
-        <!-- Debug Data Panel (Temporary) -->
-        <div style="padding: 10px; background: #fee2e2; border-top: 1px solid #fca5a5; font-size: 11px; color: #b91c1c; word-break: break-all;">
-          <b>[DEBUG INFO]</b><br>
-          Visitor ID: '{{ activeVisitorId }}' | Token exists? {{ !!token() }}<br>
-          Messages count: {{ activeMessages.length }}<br>
-          Debug Log: {{ debugLogText }}
-        </div>
       </div>
     </main>
   </div>
