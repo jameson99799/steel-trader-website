@@ -1654,6 +1654,11 @@ Requirements:
   try { db.exec('ALTER TABLE live_chat_messages ADD COLUMN ip TEXT') } catch(e) {}
   try { db.exec('ALTER TABLE live_chat_messages ADD COLUMN country TEXT') } catch(e) {}
 
+  // Speed up chat polling and visitor listing
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_live_chat_visitor_id ON live_chat_messages(visitor_id)`)
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_live_chat_unread ON live_chat_messages(visitor_id, sender_type, is_read)`)
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_live_chat_timestamp ON live_chat_messages(timestamp)`)
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS live_chat_settings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
