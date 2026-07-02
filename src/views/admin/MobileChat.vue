@@ -198,6 +198,13 @@
             </button>
           </div>
         </div>
+        <!-- Debug Data Panel (Temporary) -->
+        <div style="padding: 10px; background: #fee2e2; border-top: 1px solid #fca5a5; font-size: 11px; color: #b91c1c; word-break: break-all;">
+          <b>[DEBUG INFO]</b><br>
+          Visitor ID: '{{ activeVisitorId }}' | Token exists? {{ !!token() }}<br>
+          Messages count: {{ activeMessages.length }}<br>
+          Debug Log: {{ debugLogText }}
+        </div>
       </div>
     </main>
   </div>
@@ -229,6 +236,7 @@ const textareaRef = ref(null)
 const visitors = ref([])
 const activeVisitorId = ref('')
 const activeMessages = ref([])
+const debugLogText = ref('Initialized.')
 
 // AI Translation States
 const aiChannels = ref([])
@@ -346,8 +354,12 @@ const fetchVisitors = async () => {
     const res = await fetch('/api/chat/admin/messages', { headers: headers() })
     if (res.ok) {
       visitors.value = await res.json()
+      debugLogText.value = 'fetchVisitors: OK, found ' + visitors.value.length
+    } else {
+      debugLogText.value = 'fetchVisitors error: ' + res.status
     }
   } catch (e) {
+    debugLogText.value = 'fetchVisitors EXCEPTION: ' + e.message
     console.error('Failed to fetch visitors', e)
   }
 }
@@ -361,13 +373,17 @@ const fetchActiveMessages = async () => {
     })
     if (res.ok) {
       const data = await res.json()
+      debugLogText.value = 'fetchActiveMessages: OK, found ' + data.length
       const isNewMessageAdded = data.length > activeMessages.value.length
       activeMessages.value = data
       if (isNewMessageAdded) {
         scrollToBottom()
       }
+    } else {
+      debugLogText.value = 'fetchActiveMessages error: ' + res.status
     }
   } catch (e) {
+    debugLogText.value = 'fetchActiveMsg EXCEPTION: ' + e.message
     console.error('Failed to fetch active messages', e)
   }
 }
