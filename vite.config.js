@@ -38,6 +38,7 @@ export default defineConfig({
       }
     },
     // Reduce chunk size warnings threshold
-    chunkSizeWarningLimit: 800
+    chunkSizeWarningLimit: 800,
+    target: 'es2015'
   }
 })
