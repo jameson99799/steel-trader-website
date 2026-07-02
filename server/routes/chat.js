@@ -579,7 +579,7 @@ router.all('/poll', (req, res) => {
 
     if (msgs.length > 0) {
       try {
-        run("UPDATE live_chat_messages SET is_read = 1 WHERE visitor_id = ? AND sender_type = 'admin' AND id > ?", [visitor_id, queryLastId])
+        run("UPDATE live_chat_messages SET is_read = 1 WHERE visitor_id = ? AND sender_type = ? AND id > ?", [visitor_id, 'admin', queryLastId])
       } catch (updateErr) {
         // Fallback: ignore if is_read column doesn't exist — only log once to avoid log spam
         if (!isReadColumnMissing) {
@@ -604,12 +604,15 @@ router.all('/poll', (req, res) => {
 
 // ── Admin: List Messages ─────────────────────────────────────
 router.get('/admin/messages', authMiddleware, (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
   try {
     healSchema()
     const visitorId = req.query.visitor_id
     if (visitorId) {
       try {
-        run("UPDATE live_chat_messages SET is_read = 1 WHERE visitor_id = ? AND sender_type = 'visitor'", [visitorId])
+        run("UPDATE live_chat_messages SET is_read = 1 WHERE visitor_id = ? AND sender_type = ?", [visitorId, 'visitor'])
       } catch (e) {}
       
       let msgs = []

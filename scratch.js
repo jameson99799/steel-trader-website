@@ -1,7 +1,8 @@
+const { getOne } = require('./server/db.js');
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { getOne } from '../db.js'
+import { getOne } from './server/db.js'
 import { exec } from 'child_process'
 import util from 'util'
 
@@ -53,36 +54,34 @@ export async function applyWatermark(originalFilepath, templateId = null) {
     const isImage = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext)
     
     if (!isImage && !isVideo) return originalFilepath
-  
-      let inputWidth = 0
-      let inputHeight = 0
-  
-      if (isImage) {
-        const originalMeta = await sharp(originalAbsPath).metadata()
-        inputWidth = originalMeta.width
-        inputHeight = originalMeta.height
-      } else {
-        try {
-          const { stderr } = await execAsync(`"${ffmpegPath}" -i "${originalAbsPath}"`).catch(e => e)
-          const match = stderr.match(/Video:.*?, (\d+)x(\d+)/)
-          if (match) {
-            inputWidth = parseInt(match[1])
-            inputHeight = parseInt(match[2])
-            const rotMatch = stderr.match(/rotate\s*:\s*(\d+)/i)
-            if (rotMatch) {
-              const rot = parseInt(rotMatch[1])
-              if (rot === 90 || rot === 270) {
-                  const tmp = inputWidth; inputWidth = inputHeight; inputHeight = tmp;
-              }
+
+    let inputWidth = 0
+    let inputHeight = 0
+
+    if (isImage) {
+      const originalMeta = await sharp(originalAbsPath).metadata()
+      inputWidth = originalMeta.width
+      inputHeight = originalMeta.height
+    } else {
+      try {
+        const { stderr } = await execAsync(`"${ffmpegPath}" -i "${originalAbsPath}"`).catch(e => e)
+        const match = stderr.match(/Video:.*?, (\d+)x(\d+)/)
+        if (match) {
+          inputWidth = parseInt(match[1])
+          inputHeight = parseInt(match[2])
+          const rotMatch = stderr.match(/rotate\s*:\s*(\d+)/i)
+          if (rotMatch) {
+            const rot = parseInt(rotMatch[1])
+            if (rot === 90 || rot === 270) {
+                const tmp = inputWidth; inputWidth = inputHeight; inputHeight = tmp;
             }
-          } else {
-            console.log('ffmpeg did not match width/height, fallback 1920x1080');
-            inputWidth = 1920; inputHeight = 1080;
           }
-        } catch(e) {
-          console.log('ffmpeg error fallback');
+        } else {
           inputWidth = 1920; inputHeight = 1080;
         }
+      } catch(e) {
+        inputWidth = 1920; inputHeight = 1080;
+      }
     }
 
     if (!inputWidth || !inputHeight) return originalFilepath
@@ -116,13 +115,10 @@ export async function applyWatermark(originalFilepath, templateId = null) {
       if (!settings.text_content) return originalFilepath
       
       const scaleFactor = settings.font_size || 0.05
-      let fontSizePx = Math.round(inputWidth * scaleFactor)
-      // Ensure font size provides at least 12px visibility
-      fontSizePx = Math.max(12, fontSizePx) 
+      const fontSizePx = Math.round(inputWidth * scaleFactor)
       
-      // Calculate bounds for SVG
-      compositeWidth = Math.round(settings.text_content.length * fontSizePx * 1.5) 
-      compositeHeight = Math.round(fontSizePx * 2.5) 
+      compositeWidth = Math.round(settings.text_content.length * fontSizePx * 1.5) // Added 1.5x padding to prevent SVG cropping
+      compositeHeight = Math.round(fontSizePx * 2) 
       
       const escapeHtml = (unsafe) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;")
       const text = escapeHtml(settings.text_content)
@@ -160,19 +156,8 @@ export async function applyWatermark(originalFilepath, templateId = null) {
     const newAbsPath = path.join(uploadDir, newFilename)
 
     if (isImage) {
-        // Robustness: ensure composite image is safely dimensioned relative to the input image. (Fixes crash: "Image to composite must have same dimensions or smaller")
-        if (compositeWidth >= inputWidth || compositeHeight >= inputHeight) {
-           const fitWidth = Math.max(1, inputWidth - 20)
-           const fitHeight = Math.max(1, inputHeight - 20)
-           compositeBuffer = await sharp(compositeBuffer).resize({ width: fitWidth, height: fitHeight, fit: 'inside' }).toBuffer()
-           const safeMeta = await sharp(compositeBuffer).metadata()
-           compositeWidth = safeMeta.width
-           compositeHeight = safeMeta.height
-        }
-
         let left = Math.round(posX * inputWidth - compositeWidth / 2)
         let top = Math.round(posY * inputHeight - compositeHeight / 2)
-        
         left = Math.max(0, Math.min(left, inputWidth - compositeWidth))
         top = Math.max(0, Math.min(top, inputHeight - compositeHeight))
 
@@ -186,30 +171,32 @@ export async function applyWatermark(originalFilepath, templateId = null) {
           .toFile(newAbsPath)
 
         return `/uploads/${newFilename}`
-      } else if (isVideo) {
-          try {
-              // FFmpeg overlay command with dynamic safe bounds based on actual video size instead of 1920x1080 constant
-              const overlayExpr = `overlay=x='max(0, min(main_w*${posX} - overlay_w/2, main_w-overlay_w))':y='max(0, min(main_h*${posY} - overlay_h/2, main_h-overlay_h))'`
-              
-              // Generate ffmpeg command
-              const cmd = `"${ffmpegPath}" -y -i "${originalAbsPath}" -i "${compositeImagePath}" -filter_complex "${overlayExpr}" -c:a copy -c:v libx264 -preset fast -crf 23 -movflags +faststart "${newAbsPath}"`
-              
-              console.log('Running FFmpeg watermark task...')
-              await execAsync(cmd)
-              console.log('FFmpeg watermark success!')
-              
-              // cleanup temp image
-              if (fs.existsSync(compositeImagePath)) fs.unlinkSync(compositeImagePath)
-              return `/uploads/${newFilename}`
-          } catch (execErr) {
-              console.error('FFmpeg Watermark Error:', execErr)
-              if (fs.existsSync(compositeImagePath)) fs.unlinkSync(compositeImagePath)
-              return originalFilepath
-          }
-      }
-  
-    } catch (e) {
-      console.error('Watermark Error:', e)
-      return originalFilepath
+    } else if (isVideo) {
+        try {
+            // FFmpeg overlay command with dynamic safe bounds based on actual video size instead of 1920x1080 constant
+            const overlayExpr = `overlay=x='max(0, min(main_w*${posX} - overlay_w/2, main_w-overlay_w))':y='max(0, min(main_h*${posY} - overlay_h/2, main_h-overlay_h))'`
+            
+            // Generate ffmpeg command
+            const cmd = `"${ffmpegPath}" -y -i "${originalAbsPath}" -i "${compositeImagePath}" -filter_complex "${overlayExpr}" -c:a copy -c:v libx264 -preset fast -crf 23 -movflags +faststart "${newAbsPath}"`
+            
+            console.log('Running FFmpeg watermark task...')
+            await execAsync(cmd)
+            console.log('FFmpeg watermark success!')
+            
+            // cleanup temp image
+            if (fs.existsSync(compositeImagePath)) fs.unlinkSync(compositeImagePath)
+            return `/uploads/${newFilename}`
+        } catch (execErr) {
+            console.error('FFmpeg Watermark Error:', execErr)
+            if (fs.existsSync(compositeImagePath)) fs.unlinkSync(compositeImagePath)
+            return originalFilepath
+        }
     }
+
+  } catch (e) {
+    console.error('Watermark Error:', e)
+    return originalFilepath
   }
+}
+
+applyWatermark('/uploads/placeholder.png', 1).then(console.log)

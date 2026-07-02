@@ -3,21 +3,28 @@ import { useLang } from '../composables/useLang'
 
 import Home from '../views/Home.vue'
 import Layout from '../views/Layout.vue'
+import Products from '../views/Products.vue'
+import ProductDetail from '../views/ProductDetail.vue'
+import News from '../views/News.vue'
+import NewsDetail from '../views/NewsDetail.vue'
+import About from '../views/About.vue'
+import Contact from '../views/Contact.vue'
+import Factory from '../views/Factory.vue'
 
 const publicRoutes = [
   { path: '', name: 'Home', component: Home },
-  { path: 'products', name: 'Products', component: () => import('../views/Products.vue') },
-  { path: 'products/category/:catSlug', name: 'ProductsCategory', component: () => import('../views/Products.vue') },
-  { path: 'products/:slug', name: 'ProductDetail', component: () => import('../views/ProductDetail.vue') },
-  { path: 'news', name: 'News', component: () => import('../views/News.vue') },
-  { path: 'news/category/:catSlug', name: 'NewsCategory', component: () => import('../views/News.vue') },
-  { path: 'news/ral-colors', name: 'NewsRalColors', component: () => import('../views/News.vue') },
-  { path: 'news/roofing-profiles', name: 'NewsRoofingProfiles', component: () => import('../views/News.vue') },
-  { path: 'news/futures-price', name: 'NewsFuturesPrice', component: () => import('../views/News.vue') },
-  { path: 'news/:slug', name: 'NewsDetail', component: () => import('../views/NewsDetail.vue') },
-  { path: 'about', name: 'About', component: () => import('../views/About.vue') },
-  { path: 'contact', name: 'Contact', component: () => import('../views/Contact.vue') },
-  { path: 'factory', name: 'Factory', component: () => import('../views/Factory.vue') },
+  { path: 'products', name: 'Products', component: Products },
+  { path: 'products/category/:catSlug', name: 'ProductsCategory', component: Products },
+  { path: 'products/:slug', name: 'ProductDetail', component: ProductDetail },
+  { path: 'news', name: 'News', component: News },
+  { path: 'news/category/:catSlug', name: 'NewsCategory', component: News },
+  { path: 'news/ral-colors', name: 'NewsRalColors', component: News },
+  { path: 'news/roofing-profiles', name: 'NewsRoofingProfiles', component: News },
+  { path: 'news/futures-price', name: 'NewsFuturesPrice', component: News },
+  { path: 'news/:slug', name: 'NewsDetail', component: NewsDetail },
+  { path: 'about', name: 'About', component: About },
+  { path: 'contact', name: 'Contact', component: Contact },
+  { path: 'factory', name: 'Factory', component: Factory },
   { path: 'ral-colors', name: 'RalColors', redirect: to => `/${to.params.lang || 'en'}/news/ral-colors` },
   { path: 'roofing-profiles', name: 'RoofingProfiles', redirect: to => `/${to.params.lang || 'en'}/news/roofing-profiles` },
   { path: ':pathMatch(.*)*', name: 'NotFound', component: () => import('../views/NotFound.vue') }
@@ -174,7 +181,11 @@ router.beforeEach((to, from, next) => {
   if (to.matched.some(record => record.meta.requiresAuth)) {
     const token = localStorage.getItem('token')
     if (!token) {
-      next('/admin/login')
+      if (to.fullPath && to.fullPath !== '/admin' && to.fullPath !== '/admin/' && to.fullPath !== '/admin/dashboard') {
+        next({ path: '/admin/login', query: { redirect: to.fullPath } })
+      } else {
+        next('/admin/login')
+      }
     } else {
       next()
     }

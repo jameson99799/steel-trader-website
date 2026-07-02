@@ -1735,6 +1735,8 @@ Requirements:
     db.exec(`CREATE INDEX IF NOT EXISTS idx_news_slug ON news(slug)`)
     db.exec(`CREATE INDEX IF NOT EXISTS idx_news_category ON news(category_id)`)
     db.exec(`CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug)`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_translations_lang ON translations(language_code)`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_translations_content ON translations(content_type, content_id)`)
   } catch (e) {
     console.warn('[db] Note: Error executing index creations:', e.message)
   }

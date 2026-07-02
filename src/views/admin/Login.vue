@@ -36,7 +36,12 @@ const handleLogin = async () => {
   try {
     const res = await api.login(form)
     localStorage.setItem('token', res.token)
-    router.push('/admin/dashboard')
+    const redirectPath = router.currentRoute.value.query.redirect
+    if (redirectPath && redirectPath.startsWith('/')) {
+      router.push(redirectPath)
+    } else {
+      router.push('/admin/dashboard')
+    }
   } catch (e) {
     alert(e.message)
   } finally {
