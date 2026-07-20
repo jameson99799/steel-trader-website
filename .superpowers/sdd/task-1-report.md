@@ -34,3 +34,20 @@
 - The empty visible-category set yields the required `AND 1=0` condition, so no public product endpoint can leak uncategorized/hidden output.
 - Product detail and fuzzy fallback now return the existing 404 result for hidden-category products.
 - No database, GeoIP, API-key, or generated `dist` files are included in the task changes.
+
+## Review follow-up
+
+- Public `GET /api/categories/` now filters the flat category list through `getVisibleCategoryIds`; the authenticated `/api/categories/admin/tree` remains the complete administrative source.
+- Added authenticated `GET /api/products/admin/list`. The public product list stays visibility-filtered, while `admin/Products.vue` now loads complete categories and products, including records in disabled category branches.
+- Added regression test `public categories are pruned while the admin tree retains disabled records`.
+
+### Follow-up TDD and verification
+
+1. RED command: `node --test test/catalogVisibility.test.js`
+   - Failed as expected because `buildAdminCategoryTree` was not exported from the categories route.
+2. GREEN command: `node --test test/catalogVisibility.test.js`
+   - Passed 4/4 after exporting the complete-tree helper and applying public/admin route separation.
+3. Final commands:
+   - `node --check server/routes/categories.js server/routes/products.js server/services/catalogVisibility.js`: passed.
+   - `node --test test/catalogVisibility.test.js`: passed 4/4.
+   - `npm.cmd run build`: passed; Vite transformed 738 modules.

@@ -1121,7 +1121,7 @@ function copyVar(v) {
 
 const loadProducts = async () => {
   try {
-    const res = await api.getProducts({ limit: 500 })
+    const res = await api.getAdminProducts({ limit: 500 })
     products.value = res.data
   } catch (e) {
     console.error(e)
@@ -1130,7 +1130,7 @@ const loadProducts = async () => {
 
 const loadCategories = async () => {
   try {
-    categories.value = await api.getCategoryTree()
+    categories.value = await api.getAdminCategoryTree()
     // Also load company info for the template variables panel
     try { companyInfo.value = await api.getCompany() } catch (e) {}
     // Load AI channels

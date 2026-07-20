@@ -3,7 +3,7 @@ import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { upload } from '../middleware/upload.js'
 import { loadTranslationsForLang, translateCategory } from '../helpers/translate.js'
-import { buildPublicCategoryTree } from '../services/catalogVisibility.js'
+import { buildPublicCategoryTree, getVisibleCategoryIds } from '../services/catalogVisibility.js'
 
 const router = Router()
 
@@ -13,7 +13,9 @@ function slugify(text, id) {
 }
 
 router.get('/', (req, res) => {
-  const categories = getAll('SELECT * FROM categories ORDER BY sort_order, id')
+  const allCategories = getAll('SELECT * FROM categories ORDER BY sort_order, id')
+  const visibleIds = getVisibleCategoryIds(allCategories)
+  const categories = allCategories.filter(category => visibleIds.has(category.id))
 
   // Inject translations if lang param is provided
   const lang = req.query.lang
@@ -30,7 +32,7 @@ function categoryProductCounts() {
     .map(product => [product.category_id, product.count]))
 }
 
-function buildAdminCategoryTree(categories) {
+export function buildAdminCategoryTree(categories) {
   const byParent = new Map()
   for (const category of categories) {
     const parentId = Number(category.parent_id || 0)

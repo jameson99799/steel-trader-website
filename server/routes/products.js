@@ -12,6 +12,49 @@ function publicProductVisibility(alias = 'p') {
   return visibleProductWhere(alias, getVisibleCategoryIds(categories))
 }
 
+function listProducts(req, res, { publicOnly }) {
+  const { category_id, featured, status, page = 1, limit = 20 } = req.query
+  let sql = 'SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description, p.description_en, p.is_featured, p.status, p.sort_order, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE 1=1'
+  const params = []
+
+  if (category_id) {
+    const categoryIds = [parseInt(category_id)]
+    const children = getAll('SELECT id FROM categories WHERE parent_id = ?', [category_id])
+    children.forEach(child => {
+      categoryIds.push(child.id)
+      getAll('SELECT id FROM categories WHERE parent_id = ?', [child.id])
+        .forEach(grandChild => categoryIds.push(grandChild.id))
+    })
+    sql += ` AND p.category_id IN (${categoryIds.map(() => '?').join(', ')})`
+    params.push(...categoryIds)
+  }
+  if (publicOnly) {
+    const visibility = publicProductVisibility()
+    sql += visibility.clause
+    params.push(...visibility.params)
+  }
+  if (featured === '1') sql += ' AND p.is_featured = 1'
+  if (status !== undefined) {
+    sql += ' AND p.status = ?'
+    params.push(parseInt(status))
+  }
+
+  sql += ' ORDER BY p.sort_order DESC, p.id DESC'
+  const countSql = sql.replace('SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description, p.description_en, p.is_featured, p.status, p.sort_order, c.name as category_name, c.name_en as category_name_en', 'SELECT COUNT(*) as total')
+  const total = getOne(countSql, params)?.total || 0
+  sql += ' LIMIT ? OFFSET ?'
+  const pageNumber = parseInt(page)
+  const limitNumber = parseInt(limit)
+  const products = getAll(sql, [...params, limitNumber, (pageNumber - 1) * limitNumber])
+
+  const lang = req.query.lang
+  if (lang && lang !== 'en') {
+    const tMap = loadTranslationsForLang(lang)
+    if (tMap) products.forEach(product => translateProduct(product, tMap, lang))
+  }
+  res.json({ data: products, total, page: pageNumber, limit: limitNumber })
+}
+
 // Slugify helper for SEO-friendly URLs
 function slugify(text) {
   return text.toLowerCase()
@@ -35,55 +78,11 @@ function uniqueSlug(base, excludeId = null) {
 }
 
 router.get('/', (req, res) => {
-  const { category_id, featured, status, page = 1, limit = 20 } = req.query
-  let sql = 'SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description, p.description_en, p.is_featured, p.status, p.sort_order, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE 1=1'
-  const params = []
-  const visibility = publicProductVisibility()
+  listProducts(req, res, { publicOnly: true })
+})
 
-  if (category_id) {
-    const categoryIds = [parseInt(category_id)]
-    const children = getAll('SELECT id FROM categories WHERE parent_id = ?', [category_id])
-    children.forEach(c => {
-      categoryIds.push(c.id)
-      const grandChildren = getAll('SELECT id FROM categories WHERE parent_id = ?', [c.id])
-      grandChildren.forEach(gc => categoryIds.push(gc.id))
-    })
-    sql += ` AND p.category_id IN (${categoryIds.map(() => '?').join(', ')})`
-    params.push(...categoryIds)
-  }
-
-  sql += visibility.clause
-  params.push(...visibility.params)
-
-  if (featured === '1') {
-    sql += ' AND p.is_featured = 1'
-  }
-
-  if (status !== undefined) {
-    sql += ' AND p.status = ?'
-    params.push(parseInt(status))
-  }
-
-  sql += ' ORDER BY p.sort_order DESC, p.id DESC'
-
-  const countSql = sql.replace('SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description, p.description_en, p.is_featured, p.status, p.sort_order, c.name as category_name, c.name_en as category_name_en', 'SELECT COUNT(*) as total')
-  const totalResult = getOne(countSql, params)
-  const total = totalResult?.total || 0
-
-  const offset = (parseInt(page) - 1) * parseInt(limit)
-  sql += ` LIMIT ? OFFSET ?`
-  params.push(parseInt(limit), offset)
-
-  const products = getAll(sql, params)
-
-  // Inject translations if lang param is provided
-  const lang = req.query.lang
-  if (lang && lang !== 'en') {
-    const tMap = loadTranslationsForLang(lang)
-    if (tMap) products.forEach(p => translateProduct(p, tMap, lang))
-  }
-
-  res.json({ data: products, total, page: parseInt(page), limit: parseInt(limit) })
+router.get('/admin/list', authMiddleware, (req, res) => {
+  listProducts(req, res, { publicOnly: false })
 })
 
 // Public API: Get all active products (no auth required)

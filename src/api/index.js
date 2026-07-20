@@ -187,6 +187,10 @@ export const api = {
     const query = new URLSearchParams(params).toString()
     return request(`/products${query ? `?${query}` : ''}`)
   },
+  getAdminProducts: (params = {}) => {
+    const query = new URLSearchParams(params).toString()
+    return request(`/products/admin/list${query ? `?${query}` : ''}`)
+  },
   getProduct: (id) => request(appendLang(`/products/${id}`)),
   createProduct: (data) => request('/products', { method: 'POST', body: data }),
   updateProduct: (id, data) => request(`/products/${id}`, { method: 'PUT', body: data }),
