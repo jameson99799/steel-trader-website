@@ -3,70 +3,16 @@ import { run, getAll, getOne } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { sendWeChatNotification } from '../utils/wechatWebhook.js'
 import { getVisibleCategoryIds } from '../services/catalogVisibility.js'
+import { createGeoIpService, getClientIp } from '../services/geoip.js'
 import fs from 'fs'
-import http from 'http'
-import https from 'https'
 
 const router = express.Router()
+const geoIp = createGeoIpService()
 
-function fetchGeoIP(ipAddress) {
-  return new Promise((resolve) => {
-    if (!ipAddress) return resolve(null)
-    const cleanIp = ipAddress.replace(/^::ffff:/, '')
-    if (cleanIp === '127.0.0.1' || cleanIp === '::1' || cleanIp.startsWith('192.168.') || cleanIp.startsWith('10.') || cleanIp.startsWith('172.16.') || cleanIp.startsWith('172.17.') || cleanIp.startsWith('172.18.') || cleanIp.startsWith('172.19.') || cleanIp.startsWith('172.2') || cleanIp.startsWith('172.3') || cleanIp.startsWith('127.')) {
-      return resolve(null)
-    }
-
-    const options = {
-      hostname: 'ip9.com.cn',
-      path: `/get?ip=${cleanIp}`,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    }
-
-    https.get(options, (res) => {
-      let data = ''
-      res.on('data', (chunk) => { data += chunk })
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data)
-          if (parsed && parsed.ret === 200 && parsed.data) {
-            const parts = []
-            if (parsed.data.country) parts.push(parsed.data.country)
-            if (parsed.data.prov && parsed.data.prov !== parsed.data.country) parts.push(parsed.data.prov)
-            if (parsed.data.city && parsed.data.city !== parsed.data.prov) parts.push(parsed.data.city)
-            const locString = parts.filter(Boolean).join(' ')
-            resolve(locString || null)
-          } else {
-            resolve(null)
-          }
-        } catch (e) {
-          resolve(null)
-        }
-      })
-    }).on('error', (e) => {
-      resolve(null)
-    })
-  })
-}
-
-async function processNotificationAndGeoIP(visitor_id, cleanIp, content) {
+function processNotification(visitor_id, clientIp, content) {
   try {
-    let cachedCountry = null
-    try {
-      const existing = getOne("SELECT country FROM live_chat_messages WHERE visitor_id = ? AND country IS NOT NULL AND country != '' LIMIT 1", [visitor_id])
-      cachedCountry = existing ? existing.country : null
-    } catch (e) {}
-
-    if (!cachedCountry) {
-      cachedCountry = await fetchGeoIP(cleanIp)
-      if (cachedCountry) {
-        try {
-          run("UPDATE live_chat_messages SET country = ? WHERE visitor_id = ? AND (country IS NULL OR country = '')", [cachedCountry, visitor_id])
-        } catch (e) {}
-      }
-    }
+    const cleanIp = clientIp || ''
+    const cachedCountry = getOne("SELECT country FROM live_chat_messages WHERE visitor_id = ? AND country IS NOT NULL AND country != '' LIMIT 1", [visitor_id])?.country || null
 
     const shouldNotify = true
     if (shouldNotify) {
@@ -122,18 +68,21 @@ async function processNotificationAndGeoIP(visitor_id, cleanIp, content) {
       })
     }
   } catch (e) {
-    fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] processNotificationAndGeoIP error: ${e.message}\n`)
+    fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] processNotification error: ${e.message}\n`)
   }
 }
 
-function lookupGeoIP(visitorId, ipAddress) {
-  fetchGeoIP(ipAddress).then(country => {
-    if (country) {
-      try {
-        run("UPDATE live_chat_messages SET country = ? WHERE visitor_id = ? AND (country IS NULL OR country = '')", [country, visitorId])
-      } catch (e) {}
-    }
-  }).catch(() => {})
+async function resolveVisitorGeoIp(visitorId, ip) {
+  const geo = await geoIp.resolve(ip)
+  if (!geo) return
+  run(`UPDATE live_chat_messages
+    SET country = ?, country_code = ?, geo_source = ?, geo_resolved_at = CURRENT_TIMESTAMP
+    WHERE visitor_id = ? AND ip IS ?
+      AND (country IS NULL OR country = '')
+      AND (country_code IS NULL OR country_code = '')
+      AND (geo_source IS NULL OR geo_source = '')
+      AND geo_resolved_at IS NULL`,
+  [geo.countryName, geo.countryCode, geo.source, visitorId, ip])
 }
 
 let schemaHealed = false
@@ -145,6 +94,9 @@ function healSchema() {
   try { run('ALTER TABLE live_chat_messages ADD COLUMN timestamp DATETIME DEFAULT CURRENT_TIMESTAMP') } catch(e) {}
   try { run('ALTER TABLE live_chat_messages ADD COLUMN ip TEXT') } catch(e) {}
   try { run('ALTER TABLE live_chat_messages ADD COLUMN country TEXT') } catch(e) {}
+  try { run('ALTER TABLE live_chat_messages ADD COLUMN country_code TEXT') } catch(e) {}
+  try { run('ALTER TABLE live_chat_messages ADD COLUMN geo_source TEXT') } catch(e) {}
+  try { run('ALTER TABLE live_chat_messages ADD COLUMN geo_resolved_at DATETIME') } catch(e) {}
   try { run("ALTER TABLE live_chat_messages ADD COLUMN buttons TEXT DEFAULT '[]'") } catch(e) {}
   try { run("ALTER TABLE chat_wechat_webhooks ADD COLUMN notify_type TEXT DEFAULT 'all'") } catch(e) {}
   schemaHealed = true
@@ -463,50 +415,23 @@ router.get('/widget-config', (req, res) => {
   })
 })
 
-// ── Public: Visitor API ──────────────────────────────────────
-
-router.get('/debug-ip', (req, res) => {
-  res.json({
-    ip: req.ip,
-    headers: req.headers,
-    cf: req.headers['cf-connecting-ip'],
-    xfwd: req.headers['x-forwarded-for'],
-    real: req.headers['x-real-ip']
-  })
-})
-
 router.post('/send', (req, res) => {
   try {
     healSchema()
     const { visitor_id, content, lang } = req.body
     if (!visitor_id || !content) return res.status(400).json({ error: 'Missing fields' })
 
-    // Extract client IP address safely (Cloudflare CF-Connecting-IP first)
-    const rawIp = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.ip || (req.socket ? req.socket.remoteAddress : '') || ''
-    const ipStr = Array.isArray(rawIp) ? rawIp[0] : String(rawIp)
-    const cleanIp = ipStr.split(',')[0].trim().replace(/^::ffff:/, '')
-
-    // Try to find cached country for this visitor
-    let cachedCountry = null
-    try {
-      const existing = getOne("SELECT country FROM live_chat_messages WHERE visitor_id = ? AND country IS NOT NULL AND country != '' LIMIT 1", [visitor_id])
-      cachedCountry = existing ? existing.country : null
-    } catch (e) {}
+    const clientIp = getClientIp(req)
 
     try {
-      run('INSERT INTO live_chat_messages (visitor_id, sender_type, content, ip, country) VALUES (?, ?, ?, ?, ?)', 
-          [visitor_id, 'visitor', content, cleanIp, cachedCountry])
+      run('INSERT INTO live_chat_messages (visitor_id, sender_type, content, ip) VALUES (?, ?, ?, ?)',
+          [visitor_id, 'visitor', content, clientIp])
     } catch (dbErr) {
       // Fallback in case columns do not exist yet (migration didn't run or failed)
       fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] INSERT with ip/country failed, falling back: ${dbErr.message}\n`)
       run('INSERT INTO live_chat_messages (visitor_id, sender_type, content) VALUES (?, ?, ?)', 
           [visitor_id, 'visitor', content])
     }
-
-    // Trigger background lookup and notification process (async/non-blocking)
-    processNotificationAndGeoIP(visitor_id, cleanIp, content).catch(err => {
-      fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] processNotificationAndGeoIP async catch: ${err.message}\n`)
-    })
 
     // Check auto-reply logic
     const settings = getOne('SELECT * FROM live_chat_settings WHERE id = 1')
@@ -551,6 +476,13 @@ router.post('/send', (req, res) => {
     }
 
     res.json({ success: true })
+
+    setImmediate(() => {
+      resolveVisitorGeoIp(visitor_id, clientIp).catch(err => {
+        fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] GeoIP lookup failed: ${err.message}\n`)
+      })
+      processNotification(visitor_id, clientIp, content)
+    })
   } catch (err) {
     try {
       fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] /send global catch: ${err.stack}\n`)

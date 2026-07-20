@@ -46,7 +46,7 @@
               <span :class="['status-dot', { online: isOnline(visitor.timestamp) }]"></span>
             </div>
             <div v-if="visitor.ip" class="visitor-geoip">
-              📍 {{ visitor.country || '未知国家' }} ({{ visitor.ip }})
+              📍 {{ visitor.country || visitor.country_code || '未知国家' }} ({{ visitor.ip }})
             </div>
             <div class="last-msg-snippet">
               {{ visitor.content }}
@@ -72,7 +72,7 @@
             <div class="chat-header-title">
               <h3>对讲中：访客 #{{ activeVisitorId.substring(0, 12) }}...</h3>
               <div v-if="activeVisitorMeta && activeVisitorMeta.ip" class="chat-header-geoip">
-                IP: {{ activeVisitorMeta.ip }} | 国家: {{ activeVisitorMeta.country || '未知国家' }}
+                IP: {{ activeVisitorMeta.ip }} | 国家: {{ activeVisitorMeta.country || activeVisitorMeta.country_code || '未知国家' }}
               </div>
             </div>
             <span :class="['status-badge', { online: isCurrentOnline }]">
