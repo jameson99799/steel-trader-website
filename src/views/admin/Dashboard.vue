@@ -79,17 +79,22 @@ const stats = reactive({
 
 const inquiries = ref([])
 
+const countCategoryTree = (categories) => categories.reduce(
+  (count, category) => count + 1 + countCategoryTree(category.children || []),
+  0
+)
+
 const formatDate = (date) => {
   return new Date(date).toLocaleString('zh-CN')
 }
 
 onMounted(async () => {
   try {
-    const productsRes = await api.getProducts()
+    const productsRes = await api.getAdminProducts()
     stats.products = productsRes.total
 
-    const categories = await api.getCategories()
-    stats.categories = categories.length
+    const categories = await api.getAdminCategoryTree()
+    stats.categories = countCategoryTree(categories)
 
     const inquiriesRes = await api.getInquiries()
     stats.inquiries = inquiriesRes.data.length

@@ -7,7 +7,7 @@
 - `server/db.js`: additive `is_enabled INTEGER NOT NULL DEFAULT 1` migration and `(parent_id, is_enabled)` index.
 - `server/routes/categories.js`: public pruned tree, authenticated complete admin tree, and partial visibility updates that retain omitted fields.
 - `server/routes/products.js`, `server/index.js`, `server/routes/sitemap.js`, `server/routes/chat.js`: reuse visibility filtering for public product/category outputs, SSR/JSON-LD/initial state, sitemaps, and chat links.
-- `src/views/admin/Categories.vue`, `src/api/index.js`: admin display toggle using `FormData`, admin tree loading, and category-cache invalidation.
+- `src/views/admin/Categories.vue`, `src/views/admin/Products.vue`, `src/views/admin/Dashboard.vue`, `src/views/admin/Translations.vue`, `src/api/index.js`: authenticated admin catalog consumers, display toggle using `FormData`, and category-cache invalidation.
 - `package.json`: `npm test` script.
 
 ## TDD evidence
@@ -51,3 +51,18 @@
    - `node --check server/routes/categories.js server/routes/products.js server/services/catalogVisibility.js`: passed.
    - `node --test test/catalogVisibility.test.js`: passed 4/4.
    - `npm.cmd run build`: passed; Vite transformed 738 modules.
+
+## Second review follow-up
+
+- `Dashboard.vue` uses the authenticated full product list and complete category tree; its recursive counter preserves the previous all-category total rather than counting roots only.
+- `Translations.vue` uses the authenticated complete category tree when product translation status is loaded, so disabled-branch product categories remain selectable.
+- Extended the focused regression test to verify all admin catalog consumers use `getAdminProducts`/`getAdminCategoryTree` and that the dashboard recursively counts the complete tree.
+
+### Follow-up TDD and verification
+
+1. RED command: `node --test test/catalogVisibility.test.js`
+   - Failed as expected because Dashboard still called `api.getProducts()`.
+2. Additional RED command: `node --test test/catalogVisibility.test.js`
+   - Failed as expected after adding the recursive-count assertion because Dashboard only used `categories.length`.
+3. GREEN command: `node --test test/catalogVisibility.test.js`
+   - Passed 5/5 after switching Dashboard and Translations to authenticated catalog sources and adding the recursive count.

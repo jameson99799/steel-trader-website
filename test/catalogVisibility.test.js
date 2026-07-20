@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { getVisibleCategoryIds, buildPublicCategoryTree, visibleProductWhere } from '../server/services/catalogVisibility.js'
 import { buildAdminCategoryTree } from '../server/routes/categories.js'
 
@@ -40,4 +41,15 @@ test('public categories are pruned while the admin tree retains disabled records
       { id: 4, parent_id: 1, is_enabled: 1, children: [] }
     ] }
   ])
+})
+
+test('admin dashboard and translation views use complete authenticated catalog sources', async () => {
+  const [dashboard, translations] = await Promise.all([
+    readFile(new URL('../src/views/admin/Dashboard.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../src/views/admin/Translations.vue', import.meta.url), 'utf8')
+  ])
+  assert.match(dashboard, /api\.getAdminProducts\(/)
+  assert.match(dashboard, /api\.getAdminCategoryTree\(/)
+  assert.match(dashboard, /countCategoryTree\(categories\)/)
+  assert.match(translations, /api\.getAdminCategoryTree\(/)
 })

@@ -1606,7 +1606,7 @@ async function loadGranularStatus() {
     gtAllItems.value = res.items || []
     gtLangs.value = res.languages || []
     if (explicitType.value === 'product') {
-      const cats = await api.getCategories()
+      const cats = await api.getAdminCategoryTree()
       gtCategories.value = cats || []
     }
     filterGranularItems()
