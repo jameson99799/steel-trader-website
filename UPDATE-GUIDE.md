@@ -143,8 +143,8 @@ sqlite3 data/database.db "SELECT 'products:', COUNT(*) FROM products; SELECT 'ne
 Run these checks after the backup has been verified and `server-update.sh` has finished:
 
 1. Confirm catalog visibility is still enforced. A known hidden product must return HTTP 404 on its public URL, and the public category tree must not include hidden categories/products. Verify both the public product URL and `GET /api/categories` with a known hidden record.
-2. From an India-based connection, make a first Google referral request to a non-Hindi localized page with no `locale_preference` or `locale_auto_selected` cookie. For example, request `/zh/products/coil?utm=google` with a Google referer. It must respond `302`, preserve the path/query, set `locale_auto_selected=1`, and point to `/hi/products/coil?utm=google`.
-3. Repeat from a country without an enabled mapped language (or an unmapped country). The first Google referral must fall back to `/en/...`; it must not redirect to a disabled language. A manual language selection must set `locale_preference` and prevent automatic redirection.
+2. Verify that a localized URL stays unchanged regardless of visitor IP, referer, or old locale cookies. For example, request `/zh/products/coil?utm=google` from an India-based connection with a Google referer; it must not issue a locale redirect.
+3. Use the language selector to change the page language. Confirm that the URL changes to the selected language prefix and that the selection is retained for later visits.
 4. Send a chat message and verify that the new `live_chat_messages` record has the expected `ip`, `country`, `country_code`, and `geo_source` values. Check `pm2 logs led-trade --lines 100 --nostream` for GeoIP, proxy, or application errors.
 
 ### Proxy trust reminder
