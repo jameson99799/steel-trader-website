@@ -29,6 +29,9 @@
 
     <!-- Main Content Area -->
     <main class="chat-main-body">
+      <p v-if="chatVisitorListError" class="chat-error" role="alert">{{ chatVisitorListError }}</p>
+      <p v-if="chatMessagesError" class="chat-error" role="alert">{{ chatMessagesError }}</p>
+      <p v-if="chatSendError" class="chat-error" role="alert">{{ chatSendError }}</p>
       <!-- 1. Visitor List View -->
       <div v-if="!activeVisitorId" class="visitor-list-view">
         <div class="search-bar-wrapper">
@@ -217,11 +220,29 @@ const headers = () => ({
   'Authorization': `Bearer ${token()}`
 })
 
+const handleChatError = (res, action) => {
+  if (res?.status === 401) {
+    localStorage.removeItem('token')
+    chatVisitorListError.value = '登录已过期，请重新登录。'
+    chatMessagesError.value = '登录已过期，请重新登录。'
+    chatSendError.value = '登录已过期，请重新登录。'
+    router.replace({ path: '/admin/login', query: { redirect: route.fullPath } })
+    return
+  }
+  const message = `${action}失败${res ? `（${res.status}）` : '，请检查网络后重试'}`
+  if (action === '发送回复') chatSendError.value = message
+  else if (action === '加载会话') chatVisitorListError.value = message
+  else chatMessagesError.value = message
+}
+
 // UI & Loading States
 const refreshing = ref(false)
 const searchQuery = ref('')
 const replyText = ref('')
 const sending = ref(false)
+const chatVisitorListError = ref('')
+const chatMessagesError = ref('')
+const chatSendError = ref('')
 const messagesContainer = ref(null)
 const textareaRef = ref(null)
 
@@ -347,12 +368,15 @@ const fetchVisitors = async () => {
     const res = await fetch('/api/chat/admin/messages', { headers: headers() })
     if (res.ok) {
       visitors.value = await res.json()
+      chatVisitorListError.value = ''
       debugLogText.value = 'fetchVisitors: OK, found ' + visitors.value.length
     } else {
       debugLogText.value = 'fetchVisitors error: ' + res.status
+      handleChatError(res, '加载会话')
     }
   } catch (e) {
     debugLogText.value = 'fetchVisitors EXCEPTION: ' + e.message
+    handleChatError(null, '加载会话')
     console.error('Failed to fetch visitors', e)
   }
 }
@@ -361,11 +385,12 @@ const fetchVisitors = async () => {
 const fetchActiveMessages = async () => {
   if (!activeVisitorId.value) return
   try {
-    const res = await fetch(`/api/chat/admin/messages?visitor_id=${activeVisitorId.value}`, { 
+    const res = await fetch(`/api/chat/admin/messages?visitor_id=${encodeURIComponent(activeVisitorId.value)}`, {
       headers: headers() 
     })
     if (res.ok) {
       const data = await res.json()
+      chatMessagesError.value = ''
       debugLogText.value = 'fetchActiveMessages: OK, found ' + data.length
       const isNewMessageAdded = data.length > activeMessages.value.length
       activeMessages.value = data
@@ -374,9 +399,11 @@ const fetchActiveMessages = async () => {
       }
     } else {
       debugLogText.value = 'fetchActiveMessages error: ' + res.status
+      handleChatError(res, '加载消息')
     }
   } catch (e) {
     debugLogText.value = 'fetchActiveMsg EXCEPTION: ' + e.message
+    handleChatError(null, '加载消息')
     console.error('Failed to fetch active messages', e)
   }
 }
@@ -396,8 +423,6 @@ const sendReply = async () => {
   if (!replyText.value.trim() || !activeVisitorId.value || sending.value) return
   sending.value = true
   const content = replyText.value.trim()
-  replyText.value = ''
-  adjustTextareaHeight()
 
   try {
     const res = await fetch('/api/chat/admin/messages', {
@@ -406,10 +431,16 @@ const sendReply = async () => {
       body: JSON.stringify({ visitor_id: activeVisitorId.value, content })
     })
     if (res.ok) {
+      replyText.value = ''
+      chatSendError.value = ''
+      adjustTextareaHeight()
       await fetchActiveMessages()
       fetchVisitors()
+    } else {
+      handleChatError(res, '发送回复')
     }
   } catch (e) {
+    handleChatError(null, '发送回复')
     console.error('Failed to send reply', e)
   } finally {
     sending.value = false
@@ -600,6 +631,15 @@ onUnmounted(() => {
   top: 0;
   left: 0;
   z-index: 99999;
+}
+
+.chat-error {
+  margin: 8px 16px;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 /* Header Styles */

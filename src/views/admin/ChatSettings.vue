@@ -16,6 +16,9 @@
       </button>
     </div>
 
+    <p v-if="chatVisitorListError" class="chat-error" role="alert">{{ chatVisitorListError }}</p>
+    <p v-if="chatMessagesError" class="chat-error" role="alert">{{ chatMessagesError }}</p>
+    <p v-if="chatSendError" class="chat-error" role="alert">{{ chatSendError }}</p>
     <div v-show="activeTab === 'chat'" class="chat-workspace">
       <!-- 左侧访客列表 -->
       <div class="visitor-sidebar">
@@ -371,6 +374,10 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+
+const route = useRoute()
+const router = useRouter()
 
 const activeTab = ref(localStorage.getItem('chat_active_tab') || 'chat')
 const settings = ref({ widget_enabled: true, auto_reply_enabled: false, start_time: '22:00', end_time: '07:00', auto_collapse_seconds: 10, wechat_webhook_url: '' })
@@ -386,6 +393,9 @@ const activeVisitorId = ref(localStorage.getItem('chat_active_visitor_id') || ''
 const activeMessages = ref([])
 const replyText = ref('')
 const sending = ref(false)
+const chatVisitorListError = ref('')
+const chatMessagesError = ref('')
+const chatSendError = ref('')
 const searchQuery = ref('')
 const messagesContainer = ref(null)
 const textareaRef = ref(null)
@@ -477,6 +487,21 @@ let pollInterval = null
 const token = () => localStorage.getItem('token')
 const headers = () => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` })
 
+const handleChatError = (res, action) => {
+  if (res?.status === 401) {
+    localStorage.removeItem('token')
+    chatVisitorListError.value = '登录已过期，请重新登录。'
+    chatMessagesError.value = '登录已过期，请重新登录。'
+    chatSendError.value = '登录已过期，请重新登录。'
+    router.replace({ path: '/admin/login', query: { redirect: route.fullPath } })
+    return
+  }
+  const message = `${action}失败${res ? `（${res.status}）` : '，请检查网络后重试'}`
+  if (action === '发送回复') chatSendError.value = message
+  else if (action === '加载会话') chatVisitorListError.value = message
+  else chatMessagesError.value = message
+}
+
 // Play high-quality synthed chime sound when new message arrives
 const playNotificationSound = () => {
   try {
@@ -552,6 +577,7 @@ const fetchVisitors = async () => {
     const res = await fetch('/api/chat/admin/messages', { headers: { 'Authorization': `Bearer ${token()}` } })
     if (res.ok) {
       const data = await res.json()
+      chatVisitorListError.value = ''
       // Detect new unread messages to play chime sound
       const prevTotalUnread = totalUnread.value
       visitors.value = data
@@ -559,8 +585,11 @@ const fetchVisitors = async () => {
       if (currentTotalUnread > prevTotalUnread) {
         playNotificationSound()
       }
+    } else {
+      handleChatError(res, '加载会话')
     }
   } catch (e) {
+    handleChatError(null, '加载会话')
     console.error('Failed to fetch visitors', e)
   }
 }
@@ -568,18 +597,22 @@ const fetchVisitors = async () => {
 const fetchActiveMessages = async () => {
   if (!activeVisitorId.value) return
   try {
-    const res = await fetch(`/api/chat/admin/messages?visitor_id=${activeVisitorId.value}`, { 
+    const res = await fetch(`/api/chat/admin/messages?visitor_id=${encodeURIComponent(activeVisitorId.value)}`, {
       headers: { 'Authorization': `Bearer ${token()}` } 
     })
     if (res.ok) {
       const data = await res.json()
+      chatMessagesError.value = ''
       const isNewMessageAdded = data.length > activeMessages.value.length
       activeMessages.value = data
       if (isNewMessageAdded) {
         scrollToBottom()
       }
+    } else {
+      handleChatError(res, '加载消息')
     }
   } catch (e) {
+    handleChatError(null, '加载消息')
     console.error('Failed to fetch active messages', e)
   }
 }
@@ -588,8 +621,6 @@ const sendReply = async () => {
   if (!replyText.value.trim() || !activeVisitorId.value || sending.value) return
   sending.value = true
   const content = replyText.value.trim()
-  replyText.value = ''
-  adjustTextareaHeight()
 
   try {
     const res = await fetch('/api/chat/admin/messages', {
@@ -598,10 +629,16 @@ const sendReply = async () => {
       body: JSON.stringify({ visitor_id: activeVisitorId.value, content })
     })
     if (res.ok) {
-      fetchActiveMessages()
+      replyText.value = ''
+      chatSendError.value = ''
+      adjustTextareaHeight()
+      await fetchActiveMessages()
       fetchVisitors()
+    } else {
+      handleChatError(res, '发送回复')
     }
   } catch (e) {
+    handleChatError(null, '发送回复')
     console.error('Failed to send reply', e)
   } finally {
     sending.value = false
@@ -1001,6 +1038,14 @@ onUnmounted(() => {
 .chat-dashboard.is-chat {
   height: calc(100vh - 60px);
   min-height: 600px;
+}
+.chat-error {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 .header { margin-bottom: 20px; }
 .header h2 { font-size: 24px; color: #1f2937; margin-bottom: 4px; }

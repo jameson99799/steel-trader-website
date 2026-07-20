@@ -2,7 +2,7 @@ import { isIP } from 'node:net'
 
 const LOOKUP_TIMEOUT_MS = 1200
 const SUCCESS_TTL_MS = 24 * 60 * 60 * 1000
-const FAILURE_TTL_MS = 10 * 60 * 1000
+const FAILURE_TTL_MS = 60 * 1000
 
 const COUNTRY_LANGUAGES = new Map([
   ['IN', 'hi'], ['CN', 'zh'], ['ES', 'es'], ['FR', 'fr'], ['RU', 'ru'],
@@ -100,18 +100,33 @@ export function isPublicIp(ip) {
   return isIP(normalized) === 4 ? !isPrivateIpv4(normalized) : !isPrivateIpv6(normalized)
 }
 
-function withTimeout(lookup, ip) {
+function lookupErrorMessage(error) {
+  if (/^HTTP \d{3}$/.test(error?.message || '')) return error.message
+  if (error?.name === 'AbortError') return 'timeout'
+  return 'request failed'
+}
+
+function withTimeout(lookup, ip, source, onError) {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(null), LOOKUP_TIMEOUT_MS)
+    let settled = false
+    const fail = (error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      try {
+        onError({ source, message: lookupErrorMessage(error) })
+      } catch {}
+      resolve(null)
+    }
+    const timer = setTimeout(() => fail(new Error('timeout')), LOOKUP_TIMEOUT_MS)
     Promise.resolve()
       .then(() => lookup(ip))
       .then((result) => {
+        if (settled) return
+        settled = true
         clearTimeout(timer)
         resolve(result)
-      }, () => {
-        clearTimeout(timer)
-        resolve(null)
-      })
+      }, fail)
   })
 }
 
@@ -123,22 +138,22 @@ async function requestJson(url) {
       headers: { accept: 'application/json' },
       signal: controller.signal
     })
-    if (!response.ok) return null
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
     return await response.json()
-  } catch {
-    return null
+  } catch (error) {
+    throw error
   } finally {
     clearTimeout(timer)
   }
 }
 
-async function lookupPrimary(ip) {
-  const data = await requestJson(`https://ipapi.co/${encodeURIComponent(ip)}/json/`)
+async function lookupPrimary(ip, request = requestJson) {
+  const data = await request(`https://ipapi.co/${encodeURIComponent(ip)}/json/`)
   return data ? { countryCode: data.country_code, countryName: data.country_name } : null
 }
 
-async function lookupFallback(ip) {
-  const data = await requestJson(`https://ipwho.is/${encodeURIComponent(ip)}`)
+async function lookupFallback(ip, request = requestJson) {
+  const data = await request(`https://ipwho.is/${encodeURIComponent(ip)}`)
   return data?.success ? { countryCode: data.country_code, countryName: data.country } : null
 }
 
@@ -151,8 +166,10 @@ function validResult(result, source) {
 }
 
 export function createGeoIpService(options = {}) {
-  const primary = options.lookupPrimary || lookupPrimary
-  const fallback = options.lookupFallback || lookupFallback
+  const request = options.requestJson || requestJson
+  const primary = options.lookupPrimary || (ip => lookupPrimary(ip, request))
+  const fallback = options.lookupFallback || (ip => lookupFallback(ip, request))
+  const onError = typeof options.onError === 'function' ? options.onError : () => {}
   const now = typeof options.now === 'function' ? options.now : Date.now
   const successTtlMs = Number.isFinite(options.successTtlMs) ? options.successTtlMs : SUCCESS_TTL_MS
   const failureTtlMs = Number.isFinite(options.failureTtlMs) ? options.failureTtlMs : FAILURE_TTL_MS
@@ -194,8 +211,8 @@ export function createGeoIpService(options = {}) {
     if (inFlight.has(normalized)) return inFlight.get(normalized)
 
     const lookup = (async () => {
-      const primaryResult = validResult(await withTimeout(primary, normalized), 'primary')
-      const result = primaryResult || validResult(await withTimeout(fallback, normalized), 'fallback')
+      const primaryResult = validResult(await withTimeout(primary, normalized, 'primary', onError), 'primary')
+      const result = primaryResult || validResult(await withTimeout(fallback, normalized, 'fallback', onError), 'fallback')
       cacheResult(normalized, result)
       return result
     })()

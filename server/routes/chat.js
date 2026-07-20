@@ -4,15 +4,20 @@ import { authMiddleware } from '../middleware/auth.js'
 import { sendWeChatNotification } from '../utils/wechatWebhook.js'
 import { getVisibleCategoryIds } from '../services/catalogVisibility.js'
 import { createGeoIpService, getClientIp } from '../services/geoip.js'
+import { visitorListSql } from '../services/chatVisitorMetadata.js'
 import fs from 'fs'
 
 const router = express.Router()
-const geoIp = createGeoIpService()
+const geoIp = createGeoIpService({
+  onError: ({ source, message }) => {
+    fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] Chat GeoIP ${source} lookup failed: ${message}\n`)
+  }
+})
 
-function processNotification(visitor_id, clientIp, content) {
+function processNotification(visitor_id, clientIp, content, resolvedCountry = null) {
   try {
     const cleanIp = clientIp || ''
-    const cachedCountry = getOne("SELECT country FROM live_chat_messages WHERE visitor_id = ? AND country IS NOT NULL AND country != '' LIMIT 1", [visitor_id])?.country || null
+    const cachedCountry = resolvedCountry || getOne("SELECT country FROM live_chat_messages WHERE visitor_id = ? AND country IS NOT NULL AND country != '' LIMIT 1", [visitor_id])?.country || null
 
     const shouldNotify = true
     if (shouldNotify) {
@@ -74,7 +79,7 @@ function processNotification(visitor_id, clientIp, content) {
 
 async function resolveVisitorGeoIp(visitorId, ip) {
   const geo = await geoIp.resolve(ip)
-  if (!geo) return
+  if (!geo) return null
   run(`UPDATE live_chat_messages
     SET country = ?, country_code = ?, geo_source = ?, geo_resolved_at = CURRENT_TIMESTAMP
     WHERE visitor_id = ? AND ip IS ?
@@ -83,6 +88,7 @@ async function resolveVisitorGeoIp(visitorId, ip) {
       AND (geo_source IS NULL OR geo_source = '')
       AND geo_resolved_at IS NULL`,
   [geo.countryName, geo.countryCode, geo.source, visitorId, ip])
+  return geo
 }
 
 let schemaHealed = false
@@ -477,11 +483,14 @@ router.post('/send', (req, res) => {
 
     res.json({ success: true })
 
-    setImmediate(() => {
-      resolveVisitorGeoIp(visitor_id, clientIp).catch(err => {
+    setImmediate(async () => {
+      let geo = null
+      try {
+        geo = await resolveVisitorGeoIp(visitor_id, clientIp)
+      } catch (err) {
         fs.appendFileSync('server/error.log', `[${new Date().toISOString()}] GeoIP lookup failed: ${err.message}\n`)
-      })
-      processNotification(visitor_id, clientIp, content)
+      }
+      processNotification(visitor_id, clientIp, content, geo?.countryName || null)
     })
   } catch (err) {
     try {
@@ -568,25 +577,10 @@ router.get('/admin/messages', authMiddleware, (req, res) => {
       // Return list of unique visitors with their last message and unread count
       let visitors = []
       try {
-        visitors = getAll(`
-          SELECT m.*,
-            (SELECT COUNT(*) FROM live_chat_messages WHERE visitor_id = m.visitor_id AND sender_type = 'visitor' AND is_read = 0) as unread_count
-          FROM live_chat_messages m
-          INNER JOIN (
-            SELECT visitor_id, MAX(id) as max_id FROM live_chat_messages GROUP BY visitor_id
-          ) grouped ON m.id = grouped.max_id
-          ORDER BY m.timestamp DESC
-        `)
+        visitors = getAll(visitorListSql())
       } catch (e) {
         // Fallback without is_read and timestamp if columns missing
-        visitors = getAll(`
-          SELECT m.*, 0 as unread_count
-          FROM live_chat_messages m
-          INNER JOIN (
-            SELECT visitor_id, MAX(id) as max_id FROM live_chat_messages GROUP BY visitor_id
-          ) grouped ON m.id = grouped.max_id
-          ORDER BY m.id DESC
-        `)
+        visitors = getAll(visitorListSql({ withUnread: false, orderByTimestamp: false }))
       }
       res.json(visitors)
     }

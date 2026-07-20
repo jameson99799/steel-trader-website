@@ -49,6 +49,41 @@ test('caches fallback lookup and maps India to Hindi', async () => {
   assert.equal(languageForCountry('JP', new Set(['en', 'hi'])), 'en')
 })
 
+test('reports a rate-limited primary lookup and returns the fallback country', async () => {
+  const failures = []
+  const geo = createGeoIpService({
+    lookupPrimary: async () => {
+      const error = new Error('HTTP 429')
+      error.status = 429
+      throw error
+    },
+    lookupFallback: async () => ({ countryCode: 'IN', countryName: 'India' }),
+    onError: failure => failures.push(failure)
+  })
+
+  assert.deepEqual(await geo.resolve('8.8.8.8'), {
+    countryCode: 'IN', countryName: 'India', source: 'fallback'
+  })
+  assert.deepEqual(failures, [{ source: 'primary', message: 'HTTP 429' }])
+})
+
+test('default providers fall back from ipapi.co rate limiting to ipwho.is', async () => {
+  const urls = []
+  const geo = createGeoIpService({
+    requestJson: async url => {
+      urls.push(url)
+      if (url.startsWith('https://ipapi.co/')) throw new Error('HTTP 429')
+      return { success: true, country_code: 'IN', country: 'India' }
+    }
+  })
+
+  assert.deepEqual(await geo.resolve('8.8.8.8'), {
+    countryCode: 'IN', countryName: 'India', source: 'fallback'
+  })
+  assert.equal(urls[0], 'https://ipapi.co/8.8.8.8/json/')
+  assert.equal(urls[1], 'https://ipwho.is/8.8.8.8')
+})
+
 test('bounds the GeoIP cache and evicts the oldest entry at capacity', async () => {
   const calls = new Map()
   const geo = createGeoIpService({
