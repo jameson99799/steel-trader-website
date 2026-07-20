@@ -3,6 +3,7 @@ import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { upload } from '../middleware/upload.js'
 import { loadTranslationsForLang, translateCategory } from '../helpers/translate.js'
+import { buildPublicCategoryTree } from '../services/catalogVisibility.js'
 
 const router = Router()
 
@@ -24,32 +25,47 @@ router.get('/', (req, res) => {
   res.json(categories)
 })
 
+function categoryProductCounts() {
+  return new Map(getAll('SELECT category_id, COUNT(*) as count FROM products WHERE status = 1 GROUP BY category_id')
+    .map(product => [product.category_id, product.count]))
+}
+
+function buildAdminCategoryTree(categories) {
+  const byParent = new Map()
+  for (const category of categories) {
+    const parentId = Number(category.parent_id || 0)
+    const siblings = byParent.get(parentId) || []
+    siblings.push(category)
+    byParent.set(parentId, siblings)
+  }
+  const buildBranch = parentId => (byParent.get(parentId) || []).map(category => ({
+    ...category,
+    children: buildBranch(category.id)
+  }))
+  return buildBranch(0)
+}
+
+router.get('/admin/tree', authMiddleware, (req, res) => {
+  const categories = getAll('SELECT * FROM categories ORDER BY sort_order, id')
+  res.json(buildAdminCategoryTree(categories))
+})
+
 router.get('/tree', (req, res) => {
   const categories = getAll('SELECT * FROM categories ORDER BY sort_order, id')
-  const products = getAll('SELECT category_id, COUNT(*) as count FROM products WHERE status = 1 GROUP BY category_id')
-
-  const productCountMap = {}
-  products.forEach(p => { productCountMap[p.category_id] = p.count })
 
   // Inject translations if lang param is provided
   const lang = req.query.lang
   const tMap = (lang && lang !== 'en') ? loadTranslationsForLang(lang) : null
 
-  const buildTree = (parentId = 0) => {
-    return categories
-      .filter(c => c.parent_id === parentId)
-      .map(c => {
-        const node = {
-          ...c,
-          product_count: productCountMap[c.id] || 0,
-          children: buildTree(c.id)
-        }
-        if (tMap) translateCategory(node, tMap, lang)
-        return node
-      })
+  const translateTree = nodes => {
+    nodes.forEach(node => {
+      if (tMap) translateCategory(node, tMap, lang)
+      translateTree(node.children)
+    })
   }
-
-  res.json(buildTree())
+  const tree = buildPublicCategoryTree(categories, categoryProductCounts())
+  translateTree(tree)
+  res.json(tree)
 })
 
 router.post('/', authMiddleware, upload.single('image'), (req, res) => {
@@ -61,7 +77,7 @@ router.post('/', authMiddleware, upload.single('image'), (req, res) => {
       return res.status(400).json({ error: '分类名称不能为空' })
     }
 
-    const result = run('INSERT INTO categories (name, name_en, parent_id, sort_order, image) VALUES (?, ?, ?, ?, ?)',
+    const result = run('INSERT INTO categories (name, name_en, parent_id, sort_order, image, is_enabled) VALUES (?, ?, ?, ?, ?, 1)',
       [name, name_en || null, parseInt(parent_id), parseInt(sort_order), image])
     const newId = result.lastInsertRowid
     run('UPDATE categories SET slug = ? WHERE id = ?', [slugify(name_en || name, newId), newId])
@@ -74,7 +90,7 @@ router.post('/', authMiddleware, upload.single('image'), (req, res) => {
 router.put('/:id', authMiddleware, upload.single('image'), (req, res) => {
   try {
     const { id } = req.params
-    const { name, name_en, parent_id, sort_order } = req.body
+    const { name, name_en, parent_id, sort_order, is_enabled } = req.body
 
     const category = getOne('SELECT * FROM categories WHERE id = ?', [id])
     if (!category) {
@@ -82,9 +98,14 @@ router.put('/:id', authMiddleware, upload.single('image'), (req, res) => {
     }
 
     const image = req.file ? `/uploads/${req.file.filename}` : category.image
-    const updatedSlug = req.body.slug || category.slug || slugify(name_en || name, id)
-    run('UPDATE categories SET name = ?, name_en = ?, parent_id = ?, sort_order = ?, image = ?, slug = ? WHERE id = ?',
-      [name, name_en || null, parseInt(parent_id || 0), parseInt(sort_order || 0), image, updatedSlug, id])
+    const nextName = name === undefined ? category.name : name
+    const nextNameEn = name_en === undefined ? category.name_en : name_en || null
+    const nextParentId = parent_id === undefined ? category.parent_id : parseInt(parent_id)
+    const nextSortOrder = sort_order === undefined ? category.sort_order : parseInt(sort_order)
+    const nextIsEnabled = is_enabled === undefined ? category.is_enabled : (parseInt(is_enabled) ? 1 : 0)
+    const updatedSlug = req.body.slug || category.slug || slugify(nextNameEn || nextName, id)
+    run('UPDATE categories SET name = ?, name_en = ?, parent_id = ?, sort_order = ?, image = ?, slug = ?, is_enabled = ? WHERE id = ?',
+      [nextName, nextNameEn, nextParentId, nextSortOrder, image, updatedSlug, nextIsEnabled, id])
     res.json({ message: '更新成功' })
   } catch (err) {
     res.status(500).json({ error: '分类更新失败：' + err.message })

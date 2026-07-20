@@ -3,8 +3,14 @@ import { getAll, getOne, run, findFuzzyBySlug } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { upload, compressImage } from '../middleware/upload.js'
 import { loadTranslationsForLang, translateProduct } from '../helpers/translate.js'
+import { getVisibleCategoryIds, visibleProductWhere } from '../services/catalogVisibility.js'
 
 const router = Router()
+
+function publicProductVisibility(alias = 'p') {
+  const categories = getAll('SELECT id, parent_id, is_enabled FROM categories')
+  return visibleProductWhere(alias, getVisibleCategoryIds(categories))
+}
 
 // Slugify helper for SEO-friendly URLs
 function slugify(text) {
@@ -32,6 +38,7 @@ router.get('/', (req, res) => {
   const { category_id, featured, status, page = 1, limit = 20 } = req.query
   let sql = 'SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description, p.description_en, p.is_featured, p.status, p.sort_order, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE 1=1'
   const params = []
+  const visibility = publicProductVisibility()
 
   if (category_id) {
     const categoryIds = [parseInt(category_id)]
@@ -41,8 +48,12 @@ router.get('/', (req, res) => {
       const grandChildren = getAll('SELECT id FROM categories WHERE parent_id = ?', [c.id])
       grandChildren.forEach(gc => categoryIds.push(gc.id))
     })
-    sql += ` AND p.category_id IN (${categoryIds.join(',')})`
+    sql += ` AND p.category_id IN (${categoryIds.map(() => '?').join(', ')})`
+    params.push(...categoryIds)
   }
+
+  sql += visibility.clause
+  params.push(...visibility.params)
 
   if (featured === '1') {
     sql += ' AND p.is_featured = 1'
@@ -77,13 +88,14 @@ router.get('/', (req, res) => {
 
 // Public API: Get all active products (no auth required)
 router.get('/public/all', (req, res) => {
+  const visibility = publicProductVisibility()
   const products = getAll(`
     SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description_en, p.is_featured, p.status, p.sort_order,
            c.name as category_name, c.name_en as category_name_en, c.sort_order as category_sort_order
     FROM products p LEFT JOIN categories c ON p.category_id = c.id
-    WHERE p.status = 1
+    WHERE p.status = 1${visibility.clause}
     ORDER BY c.sort_order, p.sort_order DESC, p.id DESC
-  `)
+  `, visibility.params)
   res.json({ data: products, total: products.length })
 })
 
@@ -91,14 +103,15 @@ router.get('/:slug', (req, res) => {
   const { slug } = req.params
   // Support both numeric ID (legacy) and slug
   const isId = /^\d+$/.test(slug)
+  const visibility = publicProductVisibility()
   let product = isId
-    ? getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`, [slug])
-    : getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.slug = ?`, [slug])
+    ? getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?${visibility.clause}`, [slug, ...visibility.params])
+    : getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.slug = ?${visibility.clause}`, [slug, ...visibility.params])
 
   if (!product && !isId) {
     const fallbackProduct = findFuzzyBySlug('products', slug)
     if (fallbackProduct) {
-      product = getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`, [fallbackProduct.id])
+      product = getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?${visibility.clause}`, [fallbackProduct.id, ...visibility.params])
     }
   }
 

@@ -12,6 +12,7 @@
             <div class="tree-row">
               <span class="tree-name">{{ cat.name }} <small v-if="cat.name_en">({{ cat.name_en }})</small></span>
               <div class="tree-actions">
+                <label class="visibility-toggle"><input type="checkbox" :checked="Number(cat.is_enabled) !== 0" @change="updateVisibility(cat, $event.target.checked)" /> {{ Number(cat.is_enabled) !== 0 ? '前台显示' : '前台隐藏' }}</label>
                 <button class="btn btn-sm btn-secondary" @click="openModal(cat)">编辑</button>
                 <button class="btn btn-sm btn-primary" @click="openModal(null, cat.id)">添加子分类</button>
                 <button class="btn btn-sm btn-danger" @click="handleDelete(cat)">删除</button>
@@ -22,6 +23,7 @@
                 <div class="tree-row">
                   <span class="tree-name">{{ child.name }} <small v-if="child.name_en">({{ child.name_en }})</small></span>
                   <div class="tree-actions">
+                    <label class="visibility-toggle"><input type="checkbox" :checked="Number(child.is_enabled) !== 0" @change="updateVisibility(child, $event.target.checked)" /> {{ Number(child.is_enabled) !== 0 ? '前台显示' : '前台隐藏' }}</label>
                     <button class="btn btn-sm btn-secondary" @click="openModal(child)">编辑</button>
                     <button class="btn btn-sm btn-primary" @click="openModal(null, child.id)">添加子分类</button>
                     <button class="btn btn-sm btn-danger" @click="handleDelete(child)">删除</button>
@@ -32,6 +34,7 @@
                     <div class="tree-row">
                       <span class="tree-name">{{ grandChild.name }} <small v-if="grandChild.name_en">({{ grandChild.name_en }})</small></span>
                       <div class="tree-actions">
+                        <label class="visibility-toggle"><input type="checkbox" :checked="Number(grandChild.is_enabled) !== 0" @change="updateVisibility(grandChild, $event.target.checked)" /> {{ Number(grandChild.is_enabled) !== 0 ? '前台显示' : '前台隐藏' }}</label>
                         <button class="btn btn-sm btn-secondary" @click="openModal(grandChild)">编辑</button>
                         <button class="btn btn-sm btn-danger" @click="handleDelete(grandChild)">删除</button>
                       </div>
@@ -130,7 +133,7 @@ const flatCategories = computed(() => {
 
 const loadCategories = async () => {
   try {
-    categoryTree.value = await api.getCategoryTree()
+    categoryTree.value = await api.getAdminCategoryTree()
   } catch (e) {
     console.error(e)
   }
@@ -180,6 +183,17 @@ const handleSubmit = async () => {
   }
 }
 
+const updateVisibility = async (category, isEnabled) => {
+  try {
+    const formData = new FormData()
+    formData.append('is_enabled', isEnabled ? '1' : '0')
+    await api.updateCategory(category.id, formData)
+    await loadCategories()
+  } catch (e) {
+    alert(e.message)
+  }
+}
+
 const handleDelete = async (category) => {
   if (!confirm(`确定删除分类"${category.name}"吗？`)) return
   try {
@@ -225,6 +239,14 @@ onMounted(loadCategories)
 .tree-actions {
   display: flex;
   gap: 8px;
+}
+
+.visibility-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--secondary);
+  font-size: 13px;
 }
 
 .tree-children {

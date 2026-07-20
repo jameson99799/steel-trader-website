@@ -11,6 +11,7 @@ import sharp from 'sharp'
 
 import { initDb, getAll, getOne, run, findFuzzyBySlug } from './db.js'
 import { loadTranslationsForLang, translateProduct, translateNews, translateCompany } from './helpers/translate.js'
+import { buildPublicCategoryTree, getVisibleCategoryIds, visibleProductWhere } from './services/catalogVisibility.js'
 import authRoutes from './routes/auth.js'
 import securityRoutes from './routes/security.js'
 import categoriesRoutes from './routes/categories.js'
@@ -53,6 +54,14 @@ const app = express()
 app.set('trust proxy', 1) // Trust reverse proxy to correctly report HTTP/HTTPS proto
 const PORT = process.env.PORT || 3001
 const NODE_ENV = process.env.NODE_ENV || 'development'
+
+function publicCategoryIds() {
+  return getVisibleCategoryIds(getAll('SELECT id, parent_id, is_enabled FROM categories'))
+}
+
+function publicProductVisibility(alias) {
+  return visibleProductWhere(alias, publicCategoryIds())
+}
 
 async function startServer() {
   try {
@@ -646,11 +655,12 @@ async function startServer() {
           if (productMatch) {
             matchedRoute = true
             const slug = productMatch[1]
-            let product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.slug=? AND p.status=1', [slug])
+            const visibility = publicProductVisibility('p')
+            let product = getOne(`SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.slug=? AND p.status=1${visibility.clause}`, [slug, ...visibility.params])
             if (!product) {
               const fallbackProduct = findFuzzyBySlug('products', slug)
               if (fallbackProduct) {
-                product = getOne('SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.id=? AND p.status=1', [fallbackProduct.id])
+                product = getOne(`SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.id=? AND p.status=1${visibility.clause}`, [fallbackProduct.id, ...visibility.params])
               }
             }
             if (product) {
@@ -784,7 +794,8 @@ async function startServer() {
               
               // Internal linking for GEO crawler topic clusters
               let relatedHtml = ''
-              const relatedProducts = getAll('SELECT id, slug, name_en, name FROM products WHERE category_id=? AND id!=? AND status=1 LIMIT 5', [product.category_id, product.id])
+              const relatedVisibility = publicProductVisibility('products')
+              const relatedProducts = getAll(`SELECT id, slug, name_en, name FROM products WHERE category_id=? AND id!=? AND status=1${relatedVisibility.clause} LIMIT 5`, [product.category_id, product.id, ...relatedVisibility.params])
               if (relatedProducts.length) {
                 relatedHtml = '<h2>Related Products</h2><ul>' + relatedProducts.map(rp => {
                   if (tMap) translateProduct(rp, tMap, lang)
@@ -959,7 +970,7 @@ async function startServer() {
             const catSlug = prodCatMatch[1]
             const cat = getOne('SELECT * FROM categories WHERE slug = ?', [catSlug]) ||
                          getOne('SELECT * FROM categories WHERE lower(name_en) = ?', [catSlug.replace(/-/g, ' ')])
-            if (cat) {
+            if (cat && publicCategoryIds().has(cat.id)) {
               const catName = cat.name_en || cat.name
               pageTitle = `${catName} Steel Coil Products - Manufacturer & Exporter | ${companyName}`
               pageDesc = `Browse all ${catName} products from ${companyName}. Factory-direct steel coil manufacturer in Shandong, China. ASTM / JIS / EN certified. Competitive FOB pricing and fast global shipping.`
@@ -968,7 +979,8 @@ async function startServer() {
                 { '@type': 'ListItem', position: 2, name: 'Products', item: `${siteUrl}/${lang}/products` },
                 { '@type': 'ListItem', position: 3, name: catName, item: pageCanonical }
               ] })
-              const catProducts = getAll('SELECT id, slug, name_en, name, description_en, description FROM products WHERE category_id = ? AND status = 1 ORDER BY sort_order DESC, id DESC LIMIT 30', [cat.id])
+              const categoryVisibility = publicProductVisibility('products')
+              const catProducts = getAll(`SELECT id, slug, name_en, name, description_en, description FROM products WHERE category_id = ? AND status = 1${categoryVisibility.clause} ORDER BY sort_order DESC, id DESC LIMIT 30`, [cat.id, ...categoryVisibility.params])
               if (catProducts.length) {
                 const catProdItems = catProducts.map(p =>
                   `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a><p>${esc((p.description_en || p.description || '').substring(0, 150).replace(/\s+\S*$/, '...'))}</p></li>`
@@ -996,13 +1008,15 @@ async function startServer() {
             pageTitle = `Steel Products - GI, GL, PPGI, PPGL, CRC Coils & Sheets | ${companyName}`
             pageDesc = `Manufacturer & Exporter of Galvanized Steel (GI), Galvalume (GL), PPGI, PPGL & CRC Coils. ASTM A653/JIS G3302/EN 10346 compliant. Factory direct pricing from Shandong, China.`
             // SSR product list for GEO crawlers
-            const productList = getAll('SELECT id, slug, name_en, name, description_en, description FROM products WHERE status=1 ORDER BY sort_order, id DESC LIMIT 20')
+            const productListVisibility = publicProductVisibility('products')
+            const productList = getAll(`SELECT id, slug, name_en, name, description_en, description FROM products WHERE status=1${productListVisibility.clause} ORDER BY sort_order, id DESC LIMIT 20`, productListVisibility.params)
             if (productList.length) {
               const prodItems = productList.map(p => `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a><p>${esc((p.description_en || p.description || '').substring(0, 150).replace(/\s+\S*$/, '...'))}</p></li>`).join('')
               ssrContent = `<section id="ssr-products"><h1>Steel Products</h1><ul>${prodItems}</ul></section>`
             }
             // ItemList Schema for product listing
-            const allProducts = getAll('SELECT id, slug, name_en, name FROM products WHERE status=1 ORDER BY sort_order, id DESC LIMIT 30')
+            const allProductsVisibility = publicProductVisibility('products')
+            const allProducts = getAll(`SELECT id, slug, name_en, name FROM products WHERE status=1${allProductsVisibility.clause} ORDER BY sort_order, id DESC LIMIT 30`, allProductsVisibility.params)
             if (allProducts.length) {
               extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'ItemList',
                 name: 'Steel Products', url: pageCanonical,
@@ -1149,7 +1163,8 @@ async function startServer() {
               potentialAction: { '@type': 'SearchAction', target: `${siteUrl}/${lang}/products?search={search_term_string}`, 'query-input': 'required name=search_term_string' }
             })
             // SSR home content: company intro + top products
-            const homeProducts = getAll('SELECT id, slug, name_en, name FROM products WHERE status=1 ORDER BY sort_order, id LIMIT 8')
+            const homeProductsVisibility = publicProductVisibility('products')
+            const homeProducts = getAll(`SELECT id, slug, name_en, name FROM products WHERE status=1${homeProductsVisibility.clause} ORDER BY sort_order, id LIMIT 8`, homeProductsVisibility.params)
             const companyDesc = esc(companyDescTranslated)
             const homeProductList = homeProducts.map(p => {
               if (tMap) translateProduct(p, tMap, lang)
@@ -1157,7 +1172,9 @@ async function startServer() {
               return `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(trName)}</a></li>`
             }).join('')
             
-            const allCats = getAll('SELECT id, slug, name_en, name FROM categories ORDER BY sort_order, id') || []
+            const visibleHomeCategoryIds = publicCategoryIds()
+            const allCats = (getAll('SELECT id, slug, name_en, name, parent_id, is_enabled FROM categories ORDER BY sort_order, id') || [])
+              .filter(category => visibleHomeCategoryIds.has(category.id))
             const homeCatList = allCats.map(c => {
                const catSlug = c.slug || c.id
                let trName = c.name_en || c.name
@@ -1284,15 +1301,13 @@ async function startServer() {
         // Server side fetch for grids to obliterate CLS
         let ssrFeaturedProducts = [], ssrCategories = [];
         try {
-          ssrFeaturedProducts = getAll('SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description, p.description_en, p.is_featured, p.status, p.sort_order, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.is_featured = 1 AND p.status = 1 ORDER BY p.sort_order DESC, p.id DESC LIMIT 12') || [];
+          const featuredVisibility = publicProductVisibility('p')
+          ssrFeaturedProducts = getAll(`SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description, p.description_en, p.is_featured, p.status, p.sort_order, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.is_featured = 1 AND p.status = 1${featuredVisibility.clause} ORDER BY p.sort_order DESC, p.id DESC LIMIT 12`, featuredVisibility.params) || [];
           
           const rawCats = getAll('SELECT * FROM categories ORDER BY sort_order, id') || [];
           const productCounts = getAll('SELECT category_id, COUNT(*) as count FROM products WHERE status = 1 GROUP BY category_id') || [];
-          const countMap = {}; productCounts.forEach(pc => { countMap[pc.category_id] = pc.count; });
-          
-          ssrCategories = rawCats.filter(c => c.parent_id === 0).map(c => ({
-            ...c, product_count: countMap[c.id] || 0
-          })).slice(0, 6);
+          const countMap = new Map(productCounts.map(product => [product.category_id, product.count]));
+          ssrCategories = buildPublicCategoryTree(rawCats, countMap).slice(0, 6);
         } catch(e) {}
 
         const initialState = {

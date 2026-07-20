@@ -2,6 +2,7 @@ import express from 'express'
 import { run, getAll, getOne } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { sendWeChatNotification } from '../utils/wechatWebhook.js'
+import { getVisibleCategoryIds } from '../services/catalogVisibility.js'
 import fs from 'fs'
 import http from 'http'
 import https from 'https'
@@ -319,11 +320,13 @@ router.get('/admin/page-options', authMiddleware, (req, res) => {
 
   // Dynamic: Product Categories
   try {
-    const cats = getAll('SELECT id, name, name_en, slug FROM categories ORDER BY sort_order ASC')
-    if (cats.length > 0) {
+    const cats = getAll('SELECT id, name, name_en, slug, parent_id, is_enabled FROM categories ORDER BY sort_order ASC')
+    const visibleIds = getVisibleCategoryIds(cats)
+    const visibleCats = cats.filter(category => visibleIds.has(category.id))
+    if (visibleCats.length > 0) {
       options.push({
         group: '产品分类',
-        items: cats.map(c => ({
+        items: visibleCats.map(c => ({
           label: c.name || c.name_en,
           label_en: c.name_en || c.name,
           url: `/products/category/${c.slug || c.id}`

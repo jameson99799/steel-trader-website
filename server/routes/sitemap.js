@@ -1,9 +1,15 @@
 import { Router } from 'express'
 import { getAll, getOne } from '../db.js'
+import { getVisibleCategoryIds, visibleProductWhere } from '../services/catalogVisibility.js'
 
 const router = Router()
 
 const BASE_URL = 'https://www.sunseasteel.com'
+
+function visibleCategories() {
+    const categories = getAll('SELECT id, parent_id, is_enabled FROM categories')
+    return getVisibleCategoryIds(categories)
+}
 
 function escapeXml(str) {
     if (!str) return ''
@@ -154,7 +160,9 @@ router.get('/categories', (req, res) => {
         const urls = []
 
         // Product categories
+        const ids = visibleCategories()
         const categories = getAll(`SELECT id, slug, name_en, created_at FROM categories ORDER BY sort_order, id`)
+            .filter(category => ids.has(category.id))
         for (const c of categories) {
             const catSlug = c.slug || c.name_en?.toLowerCase().replace(/\\s+/g, '-') || c.id
             const locPath = `/products/category/${catSlug}`
@@ -201,10 +209,11 @@ router.get('/products', (req, res) => {
         const now = new Date().toISOString().split('T')[0]
         const activeLangs = getActiveLangs()
 
+        const visibility = visibleProductWhere('p', visibleCategories())
         // Primary: status=1 (active). Fallback: all products (handles non-standard status values)
-        let products = getAll(`SELECT id, slug, name_en, name, images, COALESCE(updated_at, created_at) as lastmod_date FROM products WHERE status = 1 ORDER BY id DESC`)
+        let products = getAll(`SELECT p.id, p.slug, p.name_en, p.name, p.images, COALESCE(p.updated_at, p.created_at) as lastmod_date FROM products p WHERE p.status = 1${visibility.clause} ORDER BY p.id DESC`, visibility.params)
         if (!products || products.length === 0) {
-            products = getAll(`SELECT id, slug, name_en, name, images, COALESCE(updated_at, created_at) as lastmod_date FROM products ORDER BY id DESC`)
+            products = getAll(`SELECT p.id, p.slug, p.name_en, p.name, p.images, COALESCE(p.updated_at, p.created_at) as lastmod_date FROM products p WHERE 1=1${visibility.clause} ORDER BY p.id DESC`, visibility.params)
             if (products && products.length > 0) {
                 console.log(`[sitemap] WARN: No products with status=1 found; using all ${products.length} products as fallback`)
             }

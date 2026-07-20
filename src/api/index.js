@@ -10,6 +10,14 @@ const CACHE_TTL = 5 * 60 * 1000  // 5 minutes
 
 function cacheKey(url) { return `_api_cache_${url}` }
 
+function invalidateCategoryCaches() {
+  const prefix = '_api_cache_/categories'
+  for (let index = localStorage.length - 1; index >= 0; index--) {
+    const key = localStorage.key(index)
+    if (key?.startsWith(prefix)) localStorage.removeItem(key)
+  }
+}
+
 // Get current non-English lang for API requests
 function getLangParam() {
   const lang = localStorage.getItem('lang')
@@ -158,9 +166,19 @@ export const api = {
   // Categories
   getCategories: () => cachedGet('/categories'),
   getCategoryTree: () => cachedGet('/categories/tree'),
-  createCategory: (data) => request('/categories', { method: 'POST', body: data }),
-  updateCategory: (id, data) => request(`/categories/${id}`, { method: 'PUT', body: data }),
-  deleteCategory: (id) => request(`/categories/${id}`, { method: 'DELETE' }),
+  getAdminCategoryTree: () => request('/categories/admin/tree'),
+  createCategory: (data) => {
+    invalidateCategoryCaches()
+    return request('/categories', { method: 'POST', body: data })
+  },
+  updateCategory: (id, data) => {
+    invalidateCategoryCaches()
+    return request(`/categories/${id}`, { method: 'PUT', body: data })
+  },
+  deleteCategory: (id) => {
+    invalidateCategoryCaches()
+    return request(`/categories/${id}`, { method: 'DELETE' })
+  },
 
   // Products (not cached — list changes frequently with filters/search)
   getProducts: (params = {}) => {

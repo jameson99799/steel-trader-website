@@ -42,9 +42,13 @@ async function initDb() {
       parent_id INTEGER DEFAULT 0,
       sort_order INTEGER DEFAULT 0,
       image TEXT,
+      is_enabled INTEGER NOT NULL DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
+
+  // Existing categories remain publicly visible after this additive migration.
+  try { db.exec('ALTER TABLE categories ADD COLUMN is_enabled INTEGER NOT NULL DEFAULT 1') } catch (e) { }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS roofing_profiles (
@@ -1315,6 +1319,7 @@ Requirements:
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_news_slug ON news(slug)') } catch (e) { }
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_news_status ON news(status)') } catch (e) { }
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug)') } catch (e) { }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_categories_parent_enabled ON categories(parent_id, is_enabled)') } catch (e) { }
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_news_categories_slug ON news_categories(slug)') } catch (e) { }
 
   // 初始化默认数据
