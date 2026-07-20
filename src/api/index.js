@@ -80,7 +80,7 @@ const request = async (url, options = {}) => {
   })
 
   // Auto-redirect to login on 401 (expired/invalid token)
-  if (response.status === 401) {
+  if (response.status === 401 && !options.skipUnauthorizedRedirect) {
     // Only auto-redirect for admin API calls, not public ones
     const isAdminPage = window.location.pathname.startsWith('/admin')
     if (isAdminPage) {
@@ -159,7 +159,11 @@ export const api = {
   // Base request (for custom endpoints)
   request,
   // Auth
-  login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+  login: (data) => request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(data),
+    skipUnauthorizedRedirect: true
+  }),
   changePassword: (data) => request('/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
   getMe: () => request('/auth/me'),
 
