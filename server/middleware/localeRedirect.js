@@ -5,7 +5,7 @@ const SEARCH_REFERER_HOSTS = [
   /(^|\.)bing\.com$/i,
   /(^|\.)yahoo\.(?:com|[a-z]{2})(?:\.[a-z]{2})?$/i,
   /(^|\.)baidu\.com$/i,
-  /(^|\.)yandex\.[a-z.]+$/i,
+  /(^|\.)yandex\.(?:com|[a-z]{2})$/i,
   /(^|\.)duckduckgo\.com$/i
 ]
 

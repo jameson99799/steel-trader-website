@@ -39,6 +39,10 @@ test('lookalike Google and Yahoo domains are not treated as search referrals', a
   }
 })
 
+test('lookalike Yandex domains are not treated as search referrals', async () => {
+  assert.deepEqual(await run({ method: 'GET', path: '/zh/products/coil', originalUrl: '/zh/products/coil', ip: '8.8.8.8', headers: { referer: 'https://yandex.ru.evil/search?q=coil' }, cookies: {} }), { next: true, cookies: [] })
+})
+
 test('automatic-selection preference and non-public paths are not redirected', async () => {
   const google = { referer: 'https://www.google.com/search?q=coil' }
   assert.deepEqual(await run({ method: 'GET', path: '/zh/products/coil', originalUrl: '/zh/products/coil', ip: '8.8.8.8', headers: google, cookies: { locale_auto_selected: '1' } }), { next: true, cookies: [] })
