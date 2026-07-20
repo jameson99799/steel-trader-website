@@ -16,8 +16,50 @@ const COUNTRY_LANGUAGES = new Map([
 
 function normalizeIp(ip) {
   if (typeof ip !== 'string') return null
-  const value = ip.trim().replace(/^::ffff:/i, '')
-  return isIP(value) ? value : null
+  const value = ip.trim()
+  const version = isIP(value)
+  if (!version) return null
+  if (version === 4) return value
+  return mappedIpv4(value) || value
+}
+
+function ipv6Groups(ip) {
+  if (isIP(ip) !== 6) return null
+  const halves = ip.toLowerCase().split('::')
+  if (halves.length > 2) return null
+
+  const parseHalf = (half) => {
+    if (!half) return []
+    const parts = half.split(':')
+    const groups = []
+    for (let index = 0; index < parts.length; index++) {
+      const part = parts[index]
+      if (part.includes('.')) {
+        if (index !== parts.length - 1 || isIP(part) !== 4) return null
+        const octets = part.split('.').map(Number)
+        groups.push((octets[0] << 8) | octets[1], (octets[2] << 8) | octets[3])
+      } else {
+        if (!/^[0-9a-f]{1,4}$/.test(part)) return null
+        groups.push(parseInt(part, 16))
+      }
+    }
+    return groups
+  }
+
+  const left = parseHalf(halves[0])
+  const right = parseHalf(halves[1] || '')
+  if (!left || !right) return null
+  if (halves.length === 1) return left.length === 8 ? left : null
+
+  const missing = 8 - left.length - right.length
+  if (missing < 1) return null
+  return [...left, ...Array(missing).fill(0), ...right]
+}
+
+function mappedIpv4(ip) {
+  const groups = ipv6Groups(ip)
+  if (!groups || groups.slice(0, 5).some(Boolean) || groups[5] !== 0xffff) return null
+  return `${groups[6] >> 8}.${groups[6] & 0xff}.${groups[7] >> 8}.${groups[7] & 0xff}`
 }
 
 function isPrivateIpv4(ip) {
@@ -37,18 +79,19 @@ function isPrivateIpv4(ip) {
 }
 
 function isPrivateIpv6(ip) {
-  const value = ip.toLowerCase()
-  return value === '::' ||
-    value === '::1' ||
-    value.startsWith('fc') ||
-    value.startsWith('fd') ||
-    /^fe[89ab]/.test(value) ||
-    value.startsWith('2001:db8:') ||
-    value.startsWith('ff')
+  const groups = ipv6Groups(ip)
+  if (!groups) return true
+  const allLeadingZero = groups.slice(0, 7).every(group => group === 0)
+  return (allLeadingZero && (groups[7] === 0 || groups[7] === 1)) ||
+    (groups[0] & 0xfe00) === 0xfc00 ||
+    (groups[0] & 0xffc0) === 0xfe80 ||
+    (groups[0] === 0x2001 && groups[1] === 0x0db8) ||
+    (groups[0] & 0xff00) === 0xff00
 }
 
 export function getClientIp(req) {
-  return normalizeIp(req?.ip)
+  const normalized = normalizeIp(req?.ip)
+  return normalized && isPublicIp(normalized) ? normalized : null
 }
 
 export function isPublicIp(ip) {
@@ -110,25 +153,50 @@ function validResult(result, source) {
 export function createGeoIpService(options = {}) {
   const primary = options.lookupPrimary || lookupPrimary
   const fallback = options.lookupFallback || lookupFallback
+  const now = typeof options.now === 'function' ? options.now : Date.now
+  const successTtlMs = Number.isFinite(options.successTtlMs) ? options.successTtlMs : SUCCESS_TTL_MS
+  const failureTtlMs = Number.isFinite(options.failureTtlMs) ? options.failureTtlMs : FAILURE_TTL_MS
+  const maxCacheEntries = Number.isInteger(options.maxCacheEntries) && options.maxCacheEntries > 0
+    ? options.maxCacheEntries
+    : 1000
   const cache = new Map()
   const inFlight = new Map()
+  let requestsSinceSweep = 0
+
+  function pruneExpired(force = false) {
+    requestsSinceSweep++
+    if (!force && requestsSinceSweep < 100) return
+    requestsSinceSweep = 0
+    const currentTime = now()
+    for (const [key, cached] of cache) {
+      if (cached.expiresAt <= currentTime) cache.delete(key)
+    }
+  }
+
+  function cacheResult(key, value) {
+    pruneExpired(cache.size >= maxCacheEntries)
+    while (cache.size >= maxCacheEntries && !cache.has(key)) {
+      cache.delete(cache.keys().next().value)
+    }
+    cache.set(key, {
+      value,
+      expiresAt: now() + (value ? successTtlMs : failureTtlMs)
+    })
+  }
 
   async function resolve(ip) {
     const normalized = normalizeIp(ip)
     if (!normalized || !isPublicIp(normalized)) return null
 
     const cached = cache.get(normalized)
-    if (cached && cached.expiresAt > Date.now()) return cached.value
+    if (cached && cached.expiresAt > now()) return cached.value
     if (cached) cache.delete(normalized)
     if (inFlight.has(normalized)) return inFlight.get(normalized)
 
     const lookup = (async () => {
       const primaryResult = validResult(await withTimeout(primary, normalized), 'primary')
       const result = primaryResult || validResult(await withTimeout(fallback, normalized), 'fallback')
-      cache.set(normalized, {
-        value: result,
-        expiresAt: Date.now() + (result ? SUCCESS_TTL_MS : FAILURE_TTL_MS)
-      })
+      cacheResult(normalized, result)
       return result
     })()
 

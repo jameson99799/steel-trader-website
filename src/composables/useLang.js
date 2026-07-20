@@ -342,8 +342,10 @@ export function useLang() {
     _fromRouter = fromRouter
     lang.value = newLang
     localStorage.setItem('lang', newLang)
-    document.cookie = `locale_preference=${encodeURIComponent(newLang)}; Path=/; Max-Age=31536000; SameSite=Lax`
-    document.cookie = 'locale_auto_selected=; Path=/; Max-Age=0; SameSite=Lax'
+    if (!fromRouter) {
+      document.cookie = `locale_preference=${encodeURIComponent(newLang)}; Path=/; Max-Age=31536000; SameSite=Lax`
+      document.cookie = 'locale_auto_selected=; Path=/; Max-Age=0; SameSite=Lax'
+    }
 
     if (!loadedLangs.has(newLang) && newLang !== 'en' && newLang !== 'zh') {
       await loadUITranslations(newLang)

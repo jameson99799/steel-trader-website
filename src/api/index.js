@@ -192,6 +192,7 @@ export const api = {
     return request(`/products/admin/list${query ? `?${query}` : ''}`)
   },
   getProduct: (id) => request(appendLang(`/products/${id}`)),
+  getAdminProduct: (id) => request(`/products/admin/${id}`),
   createProduct: (data) => request('/products', { method: 'POST', body: data }),
   updateProduct: (id, data) => request(`/products/${id}`, { method: 'PUT', body: data }),
   deleteProduct: (id) => request(`/products/${id}`, { method: 'DELETE' }),

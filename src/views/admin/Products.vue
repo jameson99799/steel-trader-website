@@ -769,7 +769,7 @@ async function loadImportImages() {
   importImages.value = []; importSelected.value = []
   if (!importProductId.value) return
   try {
-    const p = await api.getProduct(importProductId.value)
+    const p = await api.getAdminProduct(importProductId.value)
     importImages.value = p.images ? p.images.split(',').filter(Boolean) : []
   } catch (e) { console.error(e) }
 }
@@ -914,10 +914,7 @@ function onAIChannelChange() {
 async function onRefProductChange() {
   if (aiRefProductId.value > 0) {
     try {
-      const resp = await fetch('/api/products/' + aiRefProductId.value, {
-        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
-      })
-      const p = await resp.json()
+      const p = await api.getAdminProduct(aiRefProductId.value)
       aiRefTemplate.value = p.detail_content || ''
     } catch (e) { aiRefTemplate.value = '' }
   } else {
@@ -1148,12 +1145,14 @@ const loadCategories = async () => {
 }
 
 const openModal = async (product = null) => {
-  let fullProduct = product;
+  let fullProduct = null;
   if (product && product.id) {
     try {
-      fullProduct = await api.getProduct(product.id)
+      fullProduct = await api.getAdminProduct(product.id)
     } catch (e) {
       console.error('Failed to fetch full product details', e)
+      alert('加载完整商品详情失败: ' + e.message)
+      return
     }
   }
 
@@ -1259,7 +1258,7 @@ const handleDelete = async (product) => {
 async function duplicateProduct(product) {
   if (!confirm(`复制产品「${product.name}」？`)) return
   try {
-    const original = await api.getProduct(product.id)
+    const original = await api.getAdminProduct(product.id)
     // Open the modal pre-filled with the original's data, ready to save as new
     openModal(null)  // reset first
     await new Promise(r => setTimeout(r, 50))
@@ -1466,7 +1465,7 @@ async function previewCopyImgs() {
   copyImgPreview.value = []
   if (!copyImgSourceId.value) return
   try {
-    const p = await api.getProduct(copyImgSourceId.value)
+    const p = await api.getAdminProduct(copyImgSourceId.value)
     if (!p.detail_content) return
     const parser = new DOMParser()
     const doc = parser.parseFromString(p.detail_content, 'text/html')

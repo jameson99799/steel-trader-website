@@ -75,8 +75,8 @@ export function createLocaleRedirect({ getActiveCodes, resolveCountry }) {
         maxAge: 24 * 60 * 60 * 1000
       })
       return res.redirect(302, req.originalUrl.replace(/^\/[a-z]{2}(?=\/|$)/i, `/${targetLanguage}`))
-    } catch (error) {
-      return next(error)
+    } catch {
+      return next()
     }
   }
 }

@@ -12,6 +12,13 @@ function publicProductVisibility(alias = 'p') {
   return visibleProductWhere(alias, getVisibleCategoryIds(categories))
 }
 
+export function getAdminProductDetail(id, queryOne = getOne) {
+  return queryOne(
+    'SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?',
+    [id]
+  )
+}
+
 function listProducts(req, res, { publicOnly }) {
   const { category_id, featured, status, page = 1, limit = 20 } = req.query
   let sql = 'SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description, p.description_en, p.is_featured, p.status, p.sort_order, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE 1=1'
@@ -83,6 +90,12 @@ router.get('/', (req, res) => {
 
 router.get('/admin/list', authMiddleware, (req, res) => {
   listProducts(req, res, { publicOnly: false })
+})
+
+router.get('/admin/:id', authMiddleware, (req, res) => {
+  const product = getAdminProductDetail(req.params.id)
+  if (!product) return res.status(404).json({ error: 'Product not found' })
+  res.json(product)
 })
 
 // Public API: Get all active products (no auth required)

@@ -81,3 +81,23 @@ test('does not redirect when the detected language is already active or disabled
     resolveCountry: async () => 'IN'
   }), { next: true, cookies: [] })
 })
+
+test('GeoIP resolver rejection fails open to the requested page', async () => {
+  const middleware = createLocaleRedirect({
+    getActiveCodes: () => new Set(['en', 'zh', 'hi']),
+    resolveCountry: async () => { throw new Error('GeoIP unavailable') }
+  })
+  const req = {
+    method: 'GET',
+    path: '/zh/products/coil',
+    originalUrl: '/zh/products/coil',
+    ip: '8.8.8.8',
+    headers: { referer: 'https://www.google.com/search?q=coil' },
+    cookies: {}
+  }
+
+  const nextArgs = await new Promise(resolve => {
+    middleware(req, { cookie: () => {}, redirect: () => {} }, (...args) => resolve(args))
+  })
+  assert.deepEqual(nextArgs, [])
+})

@@ -247,7 +247,7 @@ onMounted(async () => {
 
   // Load product
   try {
-    product.value = await api.getProduct(productId)
+    product.value = await api.getAdminProduct(productId)
     detailHtml.value = product.value.detail_content || ''
   } catch (e) {
     alert('加载产品失败: ' + e.message)
