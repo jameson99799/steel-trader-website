@@ -33,6 +33,12 @@ test('manual preference and non-search traffic are not redirected', async () => 
   assert.deepEqual(await run({ method: 'GET', path: '/zh/products/coil', originalUrl: '/zh/products/coil', ip: '8.8.8.8', headers: { referer: 'https://example.com/' }, cookies: {} }), { next: true, cookies: [] })
 })
 
+test('lookalike Google and Yahoo domains are not treated as search referrals', async () => {
+  for (const referer of ['https://google.com.evil/search?q=coil', 'https://yahoo.co.uk.evil/search?q=coil']) {
+    assert.deepEqual(await run({ method: 'GET', path: '/zh/products/coil', originalUrl: '/zh/products/coil', ip: '8.8.8.8', headers: { referer }, cookies: {} }), { next: true, cookies: [] })
+  }
+})
+
 test('automatic-selection preference and non-public paths are not redirected', async () => {
   const google = { referer: 'https://www.google.com/search?q=coil' }
   assert.deepEqual(await run({ method: 'GET', path: '/zh/products/coil', originalUrl: '/zh/products/coil', ip: '8.8.8.8', headers: google, cookies: { locale_auto_selected: '1' } }), { next: true, cookies: [] })

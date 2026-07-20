@@ -1,9 +1,9 @@
 import { getClientIp, languageForCountry } from '../services/geoip.js'
 
 const SEARCH_REFERER_HOSTS = [
-  /(^|\.)google\.[a-z.]+$/i,
+  /(^|\.)google\.(?:com|[a-z]{2})(?:\.[a-z]{2})?$/i,
   /(^|\.)bing\.com$/i,
-  /(^|\.)yahoo\.[a-z.]+$/i,
+  /(^|\.)yahoo\.(?:com|[a-z]{2})(?:\.[a-z]{2})?$/i,
   /(^|\.)baidu\.com$/i,
   /(^|\.)yandex\.[a-z.]+$/i,
   /(^|\.)duckduckgo\.com$/i
