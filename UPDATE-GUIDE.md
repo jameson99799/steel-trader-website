@@ -138,5 +138,18 @@ sqlite3 data/database.db "SELECT 'products:', COUNT(*) FROM products; SELECT 'ne
 
 ---
 
+## Post-backup deployment verification: catalog, locale and GeoIP
+
+Run these checks after the backup has been verified and `server-update.sh` has finished:
+
+1. Confirm catalog visibility is still enforced. A known hidden product must return HTTP 404 on its public URL, and the public category tree must not include hidden categories/products. Verify both the public product URL and `GET /api/categories` with a known hidden record.
+2. From an India-based connection, make a first Google referral request to a non-Hindi localized page with no `locale_preference` or `locale_auto_selected` cookie. For example, request `/zh/products/coil?utm=google` with a Google referer. It must respond `302`, preserve the path/query, set `locale_auto_selected=1`, and point to `/hi/products/coil?utm=google`.
+3. Repeat from a country without an enabled mapped language (or an unmapped country). The first Google referral must fall back to `/en/...`; it must not redirect to a disabled language. A manual language selection must set `locale_preference` and prevent automatic redirection.
+4. Send a chat message and verify that the new `live_chat_messages` record has the expected `ip`, `country`, `country_code`, and `geo_source` values. Check `pm2 logs led-trade --lines 100 --nostream` for GeoIP, proxy, or application errors.
+
+### Proxy trust reminder
+
+Node trusts exactly its direct Nginx proxy (`trust proxy = 1`). Nginx must continue to send `X-Real-IP`, `X-Forwarded-For`, and `X-Forwarded-Proto`. When Cloudflare is in front, configure current Cloudflare source ranges in Nginx and use `real_ip_header CF-Connecting-IP`; never trust `CF-Connecting-IP` directly in Node.
+
 > 💡 **此文件最后更新：2026-03-06**  
 > 如有问题，将 `/tmp/steel-trader-db-manual-*.db` 中最新有数据的文件覆盖到 `data/database.db` 即可恢复。

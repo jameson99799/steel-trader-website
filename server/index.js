@@ -12,6 +12,8 @@ import sharp from 'sharp'
 import { initDb, getAll, getOne, run, findFuzzyBySlug } from './db.js'
 import { loadTranslationsForLang, translateProduct, translateNews, translateCompany } from './helpers/translate.js'
 import { buildPublicCategoryTree, getVisibleCategoryIds, visibleProductWhere } from './services/catalogVisibility.js'
+import { createGeoIpService } from './services/geoip.js'
+import { createLocaleRedirect } from './middleware/localeRedirect.js'
 import authRoutes from './routes/auth.js'
 import securityRoutes from './routes/security.js'
 import categoriesRoutes from './routes/categories.js'
@@ -52,6 +54,7 @@ import chatRoutes from './routes/chat.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
 app.set('trust proxy', 1) // Trust reverse proxy to correctly report HTTP/HTTPS proto
+const geoIp = createGeoIpService()
 const PORT = process.env.PORT || 3001
 const NODE_ENV = process.env.NODE_ENV || 'development'
 
@@ -483,6 +486,16 @@ async function startServer() {
     app.get('/health', (req, res) => {
       res.json({ status: 'ok', timestamp: new Date().toISOString() })
     })
+
+    // Search landing localization must run before the root/language/slug normalizers below.
+    app.use(createLocaleRedirect({
+      getActiveCodes: () => {
+        const activeCodes = new Set((getAll('SELECT code FROM languages WHERE status=1') || []).map(({ code }) => code))
+        activeCodes.add('en')
+        return activeCodes
+      },
+      resolveCountry: ip => geoIp.resolve(ip)
+    }))
 
     // 生产环境 SPA 路由 — 动态SEO Meta注入
     if (NODE_ENV === 'production') {

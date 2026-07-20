@@ -2,6 +2,16 @@ server {
     listen 80;
     server_name your-domain.com;
 
+    # Node has `trust proxy` set to 1: it trusts this direct Nginx proxy only.
+    # Keep the three proxy headers below so Express receives the client IP and HTTPS protocol.
+    #
+    # Cloudflare deployments: configure Nginx with Cloudflare's current trusted source
+    # ranges (`set_real_ip_from ...` for every IPv4 and IPv6 range), then use:
+    #   real_ip_header CF-Connecting-IP;
+    #   real_ip_recursive on;
+    # Do not trust CF-Connecting-IP directly in Node or proxy an unvalidated external
+    # header to Node. Nginx must validate the Cloudflare source before it becomes $remote_addr.
+
     # 重定向到 HTTPS（配置 SSL 后启用）
     # return 301 https://$server_name$request_uri;
 
