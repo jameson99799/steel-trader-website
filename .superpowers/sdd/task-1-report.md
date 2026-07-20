@@ -66,3 +66,15 @@
    - Failed as expected after adding the recursive-count assertion because Dashboard only used `categories.length`.
 3. GREEN command: `node --test test/catalogVisibility.test.js`
    - Passed 5/5 after switching Dashboard and Translations to authenticated catalog sources and adding the recursive count.
+
+## Third review follow-up
+
+- Added `src/utils/categoryTree.js` with `flattenCategoryTree` and applied it before `Translations.vue` assigns the authenticated admin tree to its flat category-select data.
+- Replaced the brittle source-regex test with a behavior test that flattens a nested admin tree and verifies that a disabled child and its enabled grandchild are both retained.
+
+### Follow-up TDD and verification
+
+1. RED command: `node --test test/catalogVisibility.test.js`
+   - Failed as expected because `src/utils/categoryTree.js` did not exist.
+2. GREEN command: `node --test test/catalogVisibility.test.js`
+   - Passed 5/5 after adding the recursive flattening helper and using it in Translations.

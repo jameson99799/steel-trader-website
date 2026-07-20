@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import { getVisibleCategoryIds, buildPublicCategoryTree, visibleProductWhere } from '../server/services/catalogVisibility.js'
 import { buildAdminCategoryTree } from '../server/routes/categories.js'
+import { flattenCategoryTree } from '../src/utils/categoryTree.js'
 
 const rows = [
   { id: 1, parent_id: 0, is_enabled: 1 },
@@ -43,13 +43,18 @@ test('public categories are pruned while the admin tree retains disabled records
   ])
 })
 
-test('admin dashboard and translation views use complete authenticated catalog sources', async () => {
-  const [dashboard, translations] = await Promise.all([
-    readFile(new URL('../src/views/admin/Dashboard.vue', import.meta.url), 'utf8'),
-    readFile(new URL('../src/views/admin/Translations.vue', import.meta.url), 'utf8')
+test('flattening an admin tree retains disabled descendants for category selection', () => {
+  assert.deepEqual(flattenCategoryTree(buildAdminCategoryTree(rows)), [
+    { id: 1, parent_id: 0, is_enabled: 1, children: [
+      { id: 2, parent_id: 1, is_enabled: 0, children: [
+        { id: 3, parent_id: 2, is_enabled: 1, children: [] }
+      ] },
+      { id: 4, parent_id: 1, is_enabled: 1, children: [] }
+    ] },
+    { id: 2, parent_id: 1, is_enabled: 0, children: [
+      { id: 3, parent_id: 2, is_enabled: 1, children: [] }
+    ] },
+    { id: 3, parent_id: 2, is_enabled: 1, children: [] },
+    { id: 4, parent_id: 1, is_enabled: 1, children: [] }
   ])
-  assert.match(dashboard, /api\.getAdminProducts\(/)
-  assert.match(dashboard, /api\.getAdminCategoryTree\(/)
-  assert.match(dashboard, /countCategoryTree\(categories\)/)
-  assert.match(translations, /api\.getAdminCategoryTree\(/)
 })

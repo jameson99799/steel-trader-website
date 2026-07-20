@@ -733,6 +733,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed, nextTick, watch } from 'vue'
 import api from '../../api'
+import { flattenCategoryTree } from '../../utils/categoryTree'
 
 defineOptions({ name: 'TranslationsPage' })
 
@@ -1607,7 +1608,7 @@ async function loadGranularStatus() {
     gtLangs.value = res.languages || []
     if (explicitType.value === 'product') {
       const cats = await api.getAdminCategoryTree()
-      gtCategories.value = cats || []
+      gtCategories.value = flattenCategoryTree(cats)
     }
     filterGranularItems()
   } catch (e) {
