@@ -17,6 +17,7 @@ import {
   renderSeoDocument,
   renderSeoErrorPage
 } from './services/seoDocument.js'
+import { getPublicTranslationSettings } from './services/publicInitialState.js'
 import authRoutes from './routes/auth.js'
 import securityRoutes from './routes/security.js'
 import categoriesRoutes from './routes/categories.js'
@@ -1323,7 +1324,7 @@ async function startServer() {
           ssrProduct: req.ssrProduct || null,
           seoSettings: seoSettings,
           languages: getAll('SELECT * FROM languages WHERE status=1 ORDER BY sort_order, code') || [],
-          translationSettings: getOne('SELECT enabled, multilingual_enabled FROM translation_settings WHERE id = 1') || {},
+          translationSettings: getPublicTranslationSettings(getOne),
           featuredProducts: ssrFeaturedProducts,
           categories: ssrCategories
         }
