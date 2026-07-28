@@ -553,9 +553,17 @@ async function loadArticle(slug) {
       // ── GEO: Inject Article JSON-LD ──────────────────────────
       const a = article.value
       const siteUrl = window.location.origin
-      const articleUrl = `${siteUrl}/news/${a.slug || a.id}`
+      const articleUrl = new URL(window.location.pathname, siteUrl).href
       const articleTitle = a.seo_title || a.title_en || a.title || ''
       const articleDesc = a.seo_description || a.summary_en || a.summary || ''
+      const companyName = comp?.name_en || comp?.name || 'SunSea Steel'
+      const articleAuthor = seoRes?.default_news_author
+        ? { '@type': 'Person', 'name': seoRes.default_news_author }
+        : {
+            '@type': 'Organization',
+            'name': companyName,
+            'url': new URL(langPath('/about'), siteUrl).href
+          }
 
       const articleSchema = {
         '@context': 'https://schema.org',
@@ -566,10 +574,14 @@ async function loadArticle(slug) {
         'datePublished': a.created_at,
         ...(a.updated_at && { 'dateModified': a.updated_at }),
         ...(a.cover_image && { 'image': a.cover_image.startsWith('http') ? a.cover_image : siteUrl + a.cover_image }),
-        ...(seoRes?.default_news_author && { 'author': { '@type': 'Person', 'name': seoRes.default_news_author } }),
+        'author': articleAuthor,
         'publisher': {
           '@type': 'Organization',
-          'name': document.title || 'SunSea Steel'
+          'name': companyName,
+          'logo': {
+            '@type': 'ImageObject',
+            'url': `${siteUrl}/uploads/logo.png`
+          }
         },
         'mainEntityOfPage': { '@type': 'WebPage', '@id': articleUrl }
       }

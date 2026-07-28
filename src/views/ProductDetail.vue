@@ -507,7 +507,7 @@ onMounted(async () => {
     if (product.value) {
       const p = product.value
       const siteUrl = window.location.origin
-      const productUrl = `${siteUrl}/products/${p.slug || p.id}`
+      const productUrl = new URL(window.location.pathname, siteUrl).href
       const productName = p.name_en || p.name || ''
       const productDesc = p.seo_description || p.description_en || p.description || ''
       const productImages = (p.images || '').split(',').filter(Boolean).map(img => img.startsWith('http') ? img : siteUrl + img)

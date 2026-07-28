@@ -863,6 +863,13 @@ async function startServer() {
               pageKeywords = seoT.seo_keywords || article.seo_keywords || pageKeywords
               ogType = 'article'
               if (article.cover_image) pageImage = article.cover_image.startsWith('http') ? article.cover_image : `${siteUrl}${article.cover_image}`
+              const articleAuthor = seoSettings.default_news_author
+                ? { '@type': 'Person', name: seoSettings.default_news_author }
+                : {
+                    '@type': 'Organization',
+                    name: companyNameTranslated,
+                    url: `${siteUrl}/${lang}/about`
+                  }
 
               extraSchemas += jsonLd({
                 '@context': 'https://schema.org', '@type': 'Article',
@@ -872,7 +879,7 @@ async function startServer() {
                 datePublished: article.created_at,
                 ...(article.updated_at && { dateModified: article.updated_at }),
                 ...(pageImage && { image: pageImage }),
-                ...(seoSettings.default_news_author && { author: { '@type': 'Person', name: seoSettings.default_news_author } }),
+                author: articleAuthor,
                 publisher: { '@type': orgType, name: companyNameTranslated, logo: { '@type': 'ImageObject', url: `${siteUrl}/uploads/logo.png` } },
                 mainEntityOfPage: { '@type': 'WebPage', '@id': pageCanonical }
               }, 'article-jsonld')
@@ -1229,9 +1236,7 @@ async function startServer() {
           logo: `${siteUrl}/uploads/logo.png`,
           description: (company.description_en || '').substring(0, 300),
           address: seoSettings.local_business_address || company.address_en || company.address || '',
-          foundingDate: '2010',
           areaServed: 'Worldwide',
-          numberOfEmployees: { '@type': 'QuantitativeValue', minValue: 100, maxValue: 500 },
           contactPoint: []
         }
         if (company.email) orgSchema.contactPoint.push({ '@type': 'ContactPoint', email: company.email, contactType: 'sales' })
