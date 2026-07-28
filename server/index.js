@@ -12,6 +12,11 @@ import sharp from 'sharp'
 import { initDb, getAll, getOne, run, findFuzzyBySlug } from './db.js'
 import { loadTranslationsForLang, translateProduct, translateNews, translateCompany } from './helpers/translate.js'
 import { buildPublicCategoryTree, getVisibleCategoryIds, visibleProductWhere } from './services/catalogVisibility.js'
+import {
+  getSeoResponsePolicy,
+  renderSeoDocument,
+  renderSeoErrorPage
+} from './services/seoDocument.js'
 import authRoutes from './routes/auth.js'
 import securityRoutes from './routes/security.js'
 import categoriesRoutes from './routes/categories.js'
@@ -558,7 +563,13 @@ async function startServer() {
           return res.status(404).send('Not Found')
         }
         
-        if (!indexHtmlTemplate) return res.sendFile(distIndexPath)
+        if (!indexHtmlTemplate) {
+          return res
+            .status(500)
+            .set('Cache-Control', 'no-store')
+            .set('Content-Type', 'text/html; charset=utf-8')
+            .send(renderSeoErrorPage())
+        }
 
         try {
         const url = req.path
@@ -1251,9 +1262,8 @@ async function startServer() {
         // Use company logo as default og:image when no page-specific image is available
         const ogImage = pageImage || `${siteUrl}/uploads/logo.png`
         const safeDesc = (pageDesc || '').substring(0, 160)
-        const robotsMeta = isNotFound
-          ? `<meta name="robots" content="noindex, follow" />`
-          : `<meta name="robots" content="index, follow" />`
+        const isPrivateRoute = url.startsWith('/admin') || url.startsWith('/crm')
+        const responsePolicy = getSeoResponsePolicy({ isPrivateRoute, isNotFound })
         const extraMeta = `
   <meta property="og:type" content="${esc(ogType)}" />
   <meta property="og:title" content="${esc(pageTitle)}" />
@@ -1269,16 +1279,6 @@ async function startServer() {
   <meta name="twitter:image" content="${esc(ogImage)}" />${seoSettings.geo_region ? `\n  <meta name="geo.region" content="${esc(seoSettings.geo_region)}" />` : ''}${seoSettings.geo_placename ? `\n  <meta name="geo.placename" content="${esc(seoSettings.geo_placename)}" />` : ''}${(seoSettings.geo_lat && seoSettings.geo_lng) ? `\n  <meta name="geo.position" content="${esc(seoSettings.geo_lat)};${esc(seoSettings.geo_lng)}" />\n  <meta name="ICBM" content="${esc(seoSettings.geo_lat)}, ${esc(seoSettings.geo_lng)}" />` : ''}
   ${hreflangTags}`
 
-        // ── Replace meta tags in HTML ──
-        html = html.replace(/<html([^>]*?)lang="[^"]*"/, `<html$1lang="${esc(lang)}"`)
-        html = html.replace(/<title>[^<]*<\/title>/, `<title>${esc(pageTitle)}</title>`)
-        html = html.replace(/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/, `<meta name="description" content="${esc(pageDesc)}">`)
-        html = html.replace(/<meta\s+name="keywords"\s+content="[^"]*"\s*\/?>/, `<meta name="keywords" content="${esc(pageKeywords)}">`)
-        html = html.replace(/<meta\s+name="robots"\s+content="[^"]*"\s*\/?>/, robotsMeta)
-        // Remove existing canonical if present, then add correct one via </head> injection
-        html = html.replace(/<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/, '')
-        const canonicalTag = `<link rel="canonical" href="${esc(pageCanonical)}">`
-        
         // ── Inject SSR content and INITIAL_STATE for hydration ──
         // Insert real content inside <body> so non-JS crawlers can read it
         if (url.startsWith('/admin') || url.startsWith('/crm')) {
@@ -1323,10 +1323,21 @@ async function startServer() {
           categories: ssrCategories
         }
         const stateTag = `<script>window.__INITIAL_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')}</script>`
-        html = html.replace('</head>', `${canonicalTag}\n  ${extraMeta}\n  ${extraSchemas}\n  ${stateTag}\n</head>`)
+        html = renderSeoDocument({
+          html,
+          lang,
+          title: pageTitle,
+          description: pageDesc,
+          keywords: pageKeywords,
+          canonical: pageCanonical,
+          robots: responsePolicy.robots,
+          metaHtml: extraMeta,
+          schemaHtml: extraSchemas,
+          stateHtml: stateTag
+        })
 
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+        res.setHeader('Cache-Control', responsePolicy.cacheControl)
         // Return 404 status for non-existent detail pages (fixes soft 404)
         if (isNotFound) {
           res.status(404).send(html)
@@ -1336,7 +1347,11 @@ async function startServer() {
 
         } catch (e) {
           console.error('SEO meta injection fatal error:', e)
-          res.sendFile(distIndexPath)
+          res
+            .status(500)
+            .set('Cache-Control', 'no-store')
+            .set('Content-Type', 'text/html; charset=utf-8')
+            .send(renderSeoErrorPage())
         }
       })
     }
