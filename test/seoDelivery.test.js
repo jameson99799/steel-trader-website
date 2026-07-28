@@ -45,6 +45,8 @@ test('new-install and update scripts deliver public HTML through Node', () => {
   assert.match(update, /scripts\/verifySeoDelivery\.mjs/)
   assert.match(update, /nginx -t/)
   assert.match(update, /\.seo-backup-\$\{TIMESTAMP\}/)
+  assert.match(update, /\$SUDO node scripts\/nginxSsrConfig\.mjs/)
+  assert.match(update, /\$SUDO cmp -s "\$SEO_NGINX_CONF" "\$SEO_NGINX_TMP"/)
   assert.doesNotMatch(update, /\/www\/server\/panel\/vhost\/nginx\/\*\.conf/)
   assert.doesNotMatch(update, /\/www\/server\/nginx\/conf\/nginx\.conf/)
 })

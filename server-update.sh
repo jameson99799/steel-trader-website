@@ -143,12 +143,12 @@ for SEO_NGINX_CONF in \
   [ -f "$SEO_NGINX_CONF" ] || continue
 
   SEO_NGINX_TMP="/tmp/steel-trader-nginx-${TIMESTAMP}.conf"
-  node scripts/nginxSsrConfig.mjs \
+  $SUDO node scripts/nginxSsrConfig.mjs \
     --input "$SEO_NGINX_CONF" \
     --output "$SEO_NGINX_TMP" \
     --port "${PORT:-3001}"
 
-  if ! cmp -s "$SEO_NGINX_CONF" "$SEO_NGINX_TMP"; then
+  if ! $SUDO cmp -s "$SEO_NGINX_CONF" "$SEO_NGINX_TMP"; then
     SEO_NGINX_BACKUP="${SEO_NGINX_CONF}.seo-backup-${TIMESTAMP}"
     $SUDO cp "$SEO_NGINX_CONF" "$SEO_NGINX_BACKUP"
     $SUDO cp "$SEO_NGINX_TMP" "$SEO_NGINX_CONF"
@@ -156,7 +156,7 @@ for SEO_NGINX_CONF in \
     if ! $SUDO nginx -t; then
       $SUDO cp "$SEO_NGINX_BACKUP" "$SEO_NGINX_CONF"
       $SUDO nginx -t || true
-      rm -f "$SEO_NGINX_TMP"
+      $SUDO rm -f "$SEO_NGINX_TMP"
       fail "Nginx SEO migration validation failed. Restored: ${SEO_NGINX_BACKUP}"
     fi
 
@@ -164,7 +164,7 @@ for SEO_NGINX_CONF in \
     SEO_NGINX_MIGRATED=1
     ok "Nginx public HTML now routes through Node. Backup: ${SEO_NGINX_BACKUP}"
   fi
-  rm -f "$SEO_NGINX_TMP"
+  $SUDO rm -f "$SEO_NGINX_TMP"
 done
 
 if [ "$SEO_NGINX_MIGRATED" -eq 0 ]; then
