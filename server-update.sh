@@ -19,6 +19,12 @@ echo ""
 
 [ ! -f "package.json" ] && fail "请在项目目录下运行: cd /www/wwwroot/steel-trader"
 
+if [ "$EUID" -eq 0 ]; then
+  SUDO=""
+else
+  SUDO="sudo"
+fi
+
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 DB_PATH="data/database.db"
 
@@ -126,26 +132,79 @@ ok "PM2 已启动（NODE_ENV=production）"
 echo ""
 pm2 status
 
-# ── 10. 智能修复 Nginx 视频上传大小限制 ──────────────
-info "检查并自动解锁大视频上传限制..."
-# 为了彻底突破宝塔面板针对独立站点的重写，我们需要扫过所有相关的 vhost 配置文件
-for NGINX_CONF in /www/server/nginx/conf/nginx.conf /etc/nginx/nginx.conf /www/server/panel/vhost/nginx/*.conf; do
-  if [ -f "$NGINX_CONF" ]; then
-    if grep -q "client_max_body_size" "$NGINX_CONF"; then
-      # 使用正则匹配将现有的各种数字加M/m/g/k 强制改为 1024M
-      sudo sed -i -E 's/client_max_body_size[[:space:]]+[0-9]+[A-Za-z]?/client_max_body_size 1024M/g' "$NGINX_CONF"
-    else
-      # 如果找不到，优先在 server { 下面插入，如果还没有则去 http { 下面插入
-      if grep -q "server[[:space:]]*{" "$NGINX_CONF"; then
-         sudo sed -i '/server[[:space:]]*{/a \    client_max_body_size 1024M;' "$NGINX_CONF"
-      else
-         sudo sed -i '/http[[:space:]]*{/a \    client_max_body_size 1024M;' "$NGINX_CONF"
-      fi
+# ── Guarded migration of the setup-generated legacy SPA vhost ──
+info "Checking whether the legacy Nginx SPA delivery block needs migration..."
+SEO_NGINX_MIGRATED=0
+for SEO_NGINX_CONF in \
+  /etc/nginx/sites-available/led-trade \
+  /etc/nginx/sites-available/steel-trader \
+  /www/server/panel/vhost/nginx/sunseasteel.com.conf \
+  /www/server/panel/vhost/nginx/www.sunseasteel.com.conf; do
+  [ -f "$SEO_NGINX_CONF" ] || continue
+
+  SEO_NGINX_TMP="/tmp/steel-trader-nginx-${TIMESTAMP}.conf"
+  node scripts/nginxSsrConfig.mjs \
+    --input "$SEO_NGINX_CONF" \
+    --output "$SEO_NGINX_TMP" \
+    --port "${PORT:-3001}"
+
+  if ! cmp -s "$SEO_NGINX_CONF" "$SEO_NGINX_TMP"; then
+    SEO_NGINX_BACKUP="${SEO_NGINX_CONF}.seo-backup-${TIMESTAMP}"
+    $SUDO cp "$SEO_NGINX_CONF" "$SEO_NGINX_BACKUP"
+    $SUDO cp "$SEO_NGINX_TMP" "$SEO_NGINX_CONF"
+
+    if ! $SUDO nginx -t; then
+      $SUDO cp "$SEO_NGINX_BACKUP" "$SEO_NGINX_CONF"
+      $SUDO nginx -t || true
+      rm -f "$SEO_NGINX_TMP"
+      fail "Nginx SEO migration validation failed. Restored: ${SEO_NGINX_BACKUP}"
     fi
-    sudo nginx -s reload 2>/dev/null || sudo systemctl reload nginx 2>/dev/null || true
+
+    $SUDO systemctl reload nginx 2>/dev/null || $SUDO nginx -s reload
+    SEO_NGINX_MIGRATED=1
+    ok "Nginx public HTML now routes through Node. Backup: ${SEO_NGINX_BACKUP}"
+  fi
+  rm -f "$SEO_NGINX_TMP"
+done
+
+if [ "$SEO_NGINX_MIGRATED" -eq 0 ]; then
+  warn "No setup-generated legacy SPA block was changed. Existing panel-managed Nginx files were left untouched."
+fi
+
+# ── 10. 智能修复 Nginx 视频上传大小限制 ──────────────
+info "检查本站点的大视频上传限制..."
+NGINX_UPLOAD_CHANGED=0
+for NGINX_CONF in \
+  /etc/nginx/sites-available/led-trade \
+  /etc/nginx/sites-available/steel-trader \
+  /www/server/panel/vhost/nginx/sunseasteel.com.conf \
+  /www/server/panel/vhost/nginx/www.sunseasteel.com.conf; do
+  if [ -f "$NGINX_CONF" ] && grep -q "client_max_body_size" "$NGINX_CONF"; then
+    NGINX_UPLOAD_BACKUP="${NGINX_CONF}.upload-backup-${TIMESTAMP}"
+    $SUDO cp "$NGINX_CONF" "$NGINX_UPLOAD_BACKUP"
+    $SUDO sed -i -E 's/client_max_body_size[[:space:]]+[0-9]+[A-Za-z]?/client_max_body_size 1024M/g' "$NGINX_CONF"
+    if ! $SUDO nginx -t; then
+      $SUDO cp "$NGINX_UPLOAD_BACKUP" "$NGINX_CONF"
+      $SUDO nginx -t || true
+      fail "Nginx upload-limit validation failed. Restored: ${NGINX_UPLOAD_BACKUP}"
+    fi
+    NGINX_UPLOAD_CHANGED=1
   fi
 done
-ok "Nginx 所有层级的拦截策略已全面突破，最大支持 1024M 上传！"
+if [ "$NGINX_UPLOAD_CHANGED" -eq 1 ]; then
+  $SUDO systemctl reload nginx 2>/dev/null || $SUDO nginx -s reload
+  ok "本站点最大支持 1024M 上传；未修改其他网站的 Nginx 配置。"
+else
+  warn "未找到本站点现有的 client_max_body_size；为避免误改面板配置，本次未自动插入。"
+fi
+
+# ── Public delivery gate: fail if Nginx/CDN still serves the generic SPA shell ──
+info "验证 Node 与公开域名的 SEO HTML 和子站点地图..."
+if ! PUBLIC_SITE_URL="${PUBLIC_SITE_URL:-https://www.sunseasteel.com}" \
+  node scripts/verifySeoDelivery.mjs; then
+  fail "公开 SEO 交付验证失败。请按 nginx.conf.example 检查当前域名的 location / 代理配置。"
+fi
+ok "公开 SEO 交付验证通过"
 
 echo ""
 echo "============================================================"

@@ -151,5 +151,33 @@ Run these checks after the backup has been verified and `server-update.sh` has f
 
 Node trusts exactly its direct Nginx proxy (`trust proxy = 1`). Nginx must continue to send `X-Real-IP`, `X-Forwarded-For`, and `X-Forwarded-Proto`. When Cloudflare is in front, configure current Cloudflare source ranges in Nginx and use `real_ip_header CF-Connecting-IP`; never trust `CF-Connecting-IP` directly in Node.
 
+## SEO/GEO 生产交付检查
+
+公开 HTML、`/sitemap.xml` 以及所有 `sitemap-*.xml` 必须由 Nginx 代理到
+`127.0.0.1:3001`。`/assets/` 和 `/uploads/` 仍可由 Nginx 直接提供。
+不要在公开 `location /` 中使用 `try_files $uri $uri/ /index.html`，否则 Google
+收到的是通用 Vite 页面，服务端生成的 canonical、hreflang、JSON-LD 和正文都不会送达。
+
+`server-update.sh` 会执行以下保护流程：
+
+1. 只识别并迁移旧版 `server-setup.sh` 生成的精确 SPA 配置块；
+2. 在原配置旁保存 `.seo-backup-时间戳` 备份；
+3. 运行 `nginx -t`，失败时立即恢复备份；
+4. 不重写未知或面板自定义的 `location /`；
+5. 同时比较本机 Node 和公开域名的 `/en/about` 与
+   `/sitemap-products.xml`，若公开域名仍返回通用页面或错误 XML，则更新以非零状态退出。
+
+如果提示未识别面板配置，请把 [nginx.conf.example](./nginx.conf.example)
+中的公开 `location /` 代理规则复制到当前域名的 Nginx 站点配置，执行
+`nginx -t` 后重载，再重新运行：
+
+```bash
+PUBLIC_SITE_URL=https://www.sunseasteel.com node scripts/verifySeoDelivery.mjs
+```
+
+验证通过后，在 Google Search Console 中对重要产品/文章 URL 使用“网址检查”，
+确认抓取到的 canonical 与 JSON-LD 正确，再提交站点地图并等待 Google 重新抓取。
+这些修复能消除技术交付阻碍，但不承诺具体排名位置。
+
 > 💡 **此文件最后更新：2026-03-06**  
 > 如有问题，将 `/tmp/steel-trader-db-manual-*.db` 中最新有数据的文件覆盖到 `data/database.db` 即可恢复。

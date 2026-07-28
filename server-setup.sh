@@ -164,13 +164,19 @@ $SUDO tee /etc/nginx/sites-available/${APP_NAME} >/dev/null << NGINXEOF
 server {
     listen 80;
     server_name ${DOMAIN} sunseasteel.com 43.159.129.164;
-    client_max_body_size 20M;
+    client_max_body_size 1024M;
 
-    # Frontend (Vue SPA)
+    # Public HTML and sitemap routes are rendered by Node for SEO/GEO.
     location / {
-        root ${DIR}/dist;
-        index index.html;
-        try_files \$uri \$uri/ /index.html;
+        proxy_pass http://127.0.0.1:${PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 30s;
+        proxy_read_timeout 300s;
     }
 
     # Hashed assets - long cache
@@ -189,6 +195,7 @@ server {
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_connect_timeout 30s;
         proxy_read_timeout 300s;
     }
