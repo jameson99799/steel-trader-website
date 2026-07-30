@@ -81,7 +81,8 @@ if [ -f "${DB_BACKUP}" ]; then
     mkdir -p data
     cp "${DB_BACKUP}" "${DB_PATH}"
     rm -f "${DB_PATH}-shm" "${DB_PATH}-wal"
-    ok "数据库已恢复（${BACKUP_SIZE} 字节）"
+    sqlite3 "${DB_PATH}" "DELETE FROM seo_render_cache;" 2>/dev/null || true
+    ok "数据库已恢复并清理了SEO缓存（${BACKUP_SIZE} 字节）"
   else
     warn "备份文件为空，跳过恢复"
   fi
