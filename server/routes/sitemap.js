@@ -85,6 +85,8 @@ function toDateStr(val, fallback) {
 router.get('/', (req, res) => {
     let lastProdDate = '2024-03-01'
     let lastNewsDate = '2024-03-01'
+    let lastCatDate = '2024-03-01'
+    let lastStaticDate = '2024-03-01'
     try {
         const lp = getOne('SELECT COALESCE(updated_at, created_at) as d FROM products WHERE status=1 ORDER BY d DESC LIMIT 1')
         if (lp && lp.d) lastProdDate = toDateStr(lp.d, '2024-03-01')
@@ -93,13 +95,14 @@ router.get('/', (req, res) => {
         if (ln && ln.d) lastNewsDate = toDateStr(ln.d, '2024-03-01')
         
         const lc = getOne('SELECT COALESCE(updated_at, created_at) as d FROM categories ORDER BY d DESC LIMIT 1')
-        const lastCatDate = lc && lc.d ? toDateStr(lc.d, '2024-03-01') : '2024-03-01'
-        const lastStaticDate = new Date().toISOString().split('T')[0] // Static always has futures changing today
+        if (lc && lc.d) lastCatDate = toDateStr(lc.d, '2024-03-01')
+        
+        lastStaticDate = new Date().toISOString().split('T')[0] // Static always has futures changing today
     } catch(e) {}
     
     // Explicitly fallback if not set to prevent syntax issues
-    const catDate = typeof lastCatDate !== 'undefined' ? lastCatDate : '2024-03-01'
-    const statDate = typeof lastStaticDate !== 'undefined' ? lastStaticDate : '2024-03-01'
+    const catDate = lastCatDate || '2024-03-01'
+    const statDate = lastStaticDate || '2024-03-01'
     
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

@@ -18,7 +18,7 @@ async function fetchText(fetchImpl, baseUrl, pathname, label, retries = 3) {
           accept: pathname.endsWith('.xml')
             ? 'application/xml,text/xml;q=0.9,*/*;q=0.8'
             : 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
-          'user-agent': 'SunSea-SEO-Delivery-Verifier/1.0'
+          'user-agent': 'Googlebot/2.1 (+http://www.google.com/bot.html)'
         },
         redirect: 'follow',
         signal: AbortSignal.timeout(15000)

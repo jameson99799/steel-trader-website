@@ -620,22 +620,6 @@ async function startServer() {
         }
         const isBot = /googlebot|bingbot|yandex|baiduspider|twitterbot|facebookexternalhit|rogerbot|linkedinbot|embedly|quora link preview|showyoubot|outbrain|pinterest\/0\.|pinterestbot|slackbot|vkShare|W3C_Validator|whatsapp|bot|spider|crawl|screaming frog|ahrefs|semrush|petalbot/i.test(req.get('user-agent') || '')
 
-        // ── 0. Puppeteer Dynamic Rendering for Bots (Highest Priority) ──
-        if (isBot && !req.get('user-agent').includes('Sunsea-Internal-Prerenderer')) {
-          try {
-            const prerenderedHtml = await renderUrl(req, PORT, req.originalUrl)
-            if (prerenderedHtml) {
-              return res
-                .status(200)
-                .set('Cache-Control', 'public, max-age=0, must-revalidate, s-maxage=300, stale-while-revalidate=60')
-                .set('Content-Type', 'text/html; charset=utf-8')
-                .send(prerenderedHtml)
-            }
-          } catch (err) {
-            console.error('[seo] Dynamic Render failed, falling back to string SSR:', err)
-          }
-        }
-
         try {
         const url = req.path
         let html = indexHtmlTemplate
@@ -1387,9 +1371,10 @@ async function startServer() {
         if (url.startsWith('/admin') || url.startsWith('/crm')) {
           const loadingHtml = `<style>body{margin:0;}.ssr-loader{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f1f5f9;font-family:-apple-system,sans-serif;color:#64748b;}.ssr-spinner{width:40px;height:40px;border:4px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:ssr-spin 1s linear infinite;margin-bottom:16px;}@keyframes ssr-spin{to{transform:rotate(360deg);}}</style><div class="ssr-loader"><div class="ssr-spinner"></div><div style="font-weight:600;letter-spacing:1px;">Loading System...</div></div>`
           html = html.replace('<div id="app">', `<div id="app">${loadingHtml}`)
+        } else if (ssrContent && isBot) {
+          // Dynamic Rendering for bots: Inject structural HTML directly into #app natively.
+          html = html.replace('<div id="app">', `<div id="app">\n${ssrContent}\n`)
         }
-        // Removed text-injected ssrContent to prevent "CSS hidden text" & "double H1" SEO penalties.
-        // Puppeteer dynamic rendering now exclusively handles structural bot DOMs.
         
         // Inject state for instant LCP rendering
         // Define a lightweight company object without heavy rich-text fields for SSR hydration
