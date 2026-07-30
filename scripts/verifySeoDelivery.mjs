@@ -7,29 +7,42 @@ function verificationUrl(baseUrl, pathname) {
   return url
 }
 
-async function fetchText(fetchImpl, baseUrl, pathname, label) {
+async function fetchText(fetchImpl, baseUrl, pathname, label, retries = 3) {
   const url = verificationUrl(baseUrl, pathname)
-  const response = await fetchImpl(url, {
-    headers: {
-      accept: pathname.endsWith('.xml')
-        ? 'application/xml,text/xml;q=0.9,*/*;q=0.8'
-        : 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
-      'user-agent': 'SunSea-SEO-Delivery-Verifier/1.0'
-    },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(15000)
-  })
+  let lastError = null;
 
-  if (!response) {
-    throw new Error(`${label}: no HTTP response`)
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetchImpl(url, {
+        headers: {
+          accept: pathname.endsWith('.xml')
+            ? 'application/xml,text/xml;q=0.9,*/*;q=0.8'
+            : 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+          'user-agent': 'SunSea-SEO-Delivery-Verifier/1.0'
+        },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(15000)
+      })
+
+      if (!response) {
+        throw new Error(`${label}: no HTTP response`)
+      }
+      if (!response.ok) {
+        throw new Error(`${label}: HTTP ${response.status}`)
+      }
+      return {
+        body: await response.text(),
+        contentType: response.headers.get('content-type') || ''
+      }
+    } catch (err) {
+      lastError = err;
+      if (i < retries - 1) {
+        // Wait 2 seconds before retrying to give the local server time to boot
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
   }
-  if (!response.ok) {
-    throw new Error(`${label}: HTTP ${response.status}`)
-  }
-  return {
-    body: await response.text(),
-    contentType: response.headers.get('content-type') || ''
-  }
+  throw new Error(`${label} fetching ${url} failed after ${retries} retries. Last error: ${lastError.message}`);
 }
 
 function validateAbout({ body }, label) {
