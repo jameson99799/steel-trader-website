@@ -83,24 +83,33 @@ function toDateStr(val, fallback) {
 
 // ── Sitemap Index (/sitemap.xml) ─────────────────────────────
 router.get('/', (req, res) => {
-    const now = new Date().toISOString().split('T')[0]
+    let lastProdDate = '2024-03-01'
+    let lastNewsDate = '2024-03-01'
+    try {
+        const lp = getOne('SELECT COALESCE(updated_at, created_at) as d FROM products WHERE status=1 ORDER BY d DESC LIMIT 1')
+        if (lp && lp.d) lastProdDate = toDateStr(lp.d, '2024-03-01')
+        
+        const ln = getOne('SELECT COALESCE(created_at, created_at) as d FROM news WHERE status=1 ORDER BY created_at DESC LIMIT 1')
+        if (ln && ln.d) lastNewsDate = toDateStr(ln.d, '2024-03-01')
+    } catch(e) {}
+    
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <sitemap>
     <loc>${BASE_URL}/sitemap-static.xml</loc>
-    <lastmod>${now}</lastmod>
+    <lastmod>2024-04-15</lastmod>
   </sitemap>
   <sitemap>
     <loc>${BASE_URL}/sitemap-products.xml</loc>
-    <lastmod>${now}</lastmod>
+    <lastmod>${lastProdDate}</lastmod>
   </sitemap>
   <sitemap>
     <loc>${BASE_URL}/sitemap-categories.xml</loc>
-    <lastmod>${now}</lastmod>
+    <lastmod>${lastProdDate}</lastmod>
   </sitemap>
   <sitemap>
     <loc>${BASE_URL}/sitemap-news.xml</loc>
-    <lastmod>${now}</lastmod>
+    <lastmod>${lastNewsDate}</lastmod>
   </sitemap>
 </sitemapindex>`
     res.setHeader('Content-Type', 'application/xml; charset=utf-8')
@@ -111,22 +120,19 @@ router.get('/', (req, res) => {
 router.get('/static', (req, res) => {
     res.setHeader('Content-Type', 'application/xml; charset=utf-8')
     try {
-        const now = new Date().toISOString().split('T')[0]
         const activeLangs = getActiveLangs()
 
         const staticPages = [
-            { loc: '/', priority: '1.0', changefreq: 'daily' },
-            { loc: '/products', priority: '0.9', changefreq: 'daily' },
-            { loc: '/news', priority: '0.8', changefreq: 'daily' },
-            { loc: '/factory', priority: '0.8', changefreq: 'weekly' },
-            { loc: '/about', priority: '0.7', changefreq: 'monthly' },
-            { loc: '/contact', priority: '0.7', changefreq: 'monthly' },
-            { loc: '/news/ral-colors', priority: '0.5', changefreq: 'yearly' },
-            { loc: '/news/roofing-profiles', priority: '0.7', changefreq: 'weekly' },
-            { loc: '/news/futures-price', priority: '0.8', changefreq: 'daily' },
+            { loc: '/', priority: '1.0', changefreq: 'weekly', lastmod: '2024-04-15' },
+            { loc: '/products', priority: '0.9', changefreq: 'weekly', lastmod: '2024-04-10' },
+            { loc: '/news', priority: '0.8', changefreq: 'weekly', lastmod: '2024-04-10' },
+            { loc: '/factory', priority: '0.8', changefreq: 'weekly', lastmod: '2024-03-25' },
+            { loc: '/about', priority: '0.7', changefreq: 'monthly', lastmod: '2024-03-01' },
+            { loc: '/contact', priority: '0.7', changefreq: 'monthly', lastmod: '2024-03-01' },
+            { loc: '/news/ral-colors', priority: '0.5', changefreq: 'yearly', lastmod: '2024-03-01' },
+            { loc: '/news/roofing-profiles', priority: '0.7', changefreq: 'weekly', lastmod: '2024-04-01' },
+            { loc: '/news/futures-price', priority: '0.8', changefreq: 'daily', lastmod: new Date().toISOString().split('T')[0] }, // Only futures price changes daily truly
         ]
-
-
 
         const seoSettings = getSeoSettings()
         const urls = []
@@ -135,7 +141,7 @@ router.get('/static', (req, res) => {
                 const langPath = `/${l.code}${p.loc === '/' ? '' : p.loc}`
                 urls.push(urlEntry({
                     loc: BASE_URL + langPath,
-                    lastmod: now,
+                    lastmod: p.lastmod,
                     changefreq: p.changefreq,
                     priority: p.priority,
                     hreflang: hreflangLinks(p.loc, activeLangs, seoSettings)
@@ -154,7 +160,7 @@ router.get('/static', (req, res) => {
 router.get('/categories', (req, res) => {
     res.setHeader('Content-Type', 'application/xml; charset=utf-8')
     try {
-        const now = new Date().toISOString().split('T')[0]
+        const fallbackDate = '2024-03-01'
         const activeLangs = getActiveLangs()
         const seoSettings = getSeoSettings()
         const urls = []
@@ -166,7 +172,7 @@ router.get('/categories', (req, res) => {
         for (const c of categories) {
             const catSlug = c.slug || c.name_en?.toLowerCase().replace(/\\s+/g, '-') || c.id
             const locPath = `/products/category/${catSlug}`
-            const lastmod = toDateStr(c.created_at, now)
+            const lastmod = toDateStr(c.created_at, fallbackDate)
             for (const l of activeLangs) {
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + locPath,
@@ -183,7 +189,7 @@ router.get('/categories', (req, res) => {
         for (const nc of newsCategories) {
             if (!nc.slug) continue
             const locPath = `/news/category/${nc.slug}`
-            const lastmod = toDateStr(nc.created_at, now)
+            const lastmod = toDateStr(nc.created_at, fallbackDate)
             for (const l of activeLangs) {
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + locPath,
@@ -206,7 +212,7 @@ router.get('/categories', (req, res) => {
 router.get('/products', (req, res) => {
     res.setHeader('Content-Type', 'application/xml; charset=utf-8')
     try {
-        const now = new Date().toISOString().split('T')[0]
+        const fallbackDate = '2024-03-01'
         const activeLangs = getActiveLangs()
 
         const visibility = visibleProductWhere('p', visibleCategories())
@@ -226,7 +232,7 @@ router.get('/products', (req, res) => {
         for (const p of products || []) {
             const prodSlug = p.slug || p.id
             const prodPath = `/products/${prodSlug}`
-            const lastmod = toDateStr(p.lastmod_date, now)
+            const lastmod = toDateStr(p.lastmod_date, fallbackDate)
             
             for (const l of activeLangs) {
                 let imagesHTML = ''
@@ -261,7 +267,7 @@ router.get('/products', (req, res) => {
 router.get('/news', (req, res) => {
     res.setHeader('Content-Type', 'application/xml; charset=utf-8')
     try {
-        const now = new Date().toISOString().split('T')[0]
+        const fallbackDate = '2024-03-01'
         const activeLangs = getActiveLangs()
         const news = getAll(`SELECT slug, id, title_en, title, cover_image, created_at FROM news WHERE status = 1 ORDER BY id DESC`)
 
@@ -270,7 +276,7 @@ router.get('/news', (req, res) => {
         for (const n of news) {
             const slug = n.slug || n.id
             const newsPath = `/news/${slug}`
-            const lastmod = toDateStr(n.created_at, now)
+            const lastmod = toDateStr(n.created_at, fallbackDate)
             
             for (const l of activeLangs) {
                 let imagesHTML = ''

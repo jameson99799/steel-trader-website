@@ -25,6 +25,13 @@ router.get('/', (req, res) => {
     const tMap = loadTranslationsForLang(lang)
     if (tMap) translateCompany(result, tMap, lang)
   }
+  const ts = result.updated_at ? new Date(result.updated_at).getTime() : Date.now()
+  const imgFields = ['logo', 'favicon', 'about_image', 'whatsapp_qr', 'wechat_qr']
+  imgFields.forEach(f => {
+    if (result[f] && typeof result[f] === 'string' && !result[f].startsWith('data:')) {
+      result[f] = result[f].split('?')[0] + '?t=' + ts
+    }
+  })
 
   res.json(result)
 })

@@ -324,6 +324,19 @@ async function initDb() {
   try { db.exec("ALTER TABLE indexing_queue ADD COLUMN gsc_last_crawl_time DATETIME") } catch (e) { }
   try { db.exec("ALTER TABLE indexing_queue ADD COLUMN gsc_inspection_date DATETIME") } catch (e) { }
 
+  // SEO Content Reviews table for dynamic JSON-LD rating/review schema
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS seo_reviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      target_type TEXT NOT NULL,
+      target_id INTEGER NOT NULL,
+      author_name TEXT NOT NULL,
+      rating REAL DEFAULT 5.0,
+      review_text TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
   // AI Channels table for AI product generation
   db.exec(`
     CREATE TABLE IF NOT EXISTS ai_channels (
