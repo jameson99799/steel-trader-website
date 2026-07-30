@@ -17,6 +17,7 @@ import {
   renderSeoDocument,
   renderSeoErrorPage
 } from './services/seoDocument.js'
+import { renderUrl } from './services/puppeteerRenderer.js'
 import { getPublicTranslationSettings } from './services/publicInitialState.js'
 import authRoutes from './routes/auth.js'
 import securityRoutes from './routes/security.js'
@@ -496,26 +497,7 @@ async function startServer() {
       let indexHtmlTemplate = ''
       try { 
         indexHtmlTemplate = readFileSync(distIndexPath, 'utf8')
-        // Preload hashed assets for faster discovery
-        const assetsDir = join(__dirname, '..', 'dist', 'assets')
-        if (existsSync(assetsDir)) {
-          let injectedCss = ''
-          let preloads = ''
-          readdirSync(assetsDir).forEach(file => {
-            if (file.endsWith('.css')) {
-              const cssPath = join(assetsDir, file)
-              try {
-                injectedCss += `<style>${readFileSync(cssPath, 'utf8')}</style>\n`
-              } catch (e) {}
-            } else if (file.endsWith('.js')) {
-              preloads += `<link rel="preload" href="/assets/${file}" as="script">\n`
-            }
-          })
-          if (injectedCss) {
-            indexHtmlTemplate = indexHtmlTemplate.replace(/<link[^>]+(?:rel="stylesheet"|href="[^"]+\.css")[^>]*>/gi, '')
-            indexHtmlTemplate = indexHtmlTemplate.replace('</head>', `${injectedCss}${preloads}</head>`)
-          }
-        }
+        // Removed inline CSS block to prevent 350KB HTML bloat. Let Vite's <link> tags handle it.
       } catch (e) {
         console.error('Failed to read or process dist/index.html:', e)
       }
@@ -635,6 +617,23 @@ async function startServer() {
             .set('Cache-Control', 'no-store')
             .set('Content-Type', 'text/html; charset=utf-8')
             .send(renderSeoErrorPage())
+        }
+        const isBot = /googlebot|bingbot|yandex|baiduspider|twitterbot|facebookexternalhit|rogerbot|linkedinbot|embedly|quora link preview|showyoubot|outbrain|pinterest\/0\.|pinterestbot|slackbot|vkShare|W3C_Validator|whatsapp|bot|spider|crawl|screaming frog|ahrefs|semrush|petalbot/i.test(req.get('user-agent') || '')
+
+        // ── 0. Puppeteer Dynamic Rendering for Bots (Highest Priority) ──
+        if (isBot && !req.get('user-agent').includes('Sunsea-Internal-Prerenderer')) {
+          try {
+            const prerenderedHtml = await renderUrl(req, PORT, req.originalUrl)
+            if (prerenderedHtml) {
+              return res
+                .status(200)
+                .set('Cache-Control', 'public, max-age=0, must-revalidate, s-maxage=300, stale-while-revalidate=60')
+                .set('Content-Type', 'text/html; charset=utf-8')
+                .send(prerenderedHtml)
+            }
+          } catch (err) {
+            console.error('[seo] Dynamic Render failed, falling back to string SSR:', err)
+          }
         }
 
         try {
@@ -790,6 +789,7 @@ async function startServer() {
                   priceCurrency: 'USD',
                   price: persistentPrice.toString(),
                   priceValidUntil: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
+                  validFrom: new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0],
                   itemCondition: 'https://schema.org/NewCondition',
                   availability: 'https://schema.org/InStock',
                   seller: { '@type': orgType, name: companyName },
@@ -826,7 +826,6 @@ async function startServer() {
                 }))
               }
               if (productImages.length) productSchema.image = productImages
-              if (product.category_name_en) productSchema.category = product[`category_name_${lang}`] || product.category_name_en
               const specsJson = product[`specs_${lang}`] || product.specs
               if (specsJson) {
                 try {
@@ -1388,9 +1387,9 @@ async function startServer() {
         if (url.startsWith('/admin') || url.startsWith('/crm')) {
           const loadingHtml = `<style>body{margin:0;}.ssr-loader{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f1f5f9;font-family:-apple-system,sans-serif;color:#64748b;}.ssr-spinner{width:40px;height:40px;border:4px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:ssr-spin 1s linear infinite;margin-bottom:16px;}@keyframes ssr-spin{to{transform:rotate(360deg);}}</style><div class="ssr-loader"><div class="ssr-spinner"></div><div style="font-weight:600;letter-spacing:1px;">Loading System...</div></div>`
           html = html.replace('<div id="app">', `<div id="app">${loadingHtml}`)
-        } else if (ssrContent) {
-          html = html.replace('<div id="app">', `<div id="app">\n<div id="ssr-content" class="seo-ssr-content" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">${ssrContent}</div>`)
         }
+        // Removed text-injected ssrContent to prevent "CSS hidden text" & "double H1" SEO penalties.
+        // Puppeteer dynamic rendering now exclusively handles structural bot DOMs.
         
         // Inject state for instant LCP rendering
         // Define a lightweight company object without heavy rich-text fields for SSR hydration

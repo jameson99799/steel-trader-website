@@ -337,6 +337,15 @@ async function initDb() {
     )
   `)
 
+  // Dynamic SEO Render Cache
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS seo_render_cache (
+      url TEXT PRIMARY KEY,
+      html TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
   // AI Channels table for AI product generation
   db.exec(`
     CREATE TABLE IF NOT EXISTS ai_channels (

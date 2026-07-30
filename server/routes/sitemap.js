@@ -89,15 +89,23 @@ router.get('/', (req, res) => {
         const lp = getOne('SELECT COALESCE(updated_at, created_at) as d FROM products WHERE status=1 ORDER BY d DESC LIMIT 1')
         if (lp && lp.d) lastProdDate = toDateStr(lp.d, '2024-03-01')
         
-        const ln = getOne('SELECT COALESCE(created_at, created_at) as d FROM news WHERE status=1 ORDER BY created_at DESC LIMIT 1')
+        const ln = getOne('SELECT COALESCE(updated_at, created_at) as d FROM news WHERE status=1 ORDER BY d DESC LIMIT 1')
         if (ln && ln.d) lastNewsDate = toDateStr(ln.d, '2024-03-01')
+        
+        const lc = getOne('SELECT COALESCE(updated_at, created_at) as d FROM categories ORDER BY d DESC LIMIT 1')
+        const lastCatDate = lc && lc.d ? toDateStr(lc.d, '2024-03-01') : '2024-03-01'
+        const lastStaticDate = new Date().toISOString().split('T')[0] // Static always has futures changing today
     } catch(e) {}
+    
+    // Explicitly fallback if not set to prevent syntax issues
+    const catDate = typeof lastCatDate !== 'undefined' ? lastCatDate : '2024-03-01'
+    const statDate = typeof lastStaticDate !== 'undefined' ? lastStaticDate : '2024-03-01'
     
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <sitemap>
     <loc>${BASE_URL}/sitemap-static.xml</loc>
-    <lastmod>2024-04-15</lastmod>
+    <lastmod>${statDate}</lastmod>
   </sitemap>
   <sitemap>
     <loc>${BASE_URL}/sitemap-products.xml</loc>
@@ -105,7 +113,7 @@ router.get('/', (req, res) => {
   </sitemap>
   <sitemap>
     <loc>${BASE_URL}/sitemap-categories.xml</loc>
-    <lastmod>${lastProdDate}</lastmod>
+    <lastmod>${catDate}</lastmod>
   </sitemap>
   <sitemap>
     <loc>${BASE_URL}/sitemap-news.xml</loc>
@@ -167,12 +175,12 @@ router.get('/categories', (req, res) => {
 
         // Product categories
         const ids = visibleCategories()
-        const categories = getAll(`SELECT id, slug, name_en, created_at FROM categories ORDER BY sort_order, id`)
+        const categories = getAll(`SELECT id, slug, name_en, COALESCE(updated_at, created_at) as lastmod_date FROM categories ORDER BY sort_order, id`)
             .filter(category => ids.has(category.id))
         for (const c of categories) {
             const catSlug = c.slug || c.name_en?.toLowerCase().replace(/\\s+/g, '-') || c.id
             const locPath = `/products/category/${catSlug}`
-            const lastmod = toDateStr(c.created_at, fallbackDate)
+            const lastmod = toDateStr(c.lastmod_date, fallbackDate)
             for (const l of activeLangs) {
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + locPath,
@@ -185,11 +193,11 @@ router.get('/categories', (req, res) => {
         }
 
         // News categories
-        const newsCategories = getAll(`SELECT id, slug, name_en, created_at FROM news_categories ORDER BY sort_order, id`)
+        const newsCategories = getAll(`SELECT id, slug, name_en, COALESCE(updated_at, created_at) as lastmod_date FROM news_categories ORDER BY sort_order, id`)
         for (const nc of newsCategories) {
             if (!nc.slug) continue
             const locPath = `/news/category/${nc.slug}`
-            const lastmod = toDateStr(nc.created_at, fallbackDate)
+            const lastmod = toDateStr(nc.lastmod_date, fallbackDate)
             for (const l of activeLangs) {
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + locPath,
@@ -269,14 +277,14 @@ router.get('/news', (req, res) => {
     try {
         const fallbackDate = '2024-03-01'
         const activeLangs = getActiveLangs()
-        const news = getAll(`SELECT slug, id, title_en, title, cover_image, created_at FROM news WHERE status = 1 ORDER BY id DESC`)
+        const news = getAll(`SELECT slug, id, title_en, title, cover_image, COALESCE(updated_at, created_at) as lastmod_date FROM news WHERE status = 1 ORDER BY id DESC`)
 
         const seoSettings = getSeoSettings()
         const urls = []
         for (const n of news) {
             const slug = n.slug || n.id
             const newsPath = `/news/${slug}`
-            const lastmod = toDateStr(n.created_at, fallbackDate)
+            const lastmod = toDateStr(n.lastmod_date, fallbackDate)
             
             for (const l of activeLangs) {
                 let imagesHTML = ''

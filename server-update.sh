@@ -95,6 +95,10 @@ if [ -d "${UPLOADS_BACKUP}" ] && [ "$(ls -A ${UPLOADS_BACKUP} 2>/dev/null)" ]; t
 fi
 
 # ── 7. 安装依赖 ──────────────────────────────────────────────
+info "安装 Puppeteer/OS 渲染依赖..."
+${SUDO} apt-get update >/dev/null 2>&1 || true
+${SUDO} apt-get install -yq ca-certificates fonts-liberation libasound2t64 libatk-bridge2.0-0 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgbm1 libgcc1 libglib2.0-0 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 lsb-release wget xdg-utils >/dev/null 2>&1 || true
+
 info "npm install..."
 npm install --production=false 2>&1 | tail -1
 ok "依赖就绪"
