@@ -1291,7 +1291,7 @@ async function startServer() {
           const loadingHtml = `<style>body{margin:0;}.ssr-loader{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f1f5f9;font-family:-apple-system,sans-serif;color:#64748b;}.ssr-spinner{width:40px;height:40px;border:4px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:ssr-spin 1s linear infinite;margin-bottom:16px;}@keyframes ssr-spin{to{transform:rotate(360deg);}}</style><div class="ssr-loader"><div class="ssr-spinner"></div><div style="font-weight:600;letter-spacing:1px;">Loading System...</div></div>`
           html = html.replace('<div id="app">', `<div id="app">${loadingHtml}`)
         } else if (ssrContent) {
-          html = html.replace('<div id="app">', `<div id="ssr-content" style="display:none">${ssrContent}</div>\n<div id="app">`)
+          html = html.replace('<div id="app">', `<div id="app">\n<div id="ssr-content" class="seo-ssr-content" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">${ssrContent}</div>`)
         }
         
         // Inject state for instant LCP rendering
