@@ -10,12 +10,16 @@ const CACHE_TTL = 5 * 60 * 1000  // 5 minutes
 
 function cacheKey(url) { return `_api_cache_${url}` }
 
-function invalidateCategoryCaches() {
-  const prefix = '_api_cache_/categories'
+function invalidateCachesByPrefix(urlPattern) {
+  const prefix = `_api_cache_${urlPattern}`
   for (let index = localStorage.length - 1; index >= 0; index--) {
     const key = localStorage.key(index)
     if (key?.startsWith(prefix)) localStorage.removeItem(key)
   }
+}
+
+function invalidateCategoryCaches() {
+  invalidateCachesByPrefix('/categories')
 }
 
 // Get current non-English lang for API requests
@@ -204,21 +208,21 @@ export const api = {
   // Company — cached (rarely changes)
   getCompany: () => cachedGet('/company'),
   updateCompany: (data) => {
-    localStorage.removeItem(cacheKey('/company'))
+    invalidateCachesByPrefix('/company')
     return request('/company', { method: 'PUT', body: data })
   },
 
   // Hero — cached (rarely changes)
   getHero: () => cachedGet('/hero'),
   updateHero: (data) => {
-    localStorage.removeItem(cacheKey('/hero'))
+    invalidateCachesByPrefix('/hero')
     return request('/hero', { method: 'PUT', body: JSON.stringify(data) })
   },
 
   // Page Texts — cached (rarely changes)
   getPageTexts: () => cachedGet('/pagetexts'),
   updatePageTexts: (data) => {
-    localStorage.removeItem(cacheKey('/pagetexts'))
+    invalidateCachesByPrefix('/pagetexts')
     return request('/pagetexts', { method: 'PUT', body: JSON.stringify(data) })
   },
 
@@ -243,15 +247,15 @@ export const api = {
   // News Categories
   getNewsCategories: () => cachedGet('/news-categories'),
   createNewsCategory: (data) => {
-    localStorage.removeItem(cacheKey('/news-categories'))
+    invalidateCachesByPrefix('/news-categories')
     return request('/news-categories', { method: 'POST', body: JSON.stringify(data) })
   },
   updateNewsCategory: (id, data) => {
-    localStorage.removeItem(cacheKey('/news-categories'))
+    invalidateCachesByPrefix('/news-categories')
     return request(`/news-categories/${id}`, { method: 'PUT', body: JSON.stringify(data) })
   },
   deleteNewsCategory: (id, moveToId) => {
-    localStorage.removeItem(cacheKey('/news-categories'))
+    invalidateCachesByPrefix('/news-categories')
     return request(`/news-categories/${id}${moveToId ? `?move_to=${moveToId}` : ''}`, { method: 'DELETE' })
   },
   moveArticles: (article_ids, category_id) => request('/news-categories/move', { method: 'POST', body: JSON.stringify({ article_ids, category_id }) }),
@@ -278,15 +282,20 @@ export const api = {
   getLanguages: () => request('/languages'),
   getActiveLanguages: () => cachedGet('/languages/active'),
   createLanguage: (data) => {
-    localStorage.removeItem(cacheKey('/languages/active'))
+    invalidateCachesByPrefix('/languages')
     return request('/languages', { method: 'POST', body: JSON.stringify(data) })
   },
   updateLanguage: (id, data) => {
-    localStorage.removeItem(cacheKey('/languages/active'))
+    invalidateCachesByPrefix('/languages')
     return request(`/languages/${id}`, { method: 'PUT', body: JSON.stringify(data) })
   },
+  updateLanguageStatus: (id, status) => {
+    invalidateCachesByPrefix('/languages')
+    invalidateCachesByPrefix('/translation/multilingual-status')
+    return request(`/languages/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) })
+  },
   deleteLanguage: (id) => {
-    localStorage.removeItem(cacheKey('/languages/active'))
+    invalidateCachesByPrefix('/languages')
     return request(`/languages/${id}`, { method: 'DELETE' })
   },
 
