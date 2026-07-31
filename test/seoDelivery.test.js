@@ -2,7 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { migrateLegacySpaLocation } from '../scripts/nginxSsrConfig.mjs'
-import { verifySeoDelivery } from '../scripts/verifySeoDelivery.mjs'
+import * as seoDelivery from '../scripts/verifySeoDelivery.mjs'
+
+const { verifySeoDelivery } = seoDelivery
 
 const productPath = '/en/products/sample-product'
 const newsPath = '/en/news/sample-news'
@@ -41,6 +43,45 @@ function deliveryFetch(overrides = {}) {
     })
   }
 }
+
+test('detail path discovery waits until the local API is ready', async () => {
+  assert.equal(typeof seoDelivery.discoverPath, 'function')
+  let attempts = 0
+  let waits = 0
+  const path = await seoDelivery.discoverPath(
+    async () => {
+      attempts += 1
+      if (attempts < 3) throw new TypeError('fetch failed')
+      return new Response(JSON.stringify({ data: [{ slug: 'ready-product' }] }), {
+        headers: { 'content-type': 'application/json' }
+      })
+    },
+    'http://local',
+    '/api/products?limit=1',
+    '/en/products',
+    'local product discovery',
+    { attempts: 3, intervalMs: 0, waitImpl: async () => { waits += 1 } }
+  )
+
+  assert.equal(path, '/en/products/ready-product')
+  assert.equal(attempts, 3)
+  assert.equal(waits, 2)
+})
+
+test('detail path discovery reports the failed readiness check', async () => {
+  assert.equal(typeof seoDelivery.discoverPath, 'function')
+  await assert.rejects(
+    seoDelivery.discoverPath(
+      async () => { throw new TypeError('fetch failed') },
+      'http://local',
+      '/api/news?limit=1',
+      '/en/news',
+      'local news discovery',
+      { attempts: 2, intervalMs: 0, waitImpl: async () => {} }
+    ),
+    /local news discovery.*failed after 2 attempts.*fetch failed/
+  )
+})
 
 test('migrates only the setup-generated legacy SPA location', () => {
   const legacy = `server {

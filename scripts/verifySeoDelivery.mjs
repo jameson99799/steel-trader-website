@@ -97,19 +97,49 @@ function validateDetail({ body }, label, pathname) {
   }
 }
 
-async function discoverPath(fetchImpl, baseUrl, apiPath, routePrefix, label) {
-  const response = await fetchImpl(new URL(apiPath, `${baseUrl.replace(/\/+$/, '')}/`), {
-    signal: AbortSignal.timeout(15000)
-  })
-  if (!response.ok) {
-    throw new Error(`${label}: HTTP ${response.status}`)
+export async function discoverPath(
+  fetchImpl,
+  baseUrl,
+  apiPath,
+  routePrefix,
+  label,
+  options = {}
+) {
+  const attempts = Number.isInteger(options.attempts) && options.attempts > 0
+    ? options.attempts
+    : 15
+  const intervalMs = Number.isFinite(options.intervalMs) && options.intervalMs >= 0
+    ? options.intervalMs
+    : 2000
+  const waitImpl = options.waitImpl || (ms => new Promise(resolve => setTimeout(resolve, ms)))
+  const url = new URL(apiPath, `${baseUrl.replace(/\/+$/, '')}/`)
+  let lastError = null
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetchImpl(url, {
+        signal: AbortSignal.timeout(15000)
+      })
+      if (!response.ok) {
+        throw new Error(`${label}: HTTP ${response.status}`)
+      }
+      const payload = await response.json()
+      const first = Array.isArray(payload) ? payload[0] : payload.data?.[0]
+      if (!first?.slug) {
+        throw new Error(`${label}: no published slug found`)
+      }
+      return `${routePrefix}/${first.slug}`
+    } catch (error) {
+      lastError = error
+      if (attempt < attempts) {
+        await waitImpl(intervalMs)
+      }
+    }
   }
-  const payload = await response.json()
-  const first = Array.isArray(payload) ? payload[0] : payload.data?.[0]
-  if (!first?.slug) {
-    throw new Error(`${label}: no published slug found`)
-  }
-  return `${routePrefix}/${first.slug}`
+
+  throw new Error(
+    `${label} fetching ${url} failed after ${attempts} attempts. Last error: ${lastError?.message || lastError}`
+  )
 }
 
 export async function verifySeoDelivery({
