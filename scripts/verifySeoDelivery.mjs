@@ -74,10 +74,50 @@ function validateSitemap({ body, contentType }, label) {
   }
 }
 
+function entryAsset(body, label) {
+  const match = body.match(/<script\b[^>]*\bsrc=["']([^"']*\/assets\/index-[^"']+\.js)["']/i)
+  if (!match) {
+    throw new Error(`${label}: entry asset is missing`)
+  }
+  return match[1]
+}
+
+function validateDetail({ body }, label, pathname) {
+  if (!/<script\b[^>]*\btype=["']application\/ld\+json["']/i.test(body)) {
+    throw new Error(`${label}: server JSON-LD is missing`)
+  }
+  if (!/<(?:main|article|h1)\b/i.test(body)) {
+    throw new Error(`${label}: server-readable detail content is missing`)
+  }
+  const canonical = [
+    ...body.matchAll(/<link\b[^>]*\brel=["']canonical["'][^>]*\bhref=["']([^"']+)["'][^>]*>/gi)
+  ][0]?.[1]
+  if (!canonical || new URL(canonical).pathname !== pathname) {
+    throw new Error(`${label}: canonical does not match ${pathname}`)
+  }
+}
+
+async function discoverPath(fetchImpl, baseUrl, apiPath, routePrefix, label) {
+  const response = await fetchImpl(new URL(apiPath, `${baseUrl.replace(/\/+$/, '')}/`), {
+    signal: AbortSignal.timeout(15000)
+  })
+  if (!response.ok) {
+    throw new Error(`${label}: HTTP ${response.status}`)
+  }
+  const payload = await response.json()
+  const first = Array.isArray(payload) ? payload[0] : payload.data?.[0]
+  if (!first?.slug) {
+    throw new Error(`${label}: no published slug found`)
+  }
+  return `${routePrefix}/${first.slug}`
+}
+
 export async function verifySeoDelivery({
   fetchImpl = globalThis.fetch,
   localBaseUrl,
-  publicBaseUrl
+  publicBaseUrl,
+  productPath,
+  newsPath
 }) {
   if (typeof fetchImpl !== 'function') {
     throw new Error('A fetch implementation is required')
@@ -86,12 +126,25 @@ export async function verifySeoDelivery({
     throw new Error('Both localBaseUrl and publicBaseUrl are required')
   }
 
-  const [localAbout, localSitemap, publicAbout, publicSitemap] = await Promise.all([
-    fetchText(fetchImpl, localBaseUrl, '/en/about', 'local about'),
-    fetchText(fetchImpl, localBaseUrl, '/sitemap-products.xml', 'local product sitemap'),
-    fetchText(fetchImpl, publicBaseUrl, '/en/about', 'public about'),
-    fetchText(fetchImpl, publicBaseUrl, '/sitemap-products.xml', 'public product sitemap')
-  ])
+  const pending = {
+    localAbout: fetchText(fetchImpl, localBaseUrl, '/en/about', 'local about'),
+    localSitemap: fetchText(fetchImpl, localBaseUrl, '/sitemap-products.xml', 'local product sitemap'),
+    publicAbout: fetchText(fetchImpl, publicBaseUrl, '/en/about', 'public about'),
+    publicSitemap: fetchText(fetchImpl, publicBaseUrl, '/sitemap-products.xml', 'public product sitemap')
+  }
+  if (productPath) {
+    pending.localProduct = fetchText(fetchImpl, localBaseUrl, productPath, 'local product detail')
+    pending.publicProduct = fetchText(fetchImpl, publicBaseUrl, productPath, 'public product detail')
+  }
+  if (newsPath) {
+    pending.localNews = fetchText(fetchImpl, localBaseUrl, newsPath, 'local news detail')
+    pending.publicNews = fetchText(fetchImpl, publicBaseUrl, newsPath, 'public news detail')
+  }
+
+  const names = Object.keys(pending)
+  const values = await Promise.all(Object.values(pending))
+  const results = Object.fromEntries(names.map((name, index) => [name, values[index]]))
+  const { localAbout, localSitemap, publicAbout, publicSitemap } = results
 
   const localCanonical = validateAbout(localAbout, 'local about')
   const publicCanonical = validateAbout(publicAbout, 'public about')
@@ -102,13 +155,33 @@ export async function verifySeoDelivery({
   }
   validateSitemap(localSitemap, 'local product sitemap')
   validateSitemap(publicSitemap, 'public product sitemap')
+
+  if (productPath) {
+    validateDetail(results.localProduct, 'local product detail', productPath)
+    validateDetail(results.publicProduct, 'public product detail', productPath)
+  }
+  if (newsPath) {
+    validateDetail(results.localNews, 'local news detail', newsPath)
+    validateDetail(results.publicNews, 'public news detail', newsPath)
+  }
+
+  const localEntry = entryAsset(localAbout.body, 'local about')
+  const publicEntry = entryAsset(publicAbout.body, 'public about')
+  if (localEntry !== publicEntry) {
+    throw new Error(`public entry asset differs from Node output (${publicEntry} != ${localEntry})`)
+  }
+  await fetchText(fetchImpl, publicBaseUrl, publicEntry, 'public entry asset')
 }
 
 async function runCli() {
   const port = process.env.PORT || '3001'
   const localBaseUrl = process.env.LOCAL_SITE_URL || `http://127.0.0.1:${port}`
   const publicBaseUrl = process.env.PUBLIC_SITE_URL || 'https://www.sunseasteel.com'
-  await verifySeoDelivery({ localBaseUrl, publicBaseUrl })
+  const [productPath, newsPath] = await Promise.all([
+    discoverPath(globalThis.fetch, localBaseUrl, '/api/products?limit=1', '/en/products', 'local product discovery'),
+    discoverPath(globalThis.fetch, localBaseUrl, '/api/news?limit=1', '/en/news', 'local news discovery')
+  ])
+  await verifySeoDelivery({ localBaseUrl, publicBaseUrl, productPath, newsPath })
   console.log(`SEO delivery verified: ${localBaseUrl} -> ${publicBaseUrl}`)
 }
 

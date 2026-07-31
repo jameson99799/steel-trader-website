@@ -4,6 +4,44 @@ import fs from 'node:fs'
 import { migrateLegacySpaLocation } from '../scripts/nginxSsrConfig.mjs'
 import { verifySeoDelivery } from '../scripts/verifySeoDelivery.mjs'
 
+const productPath = '/en/products/sample-product'
+const newsPath = '/en/news/sample-news'
+
+function htmlDocument(pathname, asset = '/assets/index-current.js') {
+  return `<html><head>
+    <link rel="canonical" href="https://www.sunseasteel.com${pathname}">
+    <script type="application/ld+json">{"@type":"Thing"}</script>
+    <script type="module" src="${asset}"></script>
+  </head><body><main><h1>Page</h1></main></body></html>`
+}
+
+function deliveryFetch(overrides = {}) {
+  return async url => {
+    const parsed = new URL(String(url))
+    const key = `${parsed.origin}${parsed.pathname}`
+    const override = overrides[key]
+    if (override) {
+      return new Response(override.body || '', {
+        status: override.status || 200,
+        headers: { 'content-type': override.contentType || 'text/html' }
+      })
+    }
+    if (parsed.pathname === '/sitemap-products.xml') {
+      return new Response('<?xml version="1.0"?><urlset></urlset>', {
+        headers: { 'content-type': 'application/xml' }
+      })
+    }
+    if (parsed.pathname === '/assets/index-current.js') {
+      return new Response('console.log("current")', {
+        headers: { 'content-type': 'text/javascript' }
+      })
+    }
+    return new Response(htmlDocument(parsed.pathname), {
+      headers: { 'content-type': 'text/html' }
+    })
+  }
+}
+
 test('migrates only the setup-generated legacy SPA location', () => {
   const legacy = `server {
     # Frontend (Vue SPA)
@@ -52,27 +90,75 @@ test('new-install and update scripts deliver public HTML through Node', () => {
 })
 
 test('delivery verifier accepts matching SSR HTML and child sitemap XML', async () => {
-  const canonical = 'https://www.sunseasteel.com/en/about'
-  const html = `<html><head>
-    <link rel="canonical" href="${canonical}">
-    <script type="application/ld+json">{"@type":"Organization"}</script>
-  </head><body><h1>About SunSea Steel</h1></body></html>`
-  const xml = '<?xml version="1.0"?><urlset></urlset>'
-  const responses = new Map([
-    ['http://local/en/about', new Response(html, { headers: { 'content-type': 'text/html' } })],
-    ['http://local/sitemap-products.xml', new Response(xml, { headers: { 'content-type': 'application/xml' } })],
-    ['https://public/en/about', new Response(html, { headers: { 'content-type': 'text/html' } })],
-    ['https://public/sitemap-products.xml', new Response(xml, { headers: { 'content-type': 'application/xml' } })]
-  ])
-
   await verifySeoDelivery({
-    fetchImpl: async url => {
-      const parsed = new URL(String(url))
-      return responses.get(`${parsed.origin}${parsed.pathname}`)
-    },
+    fetchImpl: deliveryFetch(),
     localBaseUrl: 'http://local',
-    publicBaseUrl: 'https://public'
+    publicBaseUrl: 'https://public',
+    productPath,
+    newsPath
   })
+})
+
+test('delivery verifier rejects a failing public product detail', async () => {
+  await assert.rejects(
+    verifySeoDelivery({
+      fetchImpl: deliveryFetch({
+        [`https://public${productPath}`]: { status: 500, body: 'Server Error' }
+      }),
+      localBaseUrl: 'http://local',
+      publicBaseUrl: 'https://public',
+      productPath,
+      newsPath
+    }),
+    /public product detail: HTTP 500/
+  )
+})
+
+test('delivery verifier rejects a failing public news detail', async () => {
+  await assert.rejects(
+    verifySeoDelivery({
+      fetchImpl: deliveryFetch({
+        [`https://public${newsPath}`]: { status: 500, body: 'Server Error' }
+      }),
+      localBaseUrl: 'http://local',
+      publicBaseUrl: 'https://public',
+      productPath,
+      newsPath
+    }),
+    /public news detail: HTTP 500/
+  )
+})
+
+test('delivery verifier rejects a stale public entry asset', async () => {
+  await assert.rejects(
+    verifySeoDelivery({
+      fetchImpl: deliveryFetch({
+        'https://public/en/about': {
+          body: htmlDocument('/en/about', '/assets/index-stale.js')
+        }
+      }),
+      localBaseUrl: 'http://local',
+      publicBaseUrl: 'https://public',
+      productPath,
+      newsPath
+    }),
+    /entry asset differs/
+  )
+})
+
+test('delivery verifier rejects a missing public entry asset file', async () => {
+  await assert.rejects(
+    verifySeoDelivery({
+      fetchImpl: deliveryFetch({
+        'https://public/assets/index-current.js': { status: 404, body: 'Not Found' }
+      }),
+      localBaseUrl: 'http://local',
+      publicBaseUrl: 'https://public',
+      productPath,
+      newsPath
+    }),
+    /public entry asset: HTTP 404/
+  )
 })
 
 test('delivery verifier rejects a public generic shell', async () => {
