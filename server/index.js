@@ -550,61 +550,6 @@ async function startServer() {
         return 520 + (Math.abs(hash) % 131)
       }
 
-      // Helper: dynamic SEO reviews (Auto-seed if empty)
-      const getOrGenerateSeoReviews = (type, id, title) => {
-        let reviews = getAll('SELECT * FROM seo_reviews WHERE target_type=? AND target_id=?', [type, id])
-        if (reviews && reviews.length > 0) return reviews
-        
-        // Auto-seed for Googlebot if 0 reviews exist
-        const count = 6 + (Math.abs(id) % 10) // 6 to 15
-        const names = ['John Smith', 'Michael Johnson', 'David Brown', 'James Wilson', 'Robert Taylor', 'William Davies', 'Richard Evans', 'Thomas Clark', 'Charles Wright', 'Daniel Harris', 'Matthew Lee', 'Anthony Walker', 'Mark Hall', 'Steven Allen', 'Paul Young']
-        const templates = [
-            "The {product} we received is of exceptional quality. Highly recommended.",
-            "Very fast delivery and professional packaging. The {product} arrived without any scratches.",
-            "We've been sourcing {product} from several suppliers, but this factory offers the best balance of price and durability.",
-            "Excellent manufacturing standards. The {product} meets all our technical requirements.",
-            "A reliable partner for {product}. We will definitely order again.",
-            "The {product} exceeded our expectations in terms of finish and strength.",
-            "Great communication from sales and perfect {product}. 5 stars.",
-            "We are very satisfied with the {product}. It performs perfectly in our applications.",
-            "Top-notch {product} and competitive pricing.",
-            "High quality {product}, shipped on time. What more could you ask for?",
-            "The dimensional accuracy of the {product} is exactly as specified.",
-            "We appreciate the stable quality of your {product} over the past few orders.",
-            "Outstanding {product} quality control.",
-            "Smooth transaction and robust {product}.",
-            "The {product} is exactly what we needed for our new project."
-        ]
-        
-        const seed = []
-        const usedIndices = new Set()
-        const usedTmpls = new Set()
-        for (let i = 0; i < count; i++) {
-            let nIdx = Math.abs(id * 7 + i * 3) % names.length;
-            while(usedIndices.has(nIdx)) nIdx = (nIdx + 1) % names.length;
-            usedIndices.add(nIdx);
-            
-            let tIdx = Math.abs(id * 11 + i * 7) % templates.length;
-            while(usedTmpls.has(tIdx)) tIdx = (tIdx + 1) % templates.length;
-            usedTmpls.add(tIdx);
-            
-            const rating = Number((4.7 + ((id + i) % 4) * 0.1).toFixed(1))
-            const text = templates[tIdx].replace(/{product}/g, title || 'product')
-            
-            const dateOffset = (id * 17 + i * 31) % 365
-            const d = new Date()
-            d.setDate(d.getDate() - dateOffset)
-            
-            seed.push({ author_name: names[nIdx], rating, review_text: text, created_at: d.toISOString() })
-        }
-        
-        for (const r of seed) {
-            run('INSERT INTO seo_reviews (target_type, target_id, author_name, rating, review_text, created_at) VALUES (?,?,?,?,?,?)', 
-                [type, id, r.author_name, r.rating, r.review_text, r.created_at])
-        }
-        return getAll('SELECT * FROM seo_reviews WHERE target_type=? AND target_id=?', [type, id])
-      }
-
       app.get('*', (req, res) => {
         // Fast-fail for missing static assets to prevent heavy SSR fallback
         if (req.path.match(/\.(js|css|ico|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot|mp4|webm|pdf)$/)) {
@@ -751,14 +696,6 @@ async function startServer() {
               if (images.length) pageImage = images[0].startsWith('http') ? images[0] : `${siteUrl}${images[0]}`
               // ── Product Schema (merged: Google Shopping + AI entity recognition) ──
               const persistentPrice = generatePersistentPrice(product.id)
-              const dbReviews = getOrGenerateSeoReviews('product', product.id, pName || 'steel coil')
-              
-              let avgRating = 5.0
-              if (dbReviews.length > 0) {
-                const totalR = dbReviews.reduce((sum, r) => sum + r.rating, 0)
-                avgRating = Number((totalR / dbReviews.length).toFixed(1))
-              }
-
               const productImages = (product.images || '').split(',').filter(Boolean).map(img => img.startsWith('http') ? img : `${siteUrl}${img}`)
               const productSchema = {
                 '@context': 'https://schema.org', '@type': 'Product',
@@ -795,19 +732,7 @@ async function startServer() {
                       transitTime: { '@type': 'QuantitativeValue', minValue: 5, maxValue: 20, unitCode: 'd' }
                     }
                   }
-                },
-                aggregateRating: { 
-                  '@type': 'AggregateRating', 
-                  ratingValue: avgRating.toString(), 
-                  reviewCount: dbReviews.length.toString() 
-                },
-                review: dbReviews.map(r => ({
-                  '@type': 'Review',
-                  author: { '@type': 'Person', name: r.author_name },
-                  datePublished: r.created_at.split('T')[0],
-                  reviewRating: { '@type': 'Rating', ratingValue: r.rating.toString(), bestRating: '5' },
-                  reviewBody: r.review_text
-                }))
+                }
               }
               if (productImages.length) productSchema.image = productImages
               const specsJson = product[`specs_${lang}`] || product.specs
@@ -933,13 +858,6 @@ async function startServer() {
                     url: `${siteUrl}/${lang}/about`
                   }
 
-              const dbNewsReviews = getOrGenerateSeoReviews('article', article.id, aTitle || 'article')
-              let avgNewsRating = 5.0
-              if (dbNewsReviews.length > 0) {
-                const totalR = dbNewsReviews.reduce((sum, r) => sum + r.rating, 0)
-                avgNewsRating = Number((totalR / dbNewsReviews.length).toFixed(1))
-              }
-
               const articleSchema = {
                 '@context': 'https://schema.org', '@type': 'Article',
                 headline: (baseArticleTitle).substring(0, 110),
@@ -950,19 +868,7 @@ async function startServer() {
                 ...(pageImage && { image: pageImage }),
                 author: articleAuthor,
                 publisher: { '@type': orgType, name: companyNameTranslated, logo: { '@type': 'ImageObject', url: `${siteUrl}/uploads/logo.png` } },
-                mainEntityOfPage: { '@type': 'WebPage', '@id': pageCanonical },
-                aggregateRating: { 
-                  '@type': 'AggregateRating', 
-                  ratingValue: avgNewsRating.toString(), 
-                  reviewCount: dbNewsReviews.length.toString() 
-                },
-                review: dbNewsReviews.map(r => ({
-                  '@type': 'Review',
-                  author: { '@type': 'Person', name: r.author_name },
-                  datePublished: r.created_at.split('T')[0],
-                  reviewRating: { '@type': 'Rating', ratingValue: r.rating.toString(), bestRating: '5' },
-                  reviewBody: r.review_text
-                }))
+                mainEntityOfPage: { '@type': 'WebPage', '@id': pageCanonical }
               }
               extraSchemas += jsonLd(articleSchema, 'article-jsonld')
               extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
