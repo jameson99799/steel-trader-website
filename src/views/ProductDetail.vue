@@ -48,8 +48,8 @@
               </div>
             </div>
             <div class="thumbnails" v-if="images.length > 1">
-              <button v-for="(img, index) in galleryImages" :key="index" 
-                  :class="['thumb-btn', { active: currentImage === img }]" 
+              <button v-for="(img, index) in images" :key="index"
+                  :class="['thumbnail-btn', { active: currentImage === img }]"
                   @click="currentImage = img">
                   <video v-if="img && (img.toLowerCase().endsWith('.mp4') || img.toLowerCase().endsWith('.webm'))" :src="img" style="width:100%;height:100%;object-fit:cover;" preload="metadata"></video>
                   <img v-else :src="img" :alt="`Product image ${index + 1}`" />
