@@ -47,8 +47,9 @@
                 <span class="badge badge-category">{{ localizedValue(product, 'category_name') }}</span>
               </div>
             </div>
-            <div class="thumbnails" v-if="images.length > 1">
+            <div class="thumbnails" ref="thumbnailContainer" v-if="images.length > 1">
               <button v-for="(img, index) in images" :key="index"
+                  :ref="el => setThumbnailButton(el, index)"
                   :class="['thumbnail-btn', { active: currentImage === img }]"
                   @click="currentImage = img">
                   <video v-if="img && (img.toLowerCase().endsWith('.mp4') || img.toLowerCase().endsWith('.webm'))" :src="img" style="width:100%;height:100%;object-fit:cover;" preload="metadata"></video>
@@ -253,7 +254,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
@@ -270,6 +271,8 @@ const pageTexts = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.
 const lightboxImg = ref(null)
 const allCategories = ref([])
 const relatedProducts = ref([])
+const thumbnailContainer = ref(null)
+const thumbnailButtons = ref([])
 
 // Handle generic anchor hashes inside v-html
 const handleAnchorClick = (e) => {
@@ -407,6 +410,36 @@ const sanitizedDetailContent = computed(() => {
 const currentImageIndex = computed(() => {
   return images.value.indexOf(currentImage.value)
 })
+
+const setThumbnailButton = (el, index) => {
+  if (el) {
+    thumbnailButtons.value[index] = el
+  } else {
+    delete thumbnailButtons.value[index]
+  }
+}
+
+const centerActiveThumbnail = async () => {
+  await nextTick()
+
+  const container = thumbnailContainer.value
+  const button = thumbnailButtons.value[currentImageIndex.value]
+  if (!container || !button) return
+
+  const containerRect = container.getBoundingClientRect()
+  const buttonRect = button.getBoundingClientRect()
+  const isOutsideHorizontalView = buttonRect.left < containerRect.left || buttonRect.right > containerRect.right
+
+  if (isOutsideHorizontalView) {
+    button.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'center'
+    })
+  }
+}
+
+watch(currentImage, centerActiveThumbnail)
 
 const prevImage = () => {
   const idx = currentImageIndex.value

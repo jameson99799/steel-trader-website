@@ -8,7 +8,7 @@ const source = fs.readFileSync(
 )
 
 test('product detail renders selectable thumbnails from the existing images source', () => {
-  assert.match(source, /<div class="thumbnails" v-if="images\.length > 1">/)
+  assert.match(source, /<div class="thumbnails"[^>]*v-if="images\.length > 1">/)
   assert.match(source, /v-for="\(img, index\) in images"/)
   assert.match(source, /:class="\['thumbnail-btn', \{ active: currentImage === img \}\]"/)
   assert.match(source, /@click="currentImage = img"/)
@@ -21,4 +21,17 @@ test('product detail keeps image and video thumbnail rendering', () => {
   assert.match(source, /img\.toLowerCase\(\)\.endsWith\('\.webm'\)/)
   assert.match(source, /<video v-if="img &&/)
   assert.match(source, /<img v-else :src="img"/)
+})
+
+test('active thumbnail follows main image navigation', () => {
+  assert.match(source, /<div class="thumbnails"[^>]*ref="thumbnailContainer"/)
+  assert.match(source, /:ref="el => setThumbnailButton\(el, index\)"/)
+  assert.match(source, /import \{[^}]*nextTick[^}]*\} from 'vue'/)
+  assert.match(source, /watch\(currentImage, centerActiveThumbnail\)/)
+  assert.match(source, /await nextTick\(\)/)
+  assert.match(source, /buttonRect\.left < containerRect\.left \|\| buttonRect\.right > containerRect\.right/)
+  assert.match(
+    source,
+    /button\.scrollIntoView\(\{[\s\S]*?behavior: 'smooth'[\s\S]*?block: 'nearest'[\s\S]*?inline: 'center'/
+  )
 })
