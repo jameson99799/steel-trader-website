@@ -7,6 +7,11 @@ const source = fs.readFileSync(
   'utf8'
 )
 
+const clientSource = fs.readFileSync(
+  new URL('../src/views/ProductDetail.vue', import.meta.url),
+  'utf8'
+)
+
 test('detail SSR does not generate or persist synthetic reviews', () => {
   assert.doesNotMatch(source, /getOrGenerateSeoReviews/)
   assert.doesNotMatch(source, /INSERT INTO seo_reviews/)
@@ -22,8 +27,26 @@ test('product schema adds only shared public review parts and article schema sta
     source.indexOf("jsonLd(articleSchema, 'article-jsonld')")
   )
 
-  assert.match(productBlock, /offers:/)
   assert.match(productBlock, /buildReviewSchemaParts\(publicReviews\)/)
   assert.doesNotMatch(productBlock, /aggregateRating\s*:|review\s*:/)
   assert.doesNotMatch(articleBlock, /aggregateRating|review:/)
+})
+
+test('server and client product schemas omit unsupported commercial claims', () => {
+  const serverProductBlock = source.slice(
+    source.indexOf("'@context': 'https://schema.org', '@type': 'Product'"),
+    source.indexOf("jsonLd(productSchema, 'product-jsonld')")
+  )
+  const clientProductBlock = clientSource.slice(
+    clientSource.indexOf("'@type': 'Product'"),
+    clientSource.indexOf('Object.assign(productSchema, buildReviewSchemaParts')
+  )
+
+  for (const block of [serverProductBlock, clientProductBlock]) {
+    assert.doesNotMatch(block, /\boffers\s*:/)
+    assert.doesNotMatch(block, /priceCurrency|priceValidUntil|shippingDetails|hasMerchantReturnPolicy/)
+  }
+
+  assert.match(serverProductBlock, /buildReviewSchemaParts\(publicReviews\)/)
+  assert.match(clientSource, /buildReviewSchemaParts\(publicReviews\.value\)/)
 })

@@ -581,17 +581,6 @@ async function startServer() {
       // Helper: build JSON-LD script tag
       const jsonLd = (obj, idStr = '') => `<script type="application/ld+json"${idStr ? ` id="${idStr}"` : ''}>${JSON.stringify(obj).replace(/</g, '\\u003c')}</script>`
 
-      // Helper: persistent ID hash for random price 520~650 USD (SEO purpose)
-      const generatePersistentPrice = (id) => {
-        let hash = 0
-        const str = id.toString()
-        for (let i = 0; i < str.length; i++) {
-            hash = ((hash << 5) - hash) + str.charCodeAt(i)
-            hash |= 0
-        }
-        return 520 + (Math.abs(hash) % 131)
-      }
-
       app.get('*', (req, res) => {
         // Fast-fail for missing static assets to prevent heavy SSR fallback
         if (req.path.match(/\.(js|css|ico|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot|mp4|webm|pdf)$/)) {
@@ -741,7 +730,6 @@ async function startServer() {
               const images = (product.images || '').split(',').filter(Boolean)
               if (images.length) pageImage = images[0].startsWith('http') ? images[0] : `${siteUrl}${images[0]}`
               // ── Product Schema (merged: Google Shopping + AI entity recognition) ──
-              const persistentPrice = generatePersistentPrice(product.id)
               const productImages = (product.images || '').split(',').filter(Boolean).map(img => img.startsWith('http') ? img : `${siteUrl}${img}`)
               let publicReviews = {
                 reviews: [],
@@ -764,36 +752,7 @@ async function startServer() {
                 description: (pageDesc).substring(0, 500),
                 url: pageCanonical,
                 brand: { '@type': 'Brand', name: companyNameTranslated },
-                manufacturer: { '@type': orgType, name: companyNameTranslated, url: siteUrl },
-                offers: {
-                  '@type': 'Offer',
-                  url: pageCanonical,
-                  priceCurrency: 'USD',
-                  price: persistentPrice.toString(),
-                  priceValidUntil: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
-                  validFrom: new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0],
-                  itemCondition: 'https://schema.org/NewCondition',
-                  availability: 'https://schema.org/InStock',
-                  seller: { '@type': orgType, name: companyName },
-                  hasMerchantReturnPolicy: {
-                    '@type': 'MerchantReturnPolicy',
-                    applicableCountry: 'US',
-                    returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
-                    merchantReturnDays: 30,
-                    returnMethod: 'https://schema.org/ReturnByMail',
-                    returnFees: 'https://schema.org/FreeReturn'
-                  },
-                  shippingDetails: {
-                    '@type': 'OfferShippingDetails',
-                    shippingRate: { '@type': 'MonetaryAmount', value: '0', currency: 'USD' },
-                    shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'US' },
-                    deliveryTime: {
-                      '@type': 'ShippingDeliveryTime',
-                      handlingTime: { '@type': 'QuantitativeValue', minValue: 1, maxValue: 5, unitCode: 'd' },
-                      transitTime: { '@type': 'QuantitativeValue', minValue: 5, maxValue: 20, unitCode: 'd' }
-                    }
-                  }
-                }
+                manufacturer: { '@type': orgType, name: companyNameTranslated, url: siteUrl }
               }
               if (productImages.length) productSchema.image = productImages
               const specsJson = product[`specs_${lang}`] || product.specs
