@@ -34,7 +34,7 @@
 
 ---
 
-### 任务 1：建立数据库结构和可重复旧数据迁移
+### Task 1：建立数据库结构和可重复旧数据迁移
 
 **Files:**
 - Create: `server/services/productReviewSchema.js`
@@ -212,7 +212,7 @@ git commit -m "feat: add normalized product review storage"
 
 ---
 
-### 任务 2：实现评价校验、批量解析和领域存储
+### Task 2：实现评价校验、批量解析和领域存储
 
 **Files:**
 - Create: `server/services/productReviews.js`
@@ -397,7 +397,7 @@ git commit -m "feat: add product review validation and workflows"
 
 ---
 
-### 任务 3：增加公共、管理员和外部评价 API
+### Task 3：增加公共、管理员和外部评价 API
 
 **Files:**
 - Create: `server/routes/product-reviews.js`
@@ -535,7 +535,7 @@ git commit -m "feat: add moderated product review APIs"
 
 ---
 
-### 任务 4：把产品评价接入 AI 全站翻译
+### Task 4：把产品评价接入 AI 全站翻译
 
 **Files:**
 - Create: `server/services/productReviewTranslation.js`
@@ -691,7 +691,7 @@ git commit -m "feat: translate published product reviews"
 
 ---
 
-### 任务 5：实现独立的后台产品评价管理页面
+### Task 5：实现独立的后台产品评价管理页面
 
 **Files:**
 - Create: `src/views/admin/Reviews.vue`
@@ -792,7 +792,7 @@ git commit -m "feat: add product review admin workflow"
 
 ---
 
-### 任务 6：实现多语言可见评价、SSR 和一致的 JSON-LD
+### Task 6：实现多语言可见评价、SSR 和一致的 JSON-LD
 
 **Files:**
 - Create: `shared/productReviewSeo.js`
@@ -914,7 +914,7 @@ git commit -m "feat: deliver visible localized product reviews"
 
 ---
 
-### 任务 7：缓存失效、接口文档和部署验证
+### Task 7：缓存失效、接口文档和部署验证
 
 **Files:**
 - Create: `test/productReviewDelivery.test.js`
@@ -1011,7 +1011,7 @@ git commit -m "test: verify product review SEO delivery"
 
 ---
 
-### 任务 8：最终审查、GitHub 推送和服务器更新交接
+### Task 8：最终审查、GitHub 推送和服务器更新交接
 
 **Files:**
 - Verify: 本计划中全部新增和修改文件
