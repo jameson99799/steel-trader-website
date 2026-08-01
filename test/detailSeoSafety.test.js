@@ -12,7 +12,7 @@ test('detail SSR does not generate or persist synthetic reviews', () => {
   assert.doesNotMatch(source, /INSERT INTO seo_reviews/)
 })
 
-test('product and article schemas do not publish synthetic review fields', () => {
+test('product schema adds only shared public review parts and article schema stays review-free', () => {
   const productBlock = source.slice(
     source.indexOf("'@context': 'https://schema.org', '@type': 'Product'"),
     source.indexOf("jsonLd(productSchema, 'product-jsonld')")
@@ -23,6 +23,7 @@ test('product and article schemas do not publish synthetic review fields', () =>
   )
 
   assert.match(productBlock, /offers:/)
-  assert.doesNotMatch(productBlock, /aggregateRating|review:/)
+  assert.match(productBlock, /buildReviewSchemaParts\(publicReviews\)/)
+  assert.doesNotMatch(productBlock, /aggregateRating\s*:|review\s*:/)
   assert.doesNotMatch(articleBlock, /aggregateRating|review:/)
 })

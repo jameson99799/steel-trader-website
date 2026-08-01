@@ -46,6 +46,8 @@ import aiAutoPostRoutes from './routes/ai-auto-post.js'
 import mailerRoutes from './routes/mailer.js'
 import externalApiRoutes from './routes/external-api.js'
 import productReviewRoutes from './routes/product-reviews.js'
+import { productReviewStore } from './routes/product-reviews.js'
+import { buildReviewSchemaParts } from '../shared/productReviewSeo.js'
 import backupRoutes from './routes/backup.js'
 import mediaRoutes from './routes/media.js'
 import crmAuthRoutes from './routes/crm-auth.js'
@@ -547,6 +549,29 @@ async function startServer() {
       // Helper: escape HTML entities in injected content
       const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
+      function renderPublicReviewsHtml(publicReviews) {
+        const schemaParts = buildReviewSchemaParts(publicReviews)
+        if (!schemaParts.review?.length) return ''
+
+        const visibleReviews = publicReviews.reviews.filter(review =>
+          buildReviewSchemaParts({ reviews: [review], summary: publicReviews.summary }).review?.length
+        )
+        const reviewsHtml = visibleReviews.map(review => {
+          const title = review.review_title ? `<h3>${esc(review.review_title)}</h3>` : ''
+          const date = review.review_date
+            ? `<time datetime="${esc(review.review_date)}">${esc(review.review_date)}</time>`
+            : ''
+          const verified = review.verified_purchase ? '<span class="review-verified">Verified purchase</span>' : ''
+          const incentive = review.is_incentivized ? '<span class="review-incentivized">Incentivized review</span>' : ''
+          const disclosure = review.is_incentivized && review.incentive_disclosure
+            ? `<p class="review-disclosure">${esc(review.incentive_disclosure)}</p>`
+            : ''
+          return `<article class="product-review">${title}<p class="review-author">${esc(review.author_name)}</p>${date}<p class="review-rating" aria-label="${esc(String(review.rating))} out of 5 stars">${esc(String(review.rating))} / 5</p><p class="review-body">${esc(review.review_text)}</p>${verified}${incentive}${disclosure}</article>`
+        }).join('')
+        const aggregate = schemaParts.aggregateRating
+        return `<section id="ssr-product-reviews" aria-labelledby="ssr-product-reviews-title"><h2 id="ssr-product-reviews-title">Product Reviews</h2><p class="review-summary">${esc(String(aggregate.ratingValue))} / 5 from ${esc(String(aggregate.reviewCount))} published reviews</p>${reviewsHtml}</section>`
+      }
+
       // Helper: build JSON-LD script tag
       const jsonLd = (obj, idStr = '') => `<script type="application/ld+json"${idStr ? ` id="${idStr}"` : ''}>${JSON.stringify(obj).replace(/</g, '\\u003c')}</script>`
 
@@ -708,6 +733,21 @@ async function startServer() {
               // ── Product Schema (merged: Google Shopping + AI entity recognition) ──
               const persistentPrice = generatePersistentPrice(product.id)
               const productImages = (product.images || '').split(',').filter(Boolean).map(img => img.startsWith('http') ? img : `${siteUrl}${img}`)
+              let publicReviews = {
+                reviews: [],
+                summary: { ratingValue: 0, reviewCount: 0 },
+                pagination: { page: 1, limit: 10, total: 0 }
+              }
+              try {
+                publicReviews = productReviewStore.listPublic({
+                  productId: product.id,
+                  lang,
+                  page: 1,
+                  limit: 10
+                })
+              } catch (error) {
+                console.warn('[SSR] Public product reviews unavailable')
+              }
               const productSchema = {
                 '@context': 'https://schema.org', '@type': 'Product',
                 name: pName,
@@ -753,6 +793,7 @@ async function startServer() {
                   if (specsList.length) productSchema.additionalProperty = specsList.map(s => ({ '@type': 'PropertyValue', name: s.name, value: s.value }))
                 } catch (e) {}
               }
+              Object.assign(productSchema, buildReviewSchemaParts(publicReviews))
               extraSchemas += jsonLd(productSchema, 'product-jsonld')
               const faqJson = product[`faq_items_${lang}`] || product.faq_items
               if (faqJson) {
@@ -800,6 +841,7 @@ async function startServer() {
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
               const hasFaqInDetail = /frequently asked|<h[23][^>]*>\\s*faq/i.test(detailHtml)
               const ssrFeaturedImage = productImages.length ? `<img src="${esc(productImages[0])}" alt="${escPName}" style="display:none;" />` : ''
+              const publicReviewsHtml = renderPublicReviewsHtml(publicReviews)
               
               // Internal linking for GEO crawler topic clusters
               let relatedHtml = ''
@@ -813,10 +855,13 @@ async function startServer() {
                 }).join('') + '</ul>'
               }
               
-              ssrContent = `<article id="ssr-product">${ssrFeaturedImage}<h1>${escPName}</h1><p>${escPDesc}</p>${specsHtml}${detailHtml}${hasFaqInDetail ? '' : faqHtml}${relatedHtml}</article>`
+              ssrContent = `<article id="ssr-product">${ssrFeaturedImage}<h1>${escPName}</h1><p>${escPDesc}</p>${specsHtml}${detailHtml}${publicReviewsHtml}${hasFaqInDetail ? '' : faqHtml}${relatedHtml}</article>`
               
               // Expose ssrData for client-side Vue hydration
               req.ssrProduct = product
+              req.ssrProductReviews = publicReviews
+              req.ssrProductReviewsProductId = product.id
+              req.ssrProductReviewsLang = lang
             } else {
               // Product not found — return 404 status to prevent soft 404
               isNotFound = true
@@ -1317,6 +1362,9 @@ async function startServer() {
           pageTexts: homeInitialState.pageTexts,
           ssrArticle: req.ssrArticle || null,
           ssrProduct: req.ssrProduct || null,
+          ssrProductReviews: req.ssrProductReviews || null,
+          ssrProductReviewsProductId: req.ssrProductReviewsProductId || null,
+          ssrProductReviewsLang: req.ssrProductReviewsLang || null,
           seoSettings: seoSettings,
           languages: getAll('SELECT * FROM languages WHERE status=1 ORDER BY sort_order, code') || [],
           translationSettings: getPublicTranslationSettings(getOne),
