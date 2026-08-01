@@ -4,6 +4,11 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import fs from 'fs'
 import { initializeProductReviewSchema } from './services/productReviewSchema.js'
+import {
+  DEFAULT_LLMS_TXT,
+  DEFAULT_LLMS_FULL_TXT,
+  migrateLegacyLlmsDefaults
+} from './services/seoDefaults.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const dataDir = join(__dirname, '..', 'data')
@@ -1396,18 +1401,11 @@ Requirements:
         'LED Trade — Professional LED Lighting Solutions', 
         'Professional LED lighting products manufacturer and exporter. High quality LED solutions for global customers.', 
         'LED lighting, LED manufacturer, LED exporter, professional LED solutions',
-        '# LED Trade AI Reading Guide\n\nWelcome to LED Trade. This file provides a structured overview of our website for AI agents and LLMs.\n\n## Core Navigation\n- [Products](/en/products)\n- [About Us](/en/about)\n- [Contact](/en/contact)\n- [News](/en/news)\n- [Factory](/en/factory)\n',
-        '# LED Trade Full Content Map\n\nThis document contains detailed information about all our products and technical guides for AI agents.\n'
+        DEFAULT_LLMS_TXT,
+        DEFAULT_LLMS_FULL_TXT
       )
   } else {
-    // Migration: populate llms_txt for existing row if empty
-    const currentSeo = db.prepare('SELECT llms_txt FROM seo_settings WHERE id = 1').get()
-    if (currentSeo && !currentSeo.llms_txt) {
-      db.prepare("UPDATE seo_settings SET llms_txt = ?, llms_full_txt = ? WHERE id = 1").run(
-        '# LED Trade AI Reading Guide\n\nWelcome to LED Trade. This file provides a structured overview of our website for AI agents and LLMs.\n\n## Core Navigation\n- [Products](/en/products)\n- [About Us](/en/about)\n- [Contact](/en/contact)\n- [News](/en/news)\n- [Factory](/en/factory)\n',
-        '# LED Trade Full Content Map\n\nThis document contains detailed information about all our products and technical guides for AI agents.\n'
-      )
-    }
+    migrateLegacyLlmsDefaults(db)
   }
 
   const pageTextsCount = db.prepare('SELECT COUNT(*) as count FROM page_texts').get().count
