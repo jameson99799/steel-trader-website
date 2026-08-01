@@ -3,10 +3,12 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import Database from 'better-sqlite3'
 import { reviewSourceHash } from '../server/services/productReviews.js'
-import {
+import * as productReviewTranslation from '../server/services/productReviewTranslation.js'
+
+const {
   collectProductReviews,
   syncProductReviewTranslation
-} from '../server/services/productReviewTranslation.js'
+} = productReviewTranslation
 
 function createFixture() {
   const db = new Database(':memory:')
@@ -27,7 +29,10 @@ function createFixture() {
       content_id INTEGER,
       content_field TEXT NOT NULL,
       original_text TEXT,
-      translated_text TEXT
+      translated_text TEXT,
+      is_manual INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE product_review_translations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,6 +46,8 @@ function createFixture() {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       UNIQUE (review_id, language_code)
     );
+    CREATE UNIQUE INDEX idx_translations_unique
+      ON translations(language_code, content_type, COALESCE(content_id, -1), content_field);
   `)
 
   const operations = []
@@ -276,6 +283,49 @@ test('rejects pending, hidden, and missing reviews and removes their public tran
   assert.deepEqual(deletes.map(operation => operation.params), [[1, 'es'], [2, 'es'], [3, 'es']])
 })
 
+test('a second manual override updates an existing manual review translation and republishes it', () => {
+  const fixture = createFixture()
+  const review = insertReview(fixture.db)
+  insertGenericTranslation(fixture.db, review.id, 'review_text', review.review_text, 'Texto actual')
+  const saveManualTranslation = productReviewTranslation.saveManualTranslation
+  const save = translated => saveManualTranslation({
+    lang: 'es',
+    type: 'product_review',
+    id: review.id,
+    field: 'review_title',
+    original: review.review_title,
+    translated,
+    getOne: fixture.getOne,
+    getAll: fixture.getAll,
+    run: fixture.run
+  })
+
+  save('Primer título')
+  save('Segundo título')
+
+  assert.deepEqual(fixture.db.prepare(`
+    SELECT original_text, translated_text, is_manual
+    FROM translations
+    WHERE language_code = 'es'
+      AND content_type = 'product_review'
+      AND content_id = ?
+      AND content_field = 'review_title'
+  `).get(review.id), {
+    original_text: review.review_title,
+    translated_text: 'Segundo título',
+    is_manual: 1
+  })
+  assert.deepEqual(fixture.db.prepare(`
+    SELECT review_title, review_text, source_hash
+    FROM product_review_translations
+    WHERE review_id = ? AND language_code = 'es'
+  `).get(review.id), {
+    review_title: 'Segundo título',
+    review_text: 'Texto actual',
+    source_hash: reviewSourceHash(review)
+  })
+})
+
 test('translation route wires reviews through every type mapping and every generic mutation path', () => {
   const source = readFileSync(new URL('../server/routes/translation.js', import.meta.url), 'utf8')
 
@@ -294,6 +344,10 @@ test('translation route wires reviews through every type mapping and every gener
   const batchReplaceSection = source.slice(source.indexOf("router.post('/batch-replace'"), source.indexOf('// ─── Translation status'))
   assert.match(batchReplaceSection, /SELECT[^`'\n]*content_type[^`'\n]*content_id[^`'\n]*language_code/is)
   assert.match(batchReplaceSection, /syncProductReviewTranslation\s*\(/)
+
+  const overrideSection = source.slice(source.indexOf("router.post('/override'"), source.indexOf('// ─── Get all translations'))
+  assert.match(overrideSection, /saveManualTranslation\s*\(/)
+  assert.doesNotMatch(overrideSection, /upsertTranslation\s*\(/)
 })
 
 test('background translation jobs map product reviews to the reviews collector without a separate write path', () => {

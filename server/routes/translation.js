@@ -6,6 +6,7 @@ import http from 'http'
 import { parse as parseHTML } from 'node-html-parser'
 import {
     collectProductReviews,
+    saveManualTranslation,
     syncProductReviewTranslation
 } from '../services/productReviewTranslation.js'
 
@@ -1738,15 +1739,22 @@ router.get('/search-untranslated/:lang', authMiddleware, (req, res) => {
 router.post('/override', authMiddleware, (req, res) => {
     const { language_code, content_type, content_id, content_field, original_text, translated_text } = req.body
     if (!language_code || !content_field || !translated_text) return res.status(400).json({ error: 'missing required fields' })
-    upsertTranslation(language_code, content_type || 'manual', content_id || null, content_field, original_text || '', translated_text)
-    // Mark as manual
     try {
-        run(
-            `UPDATE translations SET is_manual=1 WHERE language_code=? AND content_type=? AND content_id IS ? AND content_field=?`,
-            [language_code, content_type || 'manual', content_id || null, content_field]
-        )
-    } catch (e) { }
-    res.json({ message: 'Saved' })
+        saveManualTranslation({
+            lang: language_code,
+            type: content_type || 'manual',
+            id: content_id || null,
+            field: content_field,
+            original: original_text || '',
+            translated: translated_text,
+            getOne,
+            getAll,
+            run
+        })
+        res.json({ message: 'Saved' })
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
 })
 
 // ─── Get all translations for a language ─────────────────────────────────────

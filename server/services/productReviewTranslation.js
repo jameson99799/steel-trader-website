@@ -38,6 +38,45 @@ export function collectProductReviews(readAll) {
   return items
 }
 
+export function saveManualTranslation({
+  lang,
+  type,
+  id,
+  field,
+  original,
+  translated,
+  getOne,
+  getAll,
+  run
+}) {
+  const contentId = id || null
+  const updated = run(`
+    UPDATE translations
+    SET original_text = ?,
+        translated_text = ?,
+        is_manual = 1,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE language_code = ?
+      AND content_type = ?
+      AND content_id IS ?
+      AND content_field = ?
+  `, [original, translated, lang, type, contentId, field])
+
+  if (!updated?.changes) {
+    run(`
+      INSERT INTO translations
+        (language_code, content_type, content_id, content_field, original_text, translated_text, is_manual)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `, [lang, type, contentId, field, original, translated])
+  }
+
+  if (type === 'product_review') {
+    syncProductReviewTranslation({ reviewId: contentId, lang, getOne, getAll, run })
+  }
+
+  return { saved: true }
+}
+
 export function syncProductReviewTranslation({ reviewId, lang, getOne, getAll, run }) {
   if (!lang || lang === 'en') {
     return { synced: false, reason: 'english-source' }

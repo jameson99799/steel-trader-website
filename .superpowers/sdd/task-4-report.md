@@ -53,12 +53,12 @@
 
 ## 验证
 
-- `node --test test/productReviewTranslation.test.js test/productReviewCore.test.js`：26/26 通过。
+- `node --test test/productReviewTranslation.test.js test/productReviewCore.test.js`：27/27 通过。
 - `node --check server/services/productReviewTranslation.js`：exit 0。
 - `node --check server/routes/translation.js`：exit 0。
 - `node --check server/routes/translation-jobs.js`：exit 0。
 - `node --check server/routes/languages.js`：exit 0。
-- `npm.cmd test`：103/103 通过，0 失败。0 跳过。
+- `npm.cmd test`：104/104 通过，0 失败。0 跳过。
 
 ## 自审与风险
 
@@ -67,3 +67,10 @@
 - 非英语公开读取仍只使用带当前 `source_hash` 的 `product_review_translations`，本实现不创建任何回退英文的路径。
 - 通用翻译写入和公开评价译文同步是连续的两次数据库操作，不在单一显式事务中。如果第二次操作遇到数据库错误，通用译文可能已写入而公开表未更新；此时公开读取仍会用 `source_hash` 拒绝过期记录，且下次任一评价字段写入会重试同步。
 - 未生成、修改或填充任何虚构评价或虚假译文；测试数据仅存在于内存 SQLite fixture。
+
+## 门禁修复：重复手工覆盖
+
+- 问题：`POST /override` 原先复用 AI `upsertTranslation()`，而 AI 冲突 UPDATE 故意限定 `is_manual=0`。因此同 key 已是 `is_manual=1` 时，第二次手工保存是 0-row no-op，却返回 Saved 并保留旧公开译文。
+- RED：先增加真实内存 SQLite 回归，连续两次保存同一 `product_review/review_title`。`node --test test/productReviewTranslation.test.js` 为 10/12，新行为用例因 `saveManualTranslation is not a function` 失败，路由接线用例因仍调用 AI upsert 失败。
+- GREEN：新增可注入 `saveManualTranslation(...)`。它先显式 UPDATE `original_text/translated_text/is_manual=1/updated_at`，不限制旧 `is_manual`；仅在 0 行更新时 INSERT。`product_review` 保存后调用同步器，公开表获得第二次译文和当前 `reviewSourceHash`。定向测试恢复 12/12。
+- 边界：AI `upsertTranslation()` 仍保持 `is_manual=0` 条件，不会覆盖人工审定译文；显式手工保存对所有 `content_type` 使用同一 UPDATE-or-INSERT 语义，仅评价类型需要额外公开表同步。
