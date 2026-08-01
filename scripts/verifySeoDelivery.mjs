@@ -154,6 +154,45 @@ export function verifyProductReviewParity({ html, productSchema, payload }) {
   }
 }
 
+function unwrapReviewPayload(payload) {
+  return payload?.data?.reviews ? payload.data : payload
+}
+
+export function verifyProductReviewPayloadParity(localPayload, publicPayload) {
+  const visibleFields = [
+    'author_name',
+    'review_title',
+    'review_date',
+    'rating',
+    'review_text',
+    'verified_purchase',
+    'is_incentivized',
+    'incentive_disclosure'
+  ]
+  const comparable = payload => {
+    const normalized = unwrapReviewPayload(payload)
+    if (!normalized || !Array.isArray(normalized.reviews) || !normalized.summary) {
+      throw new Error('Product review API payload is invalid')
+    }
+    return {
+      summary: {
+        reviewCount: Number(normalized.summary.reviewCount),
+        ratingValue: Number(normalized.summary.ratingValue)
+      },
+      reviews: normalized.reviews.map(review => Object.fromEntries(
+        visibleFields.map(field => [
+          field,
+          field === 'rating' ? Number(review?.[field]) : (review?.[field] ?? null)
+        ])
+      ))
+    }
+  }
+
+  if (JSON.stringify(comparable(localPayload)) !== JSON.stringify(comparable(publicPayload))) {
+    throw new Error('Local and public product review payloads differ')
+  }
+}
+
 function validateAbout({ body }, label) {
   const canonicals = [
     ...body.matchAll(/<link\b[^>]*\brel=["']canonical["'][^>]*\bhref=["']([^"']+)["'][^>]*>/gi)
@@ -287,11 +326,18 @@ export async function verifySeoDelivery({
     pending.localProduct = fetchText(fetchImpl, localBaseUrl, productPath, 'local product detail')
     pending.publicProduct = fetchText(fetchImpl, publicBaseUrl, productPath, 'public product detail')
     if (productId) {
-      pending.productReviews = fetchJson(
+      const reviewPath = `/api/product-reviews/product/${productId}?lang=en&page=1&limit=10`
+      pending.localProductReviews = fetchJson(
         fetchImpl,
         localBaseUrl,
-        `/api/product-reviews/product/${productId}?lang=en&page=1&limit=10`,
+        reviewPath,
         'local product reviews'
+      )
+      pending.publicProductReviews = fetchJson(
+        fetchImpl,
+        publicBaseUrl,
+        reviewPath,
+        'public product reviews'
       )
     }
   }
@@ -319,12 +365,12 @@ export async function verifySeoDelivery({
     validateDetail(results.localProduct, 'local product detail', productPath)
     validateDetail(results.publicProduct, 'public product detail', productPath)
     if (productId) {
-      const payload = results.productReviews?.data?.reviews
-        ? results.productReviews.data
-        : results.productReviews
-      for (const [label, document] of [
-        ['local product detail', results.localProduct],
-        ['public product detail', results.publicProduct]
+      const localPayload = unwrapReviewPayload(results.localProductReviews)
+      const publicPayload = unwrapReviewPayload(results.publicProductReviews)
+      verifyProductReviewPayloadParity(localPayload, publicPayload)
+      for (const [label, document, payload] of [
+        ['local product detail', results.localProduct, localPayload],
+        ['public product detail', results.publicProduct, publicPayload]
       ]) {
         try {
           const schema = extractProductSchema(document.body)

@@ -33,3 +33,11 @@
 - 缓存删除是精确键删除，不会误删同前缀产品；代价是失效时扫描 `seo_render_cache` 的 URL 列。该缓存为短期爬虫渲染缓存，当前方案优先保证正确性和 SQLite 参数安全。
 - 线上交付 CLI 需要本地 Node 服务和公开域名均可访问；无评价是合法结果，有评价时任一可见 HTML/JSON-LD/API 漂移都会使部署门禁失败。
 - 本任务没有改前台组件、schema、管理后台或依赖。
+
+## 独立审查修复：公开评价 API 对等验证
+
+- 审查发现初版只读取本地评价 API，却用本地 payload 同时验证公开 HTML，无法独立证明公开 API 与公开页面一致。
+- 新增 RED：必须请求公开评价 API、公开 API 返回 404 时失败、公开 payload 与本地 payload 漂移时失败；首次执行 3 tests，0 pass，3 fail，失败原因均与审查问题一致。
+- 修复后分别请求 local/public `/api/product-reviews/product/:id?lang=en&page=1&limit=10`，分别以各自 payload 校验对应 HTML 与 Product JSON-LD。
+- 额外显式比较 local/public 的 `summary.reviewCount`、`summary.ratingValue`，以及当前页每条评价用于可见内容/Schema 的作者、标题、日期、评分、正文、验证购买、激励状态和激励披露；顺序或字段漂移均失败。
+- 修复验证：新场景 3/3、指定矩阵 66/66、全量 141/141；服务端/验证器语法检查、生产构建（745 modules）和 `git diff --check` 均通过。

@@ -202,8 +202,57 @@ test('delivery verifier requests the review API and validates both local and pub
     productId: PRODUCT_ID
   })
   assert.ok(requested.includes(`http://local/api/product-reviews/product/${PRODUCT_ID}`))
+  assert.ok(requested.includes(`https://public/api/product-reviews/product/${PRODUCT_ID}`))
   assert.ok(requested.includes(`http://local/en/products/${PRODUCT_SLUG}`))
   assert.ok(requested.includes(`https://public/en/products/${PRODUCT_SLUG}`))
+})
+
+test('delivery verifier fails when the public product review API is unavailable', async () => {
+  const fetchImpl = async input => {
+    const url = new URL(String(input))
+    if (url.pathname === '/sitemap-products.xml') return new Response('<?xml version="1.0"?><urlset></urlset>', { headers: { 'content-type': 'application/xml' } })
+    if (url.pathname === '/assets/index-current.js') return new Response('ok')
+    if (url.pathname === `/api/product-reviews/product/${PRODUCT_ID}`) {
+      if (url.origin === 'https://public') return new Response('Not Found', { status: 404 })
+      return new Response(JSON.stringify(reviewPayload()), { headers: { 'content-type': 'application/json' } })
+    }
+    if (url.pathname === `/en/products/${PRODUCT_SLUG}`) return new Response(productHtml(), { headers: { 'content-type': 'text/html' } })
+    const about = `<html><head><link rel="canonical" href="https://www.sunseasteel.com/en/about"><script type="application/ld+json">{}</script><script type="module" src="/assets/index-current.js"></script></head><body><main>About</main></body></html>`
+    return new Response(about, { headers: { 'content-type': 'text/html' } })
+  }
+
+  await assert.rejects(delivery.verifySeoDelivery({
+    fetchImpl,
+    localBaseUrl: 'http://local',
+    publicBaseUrl: 'https://public',
+    productPath: `/en/products/${PRODUCT_SLUG}`,
+    productId: PRODUCT_ID
+  }), /public product reviews.*HTTP 404/i)
+})
+
+test('delivery verifier rejects local and public review payload drift even when both HTML pages match local data', async () => {
+  const publicPayload = reviewPayload({ review_text: 'Different public API body.' })
+  publicPayload.summary = { reviewCount: 13, ratingValue: 4.5 }
+  const fetchImpl = async input => {
+    const url = new URL(String(input))
+    if (url.pathname === '/sitemap-products.xml') return new Response('<?xml version="1.0"?><urlset></urlset>', { headers: { 'content-type': 'application/xml' } })
+    if (url.pathname === '/assets/index-current.js') return new Response('ok')
+    if (url.pathname === `/api/product-reviews/product/${PRODUCT_ID}`) {
+      const payload = url.origin === 'https://public' ? publicPayload : reviewPayload()
+      return new Response(JSON.stringify(payload), { headers: { 'content-type': 'application/json' } })
+    }
+    if (url.pathname === `/en/products/${PRODUCT_SLUG}`) return new Response(productHtml(), { headers: { 'content-type': 'text/html' } })
+    const about = `<html><head><link rel="canonical" href="https://www.sunseasteel.com/en/about"><script type="application/ld+json">{}</script><script type="module" src="/assets/index-current.js"></script></head><body><main>About</main></body></html>`
+    return new Response(about, { headers: { 'content-type': 'text/html' } })
+  }
+
+  await assert.rejects(delivery.verifySeoDelivery({
+    fetchImpl,
+    localBaseUrl: 'http://local',
+    publicBaseUrl: 'https://public',
+    productPath: `/en/products/${PRODUCT_SLUG}`,
+    productId: PRODUCT_ID
+  }), /local.*public.*review payload|review payload.*differ/i)
 })
 
 test('CLI product discovery preserves readiness retries while returning both id and slug', async () => {
