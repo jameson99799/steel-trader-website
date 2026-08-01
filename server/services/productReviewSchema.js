@@ -36,6 +36,8 @@ function migrateLegacyProductReviews(db) {
     FROM seo_reviews AS legacy
     INNER JOIN products AS product ON product.id = legacy.target_id
     WHERE legacy.target_type = 'product'
+      AND legacy.created_at IS NOT NULL
+      AND DATE(legacy.created_at) IS NOT NULL
       AND LENGTH(TRIM(COALESCE(legacy.author_name, ''))) BETWEEN 1 AND 100
       AND LENGTH(TRIM(COALESCE(legacy.review_text, ''))) > 0
       AND typeof(legacy.rating) IN ('integer', 'real')
@@ -52,7 +54,7 @@ export function initializeProductReviewSchema(db) {
       product_id INTEGER NOT NULL,
       author_name TEXT NOT NULL CHECK (LENGTH(TRIM(author_name)) BETWEEN 1 AND 100),
       review_title TEXT,
-      review_date DATE,
+      review_date DATE NOT NULL,
       rating REAL NOT NULL CHECK (rating BETWEEN 1 AND 5),
       review_text TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'published', 'hidden')),
@@ -88,7 +90,7 @@ export function initializeProductReviewSchema(db) {
       review_title TEXT,
       review_text TEXT NOT NULL,
       incentive_disclosure TEXT,
-      source_hash TEXT,
+      source_hash TEXT NOT NULL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (review_id) REFERENCES product_reviews(id) ON DELETE CASCADE,

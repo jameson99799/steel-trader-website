@@ -140,6 +140,11 @@
       <div class="card-body">
         <textarea v-model="importText" class="form-control import-textarea" rows="7" placeholder="例如：Alex - 2026-07-18 - 4.7 - Product quality matched the specification." :disabled="!selectedProductId || importLoading" @input="resetImportPreview"></textarea>
         <div class="import-actions">
+          <label for="import-status">导入后状态</label>
+          <select id="import-status" v-model="importStatus" class="form-control import-status" :disabled="importLoading">
+            <option value="published">直接发布</option>
+            <option value="pending">待审核</option>
+          </select>
           <button class="btn btn-secondary" :disabled="!selectedProductId || !importText.trim() || importLoading" @click="previewImport">{{ importLoading ? '正在解析…' : '导入预览' }}</button>
           <button class="btn btn-primary" :disabled="!canImport || importLoading" @click="confirmImport">确认导入 {{ importPreview.valid.length }} 条</button>
         </div>
@@ -200,6 +205,7 @@ const form = reactive({
   is_incentivized: false, incentive_disclosure: ''
 })
 const importText = ref('')
+const importStatus = ref('published')
 const importPreview = ref({ valid: [], invalid: [], duplicates: [] })
 const loading = ref(false)
 const productsLoading = ref(false)
@@ -433,7 +439,7 @@ const publishAllInScope = async () => {
 }
 
 function resetImportPreview() { importPreview.value = { valid: [], invalid: [], duplicates: [] } }
-function resetImport() { importText.value = ''; resetImportPreview() }
+function resetImport() { importText.value = ''; importStatus.value = 'published'; resetImportPreview() }
 const previewImport = async () => {
   if (!selectedProductId.value || !importText.value.trim()) return
   importLoading.value = true; clearMessages()
@@ -453,7 +459,7 @@ const confirmImport = async () => {
   importLoading.value = true; clearMessages()
   try {
     const count = importPreview.value.valid.length
-    await api.bulkCreateProductReviews({ productId: selectedProductId.value, rows: importPreview.value.valid })
+    await api.bulkCreateProductReviews({ productId: selectedProductId.value, rows: importPreview.value.valid, status: importStatus.value })
     resetImport(); clearSelection(); page.value = 1; await loadReviews(); showSuccess(`已导入 ${count} 条真实评价。`)
   } catch (error) { showError(error, '批量导入失败。') }
   finally { importLoading.value = false }
@@ -465,7 +471,14 @@ const summarize = text => String(text || '').length > 120 ? `${String(text).slic
 const sourceLabel = source => ({ admin: '后台录入', admin_import: '批量导入', external_api: '外部 API' }[source] || source || '-')
 const statusLabel = status => ({ published: '已发布', pending: '待审核', hidden: '已隐藏' }[status] || status || '-')
 const translationLabel = review => {
-  if (review.translation_status != null) return String(review.translation_status)
+  if (review.translation_status && typeof review.translation_status === 'object') {
+    const { total = 0, current = 0, stale = 0, missing = 0 } = review.translation_status
+    if (!total) return '未启用目标语言'
+    const parts = [`${current}/${total} 已翻译`]
+    if (stale) parts.push(`${stale} 需重翻`)
+    if (missing) parts.push(`${missing} 未翻译`)
+    return parts.join(' · ')
+  }
   if (review.translationStatus != null) return String(review.translationStatus)
   if (Array.isArray(review.translations)) return review.translations.length ? `已有 ${review.translations.length} 个译文` : '未翻译'
   return '-'

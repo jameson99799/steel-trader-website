@@ -236,7 +236,7 @@ test('legacy seo review compatibility forwards external_id for idempotency and r
   const response = invoke(handler, {
     body: {
       target_type: 'product', target_id: 4, author_name: 'Real buyer', rating: 4.5,
-      review_text: 'Authentic review', status: 'published', external_id: 'legacy-order-8'
+      review_date: '2026-07-18', review_text: 'Authentic review', status: 'published', external_id: 'legacy-order-8'
     }
   })
   assert.equal(response.statusCode, 201)
@@ -247,6 +247,7 @@ test('legacy seo review compatibility forwards external_id for idempotency and r
   assert.deepEqual(calls.shift(), ['create', {
     product_id: 4,
     author_name: 'Real buyer',
+    review_date: '2026-07-18',
     rating: 4.5,
     review_text: 'Authentic review',
     external_id: 'legacy-order-8'

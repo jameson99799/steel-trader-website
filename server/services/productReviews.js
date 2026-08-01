@@ -144,10 +144,10 @@ export function normalizeReviewInput(input, policy = {}) {
     productId = positiveInteger(input.product_id, 'product_id')
   }
 
-  let reviewDate = null
-  if (input.review_date !== undefined && input.review_date !== null && String(input.review_date).trim() !== '') {
-    reviewDate = normalizeReviewDate(input.review_date)
+  if (input.review_date === undefined || input.review_date === null || String(input.review_date).trim() === '') {
+    throw new Error('review_date is required')
   }
+  const reviewDate = normalizeReviewDate(input.review_date)
 
   const effectiveStatus = forcedStatus === null || forcedStatus === undefined
     ? (input.status ?? 'pending')
@@ -352,6 +352,10 @@ function adminFilterParts(filters = {}) {
     conditions.push('r.source = ?')
     parameters.push(normalizedSource(filters.source))
   }
+  if (filters.externalId !== undefined && filters.externalId !== null && String(filters.externalId).trim() !== '') {
+    conditions.push('r.external_id = ?')
+    parameters.push(String(filters.externalId).trim())
+  }
   if (filters.q !== undefined && filters.q !== null && String(filters.q).trim() !== '') {
     const query = `%${String(filters.q).trim()}%`
     conditions.push(`(
@@ -461,6 +465,46 @@ export function createProductReviewStore({
       ORDER BY r.review_date DESC, r.id DESC
       LIMIT ? OFFSET ?
     `, [...parameters, limit, (page - 1) * limit])
+    if (data.length) {
+      const languages = getAll(`
+        SELECT code
+        FROM languages
+        WHERE status = 1 AND code <> 'en'
+        ORDER BY id
+      `)
+      const languageCodes = languages.map(language => language.code)
+      const reviewIds = data.map(review => review.id)
+      const translations = languageCodes.length ? getAll(`
+        SELECT review_id, language_code, source_hash
+        FROM product_review_translations
+        WHERE review_id IN (${placeholders(reviewIds.length)})
+          AND language_code IN (${placeholders(languageCodes.length)})
+      `, [...reviewIds, ...languageCodes]) : []
+      const translationByReview = new Map()
+      for (const translation of translations) {
+        if (!translationByReview.has(translation.review_id)) translationByReview.set(translation.review_id, new Map())
+        translationByReview.get(translation.review_id).set(translation.language_code, translation)
+      }
+      for (const review of data) {
+        const sourceHash = reviewSourceHash(review)
+        const reviewTranslations = translationByReview.get(review.id) || new Map()
+        const details = languageCodes.map(languageCode => {
+          const translation = reviewTranslations.get(languageCode)
+          if (!translation) return { language_code: languageCode, status: 'missing' }
+          return {
+            language_code: languageCode,
+            status: translation.source_hash === sourceHash ? 'current' : 'stale'
+          }
+        })
+        review.translation_languages = details
+        review.translation_status = {
+          total: details.length,
+          current: details.filter(item => item.status === 'current').length,
+          stale: details.filter(item => item.status === 'stale').length,
+          missing: details.filter(item => item.status === 'missing').length
+        }
+      }
+    }
     return { data, total: Number(totalRow?.total || 0), page, limit }
   }
 
@@ -667,7 +711,11 @@ export function createProductReviewStore({
     const scope = adminFilterParts({
       productId: hasProduct ? filters.productId : undefined,
       categoryId: hasCategory ? filters.categoryId : undefined,
-      status: 'pending'
+      status: 'pending',
+      source: filters.source,
+      q: filters.q,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo
     })
     const outcome = transaction(() => {
       const rows = getAll(`

@@ -106,10 +106,14 @@ export function createProductReviewHandlers({ store, parseImport = parseBulkRevi
       return execute(res, () => {
         const rows = req.body?.rows
         requireBatch(rows)
+        const forcedStatus = req.body?.status ?? 'published'
+        if (!['published', 'pending'].includes(forcedStatus)) {
+          throw new Error('status must be published or pending')
+        }
         return store.bulkCreate(
           req.body?.productId,
           rows,
-          { source: 'admin_import', forcedStatus: 'published' }
+          { source: 'admin_import', forcedStatus }
         )
       }, { status: 201 })
     },
@@ -194,10 +198,15 @@ export function createExternalProductReviewHandlers({ store }) {
     },
 
     remove(req, res) {
-      return execute(res, () => {
+      try {
+        const existing = store.getById(req.params.id)
+        if (!existing) return notFound(res)
+        if (existing.source !== 'external_api') return forbiddenExternalUpdate(res)
         const removed = store.remove(req.params.id)
-        return removed ? { success: true } : false
-      }, { missing: true })
+        return removed ? res.json({ success: true }) : notFound(res)
+      } catch (error) {
+        return badRequest(res, error)
+      }
     }
   }
 }
@@ -232,11 +241,15 @@ export function createLegacySeoReviewHandler({ store }) {
         replacement: '/api/external/product-reviews'
       })
     }
+    if (input.review_date === undefined || input.review_date === null || String(input.review_date).trim() === '') {
+      return badRequest(res, new Error('review_date is required'))
+    }
 
     return execute(res, () => {
       const data = store.create({
         product_id: input.target_id,
         author_name: input.author_name,
+        review_date: input.review_date,
         rating: input.rating,
         review_text: input.review_text,
         external_id: input.external_id

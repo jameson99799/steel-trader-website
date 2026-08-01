@@ -69,7 +69,7 @@ test('server import preview separates valid, invalid, and duplicate rows and enf
   assert.match(reviews, /v-for="row in importPreview\.invalid"[\s\S]*?row\.line[\s\S]*?row\.(?:error|reason)/)
   assert.match(reviews, /v-for="row in importPreview\.duplicates"[\s\S]*?row\.line[\s\S]*?row\.(?:error|reason)/)
   assert.match(reviews, /importPreview\.value\.valid\.length\s*<=\s*200/)
-  assert.match(reviews, /api\.bulkCreateProductReviews\(\{\s*productId:\s*selectedProductId\.value,\s*rows:\s*importPreview\.value\.valid\s*\}\)/)
+  assert.match(reviews, /api\.bulkCreateProductReviews\(\{\s*productId:\s*selectedProductId\.value,\s*rows:\s*importPreview\.value\.valid,\s*status:\s*importStatus\.value\s*\}\)/)
   assert.match(reviews, /姓名\s*-\s*日期（年月日）\s*-\s*评分（4\.7）\s*-\s*评论内容/)
 })
 

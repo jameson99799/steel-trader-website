@@ -515,7 +515,7 @@ test('translationStatus reports current, stale, and missing active non-English l
   const review = store.create(reviewInput())
   db.prepare(`
     INSERT INTO product_review_translations (review_id, language_code, review_text, source_hash)
-    VALUES (?, 'es', 'Actual', ?), (?, 'fr', 'Ancien', NULL)
+    VALUES (?, 'es', 'Actual', ?), (?, 'fr', 'Ancien', 'stale')
   `).run(review.id, reviewSourceHash(review), review.id)
 
   assert.deepEqual(store.translationStatus(review.id), [

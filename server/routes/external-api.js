@@ -957,11 +957,11 @@ router.get('/docs', (req, res) => {
                     body_example: { productId: 228, rows: [{ author_name: 'Maria Garcia', review_date: '2026/07/19', rating: 5.0, review_text: 'The surface finish matched the approved sample.', external_id: 'erp-review-1002' }] }
                 },
                 update: { method: 'PUT', path: '/api/external/product-reviews/:id', note: 'Only source=external_api reviews can be edited. Any edit resets the review to pending and invalidates prior public translations.' },
-                delete: { method: 'DELETE', path: '/api/external/product-reviews/:id', note: 'Deletes the review; there is no external publish or bulk-status endpoint.' }
+                delete: { method: 'DELETE', path: '/api/external/product-reviews/:id', note: 'Deletes only source=external_api reviews. Admin/import/migration reviews return HTTP 403; there is no external publish or bulk-status endpoint.' }
             },
             legacy_compatibility: {
                 path: '/api/external/seo-reviews',
-                product: 'target_type=product maps to the moderated product review create flow, forwards external_id, and always creates pending.',
+                product: 'target_type=product maps to the moderated product review create flow, requires and forwards review_date and external_id, and always creates pending.',
                 article: 'Article review creation through this legacy endpoint is deprecated and returns HTTP 400.',
                 replacement: '/api/external/product-reviews'
             }

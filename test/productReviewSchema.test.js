@@ -42,6 +42,7 @@ function insertReview(db, values = {}) {
   const review = {
     product_id: 1,
     author_name: 'Valid customer',
+    review_date: '2026-01-02',
     rating: 4.5,
     review_text: 'A real customer review.',
     status: null,
@@ -50,8 +51,8 @@ function insertReview(db, values = {}) {
     ...values
   }
   return db.prepare(`
-    INSERT INTO product_reviews (product_id, author_name, rating, review_text, status, source, external_id)
-    VALUES (@product_id, @author_name, @rating, @review_text, COALESCE(@status, 'pending'), COALESCE(@source, 'admin'), @external_id)
+    INSERT INTO product_reviews (product_id, author_name, review_date, rating, review_text, status, source, external_id)
+    VALUES (@product_id, @author_name, @review_date, @rating, @review_text, COALESCE(@status, 'pending'), COALESCE(@source, 'admin'), @external_id)
   `).run(review)
 }
 
@@ -67,6 +68,10 @@ test('creates normalized review tables with the required column order and indexe
     db.prepare('PRAGMA table_info(product_review_translations)').all().map(column => column.name),
     translationColumns
   )
+  const reviewInfo = db.prepare('PRAGMA table_info(product_reviews)').all()
+  const translationInfo = db.prepare('PRAGMA table_info(product_review_translations)').all()
+  assert.equal(reviewInfo.find(column => column.name === 'review_date').notnull, 1)
+  assert.equal(translationInfo.find(column => column.name === 'source_hash').notnull, 1)
 
   const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map(row => row.name)
   assert.ok(indexes.includes('idx_product_reviews_product_status_date'))
@@ -107,8 +112,8 @@ test('enforces translation language, uniqueness, and cascading foreign keys', ()
   const reviewId = insertReview(db).lastInsertRowid
 
   const insertTranslation = db.prepare(`
-    INSERT INTO product_review_translations (review_id, language_code, review_text)
-    VALUES (?, ?, ?)
+    INSERT INTO product_review_translations (review_id, language_code, review_text, source_hash)
+    VALUES (?, ?, ?, 'hash')
   `)
   assert.throws(() => insertTranslation.run(reviewId, 'en', 'English'), /CHECK constraint failed/)
   insertTranslation.run(reviewId, 'es', 'Spanish')
@@ -133,6 +138,8 @@ test('migrates only valid legacy product reviews to pending migration records id
   insertLegacy.run(5, 'product', 1, 'Precise rating', 4.55, 'Precise rating review', '2026-01-02 03:04:05')
   insertLegacy.run(6, 'product', 1, '   ', 4.5, 'Blank author review', '2026-01-02 03:04:05')
   insertLegacy.run(7, 'product', 1, 'Blank text', 4.5, '   ', '2026-01-02 03:04:05')
+  insertLegacy.run(8, 'product', 1, 'Missing date', 4.5, 'Must be skipped', null)
+  insertLegacy.run(9, 'product', 1, 'Invalid date', 4.5, 'Must be skipped', 'not-a-date')
 
   initializeProductReviewSchema(db)
   initializeProductReviewSchema(db)
