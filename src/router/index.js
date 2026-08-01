@@ -77,6 +77,7 @@ const routes = [
       { path: 'hero', name: 'AdminHero', component: () => import('../views/admin/Hero.vue') },
       { path: 'categories', name: 'AdminCategories', component: () => import('../views/admin/Categories.vue') },
       { path: 'products', name: 'AdminProducts', component: () => import('../views/admin/Products.vue') },
+      { path: 'reviews', name: 'AdminReviews', component: () => import('../views/admin/Reviews.vue') },
       { path: 'inquiries', name: 'AdminInquiries', component: () => import('../views/admin/Inquiries.vue') },
       { path: 'company', name: 'AdminCompany', component: () => import('../views/admin/Company.vue') },
       { path: 'factory', name: 'AdminFactory', component: () => import('../views/admin/Factory.vue') },
