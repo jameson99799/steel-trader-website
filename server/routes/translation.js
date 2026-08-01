@@ -683,7 +683,16 @@ const UI_TEXTS_EN = {
     "defaultPpgiMaterial": "Pre-Painted Steel (PPGI/PPGL)",
     "defaultGiCoating": "Z60 – Z275 (Galvanized)",
     "defaultGlCoating": "AZ50 – AZ150 (Galvalume)",
-    "defaultPpgiCoating": "PE / SMP / HDP / PVDF"
+    "defaultPpgiCoating": "PE / SMP / HDP / PVDF",
+    "reviewsKicker": "Customer feedback",
+    "reviewsTitle": "Product Reviews",
+    "reviewsPublishedCount": "{count} published reviews",
+    "reviewsVerifiedPurchase": "Verified purchase",
+    "reviewsIncentivized": "Incentivized review",
+    "reviewsLoadMore": "Load more reviews",
+    "reviewsLoading": "Loading…",
+    "reviewsLoadError": "Reviews could not be loaded. Please try again.",
+    "reviewsRatingAria": "{rating} out of 5 stars"
 };
 
 const FUTURES_TEXTS_EN = {

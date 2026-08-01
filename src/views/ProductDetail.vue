@@ -183,6 +183,7 @@
           :reviews="publicReviews.reviews"
           :summary="publicReviews.summary"
           :pagination="publicReviews.pagination"
+          @reviews-updated="handleReviewsUpdated"
         />
 
         <!-- Related Products Section (SEO internal linking) -->
@@ -541,6 +542,12 @@ async function loadPublicReviews(productId, language) {
       console.warn('Failed to load public product reviews:', error)
     }
   }
+}
+
+function handleReviewsUpdated(nextPublicReviews, context = {}) {
+  if (String(product.value?.id) !== String(context.productId) || lang.value !== context.lang) return
+  publicReviews.value = nextPublicReviews
+  updateProductSeo(company.value)
 }
 
 function updateProductSeo(comp) {

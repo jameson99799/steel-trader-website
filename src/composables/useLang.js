@@ -143,7 +143,16 @@ const builtInTranslations = {
     chatOnline: '在线',
     chatOffline: '离线',
     chatPlaceholder: '请输入您的消息...',
-    chatSend: '发送'
+    chatSend: '发送',
+    reviewsKicker: '客户反馈',
+    reviewsTitle: '产品评价',
+    reviewsPublishedCount: '{count} 条已发布评价',
+    reviewsVerifiedPurchase: '已验证购买',
+    reviewsIncentivized: '激励评价',
+    reviewsLoadMore: '加载更多评价',
+    reviewsLoading: '加载中…',
+    reviewsLoadError: '评价加载失败，请重试。',
+    reviewsRatingAria: '{rating} 分（满分 5 分）'
   },
   en: {
     home: 'Home', products: 'Products', about: 'About Us', contact: 'Contact',
@@ -287,7 +296,16 @@ const builtInTranslations = {
     chatOnline: 'Online',
     chatOffline: 'Offline',
     chatPlaceholder: 'Type your message...',
-    chatSend: 'Send'
+    chatSend: 'Send',
+    reviewsKicker: 'Customer feedback',
+    reviewsTitle: 'Product Reviews',
+    reviewsPublishedCount: '{count} published reviews',
+    reviewsVerifiedPurchase: 'Verified purchase',
+    reviewsIncentivized: 'Incentivized review',
+    reviewsLoadMore: 'Load more reviews',
+    reviewsLoading: 'Loading…',
+    reviewsLoadError: 'Reviews could not be loaded. Please try again.',
+    reviewsRatingAria: '{rating} out of 5 stars'
   }
 }
 

@@ -2,13 +2,13 @@
   <section v-if="localReviews.length" class="product-reviews" aria-labelledby="product-reviews-title">
     <div class="reviews-heading">
       <div>
-        <p class="reviews-kicker">Customer feedback</p>
-        <h2 id="product-reviews-title">Product Reviews</h2>
+        <p class="reviews-kicker">{{ t('reviewsKicker') }}</p>
+        <h2 id="product-reviews-title">{{ t('reviewsTitle') }}</h2>
       </div>
       <div class="reviews-summary">
         <strong>{{ Number(summary.ratingValue) }}</strong>
         <span aria-hidden="true">/ 5</span>
-        <span>{{ summary.reviewCount }} published reviews</span>
+        <span>{{ formatProductReviewUiText(t('reviewsPublishedCount'), { count: summary.reviewCount }) }}</span>
       </div>
     </div>
 
@@ -22,7 +22,7 @@
           <time v-if="review.review_date" :datetime="review.review_date">{{ review.review_date }}</time>
         </header>
 
-        <div class="review-rating" :aria-label="`${Number(review.rating)} out of 5 stars`">
+        <div class="review-rating" :aria-label="formatProductReviewUiText(t('reviewsRatingAria'), { rating: Number(review.rating) })">
           <span class="numeric-rating">{{ Number(review.rating) }} / 5</span>
           <span class="stars" aria-hidden="true">
             <span class="stars-empty">★★★★★</span>
@@ -33,8 +33,8 @@
         <p class="review-body">{{ review.review_text }}</p>
 
         <div v-if="review.verified_purchase || review.is_incentivized" class="review-badges">
-          <span v-if="review.verified_purchase" class="review-badge">Verified purchase</span>
-          <span v-if="review.is_incentivized" class="review-badge review-badge-incentive">Incentivized review</span>
+          <span v-if="review.verified_purchase" class="review-badge">{{ t('reviewsVerifiedPurchase') }}</span>
+          <span v-if="review.is_incentivized" class="review-badge review-badge-incentive">{{ t('reviewsIncentivized') }}</span>
         </div>
         <p v-if="review.is_incentivized && review.incentive_disclosure" class="review-disclosure">
           {{ review.incentive_disclosure }}
@@ -50,7 +50,7 @@
       :disabled="loadingMore"
       @click="loadMore"
     >
-      {{ loadingMore ? 'Loading…' : 'Load more reviews' }}
+      {{ loadingMore ? t('reviewsLoading') : t('reviewsLoadMore') }}
     </button>
   </section>
 </template>
@@ -58,6 +58,10 @@
 <script setup>
 import { ref, watch } from 'vue'
 import api from '../api'
+import { useLang } from '../composables/useLang'
+import { formatProductReviewUiText } from '../../shared/productReviewSeo.js'
+
+const { t } = useLang()
 
 const props = defineProps({
   productId: { type: [Number, String], required: true },
@@ -66,6 +70,7 @@ const props = defineProps({
   summary: { type: Object, default: () => ({ ratingValue: 0, reviewCount: 0 }) },
   pagination: { type: Object, default: () => ({ page: 1, limit: 10, total: 0 }) }
 })
+const emit = defineEmits(['reviews-updated'])
 
 const localReviews = ref([...props.reviews])
 const localPagination = ref({ ...props.pagination })
@@ -115,10 +120,16 @@ async function loadMore() {
 
     const deduplicated = new Map(localReviews.value.map(review => [reviewKey(review), review]))
     for (const review of result.reviews || []) deduplicated.set(reviewKey(review), review)
-    localReviews.value = [...deduplicated.values()]
-    localPagination.value = { ...localPagination.value, ...(result.pagination || {}), page: nextPage }
+    const nextPublicReviews = {
+      reviews: [...deduplicated.values()],
+      summary: result.summary || props.summary,
+      pagination: { ...localPagination.value, ...(result.pagination || {}), page: nextPage }
+    }
+    localReviews.value = nextPublicReviews.reviews
+    localPagination.value = nextPublicReviews.pagination
+    emit('reviews-updated', nextPublicReviews, { productId: props.productId, lang: props.lang })
   } catch (error) {
-    if (requestToken === loadToken) loadError.value = 'Reviews could not be loaded. Please try again.'
+    if (requestToken === loadToken) loadError.value = t('reviewsLoadError')
   } finally {
     if (requestToken === loadToken) loadingMore.value = false
   }

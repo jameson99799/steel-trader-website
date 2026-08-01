@@ -47,7 +47,11 @@ import mailerRoutes from './routes/mailer.js'
 import externalApiRoutes from './routes/external-api.js'
 import productReviewRoutes from './routes/product-reviews.js'
 import { productReviewStore } from './routes/product-reviews.js'
-import { buildReviewSchemaParts } from '../shared/productReviewSeo.js'
+import {
+  buildProductReviewUiLabels,
+  buildReviewSchemaParts,
+  formatProductReviewUiText
+} from '../shared/productReviewSeo.js'
 import backupRoutes from './routes/backup.js'
 import mediaRoutes from './routes/media.js'
 import crmAuthRoutes from './routes/crm-auth.js'
@@ -549,7 +553,7 @@ async function startServer() {
       // Helper: escape HTML entities in injected content
       const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-      function renderPublicReviewsHtml(publicReviews) {
+      function renderPublicReviewsHtml(publicReviews, labels) {
         const schemaParts = buildReviewSchemaParts(publicReviews)
         if (!schemaParts.review?.length) return ''
 
@@ -561,15 +565,17 @@ async function startServer() {
           const date = review.review_date
             ? `<time datetime="${esc(review.review_date)}">${esc(review.review_date)}</time>`
             : ''
-          const verified = review.verified_purchase ? '<span class="review-verified">Verified purchase</span>' : ''
-          const incentive = review.is_incentivized ? '<span class="review-incentivized">Incentivized review</span>' : ''
+          const verified = review.verified_purchase ? `<span class="review-verified">${esc(labels.reviewsVerifiedPurchase)}</span>` : ''
+          const incentive = review.is_incentivized ? `<span class="review-incentivized">${esc(labels.reviewsIncentivized)}</span>` : ''
           const disclosure = review.is_incentivized && review.incentive_disclosure
             ? `<p class="review-disclosure">${esc(review.incentive_disclosure)}</p>`
             : ''
-          return `<article class="product-review">${title}<p class="review-author">${esc(review.author_name)}</p>${date}<p class="review-rating" aria-label="${esc(String(review.rating))} out of 5 stars">${esc(String(review.rating))} / 5</p><p class="review-body">${esc(review.review_text)}</p>${verified}${incentive}${disclosure}</article>`
+          const ratingAria = formatProductReviewUiText(labels.reviewsRatingAria, { rating: review.rating })
+          return `<article class="product-review">${title}<p class="review-author">${esc(review.author_name)}</p>${date}<p class="review-rating" aria-label="${esc(ratingAria)}">${esc(String(review.rating))} / 5</p><p class="review-body">${esc(review.review_text)}</p>${verified}${incentive}${disclosure}</article>`
         }).join('')
         const aggregate = schemaParts.aggregateRating
-        return `<section id="ssr-product-reviews" aria-labelledby="ssr-product-reviews-title"><h2 id="ssr-product-reviews-title">Product Reviews</h2><p class="review-summary">${esc(String(aggregate.ratingValue))} / 5 from ${esc(String(aggregate.reviewCount))} published reviews</p>${reviewsHtml}</section>`
+        const publishedCount = formatProductReviewUiText(labels.reviewsPublishedCount, { count: aggregate.reviewCount })
+        return `<section id="ssr-product-reviews" aria-labelledby="ssr-product-reviews-title"><h2 id="ssr-product-reviews-title">${esc(labels.reviewsTitle)}</h2><p class="review-summary">${esc(String(aggregate.ratingValue))} / 5 · ${esc(publishedCount)}</p>${reviewsHtml}</section>`
       }
 
       // Helper: build JSON-LD script tag
@@ -645,6 +651,10 @@ async function startServer() {
         
         // Translation helpers for SSR GEO SEO
         const tMap = lang !== 'en' ? loadTranslationsForLang(lang) : null
+        const reviewLabels = buildProductReviewUiLabels({
+          lang,
+          translations: tMap?.ui_text_static
+        })
         if (company && tMap) {
           translateCompany(company, tMap, lang)
         }
@@ -841,7 +851,7 @@ async function startServer() {
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
               const hasFaqInDetail = /frequently asked|<h[23][^>]*>\\s*faq/i.test(detailHtml)
               const ssrFeaturedImage = productImages.length ? `<img src="${esc(productImages[0])}" alt="${escPName}" style="display:none;" />` : ''
-              const publicReviewsHtml = renderPublicReviewsHtml(publicReviews)
+              const publicReviewsHtml = renderPublicReviewsHtml(publicReviews, reviewLabels)
               
               // Internal linking for GEO crawler topic clusters
               let relatedHtml = ''

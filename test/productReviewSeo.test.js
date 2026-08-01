@@ -6,12 +6,19 @@ const reviewSeoUrl = new URL('../shared/productReviewSeo.js', import.meta.url)
 const detailUrl = new URL('../src/views/ProductDetail.vue', import.meta.url)
 const reviewsComponentUrl = new URL('../src/components/ProductReviews.vue', import.meta.url)
 const serverUrl = new URL('../server/index.js', import.meta.url)
+const translationRouteUrl = new URL('../server/routes/translation.js', import.meta.url)
+const useLangUrl = new URL('../src/composables/useLang.js', import.meta.url)
 
 const readIfPresent = url => fs.existsSync(url) ? fs.readFileSync(url, 'utf8') : ''
 
 async function loadBuilder() {
   assert.ok(fs.existsSync(reviewSeoUrl), 'shared/productReviewSeo.js must exist')
   return (await import(reviewSeoUrl.href)).buildReviewSchemaParts
+}
+
+async function loadReviewSeoModule() {
+  assert.ok(fs.existsSync(reviewSeoUrl), 'shared/productReviewSeo.js must exist')
+  return import(reviewSeoUrl.href)
 }
 
 test('buildReviewSchemaParts maps real visible review data without mutating it', async () => {
@@ -71,6 +78,14 @@ test('buildReviewSchemaParts returns no review schema for empty or non-positive 
   }
 })
 
+test('buildReviewSchemaParts rejects out-of-range aggregate ratings and fractional review counts', async () => {
+  const buildReviewSchemaParts = await loadBuilder()
+  const reviews = [{ author_name: 'Buyer', rating: 5, review_text: 'Real review' }]
+
+  assert.deepEqual(buildReviewSchemaParts({ reviews, summary: { ratingValue: 7, reviewCount: 1 } }), {})
+  assert.deepEqual(buildReviewSchemaParts({ reviews, summary: { ratingValue: 4.5, reviewCount: 2.5 } }), {})
+})
+
 test('buildReviewSchemaParts filters invalid records and omits blank titles and invalid dates', async () => {
   const buildReviewSchemaParts = await loadBuilder()
   const result = buildReviewSchemaParts({
@@ -121,6 +136,55 @@ test('ProductReviews loads and deduplicates the next page for the current produc
   assert.match(source, /watch\(\s*\[\(\) => props\.productId, \(\) => props\.lang/)
 })
 
+test('load-more emits the complete merged public data and ProductDetail immediately rebuilds schema', () => {
+  const component = readIfPresent(reviewsComponentUrl)
+  const detail = readIfPresent(detailUrl)
+
+  assert.match(component, /defineEmits\(\s*\[\s*['"]reviews-updated['"]\s*\]\s*\)/)
+  assert.match(component, /const nextPublicReviews\s*=\s*\{\s*reviews:/s)
+  assert.match(component, /emit\(\s*['"]reviews-updated['"],\s*nextPublicReviews/)
+  const staleGuard = component.indexOf('requestToken !== loadToken')
+  const emitted = component.indexOf("emit('reviews-updated'")
+  assert.ok(staleGuard >= 0 && emitted > staleGuard, 'stale load-more responses must return before emitting')
+
+  assert.match(detail, /@reviews-updated="handleReviewsUpdated"/)
+  const handler = detail.slice(detail.indexOf('function handleReviewsUpdated'), detail.indexOf('function updateProductSeo'))
+  assert.match(handler, /context\.productId/)
+  assert.match(handler, /context\.lang/)
+  assert.match(handler, /publicReviews\.value\s*=\s*nextPublicReviews/)
+  assert.match(handler, /updateProductSeo\(company\.value\)/)
+})
+
+test('review UI labels have English translation sources, built-in Chinese, and DB-first shared resolution', async () => {
+  const component = readIfPresent(reviewsComponentUrl)
+  const translationRoute = readIfPresent(translationRouteUrl)
+  const useLang = readIfPresent(useLangUrl)
+  const keys = [
+    'reviewsKicker', 'reviewsTitle', 'reviewsPublishedCount', 'reviewsVerifiedPurchase',
+    'reviewsIncentivized', 'reviewsLoadMore', 'reviewsLoading', 'reviewsLoadError', 'reviewsRatingAria'
+  ]
+
+  for (const key of keys) {
+    assert.match(translationRoute, new RegExp(`["']${key}["']\\s*:`), `${key} needs an English AI translation source`)
+    assert.ok((useLang.match(new RegExp(`${key}\\s*:`, 'g')) || []).length >= 2, `${key} needs built-in en and zh values`)
+    assert.match(component, new RegExp(`t\\(['"]${key}['"]\\)`), `${key} must be rendered through t()`)
+  }
+  assert.doesNotMatch(component, />Customer feedback<|>Product Reviews<|Verified purchase|Incentivized review|Load more reviews|Reviews could not be loaded|out of 5 stars/)
+
+  const reviewSeo = await loadReviewSeoModule()
+  assert.equal(typeof reviewSeo.buildProductReviewUiLabels, 'function')
+  const hindi = reviewSeo.buildProductReviewUiLabels({
+    lang: 'hi',
+    translations: {
+      reviewsTitle: 'उत्पाद समीक्षाएँ',
+      reviewsLoadMore: 'और समीक्षाएँ लोड करें'
+    }
+  })
+  assert.equal(hindi.reviewsTitle, 'उत्पाद समीक्षाएँ')
+  assert.equal(hindi.reviewsLoadMore, 'और समीक्षाएँ लोड करें')
+  assert.equal(hindi.reviewsVerifiedPurchase, 'Verified purchase')
+})
+
 test('ProductDetail consumes matching SSR review state and protects product-language request races', () => {
   const detail = readIfPresent(detailUrl)
   const component = readIfPresent(reviewsComponentUrl)
@@ -150,7 +214,7 @@ test('ProductDetail consumes matching SSR review state and protects product-lang
 test('SSR reads one localized first page and reuses it for HTML, state and shared schema', () => {
   const source = readIfPresent(serverUrl)
   assert.match(source, /import \{\s*productReviewStore\s*\} from ['"]\.\/routes\/product-reviews\.js['"]/)
-  assert.match(source, /import \{ buildReviewSchemaParts \} from ['"]\.\.\/shared\/productReviewSeo\.js['"]/)
+  assert.match(source, /import\s*\{[^}]*buildReviewSchemaParts[^}]*\}\s*from ['"]\.\.\/shared\/productReviewSeo\.js['"]/s)
   assert.match(source, /productReviewStore\.listPublic\(\{\s*productId:\s*product\.id,\s*lang,\s*page:\s*1,\s*limit:\s*10\s*\}\)/s)
   assert.match(source, /buildReviewSchemaParts\(publicReviews\)/)
   assert.match(source, /renderPublicReviewsHtml\(publicReviews/)
@@ -178,4 +242,18 @@ test('SSR review rendering escapes every user-controlled review field and has an
   assert.match(reviewLoadBlock, /reviews:\s*\[\]/)
   assert.match(reviewLoadBlock, /ratingValue:\s*0/)
   assert.match(reviewLoadBlock, /reviewCount:\s*0/)
+})
+
+test('SSR resolves review labels for the current language instead of hardcoding English', () => {
+  const source = readIfPresent(serverUrl)
+  const renderStart = source.indexOf('function renderPublicReviewsHtml')
+  const renderEnd = source.indexOf('\n      // Helper:', renderStart + 1)
+  const renderBlock = source.slice(renderStart, renderEnd > renderStart ? renderEnd : renderStart + 5000)
+
+  assert.match(source, /buildProductReviewUiLabels\(\{\s*lang,\s*translations:\s*tMap\?\.ui_text_static/s)
+  assert.match(source, /renderPublicReviewsHtml\(publicReviews,\s*reviewLabels\)/)
+  for (const key of ['reviewsTitle', 'reviewsPublishedCount', 'reviewsVerifiedPurchase', 'reviewsIncentivized', 'reviewsRatingAria']) {
+    assert.match(renderBlock, new RegExp(`labels\\.${key}`))
+  }
+  assert.doesNotMatch(renderBlock, /Product Reviews|published reviews|Verified purchase|Incentivized review|out of 5 stars/)
 })

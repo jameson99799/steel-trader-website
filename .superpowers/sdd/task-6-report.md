@@ -39,3 +39,18 @@
 - 页面在当前语言没有可见评价时完全隐藏评价 section，不伪造星级或摘要。
 - 构建仍有项目既有的 `vendor-chart` 大 chunk 与空 `vendor-editor` warning；本任务未改变依赖或 chunk 配置。
 - 未引入浏览器端端到端测试；竞态、初始状态复用、SSR 复用/转义/降级由定向源码契约测试覆盖，Vue 生产构建验证组件编译。
+
+## Gate 修复：本地化与 schema 同步
+
+- RED：扩展定向命令后共 29 项，25 通过、4 失败，分别锁定 aggregate 边界、load-more 父级同步、客户端本地化与 SSR 当前语言标签。
+- load-more 在 product/lang token 过期检查之后，向父组件发送完整合并后的 `{ reviews, summary, pagination }`；父组件再次校验产品与语言，仅对当前上下文更新公开评价并立即重建 Product JSON-LD。
+- 客户端评价区的可见文字、ARIA 标签和错误消息均通过 `t()`；新增英文 AI 翻译源以及内置中英文安全值。
+- SSR 通过当前语言数据库中的 `ui_text_static` 解析评价标签，缺失时使用共享的英文/中文安全 fallback；用户可控评价字段和数据库标签仍经 HTML 转义。
+- 共享 schema builder 仅接受 1–5 的 aggregate rating 与正整数 review count；明确拒绝评分 7 和计数 2.5。
+
+### Gate 修复验证
+
+- 定向：29/29 通过。
+- 语法：`shared/productReviewSeo.js`、`server/index.js`、`server/routes/translation.js` 全部通过 `node --check`。
+- 全量：`npm.cmd test` 128/128 通过。
+- 生产构建：`npm.cmd run build` 通过，745 modules transformed；仅保留项目既有 chunk warning。
