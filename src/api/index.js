@@ -205,6 +205,18 @@ export const api = {
   updateProduct: (id, data) => request(`/products/${id}`, { method: 'PUT', body: data }),
   deleteProduct: (id) => request(`/products/${id}`, { method: 'DELETE' }),
 
+  // Product Reviews
+  getPublicProductReviews: (productId, params = {}) => request(`/product-reviews/product/${productId}?${new URLSearchParams(params)}`),
+  getAdminProductReviews: (params = {}) => request(`/product-reviews/admin?${new URLSearchParams(params)}`),
+  getAdminProductReview: id => request(`/product-reviews/admin/${id}`),
+  createProductReview: data => request('/product-reviews/admin', { method: 'POST', body: JSON.stringify(data) }),
+  parseProductReviewImport: data => request('/product-reviews/admin/parse-import', { method: 'POST', body: JSON.stringify(data) }),
+  bulkCreateProductReviews: data => request('/product-reviews/admin/bulk', { method: 'POST', body: JSON.stringify(data) }),
+  updateProductReview: (id, data) => request(`/product-reviews/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteProductReview: id => request(`/product-reviews/admin/${id}`, { method: 'DELETE' }),
+  bulkUpdateProductReviewStatus: data => request('/product-reviews/admin/bulk-status', { method: 'POST', body: JSON.stringify(data) }),
+  publishAllPendingProductReviews: data => request('/product-reviews/admin/publish-all', { method: 'POST', body: JSON.stringify(data) }),
+
   // Company — cached (rarely changes)
   getCompany: () => cachedGet('/company'),
   updateCompany: (data) => {

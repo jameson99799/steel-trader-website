@@ -2,6 +2,11 @@ import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import crypto from 'crypto'
 import nodemailer from 'nodemailer'
+import {
+    createLegacySeoReviewHandler,
+    productReviewStore,
+    registerExternalProductReviewRoutes
+} from './product-reviews.js'
 
 // ─── Product type detection from article context ─────────────────────────────
 const PRODUCT_TYPE_MAP = [
@@ -445,47 +450,15 @@ router.put('/news/:id/faq', apiKeyMiddleware, (req, res) => {
     })
 })
 
-// ─── POST /api/external/seo-reviews — create SEO review ──────────────────────
-router.post('/seo-reviews', apiKeyMiddleware, (req, res) => {
-    let { target_type, target_id, author_name, rating, review_text } = req.body
-    
-    if (!target_type || !target_id || !author_name || !review_text) {
-        return res.status(400).json({ error: 'target_type, target_id, author_name, review_text are required' })
-    }
-    target_type = String(target_type).toLowerCase()
-    if (target_type !== 'product' && target_type !== 'article') {
-        return res.status(400).json({ error: 'target_type must be product or article' })
-    }
-    
-    // Verify target exists
-    if (target_type === 'product') {
-        if (!getOne('SELECT id FROM products WHERE id = ?', [target_id])) {
-            return res.status(404).json({ error: 'Product not found' })
-        }
-    } else {
-        if (!getOne('SELECT id FROM news WHERE id = ?', [target_id])) {
-            return res.status(404).json({ error: 'Article not found' })
-        }
-    }
-
-    rating = parseFloat(rating)
-    if (isNaN(rating) || rating < 4.7 || rating > 5.0) {
-        rating = Number((4.7 + Math.random() * 0.3).toFixed(1))
-    }
-
-    const result = run(
-        'INSERT INTO seo_reviews (target_type, target_id, author_name, rating, review_text) VALUES (?,?,?,?,?)',
-        [target_type, parseInt(target_id), author_name, rating, review_text]
-    )
-
-    res.json({
-        success: true, 
-        id: result.lastInsertRowid,
-        target_type, 
-        target_id, 
-        message: 'Review successfully created. It will immediately appear in JSON-LD schema.'
-    })
+// Product reviews use the same X-API-Key middleware as the existing external API.
+registerExternalProductReviewRoutes(router, {
+    store: productReviewStore,
+    middleware: apiKeyMiddleware
 })
+
+// Deprecated compatibility endpoint: product reviews are queued as pending.
+// Article reviews are rejected because the moderated review domain is product-only.
+router.post('/seo-reviews', apiKeyMiddleware, createLegacySeoReviewHandler({ store: productReviewStore }))
 
 // ─── GET /api/external/templates — list/search email templates ──────────────
 router.get('/templates', apiKeyMiddleware, (req, res) => {
