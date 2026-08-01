@@ -1,6 +1,11 @@
 import { Router } from 'express'
 import { getAll, getOne } from '../db.js'
 import { getVisibleCategoryIds, visibleProductWhere } from '../services/catalogVisibility.js'
+import {
+    CATEGORY_INDEX_LASTMOD_QUERY,
+    PRODUCT_CATEGORY_SITEMAP_QUERY,
+    NEWS_CATEGORY_SITEMAP_QUERY
+} from '../services/sitemapCategoryQueries.js'
 
 const router = Router()
 
@@ -94,7 +99,7 @@ router.get('/', (req, res) => {
         const ln = getOne('SELECT COALESCE(updated_at, created_at) as d FROM news WHERE status=1 ORDER BY d DESC LIMIT 1')
         if (ln && ln.d) lastNewsDate = toDateStr(ln.d, '2024-03-01')
         
-        const lc = getOne('SELECT COALESCE(updated_at, created_at) as d FROM categories ORDER BY d DESC LIMIT 1')
+        const lc = getOne(CATEGORY_INDEX_LASTMOD_QUERY)
         if (lc && lc.d) lastCatDate = toDateStr(lc.d, '2024-03-01')
         
         lastStaticDate = new Date().toISOString().split('T')[0] // Static always has futures changing today
@@ -178,7 +183,7 @@ router.get('/categories', (req, res) => {
 
         // Product categories
         const ids = visibleCategories()
-        const categories = getAll(`SELECT id, slug, name_en, COALESCE(updated_at, created_at) as lastmod_date FROM categories ORDER BY sort_order, id`)
+        const categories = getAll(PRODUCT_CATEGORY_SITEMAP_QUERY)
             .filter(category => ids.has(category.id))
         for (const c of categories) {
             const catSlug = c.slug || c.name_en?.toLowerCase().replace(/\\s+/g, '-') || c.id
@@ -196,7 +201,7 @@ router.get('/categories', (req, res) => {
         }
 
         // News categories
-        const newsCategories = getAll(`SELECT id, slug, name_en, COALESCE(updated_at, created_at) as lastmod_date FROM news_categories ORDER BY sort_order, id`)
+        const newsCategories = getAll(NEWS_CATEGORY_SITEMAP_QUERY)
         for (const nc of newsCategories) {
             if (!nc.slug) continue
             const locPath = `/news/category/${nc.slug}`
