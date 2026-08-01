@@ -114,3 +114,78 @@ duration_ms 12411.5588
 ## Concerns
 
 - None known. A read-only reviewer was started but stopped at the parent task's request so final verification and submission would not wait; the parent will perform the independent post-commit review.
+
+## Atomic batch update review fix
+
+Independent review identified that `bulkStatus` and `publishAll` selected their target rows before invoking the update, without enclosing both operations in one transaction snapshot.
+
+### Regression RED
+
+The real in-memory SQLite adapter now records `db.inTransaction` for actual `getAll`, `run`, transaction-boundary, and cache-invalidation operations. The two mutation tests assert that the target SELECT and UPDATE both execute inside one transaction callback and that cache invalidation occurs only after the transaction ends.
+
+Command:
+
+```powershell
+node --test test/productReviewCore.test.js
+```
+
+Observed before the implementation fix (exit 1):
+
+```text
+tests 15
+pass 13
+fail 2
+bulkStatus: false !== true for SELECT inTransaction
+publishAll: false !== true for SELECT inTransaction
+```
+
+### Implementation
+
+- Moved the `bulkStatus` target SELECT, explicit-ID UPDATE, `updated` count, and `productIds` derivation into one `transaction` callback.
+- Moved the `publishAll` scoped pending SELECT, explicit-ID UPDATE, `updated` count, and `productIds` derivation into one `transaction` callback.
+- Kept every `invalidateCache(productId)` call after the transaction returns successfully.
+
+### Review-fix GREEN and regressions
+
+Focused command:
+
+```powershell
+node --test test/productReviewCore.test.js
+```
+
+Result:
+
+```text
+tests 15
+pass 15
+fail 0
+duration_ms 137.4202
+```
+
+Syntax command:
+
+```powershell
+node --check server/services/productReviews.js
+```
+
+Result: exit 0 with no output.
+
+Full command:
+
+```powershell
+npm.cmd test
+```
+
+Result:
+
+```text
+tests 78
+pass 78
+fail 0
+duration_ms 12392.1251
+```
+
+### Review-fix commit
+
+- Title: `fix: make product review batch updates atomic`
+- The final SHA is reported by the task response after Git creates the commit.

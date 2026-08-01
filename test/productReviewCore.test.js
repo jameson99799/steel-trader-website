@@ -62,26 +62,61 @@ function createFixture() {
   initializeProductReviewSchema(db)
 
   const invalidated = []
+  const operations = []
   const store = createProductReviewStore({
     getAll(sql, params = []) {
+      operations.push({ type: 'getAll', sql, inTransaction: db.inTransaction })
       return db.prepare(sql).all(...params)
     },
     getOne(sql, params = []) {
+      operations.push({ type: 'getOne', sql, inTransaction: db.inTransaction })
       return db.prepare(sql).get(...params) || null
     },
     run(sql, params = []) {
+      operations.push({ type: 'run', sql, inTransaction: db.inTransaction })
       const result = db.prepare(sql).run(...params)
       return { lastInsertRowid: result.lastInsertRowid, changes: result.changes }
     },
     transaction(fn) {
-      return db.transaction(fn)()
+      operations.push({ type: 'transaction-start', inTransaction: db.inTransaction })
+      const result = db.transaction(() => {
+        operations.push({ type: 'transaction-callback', inTransaction: db.inTransaction })
+        return fn()
+      })()
+      operations.push({ type: 'transaction-end', inTransaction: db.inTransaction })
+      return result
     },
     invalidateCache(productId) {
+      operations.push({ type: 'invalidateCache', productId, inTransaction: db.inTransaction })
       invalidated.push(productId)
     }
   })
 
-  return { db, store, invalidated }
+  return { db, store, invalidated, operations }
+}
+
+function assertSelectionAndUpdateAreAtomic(operations, selectFragment) {
+  const selectIndex = operations.findIndex(operation =>
+    operation.type === 'getAll' && operation.sql.includes(selectFragment)
+  )
+  const updateIndex = operations.findIndex(operation =>
+    operation.type === 'run' && operation.sql.includes('UPDATE product_reviews')
+  )
+  const transactionEndIndex = operations.findIndex(operation => operation.type === 'transaction-end')
+  const invalidationIndexes = operations
+    .map((operation, index) => operation.type === 'invalidateCache' ? index : -1)
+    .filter(index => index >= 0)
+
+  assert.ok(selectIndex >= 0, 'expected the real target-selection query to execute')
+  assert.ok(updateIndex > selectIndex, 'expected the real update after target selection')
+  assert.equal(operations[selectIndex].inTransaction, true)
+  assert.equal(operations[updateIndex].inTransaction, true)
+  assert.ok(transactionEndIndex > updateIndex, 'expected the update to finish before transaction commit')
+  assert.ok(invalidationIndexes.length > 0, 'expected cache invalidation after the mutation')
+  for (const index of invalidationIndexes) {
+    assert.ok(index > transactionEndIndex, 'cache invalidation must run after transaction commit')
+    assert.equal(operations[index].inTransaction, false)
+  }
 }
 
 function reviewInput(overrides = {}) {
@@ -342,16 +377,18 @@ test('update applies publication timestamp transitions and refuses invalid ratin
   assert.equal(db.prepare('SELECT rating FROM product_reviews WHERE id = ?').get(created.id).rating, before)
 })
 
-test('bulkStatus updates only explicit unique ids and invalidates their product ids', () => {
-  const { store, invalidated } = createFixture()
+test('bulkStatus atomically selects and updates only explicit unique ids before cache invalidation', () => {
+  const { store, invalidated, operations } = createFixture()
   const first = store.create(reviewInput({ product_id: 1, status: 'pending' }), { forcedStatus: 'pending' })
   const second = store.create(reviewInput({ product_id: 3, author_name: 'Other', status: 'pending' }), { forcedStatus: 'pending' })
   const untouched = store.create(reviewInput({ product_id: 2, author_name: 'Untouched', status: 'pending' }), { forcedStatus: 'pending' })
   invalidated.length = 0
+  operations.length = 0
 
   const result = store.bulkStatus([first.id, second.id, first.id, 999], 'published')
   assert.equal(result.updated, 2)
   assert.deepEqual(result.productIds, [1, 3])
+  assertSelectionAndUpdateAreAtomic(operations, 'WHERE id IN')
   assert.equal(store.getById(first.id).status, 'published')
   assert.ok(store.getById(first.id).published_at)
   assert.equal(store.getById(second.id).status, 'published')
@@ -361,17 +398,19 @@ test('bulkStatus updates only explicit unique ids and invalidates their product 
   assert.throws(() => store.bulkStatus([first.id], 'approved'), /status/i)
 })
 
-test('publishAll requires a scope, includes descendant categories, and remove invalidates the right products', () => {
-  const { store, invalidated } = createFixture()
+test('publishAll atomically selects scoped pending rows and updates before cache invalidation', () => {
+  const { store, invalidated, operations } = createFixture()
   const rootChild = store.create(reviewInput({ product_id: 1 }), { forcedStatus: 'pending' })
   const grandchild = store.create(reviewInput({ product_id: 2, author_name: 'Grandchild buyer' }), { forcedStatus: 'pending' })
   const other = store.create(reviewInput({ product_id: 3, author_name: 'Other buyer' }), { forcedStatus: 'pending' })
   invalidated.length = 0
+  operations.length = 0
 
   assert.throws(() => store.publishAll({}), /productId.*categoryId|scope/i)
   const result = store.publishAll({ categoryId: 10 })
   assert.equal(result.updated, 2)
   assert.deepEqual(result.productIds, [1, 2])
+  assertSelectionAndUpdateAreAtomic(operations, "r.status = ?")
   assert.equal(store.getById(rootChild.id).status, 'published')
   assert.equal(store.getById(grandchild.id).status, 'published')
   assert.equal(store.getById(other.id).status, 'pending')

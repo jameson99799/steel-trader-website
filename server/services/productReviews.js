@@ -535,28 +535,33 @@ export function createProductReviewStore({
     const normalized = normalizedStatus(status)
     if (!uniqueIds.length) return { updated: 0, productIds: [] }
 
-    const rows = getAll(`
-      SELECT id, product_id
-      FROM product_reviews
-      WHERE id IN (${placeholders(uniqueIds.length)})
-      ORDER BY product_id, id
-    `, uniqueIds)
-    if (!rows.length) return { updated: 0, productIds: [] }
-    const existingIds = rows.map(row => row.id)
-    const result = run(`
-      UPDATE product_reviews
-      SET
-        status = ?,
-        published_at = CASE
-          WHEN ? = 'published' THEN COALESCE(published_at, CURRENT_TIMESTAMP)
-          ELSE NULL
-        END,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id IN (${placeholders(existingIds.length)})
-    `, [normalized, normalized, ...existingIds])
-    const productIds = [...new Set(rows.map(row => row.product_id))]
-    productIds.forEach(invalidateCache)
-    return { updated: result.changes, productIds }
+    const outcome = transaction(() => {
+      const rows = getAll(`
+        SELECT id, product_id
+        FROM product_reviews
+        WHERE id IN (${placeholders(uniqueIds.length)})
+        ORDER BY product_id, id
+      `, uniqueIds)
+      if (!rows.length) return { updated: 0, productIds: [] }
+      const existingIds = rows.map(row => row.id)
+      const result = run(`
+        UPDATE product_reviews
+        SET
+          status = ?,
+          published_at = CASE
+            WHEN ? = 'published' THEN COALESCE(published_at, CURRENT_TIMESTAMP)
+            ELSE NULL
+          END,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id IN (${placeholders(existingIds.length)})
+      `, [normalized, normalized, ...existingIds])
+      return {
+        updated: result.changes,
+        productIds: [...new Set(rows.map(row => row.product_id))]
+      }
+    })
+    outcome.productIds.forEach(invalidateCache)
+    return outcome
   }
 
   function publishAll(filters = {}) {
@@ -570,28 +575,33 @@ export function createProductReviewStore({
       categoryId: hasCategory ? filters.categoryId : undefined,
       status: 'pending'
     })
-    const rows = getAll(`
-      ${scope.cte}
-      SELECT r.id, r.product_id
-      FROM product_reviews AS r
-      INNER JOIN products AS p ON p.id = r.product_id
-      ${scope.where}
-      ORDER BY r.product_id, r.id
-    `, scope.parameters)
-    if (!rows.length) return { updated: 0, productIds: [] }
+    const outcome = transaction(() => {
+      const rows = getAll(`
+        ${scope.cte}
+        SELECT r.id, r.product_id
+        FROM product_reviews AS r
+        INNER JOIN products AS p ON p.id = r.product_id
+        ${scope.where}
+        ORDER BY r.product_id, r.id
+      `, scope.parameters)
+      if (!rows.length) return { updated: 0, productIds: [] }
 
-    const reviewIds = rows.map(row => row.id)
-    const result = run(`
-      UPDATE product_reviews
-      SET
-        status = 'published',
-        published_at = COALESCE(published_at, CURRENT_TIMESTAMP),
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id IN (${placeholders(reviewIds.length)})
-    `, reviewIds)
-    const productIds = [...new Set(rows.map(row => row.product_id))]
-    productIds.forEach(invalidateCache)
-    return { updated: result.changes, productIds }
+      const reviewIds = rows.map(row => row.id)
+      const result = run(`
+        UPDATE product_reviews
+        SET
+          status = 'published',
+          published_at = COALESCE(published_at, CURRENT_TIMESTAMP),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id IN (${placeholders(reviewIds.length)})
+      `, reviewIds)
+      return {
+        updated: result.changes,
+        productIds: [...new Set(rows.map(row => row.product_id))]
+      }
+    })
+    outcome.productIds.forEach(invalidateCache)
+    return outcome
   }
 
   function listPublic({ productId, lang = 'en', page = 1, limit = 10 }) {
