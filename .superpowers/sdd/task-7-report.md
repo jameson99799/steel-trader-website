@@ -41,3 +41,10 @@
 - 修复后分别请求 local/public `/api/product-reviews/product/:id?lang=en&page=1&limit=10`，分别以各自 payload 校验对应 HTML 与 Product JSON-LD。
 - 额外显式比较 local/public 的 `summary.reviewCount`、`summary.ratingValue`，以及当前页每条评价用于可见内容/Schema 的作者、标题、日期、评分、正文、验证购买、激励状态和激励披露；顺序或字段漂移均失败。
 - 修复验证：新场景 3/3、指定矩阵 66/66、全量 141/141；服务端/验证器语法检查、生产构建（745 modules）和 `git diff --check` 均通过。
+
+## 二次复核修复：完整 payload 深度对等
+
+- 二次复核指出按字段白名单比较会漏掉 API 返回的标识、状态、来源、时间戳和分页信息。
+- 新增五个独立 RED，分别修改 `id`、`product_id`、`status`、`pagination.total`，以及交换两条可见字段相同但 ID 不同的评价顺序；首次 5/5 均按预期失败。
+- `verifyProductReviewPayloadParity` 现对 unwrap 后的完整公开 payload 使用 `isDeepStrictEqual`：不删除字段、不挑选字段、不排序 reviews；对象完整结构、所有返回字段、pagination 和数组原始顺序都必须一致。
+- 二次复核验证：新增 5/5、指定矩阵 71/71、全量 146/146；服务端/验证器语法、生产构建（745 modules）和 `git diff --check` 均通过。

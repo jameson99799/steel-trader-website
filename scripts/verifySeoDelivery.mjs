@@ -1,5 +1,6 @@
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { isDeepStrictEqual } from 'node:util'
 
 function verificationUrl(baseUrl, pathname) {
   const url = new URL(pathname, `${baseUrl.replace(/\/+$/, '')}/`)
@@ -159,36 +160,15 @@ function unwrapReviewPayload(payload) {
 }
 
 export function verifyProductReviewPayloadParity(localPayload, publicPayload) {
-  const visibleFields = [
-    'author_name',
-    'review_title',
-    'review_date',
-    'rating',
-    'review_text',
-    'verified_purchase',
-    'is_incentivized',
-    'incentive_disclosure'
-  ]
-  const comparable = payload => {
-    const normalized = unwrapReviewPayload(payload)
-    if (!normalized || !Array.isArray(normalized.reviews) || !normalized.summary) {
+  const local = unwrapReviewPayload(localPayload)
+  const publiclyDelivered = unwrapReviewPayload(publicPayload)
+  for (const payload of [local, publiclyDelivered]) {
+    if (!payload || !Array.isArray(payload.reviews) || !payload.summary || !payload.pagination) {
       throw new Error('Product review API payload is invalid')
-    }
-    return {
-      summary: {
-        reviewCount: Number(normalized.summary.reviewCount),
-        ratingValue: Number(normalized.summary.ratingValue)
-      },
-      reviews: normalized.reviews.map(review => Object.fromEntries(
-        visibleFields.map(field => [
-          field,
-          field === 'rating' ? Number(review?.[field]) : (review?.[field] ?? null)
-        ])
-      ))
     }
   }
 
-  if (JSON.stringify(comparable(localPayload)) !== JSON.stringify(comparable(publicPayload))) {
+  if (!isDeepStrictEqual(local, publiclyDelivered)) {
     throw new Error('Local and public product review payloads differ')
   }
 }

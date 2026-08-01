@@ -11,13 +11,23 @@ const PRODUCT_SLUG = 'gl-steel-coil'
 function reviewPayload(overrides = {}) {
   return {
     reviews: [{
+      id: 101,
+      product_id: PRODUCT_ID,
       author_name: 'A & B Buyer',
       review_date: '2026-07-20',
       rating: 4.7,
       review_text: 'Strong <coating> & careful packing.',
+      status: 'published',
+      source: 'admin',
+      external_id: null,
+      import_batch_id: null,
+      published_at: '2026-07-21 08:00:00',
+      created_at: '2026-07-20 08:00:00',
+      updated_at: '2026-07-21 08:00:00',
       ...overrides
     }],
-    summary: { reviewCount: 12, ratingValue: 4.6 }
+    summary: { reviewCount: 12, ratingValue: 4.6 },
+    pagination: { page: 1, limit: 10, total: 1 }
   }
 }
 
@@ -253,6 +263,38 @@ test('delivery verifier rejects local and public review payload drift even when 
     productPath: `/en/products/${PRODUCT_SLUG}`,
     productId: PRODUCT_ID
   }), /local.*public.*review payload|review payload.*differ/i)
+})
+
+for (const [label, mutate] of [
+  ['id', payload => { payload.reviews[0].id = 999 }],
+  ['product_id', payload => { payload.reviews[0].product_id = 999 }],
+  ['status', payload => { payload.reviews[0].status = 'hidden' }],
+  ['pagination.total', payload => { payload.pagination.total = 2 }]
+]) {
+  test(`payload parity rejects ${label} drift`, () => {
+    const localPayload = reviewPayload()
+    const publicPayload = structuredClone(localPayload)
+    mutate(publicPayload)
+    assert.throws(
+      () => delivery.verifyProductReviewPayloadParity(localPayload, publicPayload),
+      /local.*public.*review payload.*differ/i
+    )
+  })
+}
+
+test('payload parity is review-array order sensitive without sorting or deleting fields', () => {
+  const first = reviewPayload().reviews[0]
+  const second = { ...first, id: 102 }
+  const localPayload = {
+    ...reviewPayload(),
+    reviews: [first, second],
+    pagination: { page: 1, limit: 10, total: 2 }
+  }
+  const publicPayload = { ...structuredClone(localPayload), reviews: [second, first] }
+  assert.throws(
+    () => delivery.verifyProductReviewPayloadParity(localPayload, publicPayload),
+    /local.*public.*review payload.*differ/i
+  )
 })
 
 test('CLI product discovery preserves readiness retries while returning both id and slug', async () => {
