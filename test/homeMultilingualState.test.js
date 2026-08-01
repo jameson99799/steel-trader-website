@@ -5,6 +5,23 @@ import fs from 'node:fs'
 const homeStateModule = await import('../server/services/homeInitialState.js')
   .catch(() => null)
 const buildHomeInitialState = homeStateModule?.buildHomeInitialState
+const homeClientStateModule = await import('../src/utils/homeInitialState.js')
+  .catch(() => null)
+const canReuseHomeInitialState = homeClientStateModule?.canReuseHomeInitialState
+const createLatestOnlyCommit = homeClientStateModule?.createLatestOnlyCommit
+const normalizeLocalizedRefreshResults =
+  homeClientStateModule?.normalizeLocalizedRefreshResults
+
+function completeInitialState(lang) {
+  return {
+    lang,
+    hero: { id: 1 },
+    featuredProducts: [],
+    categories: [],
+    pageTexts: { id: 1 },
+    company: { id: 1 }
+  }
+}
 
 const baseRows = {
   hero: {
@@ -145,6 +162,86 @@ test('server initial state is built through the language-aware home service', ()
     serverSource,
     /hero:\s*getOne\('SELECT \* FROM hero_content/
   )
+  assert.match(
+    serverSource,
+    /const initialState = \{[\s\S]*?\blang,/
+  )
+})
+
+test('reuses initial homepage state when its language matches the current language', () => {
+  assert.equal(
+    typeof canReuseHomeInitialState,
+    'function',
+    'canReuseHomeInitialState must be implemented'
+  )
+
+  for (const lang of ['hi', 'zh']) {
+    assert.equal(canReuseHomeInitialState(completeInitialState(lang), lang), true)
+  }
+})
+
+test('does not reuse initial homepage state with a different or missing language', () => {
+  assert.equal(
+    typeof canReuseHomeInitialState,
+    'function',
+    'canReuseHomeInitialState must be implemented'
+  )
+
+  assert.equal(canReuseHomeInitialState(completeInitialState('en'), 'hi'), false)
+  assert.equal(canReuseHomeInitialState({}, 'zh'), false)
+  assert.equal(canReuseHomeInitialState(null, 'zh'), false)
+})
+
+test('does not reuse matching-language initial homepage state when any group is missing', () => {
+  assert.equal(
+    typeof canReuseHomeInitialState,
+    'function',
+    'canReuseHomeInitialState must be implemented'
+  )
+
+  for (const group of ['hero', 'featuredProducts', 'categories', 'pageTexts', 'company']) {
+    const initialState = completeInitialState('zh')
+    delete initialState[group]
+    assert.equal(canReuseHomeInitialState(initialState, 'zh'), false, group)
+  }
+})
+
+test('allows only the most recent homepage language refresh to commit', () => {
+  assert.equal(
+    typeof createLatestOnlyCommit,
+    'function',
+    'createLatestOnlyCommit must be implemented'
+  )
+
+  const commit = createLatestOnlyCommit()
+  const firstRefresh = commit.begin()
+  const latestRefresh = commit.begin()
+
+  assert.equal(commit.isLatest(firstRefresh), false)
+  assert.equal(commit.isLatest(latestRefresh), true)
+})
+
+test('normalizes each localized refresh group independently with safe empty fallbacks', () => {
+  assert.equal(
+    typeof normalizeLocalizedRefreshResults,
+    'function',
+    'normalizeLocalizedRefreshResults must be implemented'
+  )
+
+  const data = normalizeLocalizedRefreshResults([
+    { status: 'fulfilled', value: { id: 'hero' } },
+    { status: 'rejected', reason: new Error('products unavailable') },
+    { status: 'fulfilled', value: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }, { id: 6 }, { id: 7 }] },
+    { status: 'fulfilled', value: { id: 'texts' } },
+    { status: 'rejected', reason: new Error('company unavailable') }
+  ])
+
+  assert.deepEqual(data.hero, { id: 'hero' })
+  assert.deepEqual(data.featuredProducts, [])
+  assert.deepEqual(data.categories, [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }, { id: 6 }])
+  assert.deepEqual(data.pageTexts, { id: 'texts' })
+  assert.deepEqual(data.company, {})
+  assert.equal(data.errors.length, 2)
 })
 
 test('home language watcher refreshes every language-sensitive data source', () => {
@@ -156,6 +253,9 @@ test('home language watcher refreshes every language-sensitive data source', () 
     /async function refreshLocalizedPageData\(\)\s*\{([\s\S]*?)\n\}/
   )?.[1] || ''
 
+  assert.match(refreshBody, /clearLocalizedPageData\(\)/)
+  assert.match(refreshBody, /Promise\.allSettled\(\[/)
+  assert.match(refreshBody, /normalizeLocalizedRefreshResults\(results\)/)
   assert.match(refreshBody, /api\.getHero\(\)/)
   assert.match(
     refreshBody,
@@ -165,4 +265,13 @@ test('home language watcher refreshes every language-sensitive data source', () 
   assert.match(refreshBody, /api\.getPageTexts\(\)/)
   assert.match(refreshBody, /api\.getCompany\(\)/)
   assert.match(homeSource, /watch\(lang,\s*refreshLocalizedPageData\)/)
+  assert.match(
+    homeSource,
+    /canReuseHomeInitialState\(initialState,\s*lang\.value\)/
+  )
+  assert.match(homeSource, /refreshCommit\.begin\(\)/)
+  assert.match(
+    refreshBody,
+    /if \(!refreshCommit\.isLatest\(refreshVersion\)\) return/
+  )
 })

@@ -257,13 +257,21 @@
 import { ref, onMounted, watch } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
+import {
+  canReuseHomeInitialState,
+  createLatestOnlyCommit,
+  normalizeLocalizedRefreshResults
+} from '../utils/homeInitialState'
 
 const { t, localizedValue, langPath, lang } = useLang()
-const hero = ref(window.__INITIAL_STATE__?.hero || {})
-const featuredProducts = ref(window.__INITIAL_STATE__?.featuredProducts || [])
-const categories = ref(window.__INITIAL_STATE__?.categories || [])
-const pageTexts = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.pageTexts || {} : {})
-const company = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.company || {} : {})
+const initialState = typeof window !== 'undefined' ? window.__INITIAL_STATE__ : null
+const reuseInitialState = canReuseHomeInitialState(initialState, lang.value)
+const hero = ref(reuseInitialState ? initialState.hero || {} : {})
+const featuredProducts = ref(reuseInitialState ? initialState.featuredProducts || [] : [])
+const categories = ref(reuseInitialState ? initialState.categories || [] : [])
+const pageTexts = ref(reuseInitialState ? initialState.pageTexts || {} : {})
+const company = ref(reuseInitialState ? initialState.company || {} : {})
+const refreshCommit = createLatestOnlyCommit()
 
 const videoLightboxActive = ref(false)
 const videoLightboxUrl = ref('')
@@ -336,58 +344,44 @@ const getYoutubeEmbedUrl = (url, autoplay, mute = false) => {
 }
 
 async function loadPageData() {
-  try {
-    if (!hero.value.id) {
-      hero.value = await api.getHero()
-    }
-    if (!featuredProducts.value.length) {
-      const productsRes = await api.getProducts({ featured: '1', limit: 12 })
-      featuredProducts.value = productsRes.data
-    }
-    
-    if (!categories.value.length) {
-      const tree = await api.getCategoryTree()
-      categories.value = tree.slice(0, 6)
-    }
-    
-    if (!pageTexts.value.id || !company.value.id) {
-      const [textsRes, companyRes] = await Promise.all([
-        api.getPageTexts(),
-        api.getCompany()
-      ])
-      if (!pageTexts.value.id) pageTexts.value = textsRes
-      if (!company.value.id) company.value = companyRes
-    }
-  } catch (e) {
-    console.error(e)
+  if (!reuseInitialState) {
+    await refreshLocalizedPageData()
   }
 }
 
 onMounted(loadPageData)
 
-async function refreshLocalizedPageData() {
-  try {
-    const [
-      heroResult,
-      productsResult,
-      categoryTree,
-      pageTextResult,
-      companyResult
-    ] = await Promise.all([
-      api.getHero(),
-      api.getProducts({ featured: '1', limit: 12 }),
-      api.getCategoryTree(),
-      api.getPageTexts(),
-      api.getCompany()
-    ])
+function clearLocalizedPageData() {
+  hero.value = {}
+  featuredProducts.value = []
+  categories.value = []
+  pageTexts.value = {}
+  company.value = {}
+}
 
-    hero.value = heroResult
-    featuredProducts.value = productsResult.data || []
-    categories.value = (categoryTree || []).slice(0, 6)
-    pageTexts.value = pageTextResult || {}
-    company.value = companyResult || {}
-  } catch (error) {
-    console.error('Failed to refresh localized home data', error)
+async function refreshLocalizedPageData() {
+  const refreshVersion = refreshCommit.begin()
+  clearLocalizedPageData()
+
+  const results = await Promise.allSettled([
+    Promise.resolve().then(() => api.getHero()),
+    Promise.resolve().then(() => api.getProducts({ featured: '1', limit: 12 })),
+    Promise.resolve().then(() => api.getCategoryTree()),
+    Promise.resolve().then(() => api.getPageTexts()),
+    Promise.resolve().then(() => api.getCompany())
+  ])
+
+  if (!refreshCommit.isLatest(refreshVersion)) return
+
+  const localizedData = normalizeLocalizedRefreshResults(results)
+  hero.value = localizedData.hero
+  featuredProducts.value = localizedData.featuredProducts
+  categories.value = localizedData.categories
+  pageTexts.value = localizedData.pageTexts
+  company.value = localizedData.company
+
+  for (const { group, error } of localizedData.errors) {
+    console.error(`Failed to refresh localized home ${group}`, error)
   }
 }
 

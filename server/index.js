@@ -1301,6 +1301,7 @@ async function startServer() {
         })
 
         const initialState = {
+          lang,
           hero: homeInitialState.hero,
           company: lightweightCompany,
           pageTexts: homeInitialState.pageTexts,
