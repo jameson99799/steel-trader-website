@@ -11,7 +11,7 @@ import sharp from 'sharp'
 
 import { initDb, getAll, getOne, run, findFuzzyBySlug } from './db.js'
 import { loadTranslationsForLang, translateProduct, translateNews, translateCompany } from './helpers/translate.js'
-import { buildPublicCategoryTree, getVisibleCategoryIds, visibleProductWhere } from './services/catalogVisibility.js'
+import { getVisibleCategoryIds, visibleProductWhere } from './services/catalogVisibility.js'
 import {
   getSeoResponsePolicy,
   renderSeoDocument,
@@ -19,6 +19,7 @@ import {
 } from './services/seoDocument.js'
 import { renderUrl } from './services/puppeteerRenderer.js'
 import { getPublicTranslationSettings } from './services/publicInitialState.js'
+import { buildHomeInitialState } from './services/homeInitialState.js'
 import authRoutes from './routes/auth.js'
 import securityRoutes from './routes/security.js'
 import categoriesRoutes from './routes/categories.js'
@@ -1292,29 +1293,24 @@ async function startServer() {
         delete lightweightCompany.history_content;
         delete lightweightCompany.history_content_en;
 
-        // Server side fetch for grids to obliterate CLS
-        let ssrFeaturedProducts = [], ssrCategories = [];
-        try {
-          const featuredVisibility = publicProductVisibility('p')
-          ssrFeaturedProducts = getAll(`SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description, p.description_en, p.is_featured, p.status, p.sort_order, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.is_featured = 1 AND p.status = 1${featuredVisibility.clause} ORDER BY p.sort_order DESC, p.id DESC LIMIT 12`, featuredVisibility.params) || [];
-          
-          const rawCats = getAll('SELECT * FROM categories ORDER BY sort_order, id') || [];
-          const productCounts = getAll('SELECT category_id, COUNT(*) as count FROM products WHERE status = 1 GROUP BY category_id') || [];
-          const countMap = new Map(productCounts.map(product => [product.category_id, product.count]));
-          ssrCategories = buildPublicCategoryTree(rawCats, countMap).slice(0, 6);
-        } catch(e) {}
+        const homeInitialState = buildHomeInitialState({
+          readOne: getOne,
+          readAll: getAll,
+          lang,
+          translationMap: tMap
+        })
 
         const initialState = {
-          hero: getOne('SELECT * FROM hero_content WHERE id = 1') || {},
+          hero: homeInitialState.hero,
           company: lightweightCompany,
-          pageTexts: getOne('SELECT * FROM page_texts WHERE id = 1') || {},
+          pageTexts: homeInitialState.pageTexts,
           ssrArticle: req.ssrArticle || null,
           ssrProduct: req.ssrProduct || null,
           seoSettings: seoSettings,
           languages: getAll('SELECT * FROM languages WHERE status=1 ORDER BY sort_order, code') || [],
           translationSettings: getPublicTranslationSettings(getOne),
-          featuredProducts: ssrFeaturedProducts,
-          categories: ssrCategories
+          featuredProducts: homeInitialState.featuredProducts,
+          categories: homeInitialState.categories
         }
         const stateTag = `<script>window.__INITIAL_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')}</script>`
         html = renderSeoDocument({
