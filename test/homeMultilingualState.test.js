@@ -146,3 +146,23 @@ test('server initial state is built through the language-aware home service', ()
     /hero:\s*getOne\('SELECT \* FROM hero_content/
   )
 })
+
+test('home language watcher refreshes every language-sensitive data source', () => {
+  const homeSource = fs.readFileSync(
+    new URL('../src/views/Home.vue', import.meta.url),
+    'utf8'
+  )
+  const refreshBody = homeSource.match(
+    /async function refreshLocalizedPageData\(\)\s*\{([\s\S]*?)\n\}/
+  )?.[1] || ''
+
+  assert.match(refreshBody, /api\.getHero\(\)/)
+  assert.match(
+    refreshBody,
+    /api\.getProducts\(\{\s*featured:\s*'1',\s*limit:\s*12\s*\}\)/
+  )
+  assert.match(refreshBody, /api\.getCategoryTree\(\)/)
+  assert.match(refreshBody, /api\.getPageTexts\(\)/)
+  assert.match(refreshBody, /api\.getCompany\(\)/)
+  assert.match(homeSource, /watch\(lang,\s*refreshLocalizedPageData\)/)
+})

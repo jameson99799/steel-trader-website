@@ -365,10 +365,33 @@ async function loadPageData() {
 
 onMounted(loadPageData)
 
-// Re-fetch hero when language changes so stat labels update immediately
-watch(lang, () => {
-  api.getHero().then(data => { hero.value = data }).catch(() => {})
-})
+async function refreshLocalizedPageData() {
+  try {
+    const [
+      heroResult,
+      productsResult,
+      categoryTree,
+      pageTextResult,
+      companyResult
+    ] = await Promise.all([
+      api.getHero(),
+      api.getProducts({ featured: '1', limit: 12 }),
+      api.getCategoryTree(),
+      api.getPageTexts(),
+      api.getCompany()
+    ])
+
+    hero.value = heroResult
+    featuredProducts.value = productsResult.data || []
+    categories.value = (categoryTree || []).slice(0, 6)
+    pageTexts.value = pageTextResult || {}
+    company.value = companyResult || {}
+  } catch (error) {
+    console.error('Failed to refresh localized home data', error)
+  }
+}
+
+watch(lang, refreshLocalizedPageData)
 
 </script>
 
