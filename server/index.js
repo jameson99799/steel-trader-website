@@ -213,6 +213,14 @@ async function startServer() {
       handler: (req, res) => res.status(429).json({ error: 'Too many inquiries per hour.' })
     })
 
+    const externalApiLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 300,
+      standardHeaders: true,
+      legacyHeaders: false,
+      handler: (req, res) => res.status(429).json({ error: 'External API rate limit exceeded.' })
+    })
+
     app.use('/api/inquiries', (req, res, next) => {
       if (req.method === 'POST') {
         return inquiryLimiter(req, res, next)
@@ -479,7 +487,7 @@ async function startServer() {
     app.use('/api/ai', aiRoutes)
     app.use('/api/ai-auto-post', aiAutoPostRoutes)
     app.use('/api/mailer', mailerRoutes)
-    app.use('/api/external', externalApiRoutes)
+    app.use('/api/external', externalApiLimiter, externalApiRoutes)
     app.use('/api/product-reviews', productReviewRoutes)
     app.use('/api/backup', backupRoutes)
     app.use('/api/crm/auth', crmAuthRoutes)

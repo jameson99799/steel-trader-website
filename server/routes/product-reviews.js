@@ -35,6 +35,10 @@ function notFound(res) {
   return res.status(404).json({ error: 'Product review not found' })
 }
 
+function forbiddenExternalUpdate(res) {
+  return res.status(403).json({ error: 'Only external product reviews can be modified through this API' })
+}
+
 function execute(res, operation, { status = 200, missing = false } = {}) {
   try {
     const result = operation()
@@ -45,9 +49,9 @@ function execute(res, operation, { status = 200, missing = false } = {}) {
   }
 }
 
-function requireBatch(rows) {
-  if (!Array.isArray(rows) || rows.length < 1 || rows.length > MAX_REVIEW_BATCH_SIZE) {
-    throw new Error(`rows must contain between 1 and ${MAX_REVIEW_BATCH_SIZE} entries`)
+function requireBatch(values, label = 'rows') {
+  if (!Array.isArray(values) || values.length < 1 || values.length > MAX_REVIEW_BATCH_SIZE) {
+    throw new Error(`${label} must contain between 1 and ${MAX_REVIEW_BATCH_SIZE} entries`)
   }
 }
 
@@ -109,7 +113,11 @@ export function createProductReviewHandlers({ store, parseImport = parseBulkRevi
     },
 
     bulkStatus(req, res) {
-      return execute(res, () => store.bulkStatus(req.body?.ids, req.body?.status))
+      return execute(res, () => {
+        const ids = req.body?.ids
+        requireBatch(ids, 'ids')
+        return store.bulkStatus(ids, req.body?.status)
+      })
     },
 
     publishAll(req, res) {
@@ -161,11 +169,15 @@ export function createExternalProductReviewHandlers({ store }) {
     },
 
     update(req, res) {
-      return execute(
-        res,
-        () => store.update(req.params.id, req.body, forceExternalReviewPolicy()),
-        { missing: true }
-      )
+      try {
+        const existing = store.getById(req.params.id)
+        if (!existing) return notFound(res)
+        if (existing.source !== 'external_api') return forbiddenExternalUpdate(res)
+        const updated = store.update(req.params.id, req.body, forceExternalReviewPolicy())
+        return updated ? res.json(updated) : notFound(res)
+      } catch (error) {
+        return badRequest(res, error)
+      }
     },
 
     remove(req, res) {
@@ -213,7 +225,8 @@ export function createLegacySeoReviewHandler({ store }) {
         product_id: input.target_id,
         author_name: input.author_name,
         rating: input.rating,
-        review_text: input.review_text
+        review_text: input.review_text,
+        external_id: input.external_id
       }, forceExternalReviewPolicy())
       return {
         success: true,

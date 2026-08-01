@@ -47,3 +47,28 @@
 - legacy `POST /api/external/seo-reviews` 的 product 分支现写入受审核的 `product_reviews`，强制 pending，并返回 deprecated/replacement 元数据。
 - legacy article 分支无法映射到仅支持产品外键的 Task 2 store。按已确认边界返回明确的 deprecated 400 和 replacement，不再写旧 `seo_reviews`；这是有意的兼容变化，避免扩大 schema/domain 或绕过审核。
 - 路由层将领域校验错误统一映射为 400；未知的 SQL/数据库类错误细节会被隐藏，因此生产排障仍应依赖服务端日志与全局监控。
+
+## 门禁修复
+
+### RED
+
+- 命令：`node --test test/productReviewRoutes.test.js`
+- 结果：14 项中 9 项通过、5 项失败。
+- 预期失败原因：bulk-status 空 ids 返回 200；外部 PUT 未先读取来源，missing 未返回 404 且管理员来源未返回 403；legacy 适配器丢失 `external_id`；`/api/external` 未挂载 express-rate-limit。
+- 五项均为行为断言失败，无测试语法或模块装载错误。
+
+### GREEN 与修复内容
+
+- 管理员 bulk-status 在调用 store 前统一校验 ids 数量为 1–200，空数组和 201 项均返回带明确范围 details 的 400。
+- 外部 PUT 先调用 `getById`：不存在返回 404；非 `external_api` 来源返回安全的 403 且不调用 update；外部自身评价继续强制 pending。
+- `/api/external` 在 external router 前挂载独立 express-rate-limit：15 分钟 300 次，启用标准限流响应头并禁用旧响应头。
+- legacy product 适配器透传 `external_id`，领域 store 的重复 ID 幂等结果仍由 `data` 原样返回。
+- 路由测试：14/14 通过。
+
+### 最终验证
+
+- `node --test test/productReviewRoutes.test.js test/productReviewCore.test.js test/productReviewSchema.test.js`：34/34 通过。
+- `node --check server/routes/product-reviews.js`：通过。
+- `node --check server/routes/external-api.js`：通过。
+- `node --check server/index.js`：通过。
+- `npm.cmd test`：92/92 通过，0 失败、0 跳过。

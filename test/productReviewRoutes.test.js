@@ -38,7 +38,7 @@ function createStore(overrides = {}) {
   const store = {
     listPublic: input => (calls.push(['listPublic', input]), { reviews: [], input }),
     listAdmin: input => (calls.push(['listAdmin', input]), { data: [], ...input }),
-    getById: id => (calls.push(['getById', id]), { id: Number(id) }),
+    getById: id => (calls.push(['getById', id]), { id: Number(id), source: 'external_api' }),
     create: (input, policy) => (calls.push(['create', input, policy]), { id: 1, ...input, policy }),
     bulkCreate: (productId, rows, policy) => (calls.push(['bulkCreate', productId, rows, policy]), { created: rows }),
     update: (id, input, policy) => (calls.push(['update', id, input, policy]), { id: Number(id), ...input, policy }),
@@ -136,6 +136,19 @@ test('admin details and delete return 404 when the review does not exist', async
   assert.equal(invoke(handlers.removeAdmin, { params: { id: '404' } }).statusCode, 404)
 })
 
+test('admin bulk status rejects 0 or 201 ids with 1-200 range details before calling the store', async () => {
+  const { createProductReviewHandlers } = await loadRoutes()
+  const { store, calls } = createStore()
+  const handlers = createProductReviewHandlers({ store })
+
+  for (const ids of [[], Array.from({ length: 201 }, (_, index) => index + 1)]) {
+    const response = invoke(handlers.bulkStatus, { body: { ids, status: 'hidden' } })
+    assert.equal(response.statusCode, 400)
+    assert.match(String(response.body.details), /1.{0,20}200/)
+  }
+  assert.deepEqual(calls, [])
+})
+
 test('external handlers force pending for create, bulk, and update while returning store idempotency data unchanged', async () => {
   const { createExternalProductReviewHandlers } = await loadRoutes()
   const idempotent = { id: 9, external_id: 'order-9', status: 'pending', idempotent: true }
@@ -151,7 +164,26 @@ test('external handlers force pending for create, bulk, and update while returni
   assert.deepEqual(calls.shift(), ['bulkCreate', 1, [{ line: 1, status: 'published' }], { source: 'external_api', forcedStatus: 'pending' }])
 
   invoke(handlers.update, { params: { id: '9' }, body: { product_id: 99, source: 'admin', external_id: 'changed', status: 'published' } })
+  assert.deepEqual(calls.shift(), ['getById', '9'])
   assert.deepEqual(calls.shift(), ['update', '9', { product_id: 99, source: 'admin', external_id: 'changed', status: 'published' }, { source: 'external_api', forcedStatus: 'pending' }])
+})
+
+test('external update returns 404 for missing reviews and 403 for non-external reviews without updating', async () => {
+  const { createExternalProductReviewHandlers } = await loadRoutes()
+
+  const missingFixture = createStore({ getById: id => (missingFixture.calls.push(['getById', id]), null) })
+  const missingHandlers = createExternalProductReviewHandlers({ store: missingFixture.store })
+  const missing = invoke(missingHandlers.update, { params: { id: '404' }, body: { review_text: 'Changed' } })
+  assert.equal(missing.statusCode, 404)
+  assert.deepEqual(missingFixture.calls, [['getById', '404']])
+
+  const adminFixture = createStore({ getById: id => (adminFixture.calls.push(['getById', id]), { id, source: 'admin' }) })
+  const adminHandlers = createExternalProductReviewHandlers({ store: adminFixture.store })
+  const forbidden = invoke(adminHandlers.update, { params: { id: '7' }, body: { review_text: 'Changed' } })
+  assert.equal(forbidden.statusCode, 403)
+  assert.match(forbidden.body.error, /external product review/i)
+  assert.deepEqual(adminFixture.calls, [['getById', '7']])
+  assert.doesNotMatch(JSON.stringify(forbidden.body), /SELECT|UPDATE|SQL|database/i)
 })
 
 test('external route registration has CRUD but no publish or status route', async () => {
@@ -196,22 +228,28 @@ test('admin and external batches reject 0 or 201 rows with range details and pre
   }
 })
 
-test('legacy seo review compatibility is deprecated, non-random, pending, and uses the product review store', async () => {
+test('legacy seo review compatibility forwards external_id for idempotency and returns the store result unchanged', async () => {
   const routes = await loadRoutes()
-  const { store, calls } = createStore()
+  const duplicate = { id: 8, external_id: 'legacy-order-8', status: 'pending', idempotent: true }
+  const { store, calls } = createStore({ create: (input, policy) => (calls.push(['create', input, policy]), duplicate) })
   const handler = routes.createLegacySeoReviewHandler({ store })
   const response = invoke(handler, {
-    body: { target_type: 'product', target_id: 4, author_name: 'Real buyer', rating: 4.5, review_text: 'Authentic review', status: 'published' }
+    body: {
+      target_type: 'product', target_id: 4, author_name: 'Real buyer', rating: 4.5,
+      review_text: 'Authentic review', status: 'published', external_id: 'legacy-order-8'
+    }
   })
   assert.equal(response.statusCode, 201)
   assert.equal(response.body.success, true)
+  assert.equal(response.body.data, duplicate)
   assert.equal(response.body.deprecated, true)
   assert.equal(response.body.replacement, '/api/external/product-reviews')
   assert.deepEqual(calls.shift(), ['create', {
     product_id: 4,
     author_name: 'Real buyer',
     rating: 4.5,
-    review_text: 'Authentic review'
+    review_text: 'Authentic review',
+    external_id: 'legacy-order-8'
   }, { source: 'external_api', forcedStatus: 'pending' }])
 
   const externalSource = fs.readFileSync(new URL('../server/routes/external-api.js', import.meta.url), 'utf8')
@@ -247,6 +285,20 @@ test('frontend client and server mount expose the exact product review APIs', ()
   const serverSource = fs.readFileSync(new URL('../server/index.js', import.meta.url), 'utf8')
   assert.match(serverSource, /import productReviewRoutes from ['"]\.\/routes\/product-reviews\.js['"]/)
   assert.match(serverSource, /app\.use\(['"]\/api\/product-reviews['"], productReviewRoutes\)/)
+})
+
+test('server mounts a configured express-rate-limit middleware before the external API router', () => {
+  const serverSource = fs.readFileSync(new URL('../server/index.js', import.meta.url), 'utf8')
+  const limiterDeclaration = serverSource.indexOf('const externalApiLimiter = rateLimit({')
+  const externalMount = serverSource.indexOf("app.use('/api/external', externalApiLimiter, externalApiRoutes)")
+  assert.ok(limiterDeclaration >= 0, 'external API limiter must be created with express-rate-limit')
+  assert.ok(externalMount > limiterDeclaration, 'external API limiter must be mounted before the external router')
+
+  const limiterSource = serverSource.slice(limiterDeclaration, externalMount)
+  assert.match(limiterSource, /windowMs\s*:\s*\d+/)
+  assert.match(limiterSource, /max\s*:\s*\d+/)
+  assert.match(limiterSource, /standardHeaders\s*:\s*true/)
+  assert.match(limiterSource, /legacyHeaders\s*:\s*false/)
 })
 
 test('existing external product and article routes remain registered', async () => {
