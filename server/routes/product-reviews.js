@@ -1,7 +1,12 @@
 import { Router } from 'express'
 import { getAll, getOne, run, transaction } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
-import { createProductReviewStore, parseBulkReviewText } from '../services/productReviews.js'
+import {
+  configureProductReviewSeoCacheInvalidator,
+  createProductReviewSeoCacheInvalidator,
+  createProductReviewStore,
+  parseBulkReviewText
+} from '../services/productReviews.js'
 
 export const MAX_REVIEW_BATCH_SIZE = 200
 
@@ -9,11 +14,19 @@ export function forceExternalReviewPolicy() {
   return { source: 'external_api', forcedStatus: 'pending' }
 }
 
+export const productReviewCacheInvalidator = createProductReviewSeoCacheInvalidator({
+  getAll,
+  getOne,
+  run
+})
+configureProductReviewSeoCacheInvalidator(productReviewCacheInvalidator)
+
 export const productReviewStore = createProductReviewStore({
   getAll,
   getOne,
   run,
-  transaction
+  transaction,
+  invalidateCache: productReviewCacheInvalidator
 })
 
 function safeDetails(error) {

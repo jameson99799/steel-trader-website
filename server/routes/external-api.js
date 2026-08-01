@@ -899,6 +899,7 @@ router.get('/docs', (req, res) => {
         auth: {
             method: 'Header: X-API-Key',
             description: 'All write endpoints require X-API-Key in HTTP header. GET /media/groups and GET /media also require API key.',
+            rate_limit: 'External API requests share the server rate limit: 300 requests per 15-minute window. Retry only after the window resets.',
             cloudflare_waf_bypass: {
                 warning: 'If you receive a 403 error with code 1010, you are being blocked by Cloudflare WAF (Bot Fight Mode).',
                 solution: 'You MUST provide standard browser-like headers in your requests: "User-Agent", "Referer", and "Origin".',
@@ -907,6 +908,62 @@ router.get('/docs', (req, res) => {
                     'Origin': 'https://www.sunseasteel.com',
                     'Referer': 'https://www.sunseasteel.com/'
                 }
+            }
+        },
+
+        // ═══ Moderated Product Reviews ═══
+        product_reviews: {
+            description: 'Manage authentic product reviews. Every external create and edit is forced to pending for administrator review; this API cannot publish reviews.',
+            authentication: 'Every endpoint requires the X-API-Key header and is covered by the external API rate limit (300 requests per 15 minutes).',
+            moderation_workflow: [
+                '1. Use GET /api/external/products to obtain a valid product_id.',
+                '2. Create one review or a bulk of 1-200 reviews; the server always stores status=pending.',
+                '3. An administrator reviews the pending records in /admin/reviews.',
+                '4. Only an administrator can select, select all, or bulk publish approved reviews.',
+                '5. Published reviews can then be translated with the reviews scope and delivered on localized product pages.'
+            ],
+            field_rules: {
+                product_id: 'Required positive integer identifying an existing product.',
+                author_name: 'Required non-empty name, maximum 100 characters.',
+                review_date: 'Required date. Accepted: YYYY-MM-DD, YYYY/MM/DD, or YYYY年M月D日; stored as YYYY-MM-DD.',
+                rating: 'Required numeric score from 1.0 through 5.0 with at most one decimal place. A value such as 4.7 remains 4.7 and is not converted to an integer star count.',
+                review_text: 'Required authentic English review body.',
+                review_title: 'Optional English title.',
+                external_id: 'Optional idempotency key. source=external_api plus external_id is unique; a repeated create returns the existing record and does not create a duplicate.',
+                verified_purchase: 'Optional 0 or 1; set only when verification is factual.',
+                is_incentivized: 'Optional 0 or 1. When 1, incentive_disclosure is required.',
+                incentive_disclosure: 'Required truthful disclosure for an incentivized review.',
+                status: 'Ignored on external creates and edits. The server always forces pending.'
+            },
+            response: {
+                success: 'The created, updated, deleted, or paginated review data.',
+                idempotent: 'Create results expose idempotent=true when external_id already exists.',
+                errors: '400 invalid fields or batch size; 401 missing key; 403 invalid key or attempt to edit a non-external review; 404 review/product not found; 429 rate limited.'
+            },
+            endpoints: {
+                list: {
+                    method: 'GET', path: '/api/external/product-reviews',
+                    query_params: { productId: 'Product ID', status: 'pending|published|hidden', source: 'external_api', externalId: 'External idempotency key', dateFrom: 'Start date', dateTo: 'End date', page: 'Default 1', limit: '1-100' }
+                },
+                get: { method: 'GET', path: '/api/external/product-reviews/:id', note: 'Returns one review and its existing translation status.' },
+                create: {
+                    method: 'POST', path: '/api/external/product-reviews',
+                    body_example: { product_id: 228, author_name: 'John Smith', review_date: '2026-07-18', rating: 4.7, review_text: 'The coating was consistent and the packaging was careful.', external_id: 'erp-review-1001', verified_purchase: 1 },
+                    response_example: { id: 501, product_id: 228, status: 'pending', source: 'external_api', external_id: 'erp-review-1001', idempotent: false }
+                },
+                bulk_create: {
+                    method: 'POST', path: '/api/external/product-reviews/bulk',
+                    constraint: 'rows must contain 1-200 entries; the complete write is transactional and every row is pending.',
+                    body_example: { productId: 228, rows: [{ author_name: 'Maria Garcia', review_date: '2026/07/19', rating: 5.0, review_text: 'The surface finish matched the approved sample.', external_id: 'erp-review-1002' }] }
+                },
+                update: { method: 'PUT', path: '/api/external/product-reviews/:id', note: 'Only source=external_api reviews can be edited. Any edit resets the review to pending and invalidates prior public translations.' },
+                delete: { method: 'DELETE', path: '/api/external/product-reviews/:id', note: 'Deletes the review; there is no external publish or bulk-status endpoint.' }
+            },
+            legacy_compatibility: {
+                path: '/api/external/seo-reviews',
+                product: 'target_type=product maps to the moderated product review create flow, forwards external_id, and always creates pending.',
+                article: 'Article review creation through this legacy endpoint is deprecated and returns HTTP 400.',
+                replacement: '/api/external/product-reviews'
             }
         },
 

@@ -239,6 +239,82 @@ function placeholders(count) {
   return Array.from({ length: count }, () => '?').join(', ')
 }
 
+function cachePathSegments(cacheUrl) {
+  try {
+    const pathname = new URL(String(cacheUrl), 'https://seo-cache.invalid').pathname
+    const decoded = (() => {
+      try {
+        return decodeURIComponent(pathname)
+      } catch {
+        return pathname
+      }
+    })()
+    return decoded.split('/').filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+function cacheUrlMatchesProduct(cacheUrl, slug, lang) {
+  const segments = cachePathSegments(cacheUrl)
+  if (lang) {
+    return segments.length === 3 &&
+      segments[0].toLowerCase() === lang &&
+      segments[1] === 'products' &&
+      segments[2] === slug
+  }
+  return (segments.length === 3 && segments[1] === 'products' && segments[2] === slug) ||
+    (segments.length === 2 && segments[0] === 'products' && segments[1] === slug)
+}
+
+let configuredProductReviewSeoCacheInvalidator = null
+
+export function configureProductReviewSeoCacheInvalidator(invalidator) {
+  if (typeof invalidator !== 'function') {
+    throw new Error('product review cache invalidator must be a function')
+  }
+  configuredProductReviewSeoCacheInvalidator = invalidator
+  return invalidator
+}
+
+export function invalidateProductReviewSeoCache(productId, lang = null) {
+  if (!configuredProductReviewSeoCacheInvalidator) {
+    return { deleted: 0, reason: 'not-configured' }
+  }
+  return configuredProductReviewSeoCacheInvalidator(productId, lang)
+}
+
+export function createProductReviewSeoCacheInvalidator({ getAll, getOne, run, logger = console }) {
+  if (![getAll, getOne, run].every(dependency => typeof dependency === 'function')) {
+    throw new Error('product review cache invalidator requires getAll, getOne, and run')
+  }
+
+  return function invalidateProductReviewSeoCache(productId, lang = null) {
+    try {
+      const normalizedProductId = positiveInteger(productId, 'productId')
+      const product = getOne('SELECT slug FROM products WHERE id = ?', [normalizedProductId])
+      if (!product?.slug) return { deleted: 0, reason: 'product-not-found' }
+
+      const language = lang === null || lang === undefined || String(lang).trim() === ''
+        ? null
+        : String(lang).trim().toLowerCase()
+      const cachedUrls = getAll('SELECT url FROM seo_render_cache') || []
+      let deleted = 0
+      for (const row of cachedUrls) {
+        if (!cacheUrlMatchesProduct(row?.url, String(product.slug), language)) continue
+        const result = run('DELETE FROM seo_render_cache WHERE url = ?', [row.url])
+        deleted += Number(result?.changes ?? 0)
+      }
+      return { deleted }
+    } catch (error) {
+      logger?.warn?.(
+        `[product-reviews] SEO cache invalidation failed for product ${productId}${lang ? ` (${lang})` : ''}: ${error?.message || error}`
+      )
+      return { deleted: 0, error: String(error?.message || error) }
+    }
+  }
+}
+
 function categoryScope(categoryId, productAlias = 'p') {
   return {
     cte: `WITH RECURSIVE category_tree(id) AS (
@@ -307,10 +383,28 @@ export function createProductReviewStore({
   getOne,
   run,
   transaction,
-  invalidateCache = () => {}
+  invalidateCache = () => {},
+  logger = console
 }) {
   if (![getAll, getOne, run, transaction].every(dependency => typeof dependency === 'function')) {
     throw new Error('product review store requires getAll, getOne, run, and transaction')
+  }
+
+  function invalidateProductReviewSeoCache(productId, lang = null) {
+    try {
+      const pending = invalidateCache(productId, lang)
+      if (pending && typeof pending.catch === 'function') {
+        pending.catch(error => {
+          logger?.warn?.(
+            `[product-reviews] SEO cache invalidation failed for product ${productId}${lang ? ` (${lang})` : ''}: ${error?.message || error}`
+          )
+        })
+      }
+    } catch (error) {
+      logger?.warn?.(
+        `[product-reviews] SEO cache invalidation failed for product ${productId}${lang ? ` (${lang})` : ''}: ${error?.message || error}`
+      )
+    }
   }
 
   function findReview(id) {
@@ -401,7 +495,7 @@ export function createProductReviewStore({
     if (existing) return { ...getById(existing.id), idempotent: true }
 
     const created = insertNormalized(review)
-    invalidateCache(review.product_id)
+    invalidateProductReviewSeoCache(review.product_id)
     return { ...created, idempotent: false }
   }
 
@@ -445,7 +539,7 @@ export function createProductReviewStore({
       return { created, existing }
     })
 
-    if (outcome.created.length) invalidateCache(normalizedProductId)
+    if (outcome.created.length) invalidateProductReviewSeoCache(normalizedProductId)
     return { ...outcome, import_batch_id: importBatchId }
   }
 
@@ -516,7 +610,7 @@ export function createProductReviewStore({
       }
     })
 
-    invalidateCache(existing.product_id)
+    invalidateProductReviewSeoCache(existing.product_id)
     return getById(reviewId)
   }
 
@@ -525,7 +619,7 @@ export function createProductReviewStore({
     const existing = findReview(reviewId)
     if (!existing) return false
     run('DELETE FROM product_reviews WHERE id = ?', [reviewId])
-    invalidateCache(existing.product_id)
+    invalidateProductReviewSeoCache(existing.product_id)
     return true
   }
 
@@ -560,7 +654,7 @@ export function createProductReviewStore({
         productIds: [...new Set(rows.map(row => row.product_id))]
       }
     })
-    outcome.productIds.forEach(invalidateCache)
+    outcome.productIds.forEach(productId => invalidateProductReviewSeoCache(productId))
     return outcome
   }
 
@@ -600,7 +694,7 @@ export function createProductReviewStore({
         productIds: [...new Set(rows.map(row => row.product_id))]
       }
     })
-    outcome.productIds.forEach(invalidateCache)
+    outcome.productIds.forEach(productId => invalidateProductReviewSeoCache(productId))
     return outcome
   }
 

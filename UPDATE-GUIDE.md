@@ -181,3 +181,29 @@ PUBLIC_SITE_URL=https://www.sunseasteel.com node scripts/verifySeoDelivery.mjs
 
 > 💡 **此文件最后更新：2026-03-06**  
 > 如有问题，将 `/tmp/steel-trader-db-manual-*.db` 中最新有数据的文件覆盖到 `data/database.db` 即可恢复。
+
+## 产品评价系统部署后验收
+
+继续使用项目既有更新脚本：
+
+```bash
+cd /www/wwwroot/steel-trader
+bash server-update.sh
+```
+
+更新完成后按以下顺序验收：
+
+1. 在后台“产品评价”中选择产品，手动新增一条真实评价；确认姓名、日期、小数评分、正文、验证购买和激励披露能够保存。
+2. 使用外部 API 新增一条或 1–200 条批量评价，确认结果固定为 `pending`，然后由管理员多选、全选或批量发布；外部 API 本身不能发布。
+3. 在“AI 全站翻译”选择 `reviews` / “产品评价”和目标语言，完成翻译后切换产品详情语言；非英语页不得回退或混入英文及其他语言。
+4. 检查公开接口与产品 JSON-LD 使用相同数据：
+
+```bash
+curl -s "http://127.0.0.1:3001/api/product-reviews/product/产品ID?lang=en&page=1&limit=10"
+curl -s -o /dev/null -w "产品详情 HTTP %{http_code}\n" "http://127.0.0.1:3001/en/products/产品slug"
+node scripts/verifySeoDelivery.mjs
+```
+
+`verifySeoDelivery.mjs` 会同时检查本地和公开域名的产品详情 SSR、首条可见评价、公开评价 API、`#product-jsonld` 中的 Review/aggregateRating、about、站点地图和构建资源。无评价是合法状态，但出现旧的固定 `Verified Buyer`、`Excellent quality and service.` 或 `reviewCount=89` 会导致验证失败。
+
+如果评价已发布但页面仍显示旧内容，先查看 PM2 日志中的 `[product-reviews] SEO cache invalidation failed` 或 `[product-review-translation] SEO cache invalidation failed` 警告，再重新执行上述交付验证；不要手工清空整个 `seo_render_cache` 表。

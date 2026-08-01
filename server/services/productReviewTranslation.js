@@ -1,4 +1,4 @@
-import { reviewSourceHash } from './productReviews.js'
+import { invalidateProductReviewSeoCache, reviewSourceHash } from './productReviews.js'
 
 const OPTIONAL_FIELDS = ['review_title', 'incentive_disclosure']
 
@@ -47,7 +47,9 @@ export function saveManualTranslation({
   translated,
   getOne,
   getAll,
-  run
+  run,
+  invalidateCache = invalidateProductReviewSeoCache,
+  logger = console
 }) {
   const contentId = id || null
   const updated = run(`
@@ -71,33 +73,66 @@ export function saveManualTranslation({
   }
 
   if (type === 'product_review') {
-    syncProductReviewTranslation({ reviewId: contentId, lang, getOne, getAll, run })
+    syncProductReviewTranslation({
+      reviewId: contentId,
+      lang,
+      getOne,
+      getAll,
+      run,
+      invalidateCache,
+      logger
+    })
   }
 
   return { saved: true }
 }
 
-export function syncProductReviewTranslation({ reviewId, lang, getOne, getAll, run }) {
+export function syncProductReviewTranslation({
+  reviewId,
+  lang,
+  getOne,
+  getAll,
+  run,
+  invalidateCache = invalidateProductReviewSeoCache,
+  logger = console
+}) {
   if (!lang || lang === 'en') {
     return { synced: false, reason: 'english-source' }
   }
 
-  const removePublishedTranslation = () => {
+  const invalidateTargetCache = productId => {
+    if (!productId) return
+    try {
+      const pending = invalidateCache(productId, lang)
+      if (pending && typeof pending.catch === 'function') {
+        pending.catch(error => logger?.warn?.(
+          `[product-review-translation] SEO cache invalidation failed for product ${productId} (${lang}): ${error?.message || error}`
+        ))
+      }
+    } catch (error) {
+      logger?.warn?.(
+        `[product-review-translation] SEO cache invalidation failed for product ${productId} (${lang}): ${error?.message || error}`
+      )
+    }
+  }
+
+  const removePublishedTranslation = productId => {
     if (reviewId === null || reviewId === undefined || reviewId === '') return
-    run(
+    const result = run(
       'DELETE FROM product_review_translations WHERE review_id = ? AND language_code = ?',
       [reviewId, lang]
     )
+    if (result?.changes) invalidateTargetCache(productId)
   }
 
   const review = getOne(`
-    SELECT id, review_title, review_text, incentive_disclosure
+    SELECT id, product_id, status, review_title, review_text, incentive_disclosure
     FROM product_reviews
-    WHERE id = ? AND status = 'published'
+    WHERE id = ?
   `, [reviewId])
 
-  if (!review) {
-    removePublishedTranslation()
+  if (!review || review.status !== 'published') {
+    removePublishedTranslation(review?.product_id)
     return { synced: false, reason: 'review-unavailable' }
   }
 
@@ -118,7 +153,7 @@ export function syncProductReviewTranslation({ reviewId, lang, getOne, getAll, r
   })
 
   if (!complete) {
-    removePublishedTranslation()
+    removePublishedTranslation(review.product_id)
     return { synced: false, reason: 'translation-incomplete' }
   }
 
@@ -144,6 +179,8 @@ export function syncProductReviewTranslation({ reviewId, lang, getOne, getAll, r
     translatedValue('incentive_disclosure'),
     reviewSourceHash(review)
   ])
+
+  invalidateTargetCache(review.product_id)
 
   return { synced: true }
 }
