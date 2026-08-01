@@ -92,6 +92,12 @@ test('enforces review status, rating, author, source, and source external-id con
     () => insertReview(db, { source: 'migration', external_id: 'seo_reviews:1' }),
     /UNIQUE constraint failed/
   )
+
+  insertReview(db, { source: 'external_api', external_id: '' })
+  assert.throws(
+    () => insertReview(db, { source: 'external_api', external_id: '' }),
+    /UNIQUE constraint failed/
+  )
 })
 
 test('enforces translation language, uniqueness, and cascading foreign keys', () => {

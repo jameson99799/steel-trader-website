@@ -70,7 +70,7 @@ export function initializeProductReviewSchema(db) {
 
     CREATE UNIQUE INDEX IF NOT EXISTS idx_product_reviews_source_external_id
       ON product_reviews(source, external_id)
-      WHERE external_id IS NOT NULL AND TRIM(external_id) <> '';
+      WHERE external_id IS NOT NULL;
 
     CREATE INDEX IF NOT EXISTS idx_product_reviews_product_status_date
       ON product_reviews(product_id, status, review_date DESC);
