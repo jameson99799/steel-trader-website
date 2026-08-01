@@ -63,6 +63,18 @@ export function formatProductReviewUiText(template, values = {}) {
   )
 }
 
+export function isMatchingProductReviewContext(incoming = {}, current = {}) {
+  const generation = incoming?.generation
+  const currentGeneration = current?.generation
+  const productId = incoming?.productId == null ? '' : String(incoming.productId)
+  const currentProductId = current?.productId == null ? '' : String(current.productId)
+
+  return Number.isInteger(generation) && generation > 0 && generation === currentGeneration &&
+    nonEmptyText(incoming?.slug) && incoming.slug === current?.slug &&
+    nonEmptyText(incoming?.lang) && incoming.lang === current?.lang &&
+    productId.length > 0 && productId === currentProductId
+}
+
 export function buildReviewSchemaParts({ reviews = [], summary = {} } = {}) {
   const ratingValue = positiveNumber(summary?.ratingValue)
   const reviewCount = positiveNumber(summary?.reviewCount)

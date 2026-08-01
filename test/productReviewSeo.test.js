@@ -86,6 +86,25 @@ test('buildReviewSchemaParts rejects out-of-range aggregate ratings and fraction
   assert.deepEqual(buildReviewSchemaParts({ reviews, summary: { ratingValue: 4.5, reviewCount: 2.5 } }), {})
 })
 
+test('review page context rejects stale same-language pagination before schema updates', async () => {
+  const { isMatchingProductReviewContext } = await loadReviewSeoModule()
+  assert.equal(typeof isMatchingProductReviewContext, 'function')
+
+  const startedOnA = { generation: 7, slug: 'product-a', lang: 'en', productId: 101 }
+  const currentB = { generation: 8, slug: 'product-b', lang: 'en', productId: 202 }
+  let schemaUpdates = 0
+  const applyPagination = incomingContext => {
+    if (!isMatchingProductReviewContext(incomingContext, currentB)) return false
+    schemaUpdates += 1
+    return true
+  }
+
+  assert.equal(applyPagination(startedOnA), false)
+  assert.equal(schemaUpdates, 0)
+  assert.equal(applyPagination({ ...currentB }), true)
+  assert.equal(schemaUpdates, 1)
+})
+
 test('buildReviewSchemaParts filters invalid records and omits blank titles and invalid dates', async () => {
   const buildReviewSchemaParts = await loadBuilder()
   const result = buildReviewSchemaParts({
@@ -128,12 +147,12 @@ test('ProductReviews renders authentic text, numeric partial ratings and disclos
 test('ProductReviews loads and deduplicates the next page for the current product and language', () => {
   const source = readIfPresent(reviewsComponentUrl)
   assert.ok(source, 'src/components/ProductReviews.vue must exist')
-  assert.match(source, /getPublicProductReviews\(props\.productId/)
-  assert.match(source, /lang:\s*props\.lang/)
+  assert.match(source, /getPublicProductReviews\(requestContext\.productId/)
+  assert.match(source, /lang:\s*requestContext\.lang/)
   assert.match(source, /page:\s*nextPage/)
   assert.match(source, /localPagination\.total/)
   assert.match(source, /new Set|new Map/)
-  assert.match(source, /watch\(\s*\[\(\) => props\.productId, \(\) => props\.lang/)
+  assert.match(source, /watch\(\s*\[[^\]]*props\.productId[^\]]*props\.lang[^\]]*props\.reviewContext/s)
 })
 
 test('load-more emits the complete merged public data and ProductDetail immediately rebuilds schema', () => {
@@ -141,16 +160,22 @@ test('load-more emits the complete merged public data and ProductDetail immediat
   const detail = readIfPresent(detailUrl)
 
   assert.match(component, /defineEmits\(\s*\[\s*['"]reviews-updated['"]\s*\]\s*\)/)
+  assert.match(component, /reviewContext:\s*\{\s*type:\s*Object/)
+  assert.match(component, /const requestContext\s*=\s*\{\s*\.\.\.props\.reviewContext\s*\}/)
+  assert.match(component, /isMatchingProductReviewContext\(requestContext,\s*props\.reviewContext\)/)
   assert.match(component, /const nextPublicReviews\s*=\s*\{\s*reviews:/s)
-  assert.match(component, /emit\(\s*['"]reviews-updated['"],\s*nextPublicReviews/)
+  assert.match(component, /emit\(\s*['"]reviews-updated['"],\s*nextPublicReviews,\s*requestContext\s*\)/)
   const staleGuard = component.indexOf('requestToken !== loadToken')
   const emitted = component.indexOf("emit('reviews-updated'")
   assert.ok(staleGuard >= 0 && emitted > staleGuard, 'stale load-more responses must return before emitting')
 
   assert.match(detail, /@reviews-updated="handleReviewsUpdated"/)
+  assert.match(detail, /:review-context="reviewPageContext"/)
   const handler = detail.slice(detail.indexOf('function handleReviewsUpdated'), detail.indexOf('function updateProductSeo'))
-  assert.match(handler, /context\.productId/)
-  assert.match(handler, /context\.lang/)
+  assert.match(handler, /isMatchingProductReviewContext\(incomingContext,\s*currentContext\)/)
+  assert.match(handler, /route\.params\.slug/)
+  assert.match(handler, /lang\.value/)
+  assert.match(handler, /product\.value\?\.id/)
   assert.match(handler, /publicReviews\.value\s*=\s*nextPublicReviews/)
   assert.match(handler, /updateProductSeo\(company\.value\)/)
 })
@@ -189,7 +214,7 @@ test('ProductDetail consumes matching SSR review state and protects product-lang
   const detail = readIfPresent(detailUrl)
   const component = readIfPresent(reviewsComponentUrl)
   assert.match(detail, /import ProductReviews from/)
-  assert.match(detail, /import \{ buildReviewSchemaParts \} from ['"]\.\.\/\.\.\/shared\/productReviewSeo\.js['"]/)
+  assert.match(detail, /import\s*\{[^}]*buildReviewSchemaParts[^}]*\}\s*from ['"]\.\.\/\.\.\/shared\/productReviewSeo\.js['"]/s)
   assert.match(detail, /<ProductReviews/)
   assert.match(detail, /getPublicProductReviews\(productId,\s*\{\s*lang:\s*language,\s*page:\s*1,\s*limit:\s*10\s*\}\)/s)
   assert.match(detail, /ssrProductReviews/)

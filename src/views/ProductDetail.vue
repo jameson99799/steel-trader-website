@@ -180,6 +180,7 @@
         <ProductReviews
           :product-id="product.id"
           :lang="lang"
+          :review-context="reviewPageContext"
           :reviews="publicReviews.reviews"
           :summary="publicReviews.summary"
           :pagination="publicReviews.pagination"
@@ -269,7 +270,10 @@ import { useLang } from '../composables/useLang'
 import api from '../api'
 import InquiryModal from '../components/InquiryModal.vue'
 import ProductReviews from '../components/ProductReviews.vue'
-import { buildReviewSchemaParts } from '../../shared/productReviewSeo.js'
+import {
+  buildReviewSchemaParts,
+  isMatchingProductReviewContext
+} from '../../shared/productReviewSeo.js'
 
 const route = useRoute()
 const { lang, t, localizedValue, localizedHtml, langPath } = useLang()
@@ -290,6 +294,7 @@ const emptyPublicReviews = () => ({
   pagination: { page: 1, limit: 10, total: 0 }
 })
 const publicReviews = ref(emptyPublicReviews())
+const reviewPageContext = ref({ generation: 0, slug: '', lang: '', productId: null })
 let reviewRequestToken = 0
 let pageRequestToken = 0
 
@@ -544,8 +549,14 @@ async function loadPublicReviews(productId, language) {
   }
 }
 
-function handleReviewsUpdated(nextPublicReviews, context = {}) {
-  if (String(product.value?.id) !== String(context.productId) || lang.value !== context.lang) return
+function handleReviewsUpdated(nextPublicReviews, incomingContext = {}) {
+  const currentContext = {
+    generation: reviewPageContext.value.generation,
+    slug: String(route.params.slug || ''),
+    lang: lang.value,
+    productId: product.value?.id
+  }
+  if (!isMatchingProductReviewContext(incomingContext, currentContext)) return
   publicReviews.value = nextPublicReviews
   updateProductSeo(company.value)
 }
@@ -683,6 +694,12 @@ async function loadProductPage({ hydrate = false } = {}) {
   const requestId = ++pageRequestToken
   const slug = route.params.slug
   const language = lang.value
+  reviewPageContext.value = {
+    generation: requestId,
+    slug: String(slug || ''),
+    lang: language,
+    productId: null
+  }
   if (!slug) return
 
   reviewRequestToken += 1
@@ -701,6 +718,7 @@ async function loadProductPage({ hydrate = false } = {}) {
       ? consumeInitialPublicReviews(hydratedProduct.id, language)
       : null
     if (isHydrating) {
+      reviewPageContext.value = { ...reviewPageContext.value, productId: hydratedProduct.id }
       product.value = ssr.ssrProduct
       company.value = ssr.company
       pageTexts.value = ssr.pageTexts
@@ -717,6 +735,12 @@ async function loadProductPage({ hydrate = false } = {}) {
     ])
     if (!isCurrentPage(requestId, slug, language)) return
 
+    reviewPageContext.value = {
+      generation: requestId,
+      slug: String(slug),
+      lang: language,
+      productId: nextProduct.id
+    }
     product.value = nextProduct
     company.value = comp
     pageTexts.value = texts

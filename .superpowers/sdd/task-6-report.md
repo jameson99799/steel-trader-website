@@ -54,3 +54,19 @@
 - 语法：`shared/productReviewSeo.js`、`server/index.js`、`server/routes/translation.js` 全部通过 `node --check`。
 - 全量：`npm.cmd test` 128/128 通过。
 - 生产构建：`npm.cmd run build` 通过，745 modules transformed；仅保留项目既有 chunk warning。
+
+## 二次 Gate 修复：拒绝过期分页上下文
+
+- 根因：同语言从产品 A 导航到 B 后、B 产品请求完成前，子组件仍暂时持有 A 的 `productId` 与相同 `lang`；旧 load-more 因而能通过原二元检查，并以已经切换到 B 的 URL 重建 A 评价 schema。
+- RED：先新增可执行纯函数时序测试与 wiring 契约；定向 30 项中 28 通过、2 失败。时序模拟 A 请求开始、随后切换 B，要求 A 返回 `false` 且 schema 更新次数保持 0，B 返回 `true`。
+- 每次 `loadProductPage` 开始均在任何 `await` 前发布新的 `{ generation, slug, lang, productId: null }`，hydrate 或产品解析完成后再为同一 generation 绑定 `productId`。
+- `ProductReviews` 快照完整请求上下文，API 参数、stale guard 与 emit 均使用同一快照；上下文 prop 改变也会递增本地 token 并重置分页状态。
+- 父级通过共享纯函数比较 incoming context 与由当前 generation、`route.params.slug`、`lang`、`product.id` 组成的 context；任何字段不一致均禁止写入评价及重建 schema。
+
+### 二次 Gate 验证
+
+- 定向：30/30 通过，其中 A→B 同语言可执行时序测试通过。
+- 语法：`shared/productReviewSeo.js`、`server/index.js`、`server/routes/translation.js` 全部通过 `node --check`。
+- 全量：`npm.cmd test` 129/129 通过。
+- 生产构建：`npm.cmd run build` 通过，745 modules transformed；仅保留项目既有 chunk warning。
+- `git diff --check`：通过；报告外仅修改任务 6 允许的共享 helper、评价组件、产品详情与定向测试。

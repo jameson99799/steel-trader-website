@@ -59,13 +59,17 @@
 import { ref, watch } from 'vue'
 import api from '../api'
 import { useLang } from '../composables/useLang'
-import { formatProductReviewUiText } from '../../shared/productReviewSeo.js'
+import {
+  formatProductReviewUiText,
+  isMatchingProductReviewContext
+} from '../../shared/productReviewSeo.js'
 
 const { t } = useLang()
 
 const props = defineProps({
   productId: { type: [Number, String], required: true },
   lang: { type: String, required: true },
+  reviewContext: { type: Object, required: true },
   reviews: { type: Array, default: () => [] },
   summary: { type: Object, default: () => ({ ratingValue: 0, reviewCount: 0 }) },
   pagination: { type: Object, default: () => ({ page: 1, limit: 10, total: 0 }) }
@@ -86,7 +90,13 @@ function resetFromProps() {
   loadError.value = ''
 }
 
-watch([() => props.productId, () => props.lang, () => props.reviews, () => props.pagination], resetFromProps)
+watch([
+  () => props.productId,
+  () => props.lang,
+  () => props.reviewContext,
+  () => props.reviews,
+  () => props.pagination
+], resetFromProps)
 
 function reviewKey(review) {
   return review.id ?? [review.author_name, review.review_date, review.review_text].join('|')
@@ -106,17 +116,18 @@ async function loadMore() {
 
   const nextPage = Number(localPagination.value.page || 1) + 1
   const requestToken = ++loadToken
-  const requestKey = `${props.productId}:${props.lang}`
+  const requestContext = { ...props.reviewContext }
   loadingMore.value = true
   loadError.value = ''
 
   try {
-    const result = await api.getPublicProductReviews(props.productId, {
-      lang: props.lang,
+    const result = await api.getPublicProductReviews(requestContext.productId, {
+      lang: requestContext.lang,
       page: nextPage,
       limit: Number(localPagination.value.limit || 10)
     })
-    if (requestToken !== loadToken || requestKey !== `${props.productId}:${props.lang}`) return
+    if (requestToken !== loadToken ||
+        !isMatchingProductReviewContext(requestContext, props.reviewContext)) return
 
     const deduplicated = new Map(localReviews.value.map(review => [reviewKey(review), review]))
     for (const review of result.reviews || []) deduplicated.set(reviewKey(review), review)
@@ -127,7 +138,7 @@ async function loadMore() {
     }
     localReviews.value = nextPublicReviews.reviews
     localPagination.value = nextPublicReviews.pagination
-    emit('reviews-updated', nextPublicReviews, { productId: props.productId, lang: props.lang })
+    emit('reviews-updated', nextPublicReviews, requestContext)
   } catch (error) {
     if (requestToken === loadToken) loadError.value = t('reviewsLoadError')
   } finally {
