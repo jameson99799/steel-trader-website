@@ -11,6 +11,14 @@ const reviews = readSource('../src/views/admin/Reviews.vue')
 const router = readSource('../src/router/index.js')
 const layout = readSource('../src/views/admin/Layout.vue')
 
+function section(start, end) {
+  return reviews.slice(reviews.indexOf(start), reviews.indexOf(end))
+}
+
+function occurrenceCount(source, pattern) {
+  return [...source.matchAll(pattern)].length
+}
+
 test('admin reviews has an independent route and nearby sidebar entry', () => {
   assert.match(router, /path:\s*['"]reviews['"][\s\S]*?name:\s*['"]AdminReviews['"][\s\S]*?admin\/Reviews\.vue/)
   assert.match(layout, /router-link\s+to="\/admin\/reviews"[^>]*>[^<]*产品评价/)
@@ -30,13 +38,13 @@ test('review page owns the required category, product, filter, selection, form, 
 
 test('category and product changes use linked APIs and reset stale rows and selection', () => {
   assert.match(reviews, /api\.getAdminCategoryTree\(\)/)
-  assert.match(reviews, /api\.getAdminProducts\(\{\s*category_id:\s*selectedCategoryId\.value,\s*limit:\s*500\s*\}\)/)
+  assert.match(reviews, /api\.getAdminProducts\(\{\s*category_id:\s*categorySnapshot,\s*limit:\s*500\s*\}\)/)
   assert.match(reviews, /watch\(selectedCategoryId[\s\S]*?selectedProductId\.value\s*=\s*['"]["'][\s\S]*?reviews\.value\s*=\s*\[\][\s\S]*?clearSelection\(\)/)
   assert.match(reviews, /watch\(selectedProductId[\s\S]*?clearSelection\(\)[\s\S]*?loadReviews\(\)/)
 })
 
 test('list query sends only valued scopes and filters and resets selection on filter or page changes', () => {
-  assert.match(reviews, /api\.getAdminProductReviews\(buildReviewQuery\(\)\)/)
+  assert.match(reviews, /api\.getAdminProductReviews\(querySnapshot\)/)
   assert.match(reviews, /if \(selectedProductId\.value\) query\.productId = selectedProductId\.value/)
   assert.match(reviews, /if \(selectedCategoryId\.value\) query\.categoryId = selectedCategoryId\.value/)
   assert.match(reviews, /if \(filters\.status !== ['"]all['"]\) query\.status = filters\.status/)
@@ -100,4 +108,36 @@ test('incentivized reviews require disclosure and UI exposes loading, success, e
   assert.match(reviews, /第 \{\{ page \}\} \/ \{\{ totalPages \}\} 页/)
   assert.match(reviews, /:disabled="page <= 1 \|\| loading"/)
   assert.match(reviews, /:disabled="page >= totalPages \|\| loading"/)
+})
+
+test('product and review loaders independently ignore stale success, failure, and finally writes', () => {
+  const productLoader = section('const loadProducts', 'const buildReviewQuery')
+  const reviewLoader = section('const loadReviews', 'watch(selectedCategoryId')
+
+  assert.match(reviews, /let productsRequestSequence = 0/)
+  assert.match(reviews, /let reviewsRequestSequence = 0/)
+
+  assert.match(productLoader, /const requestId = \+\+productsRequestSequence/)
+  assert.match(productLoader, /const categorySnapshot = selectedCategoryId\.value/)
+  assert.match(productLoader, /api\.getAdminProducts\(\{ category_id: categorySnapshot, limit: 500 \}\)/)
+  assert.ok(occurrenceCount(productLoader, /isLatestProductRequest\(requestId, categorySnapshot\)/g) >= 3)
+  assert.match(productLoader, /catch \(error\) \{[\s\S]*?if \(!isLatestProductRequest\(requestId, categorySnapshot\)\) return[\s\S]*?showError/)
+  assert.match(productLoader, /finally \{[\s\S]*?if \(isLatestProductRequest\(requestId, categorySnapshot\)\) productsLoading\.value = false/)
+
+  assert.match(reviewLoader, /const requestId = \+\+reviewsRequestSequence/)
+  assert.match(reviewLoader, /const querySnapshot = buildReviewQuery\(\)/)
+  assert.match(reviewLoader, /api\.getAdminProductReviews\(querySnapshot\)/)
+  assert.ok(occurrenceCount(reviewLoader, /isLatestReviewRequest\(requestId, querySnapshot\)/g) >= 3)
+  assert.match(reviewLoader, /catch \(error\) \{[\s\S]*?if \(!isLatestReviewRequest\(requestId, querySnapshot\)\) return[\s\S]*?showError/)
+  assert.match(reviewLoader, /finally \{[\s\S]*?if \(isLatestReviewRequest\(requestId, querySnapshot\)\) loading\.value = false/)
+
+  assert.match(reviews, /watch\(filters, applyFilters, \{ deep: true \}\)/)
+})
+
+test('manual review validation matches author and decimal-rating domain limits', () => {
+  assert.match(reviews, /v-model\.trim="form\.author_name"[^>]*maxlength="100"/)
+  assert.doesNotMatch(reviews, /v-model\.trim="form\.author_name"[^>]*maxlength="120"/)
+  assert.match(reviews, /form\.author_name\.trim\(\)\.length > 100/)
+  assert.match(reviews, /!\/\^\\d\(\?:\\\.\\d\)\?\$\/\.test\(String\(form\.rating\)\)/)
+  assert.match(reviews, /评分最多保留一位小数/)
 })

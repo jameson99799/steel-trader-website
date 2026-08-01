@@ -163,7 +163,7 @@
         <div class="modal-header"><div><h2 id="review-form-title">{{ editingId ? '编辑评价' : '新增真实评价' }}</h2><p>{{ editingId ? '更新已保存的评价内容。' : `评价将关联到：${selectedProductLabel}` }}</p></div><button type="button" class="modal-close" aria-label="关闭" @click="closeFormModal">&times;</button></div>
         <form @submit.prevent="saveReview">
           <div class="modal-body form-grid">
-            <div class="form-group"><label for="form-author">姓名 *</label><input id="form-author" v-model.trim="form.author_name" class="form-control" maxlength="120" required /></div>
+            <div class="form-group"><label for="form-author">姓名 *</label><input id="form-author" v-model.trim="form.author_name" class="form-control" maxlength="100" required /></div>
             <div class="form-group"><label for="form-date">日期 *</label><input id="form-date" v-model="form.review_date" type="date" class="form-control" required /></div>
             <div class="form-group"><label for="form-rating">评分（1.0–5.0）*</label><input id="form-rating" v-model.number="form.rating" type="number" min="1" max="5" step="0.1" class="form-control" required /></div>
             <div class="form-group"><label for="form-status">状态 *</label><select id="form-status" v-model="form.status" class="form-control"><option value="published">已发布</option><option value="pending">待审核</option><option value="hidden">已隐藏</option></select></div>
@@ -214,6 +214,8 @@ const page = ref(1)
 const limit = ref(20)
 const total = ref(0)
 let suppressProductWatch = false
+let productsRequestSequence = 0
+let reviewsRequestSequence = 0
 
 const flatCategories = computed(() => {
   const result = []
@@ -253,16 +255,29 @@ const loadCategories = async () => {
   try { categoryTree.value = await api.getAdminCategoryTree() }
   catch (error) { showError(error, '产品分类加载失败，请稍后重试。') }
 }
+const isLatestProductRequest = (requestId, categorySnapshot) => (
+  requestId === productsRequestSequence && categorySnapshot === selectedCategoryId.value
+)
 const loadProducts = async () => {
-  if (!selectedCategoryId.value) { products.value = []; return }
+  const requestId = ++productsRequestSequence
+  const categorySnapshot = selectedCategoryId.value
+  if (!categorySnapshot) {
+    products.value = []
+    productsLoading.value = false
+    return
+  }
   productsLoading.value = true
   try {
-    const response = await api.getAdminProducts({ category_id: selectedCategoryId.value, limit: 500 })
+    const response = await api.getAdminProducts({ category_id: categorySnapshot, limit: 500 })
+    if (!isLatestProductRequest(requestId, categorySnapshot)) return
     products.value = response?.data || []
   } catch (error) {
+    if (!isLatestProductRequest(requestId, categorySnapshot)) return
     products.value = []
     showError(error, '产品加载失败，请稍后重试。')
-  } finally { productsLoading.value = false }
+  } finally {
+    if (isLatestProductRequest(requestId, categorySnapshot)) productsLoading.value = false
+  }
 }
 const buildReviewQuery = () => {
   const query = { page: page.value, limit: limit.value }
@@ -275,18 +290,28 @@ const buildReviewQuery = () => {
   }
   return query
 }
+const reviewQueryKey = query => JSON.stringify(query)
+const isLatestReviewRequest = (requestId, querySnapshot) => (
+  requestId === reviewsRequestSequence && reviewQueryKey(querySnapshot) === reviewQueryKey(buildReviewQuery())
+)
 const loadReviews = async () => {
+  const requestId = ++reviewsRequestSequence
+  const querySnapshot = buildReviewQuery()
   loading.value = true
   errorMessage.value = ''
   try {
-    const response = await api.getAdminProductReviews(buildReviewQuery())
+    const response = await api.getAdminProductReviews(querySnapshot)
+    if (!isLatestReviewRequest(requestId, querySnapshot)) return
     reviews.value = response?.data || []
     total.value = Number(response?.total || 0)
     page.value = Number(response?.page || page.value)
   } catch (error) {
+    if (!isLatestReviewRequest(requestId, querySnapshot)) return
     reviews.value = []; total.value = 0
     showError(error, '评价加载失败，请稍后重试。')
-  } finally { loading.value = false }
+  } finally {
+    if (isLatestReviewRequest(requestId, querySnapshot)) loading.value = false
+  }
 }
 
 watch(selectedCategoryId, async () => {
@@ -311,6 +336,7 @@ watch(selectedProductId, async () => {
   await loadReviews()
 })
 const applyFilters = async () => { page.value = 1; clearSelection(); await loadReviews() }
+watch(filters, applyFilters, { deep: true })
 const changePage = async nextPage => {
   if (nextPage < 1 || nextPage > totalPages.value || nextPage === page.value) return
   page.value = nextPage
@@ -345,8 +371,10 @@ const openEditModal = async id => {
 const closeFormModal = () => { if (!submitting.value) { showFormModal.value = false; resetForm() } }
 const validateForm = () => {
   if (!form.author_name.trim() || !form.review_date || !form.review_text.trim()) { errorMessage.value = '请填写姓名、日期和评价正文。'; return false }
+  if (form.author_name.trim().length > 100) { errorMessage.value = '姓名最多 100 个字符。'; return false }
   const rating = Number(form.rating)
   if (!Number.isFinite(rating) || rating < 1 || rating > 5) { errorMessage.value = '评分必须在 1.0 到 5.0 之间。'; return false }
+  if (!/^\d(?:\.\d)?$/.test(String(form.rating))) { errorMessage.value = '评分最多保留一位小数。'; return false }
   if (form.is_incentivized && !form.incentive_disclosure.trim()) { errorMessage.value = '激励评价必须填写激励披露。'; return false }
   return true
 }
