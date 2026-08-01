@@ -30,8 +30,8 @@ test('active thumbnail follows main image navigation', () => {
   assert.match(source, /watch\(currentImage, centerActiveThumbnail\)/)
   assert.match(source, /await nextTick\(\)/)
   assert.match(source, /buttonRect\.left < containerRect\.left \|\| buttonRect\.right > containerRect\.right/)
-  assert.match(
-    source,
-    /button\.scrollIntoView\(\{[\s\S]*?behavior: 'smooth'[\s\S]*?block: 'nearest'[\s\S]*?inline: 'center'/
-  )
+  assert.match(source, /getCenteredThumbnailScrollLeft/)
+  assert.match(source, /container\.scrollTo\(\{[\s\S]*?left,[\s\S]*?behavior: 'smooth'/)
+  assert.doesNotMatch(source, /button\.scrollIntoView/)
+  assert.match(source, /@media \(max-width: 640px\)[\s\S]*?\.thumbnails\s*\{[\s\S]*?justify-content: flex-start/)
 })

@@ -51,6 +51,8 @@
               <button v-for="(img, index) in images" :key="index"
                   :ref="el => setThumbnailButton(el, index)"
                   :class="['thumbnail-btn', { active: currentImage === img }]"
+                  :aria-current="currentImage === img ? 'true' : undefined"
+                  :aria-label="`${localizedValue(product, 'name')} - ${index + 1}`"
                   @click="currentImage = img">
                   <video v-if="img && (img.toLowerCase().endsWith('.mp4') || img.toLowerCase().endsWith('.webm'))" :src="img" style="width:100%;height:100%;object-fit:cover;" preload="metadata"></video>
                   <img v-else :src="img" :alt="`Product image ${index + 1}`" />
@@ -268,6 +270,7 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
+import { getCenteredThumbnailScrollLeft } from '../utils/thumbnailScroll.js'
 import InquiryModal from '../components/InquiryModal.vue'
 import ProductReviews from '../components/ProductReviews.vue'
 import {
@@ -455,11 +458,19 @@ const centerActiveThumbnail = async () => {
   const isOutsideHorizontalView = buttonRect.left < containerRect.left || buttonRect.right > containerRect.right
 
   if (isOutsideHorizontalView) {
-    button.scrollIntoView({
-      behavior: 'smooth',
-      block: 'nearest',
-      inline: 'center'
+    const left = getCenteredThumbnailScrollLeft({
+      scrollLeft: container.scrollLeft,
+      clientWidth: container.clientWidth,
+      scrollWidth: container.scrollWidth,
+      itemLeft: buttonRect.left - containerRect.left,
+      itemWidth: buttonRect.width
     })
+
+    if (typeof container.scrollTo === 'function') {
+      container.scrollTo({ left, behavior: 'smooth' })
+    } else {
+      container.scrollLeft = left
+    }
   }
 }
 
@@ -1489,7 +1500,7 @@ watch([() => route.params.slug, lang], () => loadProductPage())
   }
   
   .thumbnails {
-    justify-content: center;
+    justify-content: flex-start;
   }
   
   .thumbnail-btn {
