@@ -48,6 +48,7 @@ router.delete('/:id', authMiddleware, (req, res) => {
     if (lang.code === 'en') return res.status(400).json({ error: 'cannot delete English language' })
     run('DELETE FROM languages WHERE id = ?', [req.params.id])
     run('DELETE FROM translations WHERE language_code = ?', [lang.code])
+    run('DELETE FROM product_review_translations WHERE language_code = ?', [lang.code])
     res.json({ message: '删除成功' })
 })
 

@@ -4,6 +4,10 @@ import { authMiddleware } from '../middleware/auth.js'
 import https from 'https'
 import http from 'http'
 import { parse as parseHTML } from 'node-html-parser'
+import {
+    collectProductReviews,
+    syncProductReviewTranslation
+} from '../services/productReviewTranslation.js'
 
 const router = Router()
 
@@ -899,6 +903,7 @@ function collectChatSupport() {
 const PAGES = {
     ui_texts_static: () => collectUITexts(),
     products: collectProducts,
+    reviews: () => collectProductReviews(getAll),
     news: collectNews,
     company: collectCompany,
     page_texts: collectPageTexts,
@@ -1265,20 +1270,23 @@ function upsertTranslation(lang, type, id, field, original, translated) {
     } catch (e) {
         try {
             run(
-                `UPDATE translations SET translated_text=?, updated_at=CURRENT_TIMESTAMP
+                `UPDATE translations SET original_text=?, translated_text=?, updated_at=CURRENT_TIMESTAMP
                WHERE language_code=? AND content_type=? AND content_id IS ? AND content_field=? AND is_manual=0`,
-                [translated, lang, type, id || null, field]
+                [original, translated, lang, type, id || null, field]
             )
         } catch (e2) {
             // Also try with = instead of IS for non-null IDs
             try {
                 run(
-                    `UPDATE translations SET translated_text=?, updated_at=CURRENT_TIMESTAMP
+                    `UPDATE translations SET original_text=?, translated_text=?, updated_at=CURRENT_TIMESTAMP
                    WHERE language_code=? AND content_type=? AND content_id=? AND content_field=? AND is_manual=0`,
-                    [translated, lang, type, id, field]
+                    [original, translated, lang, type, id, field]
                 )
             } catch (e3) { }
         }
+    }
+    if (type === 'product_review') {
+        syncProductReviewTranslation({ reviewId: id, lang, getOne, getAll, run })
     }
 }
 
@@ -1320,7 +1328,7 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'AI API key not configured' })
     }
 
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat' }
     const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
     let overrideNote = manualOverrides.length > 0
         ? '\n\nUse these approved translations as reference:\n' +
@@ -1494,7 +1502,7 @@ router.post('/run-one', authMiddleware, async (req, res) => {
     if (!s?.api_key && !getOne('SELECT api_key FROM ai_channels WHERE is_default = 1')?.api_key) return res.status(400).json({ error: 'AI API key not configured. Please add an AI channel in AI Translation settings.' })
 
     // Map singular type names to PAGES keys (product -> products, category -> categories, etc.)
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat' }
     const pageKey = TYPE_TO_PAGE[content_type] || content_type
     if (!PAGES[pageKey]) return res.status(400).json({ error: `Unknown content type: ${content_type}` })
     const allItems = PAGES[pageKey]()
@@ -1786,7 +1794,7 @@ router.get('/search-translations/:lang', authMiddleware, (req, res) => {
     
     // Filter by content type if specified
     if (page && page !== 'all') {
-        const typeMap = { products: 'product', news: 'news', company: 'company', page_texts: 'page_text', categories: 'category', hero: 'hero' }
+        const typeMap = { products: 'product', reviews: 'product_review', news: 'news', company: 'company', page_texts: 'page_text', categories: 'category', hero: 'hero' }
         const contentType = typeMap[page] || page
         sql += ' AND content_type = ?'
         params.push(contentType)
@@ -1814,6 +1822,15 @@ router.post('/replace-translation', authMiddleware, (req, res) => {
         const newText = row.translated_text.replace(new RegExp(find_text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), replace_text || '')
         
         run('UPDATE translations SET translated_text = ?, is_manual = 1 WHERE id = ?', [newText, id])
+        if (row.content_type === 'product_review') {
+            syncProductReviewTranslation({
+                reviewId: row.content_id,
+                lang: row.language_code,
+                getOne,
+                getAll,
+                run
+            })
+        }
         res.json({ success: true, original: row.translated_text, updated: newText })
     } catch (e) {
         res.status(500).json({ error: e.message })
@@ -1826,10 +1843,10 @@ router.post('/batch-replace', authMiddleware, (req, res) => {
     if (!lang || !find_text) return res.status(400).json({ error: 'Missing lang or find_text' })
     
     try {
-        let sql = 'SELECT id, translated_text FROM translations WHERE language_code = ? AND translated_text LIKE ?'
+        let sql = 'SELECT id, language_code, content_type, content_id, translated_text FROM translations WHERE language_code = ? AND translated_text LIKE ?'
         const params = [lang, `%${find_text}%`]
         if (content_type && content_type !== 'all') {
-            const typeMap = { products: 'product', news: 'news', company: 'company', page_texts: 'page_text', categories: 'category', hero: 'hero' }
+            const typeMap = { products: 'product', reviews: 'product_review', news: 'news', company: 'company', page_texts: 'page_text', categories: 'category', hero: 'hero' }
             sql += ' AND content_type = ?'
             params.push(typeMap[content_type] || content_type)
         }
@@ -1842,6 +1859,15 @@ router.post('/batch-replace', authMiddleware, (req, res) => {
             const newText = row.translated_text.replace(new RegExp(escapedFind, 'g'), replace_text || '')
             if (newText !== row.translated_text) {
                 run('UPDATE translations SET translated_text = ?, is_manual = 1 WHERE id = ?', [newText, row.id])
+                if (row.content_type === 'product_review') {
+                    syncProductReviewTranslation({
+                        reviewId: row.content_id,
+                        lang: row.language_code,
+                        getOne,
+                        getAll,
+                        run
+                    })
+                }
                 replaced++
             }
         }
@@ -2127,11 +2153,11 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
 
 router.post('/run-selective', authMiddleware, async (req, res) => {
     const { type, ids, languages: targetLangs, concurrency: reqConcurrency } = req.body
-    // type: 'product' | 'news'
+    // type: 'product' | 'product_review' | 'news'
     // ids: [1, 2, 3] — item IDs
     // languages: ['zh', 'es'] or ['all']
     // concurrency: number
-    if (!type || !['product', 'news'].includes(type)) return res.status(400).json({ error: 'type must be product or news' })
+    if (!type || !['product', 'product_review', 'news'].includes(type)) return res.status(400).json({ error: 'type must be product, product_review, or news' })
     if (!ids || !ids.length) return res.status(400).json({ error: 'No items selected' })
     if (!targetLangs || !targetLangs.length) return res.status(400).json({ error: 'No languages selected' })
 
@@ -2153,7 +2179,7 @@ router.post('/run-selective', authMiddleware, async (req, res) => {
     if (!langs.length) return res.status(400).json({ error: 'No valid languages found' })
 
     const enhanced = enhanceWithDefaultChannel(s)
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat' }
     const pageKey = TYPE_TO_PAGE[type]
     if (!PAGES[pageKey]) return res.status(400).json({ error: 'Invalid type' })
 
@@ -2610,7 +2636,7 @@ async function executeTranslationTask(targetLang, contentType, contentId) {
         throw new Error('AI API key not configured.')
     }
 
-    const TYPE_TO_PAGE = { product: 'products', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat' }
     const pageKey = TYPE_TO_PAGE[contentType] || contentType
     if (!PAGES[pageKey]) throw new Error(`Unknown content type: ${contentType}`)
     

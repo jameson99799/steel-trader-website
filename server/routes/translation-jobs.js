@@ -108,7 +108,7 @@ async function runJobInBackground(jobId) {
         if (explicitItems && explicitItems.length > 0) {
             // Explicit mode (either retry or user selected granular items)
             const TYPE_TO_PAGE_MAP = {
-                product: 'products', news: 'news', company: 'company',
+                product: 'products', product_review: 'reviews', news: 'news', company: 'company',
                 page_text: 'page_texts', category: 'categories', news_category: 'news_categories',
                 hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors',
                 roofing_profile: 'roofing_profiles', roofing_category: 'roofing_categories',
@@ -192,7 +192,7 @@ async function runJobInBackground(jobId) {
     const newFailed = JSON.parse(job.failed_items || '[]')
 
     const TYPE_TO_PAGE = {
-        product: 'products', news: 'news', company: 'company',
+        product: 'products', product_review: 'reviews', news: 'news', company: 'company',
         page_text: 'page_texts', category: 'categories', news_category: 'news_categories',
         hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors',
         roofing_profile: 'roofing_profiles', roofing_category: 'roofing_categories',
