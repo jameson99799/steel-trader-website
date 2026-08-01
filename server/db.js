@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import fs from 'fs'
+import { initializeProductReviewSchema } from './services/productReviewSchema.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const dataDir = join(__dirname, '..', 'data')
@@ -145,6 +146,8 @@ async function initDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
+
+  initializeProductReviewSchema(db)
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS factory_groups (
@@ -324,7 +327,7 @@ async function initDb() {
   try { db.exec("ALTER TABLE indexing_queue ADD COLUMN gsc_last_crawl_time DATETIME") } catch (e) { }
   try { db.exec("ALTER TABLE indexing_queue ADD COLUMN gsc_inspection_date DATETIME") } catch (e) { }
 
-  // SEO Content Reviews table for dynamic JSON-LD rating/review schema
+  // Legacy review rows retained only for production migration into product_reviews.
   db.exec(`
     CREATE TABLE IF NOT EXISTS seo_reviews (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1794,6 +1797,10 @@ function run(sql, params = []) {
   return { lastInsertRowid: info.lastInsertRowid, changes: info.changes }
 }
 
+function transaction(fn) {
+  return db.transaction(fn)()
+}
+
 // saveDb is a no-op for better-sqlite3 (writes are direct to file)
 function saveDb() { }
 
@@ -1906,5 +1913,5 @@ function findFuzzyBySlug(tableName, requestedSlug) {
   return null;
 }
 
-export { initDb, getAll, getOne, run, saveDb, closeDb, backupDb, findFuzzyBySlug }
-export default { initDb, getAll, getOne, run, saveDb, closeDb, backupDb, findFuzzyBySlug }
+export { initDb, getAll, getOne, run, transaction, saveDb, closeDb, backupDb, findFuzzyBySlug }
+export default { initDb, getAll, getOne, run, transaction, saveDb, closeDb, backupDb, findFuzzyBySlug }
