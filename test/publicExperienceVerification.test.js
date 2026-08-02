@@ -37,6 +37,15 @@ test('rejects cross-origin sitemap entries and malformed sitemap XML', async () 
   await assert.rejects(() => discoverSitemapUrls(malformedFetch, 'https://example.com'), /不是有效的 sitemap/)
 })
 
+test('rewrites canonical production sitemap URLs to a loopback base for local verification', async () => {
+  const documents = new Map([
+    ['http://127.0.0.1:3199/sitemap.xml', '<sitemapindex><sitemap><loc>https://www.sunseasteel.com/sitemap-pages.xml</loc></sitemap></sitemapindex>'],
+    ['http://127.0.0.1:3199/sitemap-pages.xml', '<urlset><url><loc>https://www.sunseasteel.com/en/about</loc></url></urlset>']
+  ])
+  const fakeFetch = async url => response(documents.get(url) || '', { status: documents.has(url) ? 200 : 404 })
+  assert.deepEqual(await discoverSitemapUrls(fakeFetch, 'http://127.0.0.1:3199'), ['http://127.0.0.1:3199/en/about'])
+})
+
 test('reports missing canonical, hreflang, H1 and invalid JSON-LD', () => {
   const issues = validateSeoDocument({
     html: '<html><head><title>X</title><script type="application/ld+json">{bad}</script></head><body></body></html>',
@@ -54,6 +63,12 @@ test('accepts complete SEO HTML and classifies representative templates', () => 
   assert.equal(classifyTemplate('https://example.com/en/products/coil'), 'product-detail')
   assert.equal(classifyTemplate('https://example.com/zh/news/article'), 'news-detail')
   assert.equal(classifyTemplate('https://example.com/en/about'), 'about')
+})
+
+test('accepts the production canonical while verifying a loopback server', () => {
+  const html = '<html><head><title>About</title><meta name="description" content="About us"><link rel="canonical" href="https://www.sunseasteel.com/en/about"><link rel="alternate" hreflang="en" href="https://www.sunseasteel.com/en/about"></head><body><h1>About</h1></body></html>'
+  const issues = validateSeoDocument({ html, url: 'http://127.0.0.1:3199/en/about', template: 'about' })
+  assert.equal(issues.some(issue => issue.code === 'canonical-cross-origin'), false)
 })
 
 test('HTTP verification preserves per-URL status and SEO issues', async () => {

@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
+import { existsSync } from 'node:fs'
 import { parse } from 'node-html-parser'
 
 const DEFAULT_CONCURRENCY = 6
@@ -19,6 +20,18 @@ function normalizeBaseUrl(baseUrl) {
   url.search = ''
   url.pathname = url.pathname.replace(/\/+$/, '') || '/'
   return url.toString().replace(/\/$/, '')
+}
+
+function isLoopbackUrl(url) {
+  const hostname = new URL(url).hostname.toLowerCase()
+  return hostname === 'localhost' || hostname === '::1' || hostname.startsWith('127.')
+}
+
+function resolveSitemapLocation(location, parentUrl, normalizedBase, expectedOrigin) {
+  const resolved = new URL(location, parentUrl)
+  if (resolved.origin === expectedOrigin) return resolved.toString()
+  if (isLoopbackUrl(normalizedBase)) return new URL(`${resolved.pathname}${resolved.search}`, normalizedBase).toString()
+  throw new Error(`站点地图包含站外 URL：${resolved}`)
 }
 
 async function fetchText(fetchImpl, url) {
@@ -53,8 +66,7 @@ export async function discoverSitemapUrls(fetchImpl, baseUrl) {
 
     const locations = root.querySelectorAll('loc').map(node => node.text.trim()).filter(Boolean)
     for (const location of locations) {
-      const resolved = new URL(location, sitemapUrl).toString()
-      if (new URL(resolved).origin !== expectedOrigin) throw new Error(`站点地图包含站外 URL：${resolved}`)
+      const resolved = resolveSitemapLocation(location, sitemapUrl, normalizedBase, expectedOrigin)
       if (isIndex) pending.push(resolved)
       else pageUrls.add(resolved)
     }
@@ -103,7 +115,7 @@ export function validateSeoDocument({ html, url, template = classifyTemplate(url
     try {
       const canonicalUrl = new URL(canonical, url)
       const currentUrl = new URL(url)
-      if (canonicalUrl.origin !== currentUrl.origin) {
+      if (canonicalUrl.origin !== currentUrl.origin && !isLoopbackUrl(currentUrl)) {
         issues.push(issue('canonical-cross-origin', `canonical 指向站外地址：${canonicalUrl}`))
       }
     } catch {
@@ -192,6 +204,20 @@ function printIssue(url, foundIssue) {
   console.log(`${url} | ${foundIssue.severity.toUpperCase()} ${foundIssue.code} | ${foundIssue.message}`)
 }
 
+function findInstalledBrowser() {
+  const configured = process.env.PUBLIC_BROWSER_EXECUTABLE?.trim()
+  if (configured) return configured
+  const candidates = process.platform === 'win32'
+    ? [
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+        'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
+      ]
+    : ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser']
+  return candidates.find(candidate => existsSync(candidate))
+}
+
 export async function runPublicExperienceVerification({
   baseUrl = process.env.PUBLIC_SITE_URL || 'https://www.sunseasteel.com',
   fetchImpl = globalThis.fetch,
@@ -214,7 +240,12 @@ export async function runPublicExperienceVerification({
   }
 
   const { default: puppeteer } = await import('puppeteer')
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] })
+  const executablePath = findInstalledBrowser()
+  const browser = await puppeteer.launch({
+    headless: true,
+    ...(executablePath ? { executablePath } : {}),
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  })
   try {
     const representatives = selectRepresentativeUrls(urls)
     console.log(`选取 ${representatives.length} 种页面模板，检查手机、平板和电脑视口…`)

@@ -5,6 +5,7 @@ import { dirname, join } from 'path'
 import fs from 'fs'
 import { initializeProductReviewSchema } from './services/productReviewSchema.js'
 import { initializeTranslationTaskSchema } from './services/translationTaskSchema.js'
+import { initializeSeoSettingsSchema } from './services/seoSettingsSchema.js'
 import {
   DEFAULT_LLMS_TXT,
   DEFAULT_LLMS_FULL_TXT,
@@ -275,32 +276,13 @@ async function initDb() {
   try { db.exec('ALTER TABLE company ADD COLUMN home_show_video INTEGER DEFAULT 0') } catch (e) { }
   // Migration: add show_contact_panel to page_texts
   try { db.exec('ALTER TABLE page_texts ADD COLUMN show_contact_panel INTEGER DEFAULT 0') } catch (e) { }
-  // Migration: add GEO SEO fields to seo_settings
-  try { db.exec("ALTER TABLE seo_settings ADD COLUMN geo_region TEXT DEFAULT ''") } catch (e) { }
-  try { db.exec("ALTER TABLE seo_settings ADD COLUMN geo_placename TEXT DEFAULT ''") } catch (e) { }
-  try { db.exec("ALTER TABLE seo_settings ADD COLUMN geo_lat TEXT DEFAULT ''") } catch (e) { }
-  try { db.exec("ALTER TABLE seo_settings ADD COLUMN geo_lng TEXT DEFAULT ''") } catch (e) { }
-  try { db.exec("ALTER TABLE seo_settings ADD COLUMN hreflang_en TEXT DEFAULT 'en'") } catch (e) { }
-  try { db.exec("ALTER TABLE seo_settings ADD COLUMN hreflang_zh TEXT DEFAULT 'zh-CN'") } catch (e) { }
-  try { db.exec("ALTER TABLE seo_settings ADD COLUMN local_business_type TEXT DEFAULT 'Manufacturer'") } catch (e) { }
-  try { db.exec("ALTER TABLE seo_settings ADD COLUMN local_business_address TEXT DEFAULT ''") } catch (e) { }
-  try { db.exec("ALTER TABLE seo_settings ADD COLUMN service_account_json TEXT DEFAULT ''") } catch (e) { }
-  // Migration: add Google OAuth 2.0 credentials
-  try { db.exec("ALTER TABLE seo_settings ADD COLUMN oauth_client_id TEXT DEFAULT ''") } catch (e) { }
-  try { db.exec("ALTER TABLE seo_settings ADD COLUMN oauth_client_secret TEXT DEFAULT ''") } catch (e) { }
-  try { db.exec("ALTER TABLE seo_settings ADD COLUMN oauth_refresh_token TEXT DEFAULT ''") } catch (e) { }
+  // Create/upgrade SEO settings before any fresh-database seed reads modern columns.
+  initializeSeoSettingsSchema(db)
   // Migration: add faq_items for GEO (Generative Engine Optimization) FAQ schema
   try { db.exec("ALTER TABLE products ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }
   try { db.exec("ALTER TABLE news ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }
   // Migration: add updated_at to products for freshness tracking
   try { db.exec('ALTER TABLE products ADD COLUMN updated_at DATETIME') } catch (e) { }
-  // Migration: auto content-refresh interval settings for SEO freshness
-  try { db.exec('ALTER TABLE seo_settings ADD COLUMN article_refresh_days INTEGER DEFAULT 0') } catch (e) { }
-  try { db.exec('ALTER TABLE seo_settings ADD COLUMN product_refresh_days INTEGER DEFAULT 0') } catch (e) { }
-  // Migration: AI accessibility instructions (llms.txt)
-  try { db.exec('ALTER TABLE seo_settings ADD COLUMN llms_txt TEXT') } catch (e) { }
-  try { db.exec('ALTER TABLE seo_settings ADD COLUMN llms_full_txt TEXT') } catch (e) { }
-
   // ── Google Indexing Queue ──────────────────────────────────────────────────
   // Tracks every URL submission: status, response, quota usage
   db.exec(`
@@ -1214,19 +1196,7 @@ Requirements:
     }
   } catch (e) { }
 
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS seo_settings (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      site_title TEXT,
-      site_description TEXT,
-      site_keywords TEXT,
-      og_image TEXT,
-      google_analytics TEXT,
-      google_search_console TEXT,
-      robots_txt TEXT,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `)
+  // seo_settings is initialized earlier so both fresh and legacy databases have all columns.
 
   // Languages table
   db.exec(`
