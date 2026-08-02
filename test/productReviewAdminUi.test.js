@@ -10,6 +10,7 @@ function readSource(relativePath) {
 const reviews = readSource('../src/views/admin/Reviews.vue')
 const router = readSource('../src/router/index.js')
 const layout = readSource('../src/views/admin/Layout.vue')
+const apiSource = readSource('../src/api/index.js')
 
 function section(start, end) {
   return reviews.slice(reviews.indexOf(start), reviews.indexOf(end))
@@ -22,6 +23,27 @@ function occurrenceCount(source, pattern) {
 test('admin reviews has an independent route and nearby sidebar entry', () => {
   assert.match(router, /path:\s*['"]reviews['"][\s\S]*?name:\s*['"]AdminReviews['"][\s\S]*?admin\/Reviews\.vue/)
   assert.match(layout, /router-link\s+to="\/admin\/reviews"[^>]*>[^<]*产品评价/)
+})
+
+test('review coverage reports authentic product counts with isolated loading and error states', () => {
+  assert.match(apiSource, /getProductReviewCoverage:\s*\(params\s*=\s*\{\}\)/)
+  for (const token of [
+    'coverageRows',
+    'coverageLoading',
+    'coverageError',
+    'published_count',
+    'pending_count',
+    'hidden_count',
+    'translation_count',
+    'needs_attention',
+    'api.getProductReviewCoverage(',
+    'selectCoverageProduct('
+  ]) {
+    assert.ok(reviews.includes(token), `missing review coverage token: ${token}`)
+  }
+  assert.match(reviews, /评价覆盖/)
+  assert.match(reviews, /已发布少于\s*8\s*条/)
+  assert.match(reviews, /watch\(selectedCategoryId[\s\S]*?loadCoverage\(\)/)
 })
 
 test('review page owns the required category, product, filter, selection, form, and import state', () => {

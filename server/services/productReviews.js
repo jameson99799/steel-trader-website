@@ -508,6 +508,78 @@ export function createProductReviewStore({
     return { data, total: Number(totalRow?.total || 0), page, limit }
   }
 
+  function listCoverage(filters = {}) {
+    const page = boundedInteger(filters.page, {
+      label: 'page', defaultValue: 1, minimum: 1, maximum: Number.MAX_SAFE_INTEGER
+    })
+    const limit = boundedInteger(filters.limit, {
+      label: 'limit', defaultValue: 20, minimum: 1, maximum: 100
+    })
+    const conditions = ['p.status = 1']
+    const parameters = []
+    let cte = ''
+
+    if (filters.categoryId !== undefined && filters.categoryId !== null && filters.categoryId !== '') {
+      const scope = categoryScope(filters.categoryId)
+      cte = scope.cte
+      conditions.push(scope.condition)
+      parameters.push(scope.parameter)
+    }
+    const where = `WHERE ${conditions.join(' AND ')}`
+    const totalRow = getOne(`
+      ${cte}
+      SELECT COUNT(*) AS total
+      FROM products AS p
+      ${where}
+    `, parameters)
+    const dataCte = cte ? `${cte},` : 'WITH'
+    const data = getAll(`
+      ${dataCte}
+      review_counts AS (
+        SELECT
+          product_id,
+          SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) AS published_count,
+          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+          SUM(CASE WHEN status = 'hidden' THEN 1 ELSE 0 END) AS hidden_count
+        FROM product_reviews
+        GROUP BY product_id
+      ),
+      translation_counts AS (
+        SELECT review.product_id, COUNT(translation.id) AS translation_count
+        FROM product_reviews AS review
+        INNER JOIN product_review_translations AS translation ON translation.review_id = review.id
+        GROUP BY review.product_id
+      )
+      SELECT
+        p.id AS product_id,
+        p.name_en AS product_name_en,
+        p.category_id AS category_id,
+        c.name_en AS category_name_en,
+        COALESCE(review_counts.published_count, 0) AS published_count,
+        COALESCE(review_counts.pending_count, 0) AS pending_count,
+        COALESCE(review_counts.hidden_count, 0) AS hidden_count,
+        COALESCE(translation_counts.translation_count, 0) AS translation_count
+      FROM products AS p
+      LEFT JOIN categories AS c ON c.id = p.category_id
+      LEFT JOIN review_counts ON review_counts.product_id = p.id
+      LEFT JOIN translation_counts ON translation_counts.product_id = p.id
+      ${where}
+      ORDER BY COALESCE(review_counts.published_count, 0) ASC, p.id ASC
+      LIMIT ? OFFSET ?
+    `, [...parameters, limit, (page - 1) * limit]).map(row => ({
+      ...row,
+      needs_attention: Number(row.published_count) < 8
+    }))
+
+    return {
+      data,
+      total: Number(totalRow?.total || 0),
+      page,
+      limit,
+      targetMinimum: 8
+    }
+  }
+
   function getById(id) {
     const review = getOne(`
       SELECT
@@ -847,6 +919,7 @@ export function createProductReviewStore({
 
   return {
     listAdmin,
+    listCoverage,
     getById,
     create,
     bulkCreate,

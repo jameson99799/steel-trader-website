@@ -85,6 +85,10 @@ export function createProductReviewHandlers({ store, parseImport = parseBulkRevi
       return execute(res, () => store.listAdmin(req.query))
     },
 
+    listCoverage(req, res) {
+      return execute(res, () => store.listCoverage(req.query))
+    },
+
     getAdmin(req, res) {
       return execute(res, () => store.getById(req.params.id), { missing: true })
     },
@@ -148,6 +152,7 @@ export function createProductReviewRouter({ store = productReviewStore, parseImp
   const handlers = createProductReviewHandlers({ store, parseImport })
 
   router.get('/product/:productId', handlers.listPublic)
+  router.get('/admin-coverage', authMiddleware, handlers.listCoverage)
   router.get('/admin', authMiddleware, handlers.listAdmin)
   router.get('/admin/:id', authMiddleware, handlers.getAdmin)
   router.post('/admin', authMiddleware, handlers.createAdmin)

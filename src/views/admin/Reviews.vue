@@ -42,6 +42,43 @@
     </section>
 
     <section class="card">
+      <div class="card-header">
+        <div>
+          <h2>评价覆盖</h2>
+          <p>仅统计已保存的真实评价。建议每个产品至少积累 8 条已发布评价，不会自动生成或伪造内容。</p>
+        </div>
+        <button class="btn btn-secondary btn-sm" :disabled="coverageLoading" @click="loadCoverage">刷新统计</button>
+      </div>
+      <div v-if="coverageLoading" class="state-panel" role="status">正在统计产品评价…</div>
+      <div v-else-if="coverageError" class="coverage-error" role="alert">
+        <span>{{ coverageError }}</span>
+        <button class="btn btn-secondary btn-sm" @click="loadCoverage">重新加载</button>
+      </div>
+      <div v-else-if="!coverageRows.length" class="state-panel">当前范围内没有产品。</div>
+      <div v-else class="table-wrap">
+        <table class="table coverage-table">
+          <thead><tr><th>产品</th><th>已发布</th><th>待审核</th><th>已隐藏</th><th>译文</th><th>覆盖状态</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr v-for="row in coverageRows" :key="row.product_id">
+              <td><strong>{{ row.product_name_en || `产品 #${row.product_id}` }}</strong><small>{{ row.category_name_en || '未分类' }}</small></td>
+              <td><strong>{{ row.published_count }}</strong></td>
+              <td>{{ row.pending_count }}</td>
+              <td>{{ row.hidden_count }}</td>
+              <td>{{ row.translation_count }}</td>
+              <td><span :class="['coverage-badge', row.needs_attention ? 'coverage-warning' : 'coverage-ok']">{{ row.needs_attention ? '已发布少于 8 条' : '覆盖良好' }}</span></td>
+              <td><button class="btn btn-primary btn-sm" @click="selectCoverageProduct(row)">管理评价</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-if="coverageRows.length && coverageTotalPages > 1" class="pagination">
+        <button class="btn btn-secondary btn-sm" :disabled="coveragePage <= 1 || coverageLoading" @click="changeCoveragePage(coveragePage - 1)">上一页</button>
+        <span>第 {{ coveragePage }} / {{ coverageTotalPages }} 页，共 {{ coverageTotal }} 个产品</span>
+        <button class="btn btn-secondary btn-sm" :disabled="coveragePage >= coverageTotalPages || coverageLoading" @click="changeCoveragePage(coveragePage + 1)">下一页</button>
+      </div>
+    </section>
+
+    <section class="card">
       <div class="card-header"><h2>筛选评价</h2></div>
       <form class="card-body filter-grid" @submit.prevent="applyFilters">
         <div class="form-group">
@@ -219,9 +256,16 @@ const editingId = ref(null)
 const page = ref(1)
 const limit = ref(20)
 const total = ref(0)
+const coverageRows = ref([])
+const coverageLoading = ref(false)
+const coverageError = ref('')
+const coveragePage = ref(1)
+const coverageLimit = 20
+const coverageTotal = ref(0)
 let suppressProductWatch = false
 let productsRequestSequence = 0
 let reviewsRequestSequence = 0
+let coverageRequestSequence = 0
 
 const flatCategories = computed(() => {
   const result = []
@@ -246,6 +290,7 @@ const currentScopeLabel = computed(() => selectedProductId.value
   ? selectedProductLabel.value
   : selectedCategoryId.value ? `${selectedCategoryLabel.value}（含子分类）` : '全站只读范围（不可全部发布）')
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit.value)))
+const coverageTotalPages = computed(() => Math.max(1, Math.ceil(coverageTotal.value / coverageLimit)))
 const currentPageIds = computed(() => reviews.value.map(review => review.id))
 const allCurrentPageSelected = computed(() => currentPageIds.value.length > 0 && currentPageIds.value.every(id => selectedReviewIds.value.includes(id)))
 const canPublishScope = computed(() => Boolean(selectedProductId.value || selectedCategoryId.value))
@@ -320,6 +365,45 @@ const loadReviews = async () => {
   }
 }
 
+const buildCoverageQuery = () => {
+  const query = { page: coveragePage.value, limit: coverageLimit }
+  if (selectedCategoryId.value) query.categoryId = selectedCategoryId.value
+  return query
+}
+const loadCoverage = async () => {
+  const requestId = ++coverageRequestSequence
+  const categorySnapshot = selectedCategoryId.value
+  coverageLoading.value = true
+  coverageError.value = ''
+  try {
+    const response = await api.getProductReviewCoverage(buildCoverageQuery())
+    if (requestId !== coverageRequestSequence || categorySnapshot !== selectedCategoryId.value) return
+    coverageRows.value = response?.data || []
+    coverageTotal.value = Number(response?.total || 0)
+    coveragePage.value = Number(response?.page || coveragePage.value)
+  } catch (error) {
+    if (requestId !== coverageRequestSequence || categorySnapshot !== selectedCategoryId.value) return
+    coverageRows.value = []
+    coverageTotal.value = 0
+    coverageError.value = error?.message || '评价覆盖统计加载失败，请稍后重试。'
+  } finally {
+    if (requestId === coverageRequestSequence && categorySnapshot === selectedCategoryId.value) coverageLoading.value = false
+  }
+}
+const changeCoveragePage = async nextPage => {
+  if (nextPage < 1 || nextPage > coverageTotalPages.value || nextPage === coveragePage.value) return
+  coveragePage.value = nextPage
+  await loadCoverage()
+}
+const selectCoverageProduct = async row => {
+  if (!products.value.some(product => String(product.id) === String(row.product_id))) {
+    products.value = [...products.value, { id: row.product_id, name_en: row.product_name_en }]
+  }
+  selectedProductId.value = String(row.product_id)
+  await nextTick()
+  document.querySelector('.filter-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 watch(selectedCategoryId, async () => {
   suppressProductWatch = true
   selectedProductId.value = ''
@@ -327,12 +411,14 @@ watch(selectedCategoryId, async () => {
   reviews.value = []
   total.value = 0
   page.value = 1
+  coveragePage.value = 1
   clearSelection()
   resetImport()
   await nextTick()
   suppressProductWatch = false
   await loadProducts()
   await loadReviews()
+  await loadCoverage()
 })
 watch(selectedProductId, async () => {
   if (suppressProductWatch) return
@@ -400,14 +486,14 @@ const saveReview = async () => {
       ? api.updateProductReview(editingId.value, reviewPayload())
       : api.createProductReview(reviewPayload()))
     const message = editingId.value ? '评价已更新。' : '真实评价已新增。'
-    showFormModal.value = false; resetForm(); clearSelection(); await loadReviews(); showSuccess(message)
+    showFormModal.value = false; resetForm(); clearSelection(); await Promise.all([loadReviews(), loadCoverage()]); showSuccess(message)
   } catch (error) { showError(error, '评价保存失败。') }
   finally { submitting.value = false }
 }
 const deleteReview = async review => {
   if (!window.confirm(`确定删除 ${review.author_name} 的这条评价吗？此操作无法撤销。`)) return
   actionLoading.value = true; clearMessages()
-  try { await api.deleteProductReview(review.id); clearSelection(); await loadReviews(); showSuccess('评价已删除。') }
+  try { await api.deleteProductReview(review.id); clearSelection(); await Promise.all([loadReviews(), loadCoverage()]); showSuccess('评价已删除。') }
   catch (error) { showError(error, '评价删除失败。') }
   finally { actionLoading.value = false }
 }
@@ -418,7 +504,7 @@ const bulkUpdateStatus = async status => {
   actionLoading.value = true; clearMessages()
   try {
     await api.bulkUpdateProductReviewStatus({ ids: selectedReviewIds.value, status })
-    const count = selectedReviewIds.value.length; clearSelection(); await loadReviews(); showSuccess(`已更新 ${count} 条评价的状态。`)
+    const count = selectedReviewIds.value.length; clearSelection(); await Promise.all([loadReviews(), loadCoverage()]); showSuccess(`已更新 ${count} 条评价的状态。`)
   } catch (error) { showError(error, '批量状态更新失败。') }
   finally { actionLoading.value = false }
 }
@@ -433,7 +519,7 @@ const publishAllInScope = async () => {
   actionLoading.value = true; clearMessages()
   try {
     const result = await api.publishAllPendingProductReviews(scope)
-    clearSelection(); await loadReviews(); showSuccess(`当前范围已发布 ${Number(result?.updated || 0)} 条待审核评价。`)
+    clearSelection(); await Promise.all([loadReviews(), loadCoverage()]); showSuccess(`当前范围已发布 ${Number(result?.updated || 0)} 条待审核评价。`)
   } catch (error) { showError(error, '当前范围全部发布失败。') }
   finally { actionLoading.value = false }
 }
@@ -460,7 +546,7 @@ const confirmImport = async () => {
   try {
     const count = importPreview.value.valid.length
     await api.bulkCreateProductReviews({ productId: selectedProductId.value, rows: importPreview.value.valid, status: importStatus.value })
-    resetImport(); clearSelection(); page.value = 1; await loadReviews(); showSuccess(`已导入 ${count} 条真实评价。`)
+    resetImport(); clearSelection(); page.value = 1; await Promise.all([loadReviews(), loadCoverage()]); showSuccess(`已导入 ${count} 条真实评价。`)
   } catch (error) { showError(error, '批量导入失败。') }
   finally { importLoading.value = false }
 }
@@ -483,7 +569,7 @@ const translationLabel = review => {
   if (Array.isArray(review.translations)) return review.translations.length ? `已有 ${review.translations.length} 个译文` : '未翻译'
   return '-'
 }
-onMounted(async () => { await Promise.all([loadCategories(), loadReviews()]) })
+onMounted(async () => { await Promise.all([loadCategories(), loadReviews(), loadCoverage()]) })
 </script>
 
 <style scoped>
@@ -499,6 +585,12 @@ onMounted(async () => { await Promise.all([loadCategories(), loadReviews()]) })
 .scope-grid { display: grid; grid-template-columns: minmax(200px,1fr) minmax(240px,1.4fr) minmax(180px,.8fr); gap: 16px; align-items: end; }
 .scope-summary { display: flex; min-height: 40px; flex-direction: column; justify-content: center; padding: 7px 12px; border-left: 3px solid #3b82f6; border-radius: 6px; background: #eff6ff; }
 .scope-summary span { color: #64748b; font-size: 11px; }.scope-summary strong { font-size: 13px; overflow-wrap: anywhere; }
+.coverage-table { min-width: 840px; }
+.coverage-table td:nth-child(n+2):nth-child(-n+5) { font-variant-numeric: tabular-nums; }
+.coverage-badge { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.coverage-warning { background: #fef3c7; color: #92400e; }
+.coverage-ok { background: #dcfce7; color: #166534; }
+.coverage-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; background: #fef2f2; color: #b91c1c; }
 .filter-grid { display: grid; grid-template-columns: 140px 150px minmax(190px,1fr) 160px 160px auto; gap: 12px; align-items: end; }
 .form-group { min-width: 0; }.form-group label { display: block; margin-bottom: 6px; color: #475569; font-size: 13px; font-weight: 600; }
 .form-control { box-sizing: border-box; width: 100%; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 7px; background: #fff; color: #1e293b; font: inherit; font-size: 14px; }

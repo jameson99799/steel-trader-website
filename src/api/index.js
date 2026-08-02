@@ -208,6 +208,7 @@ export const api = {
   // Product Reviews
   getPublicProductReviews: (productId, params = {}) => request(`/product-reviews/product/${productId}?${new URLSearchParams(params)}`),
   getAdminProductReviews: (params = {}) => request(`/product-reviews/admin?${new URLSearchParams(params)}`),
+  getProductReviewCoverage: (params = {}) => request(`/product-reviews/admin-coverage?${new URLSearchParams(params)}`),
   getAdminProductReview: id => request(`/product-reviews/admin/${id}`),
   createProductReview: data => request('/product-reviews/admin', { method: 'POST', body: JSON.stringify(data) }),
   parseProductReviewImport: data => request('/product-reviews/admin/parse-import', { method: 'POST', body: JSON.stringify(data) }),
