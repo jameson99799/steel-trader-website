@@ -137,3 +137,26 @@ test('viewport verification retries one transient navigation failure without ret
   assert.equal(attempts, 2)
   assert.deepEqual(issues, [])
 })
+
+test('viewport verification reports first-party script CSS and image HTTP errors', async () => {
+  const listeners = new Map()
+  const page = {
+    setViewport: async () => {},
+    on: (event, handler) => listeners.set(event, handler),
+    goto: async () => {
+      listeners.get('response')?.({
+        status: () => 404,
+        url: () => 'https://example.com/assets/app.css',
+        request: () => ({ resourceType: () => 'stylesheet' })
+      })
+    },
+    evaluate: async () => ({ overflow: false, brokenImages: [] }),
+    close: async () => {}
+  }
+  const issues = await verifyViewport({ browser: { newPage: async () => page }, url: 'https://example.com/en/about', viewport: { name: 'desktop', width: 1440, height: 900 } })
+  assert.deepEqual(issues, [{
+    code: 'resource-http-status',
+    message: 'desktop: https://example.com/assets/app.css (HTTP 404)',
+    severity: 'error'
+  }])
+})

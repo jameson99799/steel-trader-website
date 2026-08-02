@@ -175,6 +175,7 @@ export async function verifyViewport({ browser, url, viewport }) {
   const issues = []
   const pageErrors = []
   const failedRequests = []
+  const httpResourceFailures = []
   try {
     await page.setViewport({ width: viewport.width, height: viewport.height, deviceScaleFactor: 1 })
     page.on('pageerror', error => pageErrors.push(error))
@@ -182,6 +183,13 @@ export async function verifyViewport({ browser, url, viewport }) {
       const resourceUrl = request.url()
       const failure = request.failure?.()?.errorText || 'request failed'
       failedRequests.push({ resourceUrl, failure })
+    })
+    page.on('response', response => {
+      const status = response.status()
+      const resourceType = response.request?.()?.resourceType?.()
+      if (status >= 400 && ['script', 'stylesheet', 'image', 'font'].includes(resourceType)) {
+        httpResourceFailures.push({ resourceUrl: response.url(), status })
+      }
     })
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
@@ -191,6 +199,7 @@ export async function verifyViewport({ browser, url, viewport }) {
         if (attempt === 2) throw error
         pageErrors.length = 0
         failedRequests.length = 0
+        httpResourceFailures.length = 0
       }
     }
     for (const error of pageErrors) issues.push(issue('page-error', `${viewport.name}: ${error?.message || error}`))
@@ -198,6 +207,13 @@ export async function verifyViewport({ browser, url, viewport }) {
       issues.push(issue(
         'resource-failed',
         `${viewport.name}: ${resourceUrl} (${failure})`,
+        isFirstParty(resourceUrl, url) ? 'error' : 'warning'
+      ))
+    }
+    for (const { resourceUrl, status } of httpResourceFailures) {
+      issues.push(issue(
+        'resource-http-status',
+        `${viewport.name}: ${resourceUrl} (HTTP ${status})`,
         isFirstParty(resourceUrl, url) ? 'error' : 'warning'
       ))
     }
