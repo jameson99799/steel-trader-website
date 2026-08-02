@@ -1,9 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
 
 import {
   FAVICON_SIZES,
+  createIcoFromPng,
   createFaviconHandler,
   resolveFaviconSource
 } from '../server/services/favicon.js'
@@ -20,6 +22,29 @@ test('uses the packaged brand icon when company assets are unavailable', () => {
   })
 
   assert.equal(source, expected)
+})
+
+test('packaged and generated ico payloads use a real ICO container', () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  const ico = createIcoFromPng(png, 32)
+  assert.deepEqual([...ico.subarray(0, 6)], [0, 0, 1, 0, 1, 0])
+  assert.equal(ico.readUInt32LE(14), png.length)
+  assert.equal(ico.readUInt32LE(18), 22)
+  assert.deepEqual(ico.subarray(22), png)
+
+  const packaged = readFileSync(new URL('../public/favicon.ico', import.meta.url))
+  assert.deepEqual([...packaged.subarray(0, 4)], [0, 0, 1, 0])
+})
+
+test('dynamic ico fallback reads the packaged PNG before wrapping it', () => {
+  const projectRoot = join('C:', 'app')
+  const expected = join(projectRoot, 'public', 'favicon-32.png')
+  assert.equal(resolveFaviconSource({
+    company: {},
+    projectRoot,
+    filename: 'favicon.ico',
+    exists: value => value === expected
+  }), expected)
 })
 
 test('prefers a configured company favicon over the packaged fallback', () => {
@@ -88,4 +113,28 @@ test('favicon handler renders the requested size with stable cache and content t
   assert.equal(response.body.toString(), 'brand-icon')
   assert.equal(calls[1][1], 192)
   assert.equal(calls[1][2], 192)
+})
+
+test('favicon ico handler wraps the resized PNG while declaring image/x-icon', async () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47])
+  const handler = createFaviconHandler({
+    getCompany: () => ({ favicon: '', logo: '' }),
+    projectRoot: join('C:', 'app'),
+    exists: () => true,
+    imageFactory: () => ({
+      resize() { return this },
+      png() { return this },
+      async toBuffer() { return png }
+    })
+  })
+  const headers = {}
+  const response = {
+    setHeader(name, value) { headers[name] = value },
+    send(value) { this.body = value; return this },
+    status(code) { this.statusCode = code; return this }
+  }
+  await handler({ params: { file: 'favicon.ico' } }, response)
+  assert.equal(headers['Content-Type'], 'image/x-icon')
+  assert.deepEqual([...response.body.subarray(0, 4)], [0, 0, 1, 0])
+  assert.deepEqual(response.body.subarray(22), png)
 })

@@ -8,6 +8,25 @@ export const FAVICON_SIZES = Object.freeze({
   'apple-touch-icon.png': 180
 })
 
+export function createIcoFromPng(pngBuffer, size = 32) {
+  if (!Buffer.isBuffer(pngBuffer) || !pngBuffer.length) throw new TypeError('ICO source must be a non-empty PNG buffer')
+  if (!Number.isInteger(size) || size < 1 || size > 256) throw new RangeError('ICO size must be an integer from 1 to 256')
+
+  const header = Buffer.alloc(22)
+  header.writeUInt16LE(0, 0) // reserved
+  header.writeUInt16LE(1, 2) // icon type
+  header.writeUInt16LE(1, 4) // one image
+  header.writeUInt8(size === 256 ? 0 : size, 6)
+  header.writeUInt8(size === 256 ? 0 : size, 7)
+  header.writeUInt8(0, 8) // no palette
+  header.writeUInt8(0, 9)
+  header.writeUInt16LE(1, 10) // color planes
+  header.writeUInt16LE(32, 12) // RGBA bit depth
+  header.writeUInt32LE(pngBuffer.length, 14)
+  header.writeUInt32LE(header.length, 18)
+  return Buffer.concat([header, pngBuffer])
+}
+
 function configuredUploadPath(value, projectRoot) {
   const normalized = String(value || '').trim().replace(/\\/g, '/')
   if (!/^\/?uploads\//i.test(normalized)) return ''
@@ -27,7 +46,8 @@ export function resolveFaviconSource({ company, projectRoot, filename, exists })
     if (configured && fileExists(configured)) return configured
   }
 
-  const fallback = join(projectRoot, 'public', filename)
+  // Sharp reads the packaged PNG, then the handler wraps it in a real ICO container.
+  const fallback = join(projectRoot, 'public', filename === 'favicon.ico' ? 'favicon-32.png' : filename)
   return fileExists(fallback) ? fallback : ''
 }
 
@@ -52,13 +72,14 @@ export function createFaviconHandler({
       })
       if (!sourcePath) return res.status(404).send('Not Found')
 
-      const buffer = await imageFactory(sourcePath)
+      const pngBuffer = await imageFactory(sourcePath)
         .resize(size, size, {
           fit: 'contain',
           background: { r: 255, g: 255, b: 255, alpha: 0 }
         })
         .png()
         .toBuffer()
+      const buffer = filename.endsWith('.ico') ? createIcoFromPng(pngBuffer, size) : pngBuffer
 
       res.setHeader('Content-Type', filename.endsWith('.ico') ? 'image/x-icon' : 'image/png')
       res.setHeader('Cache-Control', 'public, max-age=86400')
