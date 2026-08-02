@@ -119,13 +119,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 import RalColors from './RalColors.vue'
 import RoofingProfiles from './RoofingProfiles.vue'
-import FuturesPrice from './FuturesPrice.vue'
+const FuturesPrice = defineAsyncComponent(() => import('./FuturesPrice.vue'))
 
 const { lang, t, localizedValue, langPath } = useLang()
 const router = useRouter()

@@ -144,7 +144,27 @@
 import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
-import * as echarts from 'echarts'
+import * as echarts from 'echarts/core'
+import { CandlestickChart, LineChart } from 'echarts/charts'
+import {
+  AxisPointerComponent,
+  DataZoomComponent,
+  GridComponent,
+  MarkLineComponent,
+  TooltipComponent
+} from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+
+echarts.use([
+  LineChart,
+  CandlestickChart,
+  GridComponent,
+  TooltipComponent,
+  AxisPointerComponent,
+  MarkLineComponent,
+  DataZoomComponent,
+  CanvasRenderer
+])
 
 const { t, localizedValue } = useLang()
 

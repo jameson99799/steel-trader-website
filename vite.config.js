@@ -32,7 +32,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-vue': ['vue', 'vue-router', 'pinia'],
-          'vendor-chart': ['echarts'],
           'vendor-editor': ['quill', 'quill-image-resize-module-react', 'quill-resize-image']
         }
       }
