@@ -2,7 +2,7 @@ import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 import { getAll, getOne, run } from '../db.js'
 import { replaceCustomVars } from './mailer.js'
-import archiver from 'archiver'
+import { ZipArchive } from 'archiver'
 import AdmZip from 'adm-zip'
 import { join, basename, dirname, resolve } from 'path'
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs'
@@ -1213,7 +1213,7 @@ router.get('/export/zip', dualAuth, (req, res) => {
     const spaHtml = buildOfflineCrmHtml(totalC, totalI, totalQ, totalF)
 
     // Create ZIP
-    const archive = archiver('zip', { zlib: { level: 9 } })
+    const archive = new ZipArchive({ zlib: { level: 9 } })
     archive.on('error', (err) => {
       console.error('Archive error:', err)
       if (!res.headersSent) res.status(500).json({ error: 'ZIP创建失败: ' + err.message })
