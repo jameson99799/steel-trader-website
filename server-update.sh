@@ -132,20 +132,44 @@ ok "旧进程已清除"
 info "创建日志目录..."
 mkdir -p logs
 
-# Ensure production secrets exist without printing or replacing existing values.
+# Ensure production secrets exist and rotate only missing, weak, or known legacy values.
 touch .env
+ENV_SECRET_BACKUP=""
+secret_is_valid() {
+  local secret_value="$1"
+  case "$secret_value" in
+    led-trade-secret-key-2024|crm-steel-secret-2024|your-secret-key-change-this-in-production) return 1 ;;
+  esac
+  [ "${#secret_value}" -ge 32 ]
+}
 ensure_secret() {
   local secret_name="$1"
-  if ! grep -q "^${secret_name}=" .env 2>/dev/null; then
+  local current_value
+  current_value=$(grep "^${secret_name}=" .env 2>/dev/null | head -1 | cut -d= -f2- || true)
+  current_value="${current_value%\"}"; current_value="${current_value#\"}"
+  current_value="${current_value%\'}"; current_value="${current_value#\'}"
+  if ! secret_is_valid "$current_value"; then
+    if [ -z "$ENV_SECRET_BACKUP" ]; then
+      ENV_SECRET_BACKUP=".env.secret-backup-${TIMESTAMP}"
+      cp -a .env "$ENV_SECRET_BACKUP"
+      ok "已备份原环境配置: ${ENV_SECRET_BACKUP}"
+    fi
     local secret_value
     secret_value=$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))")
-    printf '%s=%s\n' "$secret_name" "$secret_value" >> .env
-    ok "已生成缺失的 ${secret_name}"
+    if grep -q "^${secret_name}=" .env 2>/dev/null; then
+      sed -i "s|^${secret_name}=.*|${secret_name}=${secret_value}|" .env
+    else
+      printf '%s=%s\n' "$secret_name" "$secret_value" >> .env
+    fi
+    ok "已生成安全的 ${secret_name}"
   fi
 }
 ensure_secret "JWT_SECRET"
 ensure_secret "CRM_JWT_SECRET"
 ensure_secret "UNSUBSCRIBE_SECRET"
+if ! NODE_ENV=production node -e "import('./server/config/secrets.js')" >/dev/null 2>&1; then
+  fail "生产密钥检查失败，已停止启动。请检查 .env 中的 JWT_SECRET 和 CRM_JWT_SECRET。"
+fi
 
 info "启动新进程（使用 ecosystem.config.cjs，NODE_ENV=production 已固定）..."
 pm2 start ecosystem.config.cjs

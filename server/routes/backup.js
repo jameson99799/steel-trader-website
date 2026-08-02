@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { authMiddleware } from '../middleware/auth.js'
 import fs from 'fs'
 import path from 'path'
-import archiver from 'archiver'
+import { ZipArchive } from 'archiver'
 import AdmZip from 'adm-zip'
 import multer from 'multer'
 import { closeDb, backupDb } from '../db.js'
@@ -20,7 +20,7 @@ router.get('/export', authMiddleware, async (req, res) => {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
         res.attachment(`site-backup-${timestamp}.zip`)
 
-        const archive = archiver('zip', { zlib: { level: 9 } })
+        const archive = new ZipArchive({ zlib: { level: 9 } })
         
         archive.on('error', (err) => {
             console.error('[Backup] Archive error:', err)

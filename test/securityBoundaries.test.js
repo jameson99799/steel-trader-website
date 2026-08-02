@@ -29,4 +29,7 @@ test('production JWT configuration has no public hard-coded fallback', () => {
   assert.match(setup, /UNSUBSCRIBE_SECRET=/)
   assert.match(update, /ensure_secret\s+"JWT_SECRET"/)
   assert.match(update, /ensure_secret\s+"CRM_JWT_SECRET"/)
+  assert.match(update, /secret_is_valid/)
+  assert.match(update, /\.env\.secret-backup-/)
+  assert.match(update, /NODE_ENV=production node -e .*server\/config\/secrets\.js/)
 })
