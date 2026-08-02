@@ -3,6 +3,8 @@ import { getAll, getOne, run } from '../db.js'
 import { dualAuthMiddleware as authMiddleware } from '../middleware/auth.js'
 import { getSslDaysRemaining } from '../emailService.js'
 import nodemailer from 'nodemailer'
+import { sanitizeSmtpAccount } from '../config/secrets.js'
+import { smtpTransportOptions } from '../services/mailerPolicy.js'
 
 const router = express.Router()
 
@@ -16,73 +18,97 @@ function getUserId(req) {
     return { userId: '', isAdmin: true }
 }
 
+function requireAccountAccess(req, res, id, allowAssigned = true) {
+    const account = getOne('SELECT * FROM smtp_accounts WHERE id=?', [id])
+    if (!account) { res.status(404).json({ error: 'Account not found' }); return null }
+    const { userId, isAdmin } = getUserId(req)
+    const assigned = account.assigned_users === 'all' || String(account.assigned_users || '').split(',').map(v => v.trim()).includes(userId)
+    if (!isAdmin && String(account.created_by || '') !== userId && !(allowAssigned && assigned)) {
+        res.status(403).json({ error: 'No permission for this SMTP account' })
+        return null
+    }
+    return account
+}
+
+function requireAdmin(req, res) {
+    const { isAdmin } = getUserId(req)
+    if (!isAdmin) { res.status(403).json({ error: 'Admin permission required' }); return false }
+    return true
+}
+
 // ─── SMTP Accounts CRUD ─────────────────────────────────────────────────────
 
-// GET all accounts (plaintext passwords for admin editing)
 router.get('/accounts', authMiddleware, (req, res) => {
     try { run('ALTER TABLE smtp_accounts ADD COLUMN assigned_users TEXT DEFAULT ""') } catch(e) {}
     const { userId, isAdmin } = getUserId(req)
-    const accounts = isAdmin
-        ? getAll('SELECT * FROM smtp_accounts ORDER BY is_default DESC, id ASC')
-        : getAll(`SELECT * FROM smtp_accounts WHERE created_by=? OR assigned_users=? ORDER BY is_default DESC, id ASC`, [userId, userId])
-    res.json(accounts)
+    const allAccounts = getAll('SELECT * FROM smtp_accounts ORDER BY is_default DESC, id ASC')
+    const accounts = isAdmin ? allAccounts : allAccounts.filter(account => {
+        const assigned = account.assigned_users === 'all' || String(account.assigned_users || '').split(',').map(v => v.trim()).includes(userId)
+        return String(account.created_by || '') === userId || assigned
+    })
+    res.json(accounts.map(sanitizeSmtpAccount))
 })
 
 // POST create account
 router.post('/accounts', authMiddleware, express.json(), (req, res) => {
     const { name, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, is_default, enabled } = req.body
     if (!smtp_host || !smtp_user || !smtp_pass) return res.status(400).json({ error: '请填写SMTP服务器、账号和密码' })
-    if (is_default) run('UPDATE smtp_accounts SET is_default = 0')
-    const { userId } = getUserId(req)
+    const { userId, isAdmin } = getUserId(req)
+    if (is_default && isAdmin) run('UPDATE smtp_accounts SET is_default = 0')
     const result = run(
         `INSERT INTO smtp_accounts (name, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, is_default, enabled, created_by) VALUES (?,?,?,?,?,?,?,?,?)`,
-        [name || smtp_user, smtp_host, smtp_port || 465, smtp_user, smtp_pass, from_name || 'SunSea Steel', is_default ? 1 : 0, enabled !== false ? 1 : 0, userId]
+        [name || smtp_user, smtp_host, smtp_port || 465, smtp_user, smtp_pass, from_name || 'SunSea Steel', is_default && isAdmin ? 1 : 0, enabled !== false ? 1 : 0, userId]
     )
     res.json({ id: result.lastInsertRowid, message: '账号已添加' })
 })
 
 // PUT update account
 router.put('/accounts/:id', authMiddleware, express.json(), (req, res) => {
+    if (!requireAccountAccess(req, res, req.params.id, false)) return
     const { name, smtp_host, smtp_port, smtp_user, smtp_pass, from_name, is_default, enabled } = req.body
-    if (is_default) run('UPDATE smtp_accounts SET is_default = 0')
+    const { isAdmin } = getUserId(req)
+    if (is_default && isAdmin) run('UPDATE smtp_accounts SET is_default = 0')
+    const existing = getOne('SELECT * FROM smtp_accounts WHERE id=?', [req.params.id])
+    if (!existing) return res.status(404).json({ error: 'Account not found' })
+    const finalPass = smtp_pass && !smtp_pass.includes('****') && !smtp_pass.includes('••••') ? smtp_pass : existing.smtp_pass
     run(
         `UPDATE smtp_accounts SET name=?, smtp_host=?, smtp_port=?, smtp_user=?, smtp_pass=?, from_name=?, is_default=?, enabled=? WHERE id=?`,
-        [name, smtp_host, smtp_port || 465, smtp_user, smtp_pass, from_name || 'SunSea Steel', is_default ? 1 : 0, enabled ? 1 : 0, req.params.id]
+        [name, smtp_host, smtp_port || 465, smtp_user, finalPass, from_name || 'SunSea Steel', is_default && isAdmin ? 1 : existing.is_default || 0, enabled ? 1 : 0, req.params.id]
     )
     res.json({ message: '账号已更新' })
 })
 
 // DELETE account
 router.delete('/accounts/:id', authMiddleware, (req, res) => {
+    if (!requireAccountAccess(req, res, req.params.id, false)) return
     run('DELETE FROM smtp_accounts WHERE id=?', [req.params.id])
     res.json({ message: '账号已删除' })
 })
 
 // POST test single account
 router.post('/accounts/:id/test', authMiddleware, express.json(), async (req, res) => {
+    if (!requireAccountAccess(req, res, req.params.id)) return
     try {
         const acct = getOne('SELECT * FROM smtp_accounts WHERE id=?', [req.params.id])
         if (!acct) return res.status(404).json({ error: '账号不存在' })
         const to = req.body.to
         if (!to) return res.status(400).json({ error: '请填写测试收件邮箱' })
-        const transporter = nodemailer.createTransport({
-            host: acct.smtp_host,
-            port: parseInt(acct.smtp_port) || 465,
-            secure: parseInt(acct.smtp_port) === 465,
-            auth: { user: acct.smtp_user, pass: acct.smtp_pass },
-            tls: { rejectUnauthorized: false }
-        })
-        await transporter.sendMail({
-            from: `"${acct.from_name || 'SunSea Steel'}" <${acct.smtp_user}>`,
-            to,
-            subject: '✅ 邮件测试成功 - SunSea Steel',
-            html: `<div style="font-family:Arial,sans-serif;padding:24px;max-width:500px">
-              <h2 style="color:#1e40af">✅ 邮件发送测试成功</h2>
-              <p>账号：<strong>${acct.smtp_user}</strong></p>
-              <p>SMTP：${acct.smtp_host}:${acct.smtp_port}</p>
-              <p style="color:#64748b;font-size:13px">发送时间：${new Date().toLocaleString('zh-CN')}</p>
-            </div>`
-        })
+        const transporter = nodemailer.createTransport(smtpTransportOptions(acct))
+        try {
+            await transporter.sendMail({
+                from: `"${acct.from_name || 'SunSea Steel'}" <${acct.smtp_user}>`,
+                to,
+                subject: '✅ 邮件测试成功 - SunSea Steel',
+                html: `<div style="font-family:Arial,sans-serif;padding:24px;max-width:500px">
+                  <h2 style="color:#1e40af">✅ 邮件发送测试成功</h2>
+                  <p>账号：<strong>${acct.smtp_user}</strong></p>
+                  <p>SMTP：${acct.smtp_host}:${acct.smtp_port}</p>
+                  <p style="color:#64748b;font-size:13px">发送时间：${new Date().toLocaleString('zh-CN')}</p>
+                </div>`
+            })
+        } finally {
+            transporter.close?.()
+        }
         res.json({ success: true, message: `测试邮件已发送到 ${to}` })
     } catch (e) {
         res.status(500).json({ error: '发送失败: ' + e.message })
@@ -97,6 +123,7 @@ router.get('/settings', authMiddleware, (req, res) => {
 })
 
 router.put('/settings', authMiddleware, express.json(), (req, res) => {
+    if (!requireAdmin(req, res)) return
     const { to_emails, ssl_warn_days, round_robin, inquiry_notify_enabled, chat_notify_enabled } = req.body
     const existing = getOne('SELECT id FROM email_settings WHERE id=1')
     const inquiryVal = inquiry_notify_enabled !== false && inquiry_notify_enabled !== 0 ? 1 : 0

@@ -173,6 +173,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
+import { sanitizeRichHtml } from '../utils/sanitizeHtml.js'
 
 const route = useRoute()
 const { t, localizedValue, localizedHtml, lang, langPath } = useLang()
@@ -301,7 +302,7 @@ const sanitizedContent = computed(() => {
     html = html.replace(/<meta[^>]*>/gi, '')
     html = html.replace(/<title[^>]*>[\s\S]*?<\/title>/gi, '')
 
-    return html
+    return sanitizeRichHtml(html)
   })
 
 function handleMailtoClick(href, event) {

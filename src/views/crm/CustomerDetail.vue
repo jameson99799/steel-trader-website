@@ -113,7 +113,7 @@
             <div v-if="combinedInquiry" class="preview-panel">
               <h4>📋 询盘内容</h4>
               <div class="preview-meta">{{ combinedInquiry.note }} · {{ formatDateTime(combinedInquiry.inquiry_time) }}</div>
-              <div class="preview-html" v-html="combinedInquiry.content_html"></div>
+              <div class="preview-html" v-html="sanitizeRichHtml(combinedInquiry.content_html)"></div>
               <div v-if="combinedInquiry.images?.length" class="preview-attach">
                 <h5>📷 图片</h5>
                 <div class="img-grid">
@@ -132,7 +132,7 @@
             <div v-if="combinedQuotation" class="preview-panel">
               <h4>💰 报价内容</h4>
               <div class="preview-meta">{{ combinedQuotation.note }} · {{ formatDateTime(combinedQuotation.quotation_time) }}</div>
-              <div class="preview-html" v-html="combinedQuotation.content_html"></div>
+              <div class="preview-html" v-html="sanitizeRichHtml(combinedQuotation.content_html)"></div>
               <div v-if="combinedQuotation.price_rows?.length" class="preview-price">
                 <table class="price-table">
                   <thead><tr><th>FOB</th><th>港杂费</th><th>汇率</th><th>利润率</th><th>运费</th><th>CFR</th></tr></thead>
@@ -178,7 +178,7 @@
         <div class="modal-body">
           <div class="preview-meta">{{ previewFollowup.user_name }} · {{ formatDateTime(previewFollowup.created_at) }}</div>
           <div v-if="previewFollowup.note" class="preview-meta" style="margin-top:4px;color:#475569;">📌 {{ previewFollowup.note }}</div>
-          <div class="preview-html" v-html="previewFollowup.content_html"></div>
+          <div class="preview-html" v-html="sanitizeRichHtml(previewFollowup.content_html)"></div>
           <div v-if="previewFollowup.images?.length || previewFollowup.attachments?.length" class="preview-attach">
             <h5 v-if="previewFollowup.images?.length">📷 图片</h5>
             <div class="img-grid">
@@ -227,7 +227,7 @@
           </div>
           <div class="form-group">
             <label>询盘内容（支持粘贴Excel表格、富文本、图片）</label>
-            <div ref="inqEditorRef" class="rich-editor" contenteditable="true" @paste="handlePaste($event)" v-html="inqForm.content_html"></div>
+            <div ref="inqEditorRef" class="rich-editor" contenteditable="true" @paste="handlePaste($event)" v-html="sanitizeRichHtml(inqForm.content_html)"></div>
           </div>
           <div class="form-group">
             <label>上传图片</label>
@@ -273,7 +273,7 @@
                     <option v-for="(inq, i) in inquiries" :key="inq.id" :value="i">{{ inq.note || `询盘 ${i+1}` }} - {{ formatDateTime(inq.inquiry_time) }}</option>
                   </select>
                 </div>
-                <div class="ref-content" v-html="inquiries[refInquiryIdx]?.content_html"></div>
+                <div class="ref-content" v-html="sanitizeRichHtml(inquiries[refInquiryIdx]?.content_html)"></div>
               </div>
               <div class="form-row2">
                 <div class="form-group"><label>备注</label><input v-model="qtForm.note" placeholder="报价备注..." /></div>
@@ -281,7 +281,7 @@
               </div>
               <div class="form-group">
                 <label>报价内容（支持粘贴Excel表格、图片）</label>
-                <div ref="qtEditorRef" class="rich-editor" contenteditable="true" @paste="handlePaste($event)" v-html="qtForm.content_html"></div>
+                <div ref="qtEditorRef" class="rich-editor" contenteditable="true" @paste="handlePaste($event)" v-html="sanitizeRichHtml(qtForm.content_html)"></div>
               </div>
               <div class="form-group">
                 <label>报价图片</label>
@@ -367,7 +367,7 @@
           <div class="form-group"><label>跟进备注</label><input v-model="followForm.note" placeholder="跟进说明..." /></div>
           <div class="form-group">
             <label>跟进内容（支持粘贴截图）</label>
-            <div ref="followEditorRef" class="rich-editor" contenteditable="true" @paste="handleFollowupPaste($event)" v-html="followForm.content_html"></div>
+            <div ref="followEditorRef" class="rich-editor" contenteditable="true" @paste="handleFollowupPaste($event)" v-html="sanitizeRichHtml(followForm.content_html)"></div>
           </div>
           <div class="form-group">
             <label>上传图片</label>
@@ -401,6 +401,7 @@
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import crmApi from '../../api/crm'
+import { sanitizeRichHtml } from '../../utils/sanitizeHtml.js'
 
 const route = useRoute()
 const customerId = route.params.id

@@ -37,7 +37,7 @@
               {{ item.status === 'pass' ? '✅' : item.status === 'warn' ? '⚠️' : '❌' }}
             </span>
             <span class="audit-name">{{ item.name }}</span>
-            <span v-if="item.suggestion" class="audit-suggestion" v-html="item.suggestion"></span>
+            <span v-if="item.suggestion" class="audit-suggestion" v-html="sanitizeRichHtml(item.suggestion)"></span>
           </div>
         </div>
       </div>
@@ -279,6 +279,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import api from '../../api'
+import { sanitizeRichHtml } from '../../utils/sanitizeHtml.js'
 
 const saving = ref(false)
 const auditing = ref(false)

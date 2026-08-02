@@ -284,7 +284,7 @@
                 @click="onNewsVisualClick"
                 @paste="onNewsVisualPaste"
               ></div>
-              <div v-else class="html-preview article-body-direct" v-html="form.content"></div>
+              <div v-else class="html-preview article-body-direct" v-html="sanitizeRichHtml(form.content)"></div>
             </div>
             <input type="file" ref="newsImgInput" accept="image/*" style="display:none" @change="handleNewsImgUpload" />
           </div>
@@ -474,6 +474,7 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import api from '../../api'
 import AiAutoPostConfig from '../../components/AiAutoPostConfig.vue'
+import { sanitizeRichHtml } from '../../utils/sanitizeHtml.js'
 
 const newsList = ref([])
 const showModal = ref(false)

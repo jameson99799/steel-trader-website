@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import { execSync } from 'child_process'
 import fs from 'fs'
 import crypto from 'crypto'
+import { smtpTransportOptions } from './services/mailerPolicy.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -29,13 +30,7 @@ export function getNextSmtpAccount() {
 
 // ─── Create transporter from an smtp_account row ─────────────────────────────
 function makeTransporter(acct) {
-    return nodemailer.createTransport({
-        host: acct.smtp_host,
-        port: parseInt(acct.smtp_port) || 465,
-        secure: parseInt(acct.smtp_port) === 465,
-        auth: { user: acct.smtp_user, pass: acct.smtp_pass },
-        tls: { rejectUnauthorized: false }
-    })
+    return nodemailer.createTransport(smtpTransportOptions(acct))
 }
 
 // ─── Generic send using multi-account ────────────────────────────────────────
@@ -63,7 +58,11 @@ export async function sendMail({ to, subject, html, text, accountId, cc, readRec
     if (cc) mailOptions.cc = cc
     if (readReceipt) mailOptions.headers = { 'Disposition-Notification-To': acct.smtp_user }
 
-    await transporter.sendMail(mailOptions)
+    try {
+        await transporter.sendMail(mailOptions)
+    } finally {
+        transporter.close?.()
+    }
     // Update send count
     if (acct.id) {
         try { run('UPDATE smtp_accounts SET send_count = send_count + 1 WHERE id=?', [acct.id]) } catch (e) {}

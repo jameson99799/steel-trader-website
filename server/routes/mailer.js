@@ -6,6 +6,9 @@ import { attachmentUpload } from '../middleware/upload.js'
 import { join, dirname, basename } from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
+import { resolveUploadPath } from '../services/safePath.js'
+import { deriveTaskStatus, pendingRecipientsForResume, scheduleWithLongTimeout, smtpTransportOptions } from '../services/mailerPolicy.js'
+import { applyUnsubscribe } from '../services/mailCompliance.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const uploadsDir = join(__dirname, '..', '..', 'uploads')
@@ -38,7 +41,54 @@ function cancelTask(taskId) {
 
 function cancelScheduled(taskId) {
     const h = scheduledTasks.get(taskId)
-    if (h) { clearTimeout(h); scheduledTasks.delete(taskId) }
+    if (h) {
+        if (typeof h.cancel === 'function') h.cancel()
+        else clearTimeout(h)
+        scheduledTasks.delete(taskId)
+    }
+}
+
+function assignedToUser(value, userId) {
+    if (value === 'all') return true
+    if (!value) return false
+    return String(value).split(',').map(v => v.trim()).includes(String(userId))
+}
+
+function canAccessRow(req, row) {
+    const { userId, isAdmin } = getUserId(req)
+    const explicitlyAssigned = Object.prototype.hasOwnProperty.call(row || {}, 'assigned_users') && assignedToUser(row.assigned_users, userId)
+    return Boolean(row) && (isAdmin || String(row.created_by || '') === userId || explicitlyAssigned)
+}
+
+function requireOwnedRecord(req, res, table, id) {
+    const allowedTables = new Set(['mail_templates', 'mail_contacts', 'contact_groups', 'mail_tasks', 'smtp_accounts'])
+    if (!allowedTables.has(table)) throw new Error('Invalid resource table')
+    const row = getOne(`SELECT * FROM ${table} WHERE id=?`, [id])
+    if (!row) { res.status(404).json({ error: 'Resource not found' }); return null }
+    if (!canAccessRow(req, row)) { res.status(403).json({ error: 'No permission for this resource' }); return null }
+    return row
+}
+
+function validateTaskReferences(req, { template_ids = [], contact_ids = [], account_ids = [], parent_task_id = null, attachment_paths = [] }) {
+    for (const id of template_ids) if (!canAccessRow(req, getOne('SELECT * FROM mail_templates WHERE id=?', [id]))) return 'Template access denied'
+    for (const id of account_ids) if (!canAccessRow(req, getOne('SELECT * FROM smtp_accounts WHERE id=?', [id]))) return 'SMTP account access denied'
+    if (parent_task_id && !canAccessRow(req, getOne('SELECT * FROM mail_tasks WHERE id=?', [parent_task_id]))) return 'Parent task access denied'
+    const { userId, isAdmin } = getUserId(req)
+    for (const rawId of contact_ids) {
+        const value = String(rawId)
+        if (value.startsWith('crm_')) {
+            const customer = getOne('SELECT owner_id FROM crm_customers WHERE id=?', [Number.parseInt(value.slice(4), 10)])
+            if (!customer || (!isAdmin && String(customer.owner_id || '') !== userId)) return 'CRM customer access denied'
+        } else {
+            const id = Number.parseInt(value.replace(/^mc_/, ''), 10)
+            if (!canAccessRow(req, getOne('SELECT * FROM mail_contacts WHERE id=?', [id]))) return 'Contact access denied'
+        }
+    }
+    for (const attachment of attachment_paths) {
+        const row = getOne('SELECT * FROM mail_attachments WHERE filename=?', [attachment?.filename])
+        if (!row || (!isAdmin && String(row.created_by || '') !== userId)) return 'Attachment access denied'
+    }
+    return ''
 }
 
 async function runTask(taskId, isResume = false) {
@@ -68,7 +118,9 @@ async function runTask(taskId, isResume = false) {
     }).filter(c => c && c.email)
     let   accounts  = accountIds.length
         ? accountIds.map(id => getOne('SELECT * FROM smtp_accounts WHERE id=?', [id])).filter(Boolean)
-        : getAll('SELECT * FROM smtp_accounts WHERE enabled=1 ORDER BY id ASC')
+        : getAll('SELECT * FROM smtp_accounts WHERE enabled=1 ORDER BY id ASC').filter(account =>
+            String(account.created_by || '') === String(task.created_by || '') || assignedToUser(account.assigned_users, task.created_by)
+        )
 
     // Skip contacts emailed within X days (only for first-time sends, not follow-ups)
     const skipDays = task.skip_days || 0
@@ -85,6 +137,9 @@ async function runTask(taskId, isResume = false) {
         }
     }
 
+    const suppressed = new Set(getAll('SELECT email FROM mail_suppressions').map(row => String(row.email || '').toLowerCase()))
+    contacts = contacts.filter(contact => !suppressed.has(String(contact.email || '').toLowerCase()))
+
     if (!templates.length || !contacts.length || !accounts.length) {
         run("UPDATE mail_tasks SET status='failed' WHERE id=?", [taskId])
         return
@@ -94,25 +149,25 @@ async function runTask(taskId, isResume = false) {
     let acctIdx = 0
 
     if (isResume) {
-        const alreadyProcessed = new Set(
-            getAll(`SELECT contact_email FROM mail_logs WHERE task_id=?`, [taskId])
-            .map(r => r.contact_email.toLowerCase())
-        )
-        tplIdx = alreadyProcessed.size % templates.length
-        acctIdx = alreadyProcessed.size % accounts.length
-        
-        contacts = contacts.filter(c => !alreadyProcessed.has(c.email.toLowerCase()))
+        const previousLogs = getAll(`SELECT contact_email, status FROM mail_logs WHERE task_id=?`, [taskId])
+        const successfulCount = previousLogs.filter(row => row.status === 'sent').length
+        tplIdx = successfulCount % templates.length
+        acctIdx = successfulCount % accounts.length
+        contacts = pendingRecipientsForResume(contacts, previousLogs)
         
         if (contacts.length === 0) {
             run("UPDATE mail_tasks SET status='done' WHERE id=?", [taskId])
             return
         }
     } else {
-        run('UPDATE mail_tasks SET total_count=?, sent_count=0 WHERE id=?', [contacts.length, taskId])
+        run("UPDATE mail_tasks SET total_count=?, sent_count=0, failed_count=0, error_message='' WHERE id=?", [contacts.length, taskId])
     }
 
     const ctx = { cancelled: false, paused: false, timer: null }
     activeTasks.set(taskId, ctx)
+    let runSuccess = 0
+    let runFailures = 0
+    const transports = new Map()
 
     // If this is a follow-up task, gather original sent content keyed by email
     const parentLogData = {} // email -> { messageId, subject, sent_html, from, from_email, sent_at }
@@ -156,13 +211,11 @@ async function runTask(taskId, isResume = false) {
 
         const taskRow = getOne('SELECT created_by FROM mail_tasks WHERE id=?', [taskId])
         try {
-            const transport = nodemailer.createTransport({
-                host:   account.smtp_host,
-                port:   parseInt(account.smtp_port) || 465,
-                secure: parseInt(account.smtp_port) === 465,
-                auth:   { user: account.smtp_user, pass: account.smtp_pass },
-                tls:    { rejectUnauthorized: false }
-            })
+            let transport = transports.get(account.id)
+            if (!transport) {
+                transport = nodemailer.createTransport(smtpTransportOptions(account))
+                transports.set(account.id, transport)
+            }
 
             const subj = template.subject.replace(/{{name}}/g, contact.name || '').replace(/{{company}}/g, contact.company || '').replace(/{{first_name}}/g, contact.name?.split(' ')[0] || '').replace(/{{last_name}}/g, contact.name?.split(' ').slice(1).join(' ') || '')
             let body = template.html_body.replace(/{{name}}/g, contact.name || '').replace(/{{company}}/g, contact.company || '').replace(/{{first_name}}/g, contact.name?.split(' ')[0] || '').replace(/{{last_name}}/g, contact.name?.split(' ').slice(1).join(' ') || '')
@@ -208,7 +261,7 @@ async function runTask(taskId, isResume = false) {
             try {
                 const aPaths = JSON.parse(task.attachment_paths || '[]')
                 for (const ap of aPaths) {
-                    const fullPath = join(uploadsDir, ap.filename)
+                    const fullPath = resolveUploadPath(uploadsDir, ap.filename)
                     if (fs.existsSync(fullPath)) {
                         taskAttachments.push({ filename: ap.originalName || ap.filename, path: fullPath })
                     }
@@ -222,9 +275,11 @@ async function runTask(taskId, isResume = false) {
                 html:    body,
                 attachments: taskAttachments.length ? taskAttachments : undefined
             }
+            Object.assign(mailOpts, applyUnsubscribe(mailOpts, contact.email))
             if (task.cc) mailOpts.cc = task.cc
             if (task.read_receipt) {
                 mailOpts.headers = {
+                    ...(mailOpts.headers || {}),
                     'Disposition-Notification-To': account.smtp_user,
                     'Return-Receipt-To': account.smtp_user
                 }
@@ -273,15 +328,19 @@ async function runTask(taskId, isResume = false) {
             const info = await transport.sendMail(mailOpts)
             const msgId = (info.messageId || '').replace(/[<>]/g, '')
 
-            run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, account_id, template_id, subject, status, message_id, sent_html, sent_at, created_by)
-                 VALUES (?,?,?,?,?,?,'sent',?,?,datetime('now'),?)`,
-                [taskId, contact.email, contact.name || '', account.id, template.id, subj, msgId, mailOpts.html, taskRow?.created_by || ''])
+            run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, account_id, account_name, template_id, subject, status, message_id, sent_html, sent_at, created_by)
+                 VALUES (?,?,?,?,?,?,?,'sent',?,?,datetime('now'),?)`,
+                [taskId, contact.email, contact.name || '', account.id, account.name || account.smtp_user, template.id, subj, msgId, mailOpts.html, taskRow?.created_by || ''])
             run('UPDATE smtp_accounts SET send_count = send_count + 1 WHERE id=?', [account.id])
             run('UPDATE mail_tasks SET sent_count = sent_count + 1 WHERE id=?', [taskId])
+            runSuccess++
         } catch (e) {
-            run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, account_id, template_id, subject, status, sent_at, created_by)
-                 VALUES (?,?,?,?,?,?,'failed',datetime('now'),?)`,
-                [taskId, contact.email, contact.name || '', account.id, template.id, template.subject, taskRow?.created_by || ''])
+            const reason = String(e?.message || e || 'Unknown send failure').slice(0, 1000)
+            run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, account_id, account_name, template_id, subject, status, error_msg, sent_at, created_by)
+                 VALUES (?,?,?,?,?,?,?,'failed',?,datetime('now'),?)`,
+                [taskId, contact.email, contact.name || '', account.id, account.name || account.smtp_user, template.id, template.subject, reason, taskRow?.created_by || ''])
+            run('UPDATE mail_tasks SET failed_count = failed_count + 1, error_message=? WHERE id=?', [reason, taskId])
+            runFailures++
         }
 
         // Delay before next send
@@ -298,10 +357,14 @@ async function runTask(taskId, isResume = false) {
         }
     }
 
+    for (const transport of transports.values()) transport.close?.()
     activeTasks.delete(taskId)
     taskProgress.delete(taskId)
+    const finalCounts = getOne('SELECT total_count, sent_count FROM mail_tasks WHERE id=?', [taskId]) || {}
+    const unresolved = Math.max(0, Number(finalCounts.total_count || 0) - Number(finalCounts.sent_count || 0))
+    run('UPDATE mail_tasks SET failed_count=? WHERE id=?', [unresolved, taskId])
     run("UPDATE mail_tasks SET status=? WHERE id=?",
-        [ctx.paused ? 'paused' : (ctx.cancelled ? 'cancelled' : 'done'), taskId])
+        [deriveTaskStatus({ sent: finalCounts.sent_count || runSuccess, failed: unresolved || runFailures, paused: ctx.paused, cancelled: ctx.cancelled }), taskId])
 }
 
 // Schedule a task to run at a future time
@@ -311,10 +374,10 @@ function scheduleTask(taskId, scheduleAt) {
     if (delay <= 0) {
         runTask(taskId).catch(e => console.error('Scheduled task error:', e))
     } else {
-        const h = setTimeout(() => {
+        const h = scheduleWithLongTimeout(() => {
             scheduledTasks.delete(taskId)
             runTask(taskId).catch(e => console.error('Scheduled task error:', e))
-        }, delay)
+        }, new Date(scheduleAt).getTime())
         scheduledTasks.set(taskId, h)
     }
 }
@@ -322,6 +385,7 @@ function scheduleTask(taskId, scheduleAt) {
 // Re-schedule any pending/scheduled tasks on server restart
 function restoreScheduledTasks() {
     try {
+        run("UPDATE mail_tasks SET status='paused', error_message='Server restarted during task; resume to continue safely' WHERE status='running'")
         const tasks = getAll("SELECT * FROM mail_tasks WHERE schedule_at IS NOT NULL AND status='pending'")
         for (const t of tasks) {
             scheduleTask(t.id, t.schedule_at)
@@ -348,16 +412,19 @@ router.post('/templates', authMiddleware, (req, res) => {
     res.json({ id: r.lastInsertRowid, message: '模板已保存' })
 })
 router.put('/templates/:id', authMiddleware, (req, res) => {
+    if (!requireOwnedRecord(req, res, 'mail_templates', req.params.id)) return
     const { name, subject, html_body, note, template_type } = req.body
     run('UPDATE mail_templates SET name=?, subject=?, html_body=?, note=?, template_type=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
         [name, subject, html_body, note || '', template_type || 'rich', req.params.id])
     res.json({ message: '模板已更新' })
 })
 router.delete('/templates/:id', authMiddleware, (req, res) => {
+    if (!requireOwnedRecord(req, res, 'mail_templates', req.params.id)) return
     run('DELETE FROM mail_templates WHERE id=?', [req.params.id])
     res.json({ message: '已删除' })
 })
 router.post('/templates/:id/duplicate', authMiddleware, (req, res) => {
+    if (!requireOwnedRecord(req, res, 'mail_templates', req.params.id)) return
     const orig = getOne('SELECT * FROM mail_templates WHERE id=?', [req.params.id])
     if (!orig) return res.status(404).json({ error: '模板不存在' })
     const { userId } = getUserId(req)
@@ -410,11 +477,13 @@ router.post('/contact-groups', authMiddleware, (req, res) => {
     } catch (e) { res.status(400).json({ error: '创建失败: ' + e.message }) }
 })
 router.put('/contact-groups/:id', authMiddleware, (req, res) => {
+    if (!requireOwnedRecord(req, res, 'contact_groups', req.params.id)) return
     const { name } = req.body
     run('UPDATE contact_groups SET name=? WHERE id=?', [name.trim(), req.params.id])
     res.json({ message: '分组已更新' })
 })
 router.delete('/contact-groups/:id', authMiddleware, (req, res) => {
+    if (!requireOwnedRecord(req, res, 'contact_groups', req.params.id)) return
     // Set contacts in this group to no group
     run('UPDATE mail_contacts SET group_id=NULL WHERE group_id=?', [req.params.id])
     run('DELETE FROM contact_groups WHERE id=?', [req.params.id])
@@ -468,22 +537,27 @@ router.post('/contacts/import', authMiddleware, (req, res) => {
     res.json({ message: `已导入 ${added} 个联系人` + (skipped ? `，跳过 ${skipped} 个已存在邮箱` : '') })
 })
 router.put('/contacts/:id', authMiddleware, (req, res) => {
+    if (!requireOwnedRecord(req, res, 'mail_contacts', req.params.id)) return
     const { email, name, company, group_id } = req.body
     run('UPDATE mail_contacts SET email=?, name=?, company=?, group_id=? WHERE id=?', [email, name || '', company || '', group_id || null, req.params.id])
     res.json({ message: '联系人已更新' })
 })
 router.delete('/contacts/:id', authMiddleware, (req, res) => {
+    if (!requireOwnedRecord(req, res, 'mail_contacts', req.params.id)) return
     run('DELETE FROM mail_contacts WHERE id=?', [req.params.id])
     res.json({ message: '已删除' })
 })
 router.post('/contacts/bulk-delete', authMiddleware, (req, res) => {
     const { ids } = req.body
     if (!ids?.length) return res.status(400).json({ error: '无选中项' })
+    if (ids.some(id => !requireOwnedRecord(req, res, 'mail_contacts', id))) return
     const placeholders = ids.map(() => '?').join(',')
     run(`DELETE FROM mail_contacts WHERE id IN (${placeholders})`, ids)
     res.json({ message: `已删除 ${ids.length} 个联系人` })
 })
 router.post('/contacts/assign', authMiddleware, (req, res) => {
+    const { isAdmin } = getUserId(req)
+    if (!isAdmin) return res.status(403).json({ error: 'Admin permission required' })
     const { ids, user_id } = req.body
     if (!ids?.length || !user_id) return res.status(400).json({ error: '缺少参数' })
     const placeholders = ids.map(() => '?').join(',')
@@ -493,6 +567,8 @@ router.post('/contacts/assign', authMiddleware, (req, res) => {
 router.post('/contacts/move-group', authMiddleware, (req, res) => {
     const { ids, group_id } = req.body
     if (!ids?.length) return res.status(400).json({ error: '无选中项' })
+    if (ids.some(id => !requireOwnedRecord(req, res, 'mail_contacts', id))) return
+    if (group_id && !requireOwnedRecord(req, res, 'contact_groups', group_id)) return
     const placeholders = ids.map(() => '?').join(',')
     run(`UPDATE mail_contacts SET group_id=? WHERE id IN (${placeholders})`, [group_id || null, ...ids])
     res.json({ message: `已移动 ${ids.length} 个联系人` })
@@ -514,23 +590,31 @@ router.get('/tasks', authMiddleware, (req, res) => {
 // ─── Attachment upload/delete ─────────────────────────────────────────────────
 router.post('/attachments', authMiddleware, attachmentUpload.array('files', 20), (req, res) => {
     if (!req.files?.length) return res.status(400).json({ error: '请选择文件' })
-    const result = req.files.map(f => ({
-        filename: f.filename,
-        originalName: f.originalname,
-        size: f.size,
-        url: `/uploads/${f.filename}`
-    }))
+    const { userId } = getUserId(req)
+    const result = req.files.map(f => {
+        run('INSERT OR REPLACE INTO mail_attachments (filename, original_name, created_by) VALUES (?,?,?)', [f.filename, f.originalname, userId])
+        return { filename: f.filename, originalName: f.originalname, size: f.size, url: `/uploads/${f.filename}` }
+    })
     res.json(result)
 })
 
 router.delete('/attachments/:filename', authMiddleware, (req, res) => {
-    const filePath = join(uploadsDir, req.params.filename)
+    const attachment = getOne('SELECT * FROM mail_attachments WHERE filename=?', [req.params.filename])
+    const { userId, isAdmin } = getUserId(req)
+    if (!attachment) return res.status(404).json({ error: 'Attachment not found' })
+    if (!isAdmin && String(attachment.created_by || '') !== userId) return res.status(403).json({ error: 'Attachment access denied' })
+    let filePath
+    try { filePath = resolveUploadPath(uploadsDir, req.params.filename) }
+    catch (_) { return res.status(400).json({ error: 'Invalid attachment filename' }) }
     try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath) } catch (e) { }
+    run('DELETE FROM mail_attachments WHERE filename=?', [req.params.filename])
     res.json({ message: '已删除' })
 })
 
 router.post('/tasks', authMiddleware, (req, res) => {
     const { name, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id, skip_days, attachment_paths } = req.body
+    const referenceError = validateTaskReferences(req, { template_ids, contact_ids, account_ids, parent_task_id, attachment_paths })
+    if (referenceError) return res.status(403).json({ error: referenceError })
     const { userId } = getUserId(req)
     const r = run(
         `INSERT INTO mail_tasks (name, status, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id, skip_days, attachment_paths, created_by)
@@ -554,11 +638,14 @@ router.post('/tasks', authMiddleware, (req, res) => {
 })
 
 router.put('/tasks/:id', authMiddleware, (req, res) => {
+    if (!requireOwnedRecord(req, res, 'mail_tasks', req.params.id)) return
     const task = getOne('SELECT status FROM mail_tasks WHERE id=?', [req.params.id])
     if (!task) return res.status(404).json({ error: '任务不存在' })
     if (task.status === 'running') return res.status(400).json({ error: '运行中的任务无法直接修改，请先暂停' })
 
     const { name, template_ids, contact_ids, account_ids, interval_min, interval_max, cc, read_receipt, schedule_at, priority, parent_task_id, attachment_paths } = req.body
+    const referenceError = validateTaskReferences(req, { template_ids, contact_ids, account_ids, parent_task_id, attachment_paths })
+    if (referenceError) return res.status(403).json({ error: referenceError })
     run(`UPDATE mail_tasks SET name=?, template_ids=?, contact_ids=?, account_ids=?, interval_min=?, interval_max=?, cc=?, read_receipt=?, schedule_at=?, priority=?, parent_task_id=?, attachment_paths=? WHERE id=?`,
         [name || 'Updated Task',
          JSON.stringify(template_ids || []), JSON.stringify(contact_ids || []),
@@ -577,6 +664,7 @@ router.put('/tasks/:id', authMiddleware, (req, res) => {
 })
 
 router.post('/tasks/:id/start', authMiddleware, async (req, res) => {
+    if (!requireOwnedRecord(req, res, 'mail_tasks', req.params.id)) return
     const task = getOne('SELECT * FROM mail_tasks WHERE id=?', [req.params.id])
     if (!task) return res.status(404).json({ error: '任务不存在' })
     if (activeTasks.has(+req.params.id)) return res.status(400).json({ error: '任务正在运行中' })
@@ -587,6 +675,7 @@ router.post('/tasks/:id/start', authMiddleware, async (req, res) => {
 })
 
 router.post('/tasks/:id/resume', authMiddleware, async (req, res) => {
+    if (!requireOwnedRecord(req, res, 'mail_tasks', req.params.id)) return
     const task = getOne('SELECT * FROM mail_tasks WHERE id=?', [req.params.id])
     if (!task) return res.status(404).json({ error: '任务不存在' })
     if (activeTasks.has(+req.params.id)) return res.status(400).json({ error: '任务正在运行中' })
@@ -597,6 +686,7 @@ router.post('/tasks/:id/resume', authMiddleware, async (req, res) => {
 })
 
 router.post('/tasks/:id/stop', authMiddleware, (req, res) => {
+    if (!requireOwnedRecord(req, res, 'mail_tasks', req.params.id)) return
     const t = activeTasks.get(+req.params.id)
     if (t) { clearTimeout(t.timer); t.paused = true; activeTasks.delete(+req.params.id) }
     taskProgress.delete(+req.params.id)
@@ -605,6 +695,7 @@ router.post('/tasks/:id/stop', authMiddleware, (req, res) => {
 })
 
 router.post('/tasks/:id/schedule', authMiddleware, (req, res) => {
+    if (!requireOwnedRecord(req, res, 'mail_tasks', req.params.id)) return
     const { schedule_at } = req.body
     if (!schedule_at) return res.status(400).json({ error: '请提供定时时间' })
     const task = getOne('SELECT * FROM mail_tasks WHERE id=?', [req.params.id])
@@ -616,6 +707,7 @@ router.post('/tasks/:id/schedule', authMiddleware, (req, res) => {
 })
 
 router.delete('/tasks/:id', authMiddleware, (req, res) => {
+    if (!requireOwnedRecord(req, res, 'mail_tasks', req.params.id)) return
     const t = activeTasks.get(+req.params.id)
     if (t) { clearTimeout(t.timer); t.cancelled = true; activeTasks.delete(+req.params.id) }
     cancelScheduled(+req.params.id)
@@ -738,7 +830,7 @@ router.get('/crm-customers', authMiddleware, (req, res) => {
             if (country === '未分组') {
                 mcWhere.push('(mc.group_id IS NULL OR mc.group_id = 0)')
             } else {
-                mcWhere.push('(cg.name = ? OR mc.country = ?)'); mcParams.push(country, country)
+                mcWhere.push('cg.name = ?'); mcParams.push(country)
             }
         }
         const mcRows = getAll(`SELECT mc.*, cg.name as group_name FROM mail_contacts mc LEFT JOIN contact_groups cg ON cg.id = mc.group_id WHERE ${mcWhere.join(' AND ')} ORDER BY mc.id DESC LIMIT 500`, mcParams)
@@ -746,7 +838,7 @@ router.get('/crm-customers', authMiddleware, (req, res) => {
             results.push({
                 id: mc.id, name: mc.name || '', last_name: '',
                 email: mc.email || '', phone: '', company: mc.company || '',
-                country: mc.group_name || mc.country || '', status: '', tags: '[]',
+                country: mc.group_name || '', status: '', tags: '[]',
                 group_name: mc.group_name || '',
                 _source: 'mailer'
             })
@@ -878,7 +970,9 @@ router.post('/logs/bulk-delete', authMiddleware, express.json(), (req, res) => {
     const ids = req.body?.ids
     if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: '未选择记录' })
     const placeholders = ids.map(() => '?').join(',')
-    run(`DELETE FROM mail_logs WHERE id IN (${placeholders})`, ids)
+    const { userId, isAdmin } = getUserId(req)
+    if (isAdmin) run(`DELETE FROM mail_logs WHERE id IN (${placeholders})`, ids)
+    else run(`DELETE FROM mail_logs WHERE id IN (${placeholders}) AND created_by=?`, [...ids, userId])
     res.json({ message: `已删除 ${ids.length} 条记录` })
 })
 
@@ -887,6 +981,7 @@ router.post('/logs/bulk-delete', authMiddleware, express.json(), (req, res) => {
 
 // ─── Default template toggle (marketing + followup) ──────────────────────────
 router.post('/templates/:id/set-default', authMiddleware, express.json(), (req, res) => {
+    if (!requireOwnedRecord(req, res, 'mail_templates', req.params.id)) return
     // Ensure is_followup_default column exists
     try { run('ALTER TABLE mail_templates ADD COLUMN is_followup_default INTEGER DEFAULT 0') } catch(e) {}
     
@@ -904,6 +999,8 @@ router.post('/templates/:id/set-default', authMiddleware, express.json(), (req, 
 
 // ─── Assign template to user ────────────────────────────────────────────────
 router.post('/templates/:id/assign', authMiddleware, express.json(), (req, res) => {
+    const { isAdmin } = getUserId(req)
+    if (!isAdmin) return res.status(403).json({ error: 'Admin permission required' })
     try { run('ALTER TABLE mail_templates ADD COLUMN assigned_users TEXT DEFAULT ""') } catch(e) {}
     const userId = req.body?.user_id
     if (userId === undefined) return res.status(400).json({ error: '缺少user_id' })
@@ -914,6 +1011,8 @@ router.post('/templates/:id/assign', authMiddleware, express.json(), (req, res) 
 
 // ─── Assign SMTP account to user ────────────────────────────────────────────
 router.post('/smtp/:id/assign', authMiddleware, express.json(), (req, res) => {
+    const { isAdmin } = getUserId(req)
+    if (!isAdmin) return res.status(403).json({ error: 'Admin permission required' })
     try { run('ALTER TABLE smtp_accounts ADD COLUMN assigned_users TEXT DEFAULT ""') } catch(e) {}
     const userId = req.body?.user_id
     if (userId === undefined) return res.status(400).json({ error: '缺少user_id' })
@@ -924,8 +1023,33 @@ router.post('/smtp/:id/assign', authMiddleware, express.json(), (req, res) => {
 
 // ─── CRM Users list for assignment dropdown ─────────────────────────────────
 router.get('/users', authMiddleware, (req, res) => {
+    const { isAdmin } = getUserId(req)
+    if (!isAdmin) return res.status(403).json({ error: 'Admin permission required' })
     const users = getAll('SELECT id, username, display_name, role FROM crm_users ORDER BY id')
     res.json(users)
+})
+
+// Suppression list used by all marketing sends and the public one-click endpoint.
+router.get('/suppressions', authMiddleware, (req, res) => {
+    const { isAdmin } = getUserId(req)
+    if (!isAdmin) return res.status(403).json({ error: 'Admin permission required' })
+    res.json(getAll('SELECT * FROM mail_suppressions ORDER BY created_at DESC'))
+})
+
+router.post('/suppressions', authMiddleware, express.json(), (req, res) => {
+    const { isAdmin } = getUserId(req)
+    if (!isAdmin) return res.status(403).json({ error: 'Admin permission required' })
+    const email = String(req.body?.email || '').trim().toLowerCase()
+    if (!email.includes('@')) return res.status(400).json({ error: 'Valid email required' })
+    run("INSERT OR REPLACE INTO mail_suppressions (email, source, reason) VALUES (?,'manual',?)", [email, String(req.body?.reason || '')])
+    res.json({ success: true })
+})
+
+router.delete('/suppressions/:email', authMiddleware, (req, res) => {
+    const { isAdmin } = getUserId(req)
+    if (!isAdmin) return res.status(403).json({ error: 'Admin permission required' })
+    run('DELETE FROM mail_suppressions WHERE email=?', [String(req.params.email || '').toLowerCase()])
+    res.json({ success: true })
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -943,6 +1067,8 @@ router.get('/variables', authMiddleware, (req, res) => {
 })
 
 router.post('/variables', authMiddleware, express.json(), (req, res) => {
+    const { isAdmin } = getUserId(req)
+    if (!isAdmin) return res.status(403).json({ error: 'Admin permission required' })
     const { name, var_key, var_type, value, group_name } = req.body
     if (!name || !var_key) return res.status(400).json({ error: '名称和变量键不能为空' })
     const key = var_key.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
@@ -957,6 +1083,8 @@ router.post('/variables', authMiddleware, express.json(), (req, res) => {
 })
 
 router.put('/variables/:id', authMiddleware, express.json(), (req, res) => {
+    const { isAdmin } = getUserId(req)
+    if (!isAdmin) return res.status(403).json({ error: 'Admin permission required' })
     const { name, var_key, var_type, value, group_name } = req.body
     const key = var_key ? var_key.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() : undefined
     const sets = [], params = []
@@ -972,6 +1100,8 @@ router.put('/variables/:id', authMiddleware, express.json(), (req, res) => {
 })
 
 router.delete('/variables/:id', authMiddleware, (req, res) => {
+    const { isAdmin } = getUserId(req)
+    if (!isAdmin) return res.status(403).json({ error: 'Admin permission required' })
     run('DELETE FROM mail_variables WHERE id=?', [req.params.id])
     res.json({ message: '删除成功' })
 })

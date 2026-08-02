@@ -24,7 +24,7 @@
             <span v-else class="source-badge crm">📬 CRM</span>
             <div class="acc-host">{{ a.smtp_host }}:{{ a.smtp_port }}</div>
             <div class="acc-user">{{ a.smtp_user }}</div>
-            <div class="acc-pass">{{ a.smtp_pass }}</div>
+            <div class="acc-pass">{{ a.smtp_pass_display || (a.smtp_pass_configured ? '********' : '') }}</div>
             <div class="acc-name">{{ a.from_name || '-' }}</div>
           </div>
           <div class="acc-assign" v-if="isAdmin">
@@ -195,7 +195,7 @@
           <div class="form-group"><label>SMTP服务器</label><input v-model="accForm.smtp_host" placeholder="smtp.example.com" /></div>
           <div class="form-group"><label>端口</label><input v-model.number="accForm.smtp_port" type="number" placeholder="465" /></div>
           <div class="form-group"><label>邮箱账号</label><input v-model="accForm.smtp_user" placeholder="user@example.com" /></div>
-          <div class="form-group"><label>密码</label><input v-model="accForm.smtp_pass" type="text" placeholder="明文密码" /></div>
+          <div class="form-group"><label>密码</label><input v-model="accForm.smtp_pass" type="password" placeholder="留空保持原密码" autocomplete="new-password" /></div>
           <div class="form-group"><label>发件人名称</label><input v-model="accForm.from_name" placeholder="SunSea Steel" /></div>
           <div v-if="isAdmin" class="form-group">
             <label>分配给子账户</label>
@@ -245,7 +245,7 @@
           </div>
           <div class="form-group">
             <label>邮件内容（支持 {{name}} {{company}} 变量）</label>
-            <div ref="tplEditorRef" class="rich-editor" contenteditable="true" style="min-height:250px" v-html="tplForm.html_body"></div>
+            <div ref="tplEditorRef" class="rich-editor" contenteditable="true" style="min-height:250px" v-html="sanitizeRichHtml(tplForm.html_body)"></div>
           </div>
         </div>
         <div class="modal-footer">
@@ -264,7 +264,7 @@
         </div>
         <div class="modal-body">
           <div class="preview-meta">主题: {{ previewTpl.subject }}</div>
-          <div class="preview-html" v-html="previewTpl.html_body"></div>
+          <div class="preview-html" v-html="sanitizeRichHtml(previewTpl.html_body)"></div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="previewTpl = null">关闭</button>
@@ -277,6 +277,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import crmApi from '../../api/crm'
+import { sanitizeRichHtml } from '../../utils/sanitizeHtml.js'
 
 const tab = ref('accounts')
 const isAdmin = ref(false)
@@ -416,7 +417,7 @@ function openAccountModal(a) {
   const au = a?.assigned_users || 'all'
   Object.assign(accForm, {
     smtp_host: a?.smtp_host || '', smtp_port: a?.smtp_port || 465,
-    smtp_user: a?.smtp_user || '', smtp_pass: a?.smtp_pass || '',
+    smtp_user: a?.smtp_user || '', smtp_pass: '',
     from_name: a?.from_name || '',
     assign_mode: (!au || au === 'all') ? 'all' : 'specific',
     assign_ids: (!au || au === 'all') ? [] : au.split(',').map(s => s.trim())

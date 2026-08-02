@@ -2,9 +2,9 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { getAll, getOne, run } from '../db.js'
+import { CRM_SECRET as CRM_JWT_SECRET } from '../config/secrets.js'
 
 const router = Router()
-const CRM_JWT_SECRET = process.env.CRM_JWT_SECRET || 'crm-steel-secret-2024'
 
 // ─── CRM token helpers ─────────────────────────────────────────────────────────
 export function generateCrmToken(user) {

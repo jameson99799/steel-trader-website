@@ -6,12 +6,12 @@ import { applyWatermark } from '../utils/watermark.js'
 import fs from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { JWT_SECRET } from '../config/secrets.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const uploadDir = join(__dirname, '..', '..', 'uploads')
 
 const router = Router()
-const JWT_SECRET = process.env.JWT_SECRET || 'led-trade-secret-key-2024'
 
 function authMiddleware(req, res, next) {
   const token = req.headers.authorization?.replace('Bearer ', '')

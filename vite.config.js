@@ -31,8 +31,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'vendor-vue': ['vue', 'vue-router', 'pinia'],
-          'vendor-editor': ['quill', 'quill-image-resize-module-react', 'quill-resize-image']
+          'vendor-vue': ['vue', 'vue-router', 'pinia']
         }
       }
     },

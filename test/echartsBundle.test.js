@@ -31,6 +31,10 @@ test('vite does not force the complete echarts package into vendor-chart', () =>
   assert.doesNotMatch(viteSource, /['"]vendor-chart['"]\s*:\s*\[['"]echarts['"]\]/)
 })
 
+test('vite manual chunks do not reference removed editor plugins', () => {
+  assert.doesNotMatch(viteSource, /quill-image-resize-module-react|quill-resize-image/)
+})
+
 test('news loads the futures chart only for the futures route', () => {
   assert.doesNotMatch(newsSource, /import FuturesPrice from ['"]\.\/FuturesPrice\.vue['"]/)
   assert.match(newsSource, /defineAsyncComponent\(\(\) => import\(['"]\.\/FuturesPrice\.vue['"]\)\)/)

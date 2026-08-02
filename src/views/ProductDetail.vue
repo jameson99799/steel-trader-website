@@ -271,6 +271,7 @@ import { useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 import { getCenteredThumbnailScrollLeft } from '../utils/thumbnailScroll.js'
+import { sanitizeRichHtml } from '../utils/sanitizeHtml.js'
 import InquiryModal from '../components/InquiryModal.vue'
 import ProductReviews from '../components/ProductReviews.vue'
 import {
@@ -428,7 +429,7 @@ const sanitizedDetailContent = computed(() => {
   html = html.replace(/<body[^>]*>/gi, '').replace(/<\/body>/gi, '')
   html = html.replace(/<meta[^>]*>/gi, '')
 
-  return html
+  return sanitizeRichHtml(html)
 })
 
 

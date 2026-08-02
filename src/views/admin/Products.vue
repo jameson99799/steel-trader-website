@@ -266,7 +266,7 @@
                 ></div>
 
                 <!-- Preview mode (read-only) -->
-                <div v-else class="html-preview" v-html="form.detail_content"></div>
+                <div v-else class="html-preview" v-html="sanitizeRichHtml(form.detail_content)"></div>
               </div>
 
               <!-- Hidden file input for image upload (supports multi-select) -->
@@ -613,6 +613,7 @@ import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useLang } from '../../composables/useLang'
 import api from '../../api'
 import { DEFAULT_DETAIL_TEMPLATE } from '../../utils/defaultDetailTemplate'
+import { sanitizeRichHtml } from '../../utils/sanitizeHtml.js'
 
 const products = ref([])
 const categories = ref([])

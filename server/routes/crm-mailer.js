@@ -4,9 +4,12 @@
  * and comprehensive send records (mail_logs).
  */
 import { Router } from 'express'
+import { sanitizeSmtpAccount } from '../config/secrets.js'
 import nodemailer from 'nodemailer'
 import { getAll, getOne, run } from '../db.js'
 import { dualAuth } from './crm-customers.js'
+import { applyUnsubscribe } from '../services/mailCompliance.js'
+import { smtpTransportOptions } from '../services/mailerPolicy.js'
 
 const router = Router()
 
@@ -26,7 +29,7 @@ router.get('/accounts', dualAuth, (req, res) => {
   }
   // Also get CRM users for assignment dropdown
   const users = isAdmin ? getAll('SELECT id, username, display_name FROM crm_users ORDER BY id') : []
-  res.json({ accounts, users })
+  res.json({ accounts: accounts.map(sanitizeSmtpAccount), users })
 })
 
 router.post('/accounts', dualAuth, (req, res) => {
@@ -40,8 +43,11 @@ router.post('/accounts', dualAuth, (req, res) => {
 router.put('/accounts/:id', dualAuth, (req, res) => {
   const { smtp_host, smtp_port, smtp_user, smtp_pass, from_name, assigned_users } = req.body
   if (req.crmUser?.role !== 'admin' && !req.user) return res.status(403).json({ error: '无权限' })
+  const existing = getOne('SELECT smtp_pass FROM smtp_accounts WHERE id=?', [req.params.id])
+  if (!existing) return res.status(404).json({ error: '账号不存在' })
+  const finalPass = smtp_pass && !smtp_pass.includes('****') && !smtp_pass.includes('••••') ? smtp_pass : existing.smtp_pass
   run('UPDATE smtp_accounts SET smtp_host=?,smtp_port=?,smtp_user=?,smtp_pass=?,from_name=?,assigned_users=? WHERE id=?',
-    [smtp_host, parseInt(smtp_port)||465, smtp_user, smtp_pass, from_name||'', assigned_users||'all', req.params.id])
+    [smtp_host, parseInt(smtp_port)||465, smtp_user, finalPass, from_name||'', assigned_users||'all', req.params.id])
   res.json({ message: '已更新' })
 })
 
@@ -56,13 +62,12 @@ router.post('/accounts/:id/test', dualAuth, async (req, res) => {
   const acct = getOne('SELECT * FROM smtp_accounts WHERE id=?', [req.params.id])
   if (!acct) return res.status(404).json({ error: '账号不存在' })
   try {
-    const transport = nodemailer.createTransport({
-      host: acct.smtp_host, port: parseInt(acct.smtp_port)||465,
-      secure: parseInt(acct.smtp_port) === 465,
-      auth: { user: acct.smtp_user, pass: acct.smtp_pass },
-      tls: { rejectUnauthorized: false }, connectionTimeout: 10000
-    })
-    await transport.verify()
+    const transport = nodemailer.createTransport({ ...smtpTransportOptions(acct), connectionTimeout: 10000 })
+    try {
+      await transport.verify()
+    } finally {
+      transport.close?.()
+    }
     res.json({ success: true, message: '✅ 连接成功' })
   } catch (e) {
     res.json({ success: false, message: `❌ 连接失败: ${e.message}` })
@@ -158,6 +163,9 @@ router.post('/send', dualAuth, async (req, res) => {
     customers = getAll(`SELECT * FROM crm_customers WHERE id IN (${placeholders})`, customer_ids).filter(c => c?.email)
   }
   if (!customers.length) return res.status(400).json({ error: '没有有效的收件人' })
+  const suppressed = new Set(getAll('SELECT email FROM mail_suppressions').map(row => String(row.email || '').toLowerCase()))
+  customers = customers.filter(customer => !suppressed.has(String(customer.email || '').toLowerCase()))
+  if (!customers.length) return res.status(400).json({ error: '所有收件人均已退订' })
 
   const taskResult = run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
     ['[task]', `批量发送: ${customers.length}封`, 'running', new Date().toISOString(), req.crmUser?.id||null])
@@ -167,12 +175,7 @@ router.post('/send', dualAuth, async (req, res) => {
   activeTasks.set(taskId, ctx)
 
   async function runSendTask() {
-    const transport = nodemailer.createTransport({
-      host: smtp.smtp_host, port: parseInt(smtp.smtp_port)||465,
-      secure: parseInt(smtp.smtp_port) === 465,
-      auth: { user: smtp.smtp_user, pass: smtp.smtp_pass },
-      tls: { rejectUnauthorized: false }
-    })
+    const transport = nodemailer.createTransport(smtpTransportOptions(smtp))
     let sent = 0, failed = 0
     for (let i = 0; i < customers.length; i++) {
       if (ctx.cancelled) break
@@ -185,9 +188,9 @@ router.post('/send', dualAuth, async (req, res) => {
           subj = subj.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
           body = body.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
         }
-        await transport.sendMail({
+        await transport.sendMail(applyUnsubscribe({
           from: `"${smtp.from_name||'SunSea Steel'}" <${smtp.smtp_user}>`, to: c.email, subject: subj, html: body
-        })
+        }, c.email))
         run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
           [c.email, subj, 'sent', new Date().toISOString(), req.crmUser?.id||null])
         sent++
@@ -205,6 +208,7 @@ router.post('/send', dualAuth, async (req, res) => {
     }
     run('UPDATE crm_email_logs SET status=?, subject=? WHERE id=?',
       [ctx.cancelled ? 'cancelled' : 'done', `批量: 成功${sent} 失败${failed} / ${customers.length}封`, taskId])
+    transport.close?.()
     activeTasks.delete(taskId)
     taskProgress.delete(taskId)
   }

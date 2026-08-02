@@ -117,6 +117,9 @@ npm run build 2>&1 | tail -3
 if [ ! -f "dist/index.html" ]; then
   fail "构建失败：dist/index.html 不存在！"
 fi
+if ! node scripts/verifyBuildAssets.mjs; then
+  fail "Build asset verification failed; refusing to start with a partial build."
+fi
 NEW_HASH=$(grep -oP 'index-[A-Za-z0-9_-]+\.js' dist/index.html | head -1)
 ok "前端构建完成 (${NEW_HASH})"
 
@@ -128,6 +131,21 @@ ok "旧进程已清除"
 
 info "创建日志目录..."
 mkdir -p logs
+
+# Ensure production secrets exist without printing or replacing existing values.
+touch .env
+ensure_secret() {
+  local secret_name="$1"
+  if ! grep -q "^${secret_name}=" .env 2>/dev/null; then
+    local secret_value
+    secret_value=$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))")
+    printf '%s=%s\n' "$secret_name" "$secret_value" >> .env
+    ok "已生成缺失的 ${secret_name}"
+  fi
+}
+ensure_secret "JWT_SECRET"
+ensure_secret "CRM_JWT_SECRET"
+ensure_secret "UNSUBSCRIBE_SECRET"
 
 info "启动新进程（使用 ecosystem.config.cjs，NODE_ENV=production 已固定）..."
 pm2 start ecosystem.config.cjs

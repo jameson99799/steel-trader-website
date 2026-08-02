@@ -123,6 +123,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../../api'
+import { sanitizeRichHtml } from '../../utils/sanitizeHtml.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -528,7 +529,7 @@ function renderAIMessage(text) {
   html = html.replace(/\n\n/g, '</p><p>')
   html = html.replace(/\n/g, '<br/>')
 
-  return `<p>${html}</p>`
+  return `<p>${sanitizeRichHtml(html)}</p>`
 }
 
 // ─── Save product ──────────────────────────────────────────────────────────

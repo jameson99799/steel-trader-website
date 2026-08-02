@@ -118,7 +118,7 @@
           </div>
           <div class="form-group">
             <label>密码 / 应用专用密码</label>
-            <input v-model="editingAcct.smtp_pass" class="form-control" type="text" placeholder="明文显示，便于修改" autocomplete="off" />
+            <input v-model="editingAcct.smtp_pass" class="form-control" type="password" placeholder="留空保持原密码" autocomplete="new-password" />
           </div>
         </div>
         <div class="flex-row gap-12">
@@ -201,7 +201,7 @@ function openAddAccount() {
 }
 
 function openEditAccount(a) {
-  Object.assign(editingAcct, { ...a, is_default: !!a.is_default, enabled: !!a.enabled })
+  Object.assign(editingAcct, { ...a, smtp_pass: '', is_default: !!a.is_default, enabled: !!a.enabled })
   acctResult.value = null
   showAcctModal.value = true
 }

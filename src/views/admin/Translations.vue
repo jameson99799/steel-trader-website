@@ -265,6 +265,7 @@
             <span>
               任务 #{{ latestJob.id }} —
               <span v-if="latestJob.status==='done'" style="color:#22c55e">✅ 已完成</span>
+              <span v-else-if="latestJob.status==='partial'" style="color:#f59e0b">⚠️ 部分完成</span>
               <span v-else-if="latestJob.status==='pausing'" style="color:#f59e0b">⏸ 暂停中...</span>
               <span v-else-if="latestJob.status==='paused'" style="color:#f59e0b">⏸ 已暂停</span>
               <span v-else-if="latestJob.status==='aborting'" style="color:#f59e0b">⛔ 中止中...</span>
@@ -315,7 +316,7 @@
                  :class="job.status" @click="viewJobLogs(job.id)">
               <span>#{{ job.id }}</span>
               <span>{{ job.target_lang === 'all' ? '🌍 全部语言' : job.target_lang }}</span>
-              <span :class="'badge-' + job.status">{{ { running:'运行中', pausing:'暂停中', paused:'⏸暂停', aborting:'中止中', done:'✅完成', aborted:'⛔中止', error:'❌错误', pending:'等待中' }[job.status] || job.status }}</span>
+              <span :class="'badge-' + job.status">{{ { running:'运行中', pausing:'暂停中', paused:'⏸暂停', aborting:'中止中', done:'✅完成', partial:'⚠️部分完成', aborted:'⛔中止', error:'❌错误', pending:'等待中' }[job.status] || job.status }}</span>
               <span style="color:#94a3b8;font-size:11px">{{ job.ok_items }}/{{ job.total_items }}</span>
               <span style="color:#94a3b8;font-size:11px">{{ job.created_at?.slice(5,16) }}</span>
             </div>
@@ -928,7 +929,7 @@ async function loadJobList() {
   try {
     const jobs = await api.getTranslationJobs()
     jobList.value = jobs || []
-    const running = jobs.find(j => j.status === 'running')
+    const running = jobs.find(j => ['running', 'pausing', 'aborting'].includes(j.status))
     if (running) {
       activeJob.value = running
       if (!jobPollTimer) startJobPolling(running.id)

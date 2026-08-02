@@ -554,7 +554,7 @@
     <div class="modal-overlay" v-if="showPreview" @click.self="showPreview=false">
       <div class="modal-box modal-lg">
         <h3>📧 邮件内容预览</h3>
-        <div class="preview-frame" v-html="previewHtml"></div>
+        <div class="preview-frame" v-html="sanitizeRichHtml(previewHtml)"></div>
         <div class="modal-actions"><button class="btn btn-outline" @click="showPreview=false">关闭</button></div>
       </div>
     </div>
@@ -612,7 +612,7 @@
         </div>
         <div class="grid grid-2">
           <div class="form-group"><label>邮箱账号</label><input v-model="editAcct.smtp_user" class="form-control" type="email" placeholder="your@gmail.com" /></div>
-          <div class="form-group"><label>密码 / 应用专用密码</label><input v-model="editAcct.smtp_pass" class="form-control" type="text" placeholder="明文显示，便于修改" autocomplete="off" /></div>
+          <div class="form-group"><label>密码 / 应用专用密码</label><input v-model="editAcct.smtp_pass" class="form-control" type="password" placeholder="留空保持原密码" autocomplete="new-password" /></div>
         </div>
         <div style="display:flex;align-items:center;gap:20px;margin-bottom:16px">
           <label class="toggle-label"><input type="checkbox" v-model="editAcct.is_default" /><span>设为默认账号</span></label>
@@ -738,6 +738,7 @@
 import { ref, reactive, computed, onMounted, nextTick, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../../api'
+import { sanitizeRichHtml } from '../../utils/sanitizeHtml.js'
 
 const route = useRoute()
 const isCRM = computed(() => !!window.__CRM_MAILER || window.location.pathname.startsWith('/crm'))
@@ -818,7 +819,7 @@ function toggleAllCrmCustomers(e) {
 const showAcctEditor = ref(false)
 const editAcct = reactive({ id: null, name: '', smtp_host: '', smtp_port: 465, smtp_user: '', smtp_pass: '', from_name: 'SunSea Steel', is_default: false, enabled: true })
 function openAcctEditor(a) {
-  if (a) Object.assign(editAcct, { ...a, is_default: !!a.is_default, enabled: !!a.enabled })
+  if (a) Object.assign(editAcct, { ...a, smtp_pass: '', is_default: !!a.is_default, enabled: !!a.enabled })
   else Object.assign(editAcct, { id: null, name: '', smtp_host: '', smtp_port: 465, smtp_user: '', smtp_pass: '', from_name: 'SunSea Steel', is_default: false, enabled: true })
   showAcctEditor.value = true
 }

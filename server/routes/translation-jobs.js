@@ -10,6 +10,11 @@ const router = Router()
 // ── In-memory abort flags: jobId -> true means abort requested ──
 const abortFlags = new Map()
 
+export function normalizeTranslationConcurrency(value) {
+    const parsed = Number.parseInt(value, 10)
+    return Number.isFinite(parsed) ? Math.min(8, Math.max(1, parsed)) : 1
+}
+
 // ── Log auto-cleanup: called on startup + daily ──
 function cleanupOldLogs() {
     try {
@@ -38,11 +43,11 @@ setInterval(cleanupOldLogs, 24 * 60 * 60 * 1000)
 export function resetStaleJobs() {
     try {
         const stale = run(
-            `UPDATE translation_jobs SET status='aborted', finished_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
-             WHERE status IN ('running', 'pausing', 'aborting')`
+            `UPDATE translation_jobs SET status='paused', finished_at=NULL, updated_at=CURRENT_TIMESTAMP
+             WHERE status IN ('pending', 'running', 'pausing', 'aborting')`
         )
         if (stale?.changes > 0) {
-            console.log(`[translation-jobs] Reset ${stale.changes} stale running jobs to 'aborted'`)
+            console.log(`[translation-jobs] Recovered ${stale.changes} interrupted jobs as resumable 'paused' jobs`)
         }
     } catch (e) { /* table may not exist on first run */ }
 }
@@ -174,7 +179,7 @@ async function runJobInBackground(jobId) {
             jobLog(jobId, 'ok', `📋 共 ${allItems.length} 个待翻译项目`)
         }
         pendingItems = allItems
-        updateJobProgress(jobId, { total_items: pendingItems.length, done_items: 0, ok_items: 0, error_items: 0 })
+        updateJobProgress(jobId, { total_items: pendingItems.length, done_items: 0, ok_items: 0, error_items: 0, pending_items: JSON.stringify(pendingItems) })
     }
 
     if (pendingItems.length === 0) {
@@ -183,7 +188,7 @@ async function runJobInBackground(jobId) {
         return
     }
 
-    const concurrencyLevel = job.concurrency || 1
+    const concurrencyLevel = normalizeTranslationConcurrency(job.concurrency)
     const processingItems = new Set()
     
     let okTotal = job.ok_items || 0
@@ -207,6 +212,7 @@ async function runJobInBackground(jobId) {
             
             const item = pendingItems.shift()
             processingItems.add(item)
+            updateJobProgress(jobId, { pending_items: JSON.stringify([...processingItems, ...pendingItems]) })
 
             const langRow = getOne('SELECT name FROM languages WHERE code=?', [item.targetLang])
             if (!langRow) {
@@ -337,7 +343,7 @@ async function runJobInBackground(jobId) {
 
             processingItems.delete(item)
             doneTotal++
-            updateJobProgress(jobId, { done_items: doneTotal, ok_items: okTotal, error_items: errTotal, failed_items: JSON.stringify(newFailed) })
+            updateJobProgress(jobId, { done_items: doneTotal, ok_items: okTotal, error_items: errTotal, failed_items: JSON.stringify(newFailed), pending_items: JSON.stringify([...processingItems, ...pendingItems]) })
         }
     }
 
@@ -369,7 +375,8 @@ async function runJobInBackground(jobId) {
     }
 
     updateJobProgress(jobId, {
-        status: 'done',
+        status: newFailed.length > 0 ? 'partial' : 'done',
+        pending_items: null,
         finished_at: new Date().toISOString()
     })
 }
@@ -465,7 +472,7 @@ router.post('/', authMiddleware, async (req, res) => {
         if ((!pages || !pages.length) && (!explicitItems || !explicitItems.length)) return res.status(400).json({ error: 'pages or explicitItems is required' })
 
         // Only allow one running job at a time
-        const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('running', 'pausing')")
+        const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('pending', 'running', 'pausing', 'aborting')")
         if (running) {
             return res.status(409).json({
                 error: `当前已有正在运行的翻译任务（ID: ${running.id}），请等待完成或中止后再创建新任务`,
@@ -475,7 +482,7 @@ router.post('/', authMiddleware, async (req, res) => {
 
         const result = run(
             `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items, concurrency, prompt_id) VALUES ('pending', ?, ?, ?, ?, ?)`,
-            [lang, JSON.stringify(pages || []), JSON.stringify(explicitItems || []), concurrency || 1, promptId || null]
+            [lang, JSON.stringify(pages || []), JSON.stringify(explicitItems || []), normalizeTranslationConcurrency(concurrency), promptId || null]
         )
         const jobId = result.lastInsertRowid
 
@@ -528,7 +535,7 @@ router.post('/:id/resume', authMiddleware, async (req, res) => {
         if (!job) return res.status(404).json({ error: 'Job not found' })
         if (job.status !== 'paused') return res.status(400).json({ error: '任务不是暂停状态' })
 
-        const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('running', 'pausing')")
+        const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('pending', 'running', 'pausing', 'aborting')")
         if (running) {
             return res.status(409).json({
                 error: `当前已有正在运行的翻译任务（ID: ${running.id}），请等待完成后再恢复`,
@@ -563,7 +570,7 @@ router.post('/:id/retry-failed', authMiddleware, async (req, res) => {
         if (!failedItems.length) return res.status(400).json({ error: '没有失败项目需要重试' })
 
         // Only allow one running job at a time
-        const running = getOne("SELECT id FROM translation_jobs WHERE status = 'running'")
+        const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('pending', 'running', 'pausing', 'aborting')")
         if (running) {
             return res.status(409).json({
                 error: `当前已有正在运行的翻译任务（ID: ${running.id}），请等待完成后再重试`,

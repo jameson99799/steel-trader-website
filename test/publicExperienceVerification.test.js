@@ -160,3 +160,22 @@ test('viewport verification reports first-party script CSS and image HTTP errors
     severity: 'error'
   }])
 })
+
+test('viewport verification ignores browser-cancelled requests while still checking broken images', async () => {
+  const listeners = new Map()
+  const page = {
+    setViewport: async () => {},
+    on: (event, handler) => listeners.set(event, handler),
+    goto: async () => {
+      listeners.get('requestfailed')?.({
+        url: () => 'https://example.com/uploads/rotating.webp',
+        failure: () => ({ errorText: 'net::ERR_ABORTED' })
+      })
+    },
+    evaluate: async () => ({ overflow: false, brokenImages: [] }),
+    close: async () => {}
+  }
+
+  const issues = await verifyViewport({ browser: { newPage: async () => page }, url: 'https://example.com/en', viewport: { name: 'mobile', width: 390, height: 844 } })
+  assert.deepEqual(issues, [])
+})

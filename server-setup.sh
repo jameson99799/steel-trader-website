@@ -106,13 +106,17 @@ mkdir -p data uploads logs
 # 11. Environment file
 if [ ! -f .env ]; then
   info "Creating .env..."
-  JWT=$(head /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 48)
+  JWT=$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))")
+  CRM_JWT=$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))")
+  UNSUBSCRIBE=$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))")
   cat > .env << ENVEOF
 NODE_ENV=production
 PORT=${PORT}
 JWT_SECRET=${JWT}
+CRM_JWT_SECRET=${CRM_JWT}
+UNSUBSCRIBE_SECRET=${UNSUBSCRIBE}
 ENVEOF
-  ok ".env created (JWT auto-generated)"
+  ok ".env created (independent secrets auto-generated)"
 else
   ok ".env already exists"
 fi

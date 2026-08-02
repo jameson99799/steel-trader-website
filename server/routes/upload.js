@@ -1,10 +1,9 @@
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 import { upload, compressImage, attachmentUpload } from '../middleware/upload.js'
+import { JWT_SECRET, CRM_SECRET } from '../config/secrets.js'
 
 const router = Router()
-const JWT_SECRET = process.env.JWT_SECRET || 'led-trade-secret-key-2024'
-const CRM_SECRET = process.env.CRM_JWT_SECRET || 'crm-steel-secret-2024'
 
 // Accept both admin and CRM tokens for upload
 function dualAuthUpload(req, res, next) {

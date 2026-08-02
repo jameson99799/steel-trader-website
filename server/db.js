@@ -921,10 +921,27 @@ Requirements:
   try { db.exec("ALTER TABLE mail_tasks ADD COLUMN parent_task_id INTEGER") } catch (e) { }
   try { db.exec("ALTER TABLE mail_logs ADD COLUMN message_id TEXT") } catch (e) { }
   try { db.exec("ALTER TABLE mail_logs ADD COLUMN sent_html TEXT") } catch (e) { }
+  try { db.exec("ALTER TABLE mail_logs ADD COLUMN account_name TEXT DEFAULT ''") } catch (e) { }
+  try { db.exec("ALTER TABLE mail_logs ADD COLUMN error_msg TEXT DEFAULT ''") } catch (e) { }
+  try { db.exec("ALTER TABLE mail_logs ADD COLUMN retry_count INTEGER DEFAULT 0") } catch (e) { }
+  try { db.exec("ALTER TABLE mail_tasks ADD COLUMN failed_count INTEGER DEFAULT 0") } catch (e) { }
+  try { db.exec("ALTER TABLE mail_tasks ADD COLUMN error_message TEXT DEFAULT ''") } catch (e) { }
   try { db.exec("ALTER TABLE mail_contacts ADD COLUMN group_id INTEGER") } catch (e) { }
   try { db.exec("ALTER TABLE mail_tasks ADD COLUMN skip_days INTEGER DEFAULT 0") } catch (e) { }
   try { db.exec("ALTER TABLE mail_tasks ADD COLUMN attachment_paths TEXT DEFAULT '[]'") } catch (e) { }
   try { db.exec("ALTER TABLE mail_templates ADD COLUMN template_type TEXT DEFAULT 'rich'") } catch (e) { }
+  db.exec(`CREATE TABLE IF NOT EXISTS mail_attachments (
+    filename TEXT PRIMARY KEY,
+    original_name TEXT DEFAULT '',
+    created_by TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`)
+  db.exec(`CREATE TABLE IF NOT EXISTS mail_suppressions (
+    email TEXT PRIMARY KEY COLLATE NOCASE,
+    source TEXT DEFAULT 'manual',
+    reason TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`)
 
   // Custom email variables
   db.exec(`

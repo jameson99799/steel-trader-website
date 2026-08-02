@@ -182,6 +182,7 @@ export async function verifyViewport({ browser, url, viewport }) {
     page.on('requestfailed', request => {
       const resourceUrl = request.url()
       const failure = request.failure?.()?.errorText || 'request failed'
+      if (failure === 'net::ERR_ABORTED') return
       failedRequests.push({ resourceUrl, failure })
     })
     page.on('response', response => {

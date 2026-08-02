@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken'
+import { getJwtSecrets } from '../config/secrets.js'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'led-trade-secret-key-2024'
-const CRM_SECRET = process.env.CRM_JWT_SECRET || 'crm-steel-secret-2024'
+const { jwtSecret: JWT_SECRET, crmSecret: CRM_SECRET } = getJwtSecrets()
 
 export const generateToken = (user) => {
   return jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' })

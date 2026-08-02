@@ -7,6 +7,9 @@ import AdmZip from 'adm-zip'
 import { join, basename, dirname, resolve } from 'path'
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
+import { CRM_SECRET, JWT_SECRET as ADMIN_SECRET } from '../config/secrets.js'
+import { smtpTransportOptions } from '../services/mailerPolicy.js'
+import { applyUnsubscribe } from '../services/mailCompliance.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const UPLOADS_DIR = join(__dirname, '..', '..', 'uploads')
 
@@ -40,9 +43,6 @@ function replaceSenderVars(html, smtpUser) {
   } catch (_) { return html }
 }
 
-const CRM_SECRET = process.env.CRM_JWT_SECRET || 'crm-steel-secret-2024'
-const ADMIN_SECRET = process.env.JWT_SECRET || 'led-trade-secret-key-2024'
-
 // Dual auth: accepts both CRM token or admin token
 export function dualAuth(req, res, next) {
   const token = req.headers.authorization?.replace('Bearer ', '')
@@ -61,6 +61,31 @@ export function dualAuth(req, res, next) {
   } catch (e) {}
 
   return res.status(401).json({ error: 'Token 无效' })
+}
+
+function isPrivileged(req) {
+  return Boolean(req.user || req.crmUser?.role === 'admin')
+}
+
+function canAccessCustomer(req, customer) {
+  return Boolean(customer) && (isPrivileged(req) || String(customer.owner_id || '') === String(req.crmUser?.id || ''))
+}
+
+function canAccessAssignedResource(req, row) {
+  if (!row) return false
+  if (isPrivileged(req)) return true
+  const userId = String(req.crmUser?.id || '')
+  const assigned = String(row.assigned_users || '')
+  return String(row.created_by || '') === userId || assigned === 'all' || assigned.split(',').map(v => v.trim()).includes(userId)
+}
+
+function accessibleSmtpAccounts(req) {
+  return getAll('SELECT * FROM smtp_accounts WHERE enabled=1 ORDER BY id ASC').filter(row => canAccessAssignedResource(req, row))
+}
+
+function canAccessFollowup(req, followupId) {
+  const row = getOne('SELECT c.owner_id FROM crm_followups f JOIN crm_customers c ON c.id=f.customer_id WHERE f.id=?', [followupId])
+  return canAccessCustomer(req, row)
 }
 
 // ─── List customers ─────────────────────────────────────────────────────────────
@@ -386,6 +411,7 @@ router.delete('/quotations/:qId', dualAuth, (req, res) => {
 
 // ─── Followups ──────────────────────────────────────────────────────────────────
 router.get('/:id/followups', dualAuth, (req, res) => {
+  if (!canAccessCustomer(req, getOne('SELECT owner_id FROM crm_customers WHERE id=?', [req.params.id]))) return res.status(403).json({ error: '无权访问该客户' })
   const list = getAll(
     `SELECT f.*, u.display_name as user_name FROM crm_followups f
      LEFT JOIN crm_users u ON f.user_id=u.id WHERE f.customer_id=? ORDER BY f.created_at DESC`, [req.params.id])
@@ -394,6 +420,7 @@ router.get('/:id/followups', dualAuth, (req, res) => {
 })
 
 router.post('/:id/followups', dualAuth, (req, res) => {
+  if (!canAccessCustomer(req, getOne('SELECT owner_id FROM crm_customers WHERE id=?', [req.params.id]))) return res.status(403).json({ error: '无权访问该客户' })
   const { content_html, note, images, attachments } = req.body
   const now = new Date().toISOString()
   const result = run(`INSERT INTO crm_followups (customer_id,user_id,content_html,note,images,attachments,created_at) VALUES (?,?,?,?,?,?,?)`,
@@ -403,6 +430,7 @@ router.post('/:id/followups', dualAuth, (req, res) => {
 })
 
 router.put('/followups/:fId', dualAuth, (req, res) => {
+  if (!canAccessFollowup(req, req.params.fId)) return res.status(403).json({ error: '无权修改该跟进记录' })
   const { content_html, note, images, attachments } = req.body
   run(`UPDATE crm_followups SET content_html=?,note=?,images=?,attachments=?,updated_at=? WHERE id=?`,
     [content_html, note||'', JSON.stringify(images||[]), JSON.stringify(attachments||[]), new Date().toISOString(), req.params.fId])
@@ -410,6 +438,7 @@ router.put('/followups/:fId', dualAuth, (req, res) => {
 })
 
 router.delete('/followups/:fId', dualAuth, (req, res) => {
+  if (!canAccessFollowup(req, req.params.fId)) return res.status(403).json({ error: '无权删除该跟进记录' })
   run('DELETE FROM crm_followups WHERE id=?', [req.params.fId])
   res.json({ message: '删除成功' })
 })
@@ -426,24 +455,23 @@ router.post('/email/send', dualAuth, async (req, res) => {
     if (crmUser?.smtp_host && crmUser?.smtp_user && crmUser?.smtp_pass) smtp = crmUser
   }
   if (!smtp) {
-    smtp = getOne('SELECT smtp_host,smtp_port,smtp_user as smtp_user,smtp_pass,from_name FROM smtp_accounts WHERE enabled=1 LIMIT 1')
+    smtp = accessibleSmtpAccounts(req)[0] || null
   }
   if (!smtp) return res.status(400).json({ error: '未配置邮箱账号' })
 
-  const customers = customer_ids.map(id => getOne('SELECT email,name,company FROM crm_customers WHERE id=?', [id])).filter(c => c?.email)
+  const customers = customer_ids.map(id => getOne('SELECT id,email,name,company,owner_id FROM crm_customers WHERE id=?', [id])).filter(c => c?.email && canAccessCustomer(req, c))
   let sent = 0, failed = 0
   const nodemailer = (await import('nodemailer')).default
-  const transport = nodemailer.createTransport({
-    host: smtp.smtp_host, port: parseInt(smtp.smtp_port)||465, secure: parseInt(smtp.smtp_port)===465,
-    auth: { user: smtp.smtp_user, pass: smtp.smtp_pass }, tls: { rejectUnauthorized: false }
-  })
+  const transport = nodemailer.createTransport(smtpTransportOptions(smtp))
   for (const c of customers) {
     try {
       const subj = subject.replace(/\{\{name\}\}/g, c.name||'').replace(/\{\{company\}\}/g, c.company||'')
       const body = html_body.replace(/\{\{name\}\}/g, c.name||'').replace(/\{\{company\}\}/g, c.company||'')
-      await transport.sendMail({
+      const suppressed = getOne('SELECT email FROM mail_suppressions WHERE LOWER(email)=LOWER(?)', [c.email])
+      if (suppressed) continue
+      await transport.sendMail(applyUnsubscribe({
         from: `"${smtp.from_name||'SunSea Steel'}" <${smtp.smtp_user}>`, to: c.email, subject: subj, html: body
-      })
+      }, c.email))
       run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
         [c.email, subj, 'sent', new Date().toISOString(), req.crmUser?.id||null])
       sent++
@@ -453,6 +481,7 @@ router.post('/email/send', dualAuth, async (req, res) => {
       failed++
     }
   }
+  transport.close?.()
   res.json({ message: `发送完成: 成功 ${sent}, 失败 ${failed}` })
 })
 
@@ -465,14 +494,18 @@ router.post('/email/quick-send', dualAuth, async (req, res) => {
   
   const customer = getOne('SELECT * FROM crm_customers WHERE id=?', [customer_id])
   if (!customer?.email) return res.status(400).json({ error: '该客户没有邮箱' })
+  if (!canAccessCustomer(req, customer)) return res.status(403).json({ error: '无权访问该客户' })
+
+  if (getOne('SELECT email FROM mail_suppressions WHERE LOWER(email)=LOWER(?)', [customer.email])) {
+    return res.status(409).json({ error: '该收件人已退订营销邮件' })
+  }
 
   // Get default template (first template, or one marked as default)
-  const tpl = getOne("SELECT * FROM mail_templates WHERE is_default=1 LIMIT 1") 
-    || getOne("SELECT * FROM mail_templates ORDER BY id ASC LIMIT 1")
+  const tpl = getAll("SELECT * FROM mail_templates ORDER BY is_default DESC, id ASC").find(row => canAccessAssignedResource(req, row))
   if (!tpl) return res.status(400).json({ error: '未设置默认邮件模板，请先在邮件系统中创建模板' })
 
   // Get SMTP account (round-robin using modulo on customer_id)
-  const accounts = getAll('SELECT * FROM smtp_accounts WHERE enabled=1 ORDER BY id ASC')
+  const accounts = accessibleSmtpAccounts(req)
   if (!accounts.length) return res.status(400).json({ error: '未配置发送邮箱' })
   const smtp = accounts[customer_id % accounts.length]
 
@@ -493,15 +526,12 @@ router.post('/email/quick-send', dualAuth, async (req, res) => {
   body = body.replace(/\{\{subject_raw\}\}/g, subj)
 
   const now = new Date().toISOString()
+  const nodemailer = (await import('nodemailer')).default
+  const transport = nodemailer.createTransport(smtpTransportOptions(smtp))
   try {
-    const nodemailer = (await import('nodemailer')).default
-    const transport = nodemailer.createTransport({
-      host: smtp.smtp_host, port: parseInt(smtp.smtp_port)||465, secure: parseInt(smtp.smtp_port)===465,
-      auth: { user: smtp.smtp_user, pass: smtp.smtp_pass }, tls: { rejectUnauthorized: false }
-    })
-    await transport.sendMail({
+    await transport.sendMail(applyUnsubscribe({
       from: `"${smtp.from_name||'SunSea Steel'}" <${smtp.smtp_user}>`, to: customer.email, subject: subj, html: body
-    })
+    }, customer.email))
     // Log to both tables for full visibility
     run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
       [customer.email, subj, 'sent', now, req.crmUser?.id||null])
@@ -514,6 +544,8 @@ router.post('/email/quick-send', dualAuth, async (req, res) => {
     run(`INSERT INTO mail_logs (task_id,template_id,account_id,contact_email,contact_name,subject,status,created_by) VALUES (?,?,?,?,?,?,?,?)`,
       [0, tpl.id, smtp.id, customer.email, customer.name||customer.first_name||'', subj, 'failed', String(req.crmUser?.id||'')])
     res.json({ message: `❌ 发送失败: ${e.message}`, status: 'failed' })
+  } finally {
+    transport.close?.()
   }
 })
 
@@ -522,18 +554,22 @@ router.post('/email/quick-send', dualAuth, async (req, res) => {
 router.post('/email/quick-followup', dualAuth, async (req, res) => {
   const { recipient_email, original_subject, original_sent_at } = req.body
   if (!recipient_email) return res.status(400).json({ error: '缺少收件人' })
+  const accessibleCustomer = getOne('SELECT * FROM crm_customers WHERE LOWER(email)=LOWER(?) LIMIT 1', [recipient_email])
+  if (!canAccessCustomer(req, accessibleCustomer)) return res.status(403).json({ error: '无权向该收件人发送跟进邮件' })
+
+  if (getOne('SELECT email FROM mail_suppressions WHERE LOWER(email)=LOWER(?)', [recipient_email])) {
+    return res.status(409).json({ error: '该收件人已退订营销邮件' })
+  }
 
   // Ensure is_followup_default column exists
   try { run('ALTER TABLE mail_templates ADD COLUMN is_followup_default INTEGER DEFAULT 0') } catch(e) {}
 
   // Get followup default template (fallback to marketing default, then first template)
-  const tpl = getOne("SELECT * FROM mail_templates WHERE is_followup_default=1 LIMIT 1")
-    || getOne("SELECT * FROM mail_templates WHERE is_default=1 LIMIT 1")
-    || getOne("SELECT * FROM mail_templates ORDER BY id ASC LIMIT 1")
+  const tpl = getAll("SELECT * FROM mail_templates ORDER BY is_followup_default DESC, is_default DESC, id ASC").find(row => canAccessAssignedResource(req, row))
   if (!tpl) return res.status(400).json({ error: '未设置默认邮件模板' })
 
   // Get SMTP account
-  const accounts = getAll('SELECT * FROM smtp_accounts WHERE enabled=1 ORDER BY id ASC')
+  const accounts = accessibleSmtpAccounts(req)
   if (!accounts.length) return res.status(400).json({ error: '未配置发送邮箱' })
   const smtp = accounts[Math.floor(Math.random() * accounts.length)]
 
@@ -568,12 +604,9 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
   body = body + quotedBlock
 
   const now = new Date().toISOString()
+  const nodemailer = (await import('nodemailer')).default
+  const transport = nodemailer.createTransport(smtpTransportOptions(smtp))
   try {
-    const nodemailer = (await import('nodemailer')).default
-    const transport = nodemailer.createTransport({
-      host: smtp.smtp_host, port: parseInt(smtp.smtp_port)||465, secure: parseInt(smtp.smtp_port)===465,
-      auth: { user: smtp.smtp_user, pass: smtp.smtp_pass }, tls: { rejectUnauthorized: false }
-    })
     const mailOpts = {
       from: `"${smtp.from_name||'SunSea Steel'}" <${smtp.smtp_user}>`, to: recipient_email, subject: subj, html: body
     }
@@ -581,7 +614,7 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
     if (origLog?.message_id) {
       mailOpts.headers = { 'In-Reply-To': origLog.message_id, 'References': origLog.message_id }
     }
-    await transport.sendMail(mailOpts)
+    await transport.sendMail(applyUnsubscribe(mailOpts, recipient_email))
     run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
       [recipient_email, subj, 'sent', now, req.crmUser?.id||null])
     run(`INSERT INTO mail_logs (task_id,template_id,account_id,contact_email,contact_name,subject,status,sent_at,sent_html,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)`,
@@ -591,6 +624,8 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
     run('INSERT INTO crm_email_logs (recipient_email,subject,status,sent_at,sent_by) VALUES (?,?,?,?,?)',
       [recipient_email, subj, 'failed', now, req.crmUser?.id||null])
     res.json({ message: `❌ 发送失败: ${e.message}`, status: 'failed' })
+  } finally {
+    transport.close?.()
   }
 })
 
@@ -1112,8 +1147,14 @@ router.post('/email/records/bulk-delete', dualAuth, (req, res) => {
   if (!ids?.length) return res.status(400).json({ error: '无选中项' })
   const placeholders = ids.map(() => '?').join(',')
   // Delete from both tables since records are merged from mail_logs and crm_email_logs
-  run(`DELETE FROM mail_logs WHERE id IN (${placeholders})`, ids)
-  run(`DELETE FROM crm_email_logs WHERE id IN (${placeholders})`, ids)
+  if (isPrivileged(req)) {
+    run(`DELETE FROM mail_logs WHERE id IN (${placeholders})`, ids)
+    run(`DELETE FROM crm_email_logs WHERE id IN (${placeholders})`, ids)
+  } else {
+    const userId = String(req.crmUser?.id || '')
+    run(`DELETE FROM mail_logs WHERE id IN (${placeholders}) AND created_by=?`, [...ids, userId])
+    run(`DELETE FROM crm_email_logs WHERE id IN (${placeholders}) AND sent_by=?`, [...ids, req.crmUser.id])
+  }
   res.json({ message: `已删除 ${ids.length} 条记录` })
 })
 

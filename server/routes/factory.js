@@ -3,9 +3,9 @@ import jwt from 'jsonwebtoken'
 import { getAll, getOne, run } from '../db.js'
 import { applyWatermark } from '../utils/watermark.js'
 import { loadTranslationsForLang, translateFactoryGroup, translateFactoryMedia } from '../helpers/translate.js'
+import { JWT_SECRET } from '../config/secrets.js'
 
 const router = Router()
-const JWT_SECRET = process.env.JWT_SECRET || 'led-trade-secret-key-2024'
 
 function authMiddleware(req, res, next) {
   const token = req.headers.authorization?.replace('Bearer ', '')

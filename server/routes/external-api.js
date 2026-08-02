@@ -2,6 +2,8 @@ import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import crypto from 'crypto'
 import nodemailer from 'nodemailer'
+import { normalizeEmail, smtpTransportOptions } from '../services/mailerPolicy.js'
+import { applyUnsubscribe } from '../services/mailCompliance.js'
 import {
     createLegacySeoReviewHandler,
     productReviewStore,
@@ -812,6 +814,11 @@ router.delete('/templates/:id', apiKeyMiddleware, (req, res) => {
 router.post('/send-email', apiKeyMiddleware, async (req, res) => {
     const { to_email, to_name, subject, html_body, template_id, account_id } = req.body
     if (!to_email) return res.status(400).json({ error: 'to_email is required' })
+    const normalizedTo = normalizeEmail(to_email)
+    if (!normalizedTo.includes('@')) return res.status(400).json({ error: 'to_email is invalid' })
+    if (getOne('SELECT email FROM mail_suppressions WHERE LOWER(email)=LOWER(?)', [normalizedTo])) {
+        return res.status(409).json({ error: 'Recipient has unsubscribed from marketing email' })
+    }
 
     let finalSubject = subject || ''
     let finalBody = html_body || ''
@@ -848,26 +855,20 @@ router.post('/send-email', apiKeyMiddleware, async (req, res) => {
     }
     if (!smtp) return res.status(500).json({ error: 'No enabled SMTP accounts found' })
 
-    const transport = nodemailer.createTransport({
-        host: smtp.smtp_host,
-        port: parseInt(smtp.smtp_port) || 465,
-        secure: parseInt(smtp.smtp_port) === 465,
-        auth: { user: smtp.smtp_user, pass: smtp.smtp_pass },
-        tls: { rejectUnauthorized: false }
-    })
+    const transport = nodemailer.createTransport(smtpTransportOptions(smtp))
 
     try {
-        const info = await transport.sendMail({
+        const info = await transport.sendMail(applyUnsubscribe({
             from: `"${smtp.from_name || 'SunSea Steel'}" <${smtp.smtp_user}>`,
-            to: to_email,
+            to: normalizedTo,
             subject: finalSubject,
             html: finalBody
-        })
+        }, normalizedTo))
 
         // Log success
         run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, template_id, account_id, account_name, subject, sent_html, status, sent_at, message_id)
              VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 'sent', ?, ?)`,
-            [to_email, to_name || '', template_id || null, smtp.id, smtp.name || smtp.smtp_user, finalSubject, finalBody, new Date().toISOString(), info.messageId || '']
+            [normalizedTo, to_name || '', template_id || null, smtp.id, smtp.name || smtp.smtp_user, finalSubject, finalBody, new Date().toISOString(), info.messageId || '']
         )
         // Increment send count
         run('UPDATE smtp_accounts SET send_count = send_count + 1 WHERE id = ?', [smtp.id])
@@ -877,9 +878,11 @@ router.post('/send-email', apiKeyMiddleware, async (req, res) => {
         // Log failure
         run(`INSERT INTO mail_logs (task_id, contact_email, contact_name, template_id, account_id, account_name, subject, sent_html, status, sent_at, error_msg)
              VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?)`,
-            [to_email, to_name || '', template_id || null, smtp.id, smtp.name || smtp.smtp_user, finalSubject, finalBody, new Date().toISOString(), e.message]
+            [normalizedTo, to_name || '', template_id || null, smtp.id, smtp.name || smtp.smtp_user, finalSubject, finalBody, new Date().toISOString(), e.message]
         )
         res.status(500).json({ success: false, error: 'Failed to send email: ' + e.message })
+    } finally {
+        transport.close?.()
     }
 })
 

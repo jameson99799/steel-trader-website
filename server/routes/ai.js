@@ -7,6 +7,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
+import { sanitizeAIChannel } from '../config/secrets.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -100,12 +101,7 @@ function httpStream(urlStr, options = {}, body = null) {
 
 router.get('/channels', authMiddleware, (req, res) => {
     const channels = getAll('SELECT * FROM ai_channels ORDER BY is_default DESC, id ASC')
-    // Return channels with plaintext keys (private server) + parsed models
-    const parsed = channels.map(c => ({
-        ...c,
-        api_key_display: c.api_key || '',
-        models: JSON.parse(c.models || '[]')
-    }))
+    const parsed = channels.map(sanitizeAIChannel)
     res.json(parsed)
 })
 

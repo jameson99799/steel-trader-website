@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
+import { sanitizeTranslationSettings } from '../config/secrets.js'
 import https from 'https'
 import http from 'http'
 import { parse as parseHTML } from 'node-html-parser'
@@ -94,12 +95,9 @@ router.put('/prompts/:id/default', authMiddleware, (req, res) => {
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 
-router.get('/settings', (req, res) => {
+router.get('/settings', authMiddleware, (req, res) => {
     const s = getOne('SELECT * FROM translation_settings WHERE id = 1')
-    if (s && s.api_key && s.api_key.length > 8) {
-        s.api_key_display = s.api_key.slice(0, 4) + '****' + s.api_key.slice(-4)
-    }
-    res.json(s || {})
+    res.json(sanitizeTranslationSettings(s))
 })
 
 router.put('/settings', authMiddleware, (req, res) => {
@@ -127,7 +125,7 @@ router.get('/concurrency', authMiddleware, (req, res) => {
 
 router.put('/concurrency', authMiddleware, (req, res) => {
     const { concurrency } = req.body
-    const c = parseInt(concurrency) || 3
+    const c = Math.min(8, Math.max(1, parseInt(concurrency) || 3))
     run('UPDATE translation_settings SET concurrency = ? WHERE id = 1', [c])
     // Update memory variable for background worker if it exists
     workerConcurrency = c
@@ -2675,54 +2673,45 @@ async function executeTranslationTask(targetLang, contentType, contentId) {
     return { results, errors }
 }
 
+async function executeQueuedTranslationTask(task) {
+    try {
+        const result = await executeTranslationTask(task.target_lang, task.item_type, task.item_id)
+        if (result.errors && result.errors.length > 0) {
+            const errMsg = (result.errors[0].error || 'Unknown error').slice(0, 500)
+            run("UPDATE translation_tasks SET status='error', error_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", [errMsg, task.id])
+        } else {
+            run("UPDATE translation_tasks SET status='success', error_message=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?", [task.id])
+        }
+    } catch (e) {
+        run("UPDATE translation_tasks SET status='error', error_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", [(e.message || 'Error').slice(0, 500), task.id])
+    }
+}
+
 async function processTranslationQueue() {
-    if (workerRunning) return;
-    workerRunning = true;
-    
+    if (workerRunning) return
+    run("UPDATE translation_tasks SET status='pending', updated_at=CURRENT_TIMESTAMP WHERE status='running'")
+    workerRunning = true
+
     try {
         while (!workerPaused) {
-            if (activeWorkers >= workerConcurrency) {
-                await new Promise(r => setTimeout(r, 1000));
-                continue;
-            }
-            
-            // Fetch next task
-            const task = getOne("SELECT * FROM translation_tasks WHERE status='pending' ORDER BY id ASC LIMIT 1");
-            if (!task) {
-                // If no pending, check if we should auto-retry failed ones
-                const allFinished = getOne("SELECT count(*) as c FROM translation_tasks WHERE status='pending' OR status='running'");
-                if (allFinished && allFinished.c === 0) {
-                    // Try to auto-retry errors once
-                    const errorCount = run("UPDATE translation_tasks SET status='error', status='pending', retry_count = retry_count + 1 WHERE status='error' AND retry_count = 0");
-                    if (errorCount && errorCount.changes > 0) {
-                        continue; // loop again to pick up the newly pending tasks
-                    }
-                }
-                break; // queue truly empty
+            const concurrency = Math.min(8, Math.max(1, Number.parseInt(workerConcurrency, 10) || 1))
+            const tasks = getAll(`SELECT * FROM translation_tasks WHERE status='pending' ORDER BY id ASC LIMIT ${concurrency}`)
+            if (!tasks.length) {
+                const errorCount = run("UPDATE translation_tasks SET status='pending', retry_count=retry_count+1 WHERE status='error' AND retry_count=0")
+                if (errorCount?.changes > 0) continue
+                break
             }
 
-            // Mark running
-            run("UPDATE translation_tasks SET status='running', updated_at=CURRENT_TIMESTAMP WHERE id=?", [task.id]);
-            activeWorkers++;
-
-            (async () => {
-                try {
-                    const result = await executeTranslationTask(task.target_lang, task.item_type, task.item_id);
-                    if (result.errors && result.errors.length > 0 && (!result.results || result.results.length === 0)) {
-                        const errMsg = (result.errors[0].error || 'Unknown error').slice(0, 500);
-                        run("UPDATE translation_tasks SET status='error', error_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", [errMsg, task.id]);
-                    } else {
-                        run("UPDATE translation_tasks SET status='success', error_message=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?", [task.id]);
-                    }
-                } catch (e) {
-                    run("UPDATE translation_tasks SET status='error', error_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", [(e.message || 'Error').slice(0, 500), task.id]);
-                } finally {
-                    activeWorkers--;
-                }
-            })();
+            for (const task of tasks) {
+                run("UPDATE translation_tasks SET status='running', updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'", [task.id])
+            }
+            activeWorkers = tasks.length
+            await Promise.all(tasks.map(executeQueuedTranslationTask))
+            activeWorkers = 0
         }
     } finally {
-        workerRunning = false;
+        activeWorkers = 0
+        workerRunning = false
     }
 }
 
@@ -2733,7 +2722,7 @@ router.post('/batch-start', authMiddleware, async (req, res) => {
     if (!pages || !lang) return res.status(400).json({ error: 'pages and lang are required' });
     
     if (concurrency) {
-        workerConcurrency = parseInt(concurrency) || 3;
+        workerConcurrency = Math.min(8, Math.max(1, parseInt(concurrency) || 3));
         run('UPDATE translation_settings SET concurrency = ? WHERE id = 1', [workerConcurrency])
     }
     workerPaused = false;

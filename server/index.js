@@ -7,6 +7,7 @@ import rateLimit from 'express-rate-limit'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { readFileSync, existsSync, unlinkSync } from 'fs'
+import { sanitizeRichHtml } from '../src/utils/sanitizeHtml.js'
 import sharp from 'sharp'
 
 import { initDb, getAll, getOne, run, findFuzzyBySlug } from './db.js'
@@ -59,6 +60,7 @@ import crmAuthRoutes from './routes/crm-auth.js'
 import crmUsersRoutes from './routes/crm-users.js'
 import crmCustomersRoutes from './routes/crm-customers.js'
 import crmMailerRoutes from './routes/crm-mailer.js'
+import unsubscribeRoutes from './routes/unsubscribe.js'
 import ralColorsRoutes from './routes/ral-colors.js'
 import roofingProfilesRoutes from './routes/roofing-profiles.js'
 import factoryRoutes from './routes/factory.js'
@@ -451,6 +453,7 @@ async function startServer() {
     app.use('/api/ai', aiRoutes)
     app.use('/api/ai-auto-post', aiAutoPostRoutes)
     app.use('/api/mailer', mailerRoutes)
+    app.use('/api', unsubscribeRoutes)
     app.use('/api/external', externalApiLimiter, externalApiRoutes)
     app.use('/api/product-reviews', productReviewRoutes)
     app.use('/api/backup', backupRoutes)
@@ -765,6 +768,7 @@ async function startServer() {
                 .replace(/(%7B%7B|\{\{)whatsapp_link(%7D%7D|\}\})/gi, waLink)
                 .replace(/(%7B%7B|\{\{)company_name(%7D%7D|\}\})/gi, companyNameTranslated)
               detailHtml = formatSsrMailtoLinks(detailHtml, company.email || '')
+              detailHtml = sanitizeRichHtml(detailHtml)
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
               const hasFaqInDetail = /frequently asked|<h[23][^>]*>\\s*faq/i.test(detailHtml)
               const ssrFeaturedImage = productImages.length ? `<img src="${esc(productImages[0])}" alt="${escPName}" style="display:none;" />` : ''
@@ -877,6 +881,7 @@ async function startServer() {
                 .replace(/(%7B%7B|\{\{)company_name(%7D%7D|\}\})/gi, companyNameTranslated)
               
               articleBody = formatSsrMailtoLinks(articleBody, company.email || '')
+              articleBody = sanitizeRichHtml(articleBody)
 
               // ── FAQPage schema for news articles (GEO: used by Google SGE, ChatGPT, Perplexity) ──
               let newsFaqHtml = ''
