@@ -1108,12 +1108,12 @@ async function startServer() {
             ] })
             
             // Render basic table for GEO crawlers
-            const watchlist = getAll('SELECT symbol, name, name_en FROM futures_watchlist ORDER BY sort_order ASC')
+            const watchlist = getAll('SELECT id, symbol, name, name_en FROM futures_watchlist ORDER BY sort_order ASC')
             if (watchlist && watchlist.length) {
               const tableRows = watchlist.map(w => {
                 let name = w.name_en || w.name
                 if (lang !== 'en') {
-                  const tRow = getOne('SELECT translated_text FROM translations WHERE content_type="futures_watchlist" AND content_id=? AND language_code=? AND content_field="name"', [w.id, lang])
+                  const tRow = getOne('SELECT translated_text FROM translations WHERE content_type=? AND content_id=? AND language_code=? AND content_field=?', ['futures_watchlist', w.id, lang, 'name'])
                   if (tRow) name = tRow.translated_text
                 }
                 return `<tr><td>${esc(name)}</td><td>${esc(w.symbol)}</td></tr>`

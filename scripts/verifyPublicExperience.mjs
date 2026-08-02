@@ -135,11 +135,22 @@ export async function verifyHttpUrls({ fetchImpl, urls, concurrency = DEFAULT_CO
       const index = nextIndex++
       const url = urls[index]
       try {
-        const response = await fetchImpl(url, {
-          headers: { accept: 'text/html', 'user-agent': 'SunSea-Public-Experience-Verification/1.0' },
-          redirect: 'follow',
-          signal: AbortSignal.timeout(30000)
-        })
+        let response
+        let lastError
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            response = await fetchImpl(url, {
+              headers: { accept: 'text/html', 'user-agent': 'SunSea-Public-Experience-Verification/1.0' },
+              redirect: 'follow',
+              signal: AbortSignal.timeout(30000)
+            })
+            if (response.status < 500 || attempt === 2) break
+          } catch (error) {
+            lastError = error
+            if (attempt === 2) throw error
+          }
+        }
+        if (!response) throw lastError || new Error('request failed')
         const html = await response.text()
         const issues = []
         if (!response.ok) issues.push(issue('http-status', `HTTP ${response.status}`))
@@ -162,19 +173,34 @@ function isFirstParty(resourceUrl, pageUrl) {
 export async function verifyViewport({ browser, url, viewport }) {
   const page = await browser.newPage()
   const issues = []
+  const pageErrors = []
+  const failedRequests = []
   try {
     await page.setViewport({ width: viewport.width, height: viewport.height, deviceScaleFactor: 1 })
-    page.on('pageerror', error => issues.push(issue('page-error', `${viewport.name}: ${error?.message || error}`)))
+    page.on('pageerror', error => pageErrors.push(error))
     page.on('requestfailed', request => {
       const resourceUrl = request.url()
       const failure = request.failure?.()?.errorText || 'request failed'
+      failedRequests.push({ resourceUrl, failure })
+    })
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+        break
+      } catch (error) {
+        if (attempt === 2) throw error
+        pageErrors.length = 0
+        failedRequests.length = 0
+      }
+    }
+    for (const error of pageErrors) issues.push(issue('page-error', `${viewport.name}: ${error?.message || error}`))
+    for (const { resourceUrl, failure } of failedRequests) {
       issues.push(issue(
         'resource-failed',
         `${viewport.name}: ${resourceUrl} (${failure})`,
         isFirstParty(resourceUrl, url) ? 'error' : 'warning'
       ))
-    })
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    }
     const state = await page.evaluate(() => ({
       overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
       brokenImages: [...document.querySelectorAll('main img, article img')]

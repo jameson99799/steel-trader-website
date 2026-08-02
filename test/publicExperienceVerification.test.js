@@ -87,6 +87,19 @@ test('HTTP verification preserves per-URL status and SEO issues', async () => {
   assert.equal(results[1].issues[0].code, 'http-status')
 })
 
+test('HTTP verification retries one transient request failure', async () => {
+  let calls = 0
+  const html = '<html><head><title>Good</title><meta name="description" content="Good"><link rel="canonical" href="https://example.com/en/about"><link rel="alternate" hreflang="en" href="https://example.com/en/about"></head><body><h1>Good</h1></body></html>'
+  const fakeFetch = async () => {
+    calls++
+    if (calls === 1) throw new Error('temporary timeout')
+    return response(html, { contentType: 'text/html' })
+  }
+  const [result] = await verifyHttpUrls({ fetchImpl: fakeFetch, urls: ['https://example.com/en/about'], concurrency: 1 })
+  assert.equal(calls, 2)
+  assert.deepEqual(result.issues, [])
+})
+
 test('viewport verification reports overflow, first-party resource failures, page errors and broken main images', async () => {
   const listeners = new Map()
   const page = {
@@ -102,4 +115,25 @@ test('viewport verification reports overflow, first-party resource failures, pag
   const browser = { newPage: async () => page }
   const issues = await verifyViewport({ browser, url: 'https://example.com/en/about', viewport: { name: 'mobile', width: 390, height: 844 } })
   assert.deepEqual(issues.map(issue => issue.code).sort(), ['broken-image', 'horizontal-overflow', 'page-error', 'resource-failed'])
+})
+
+test('viewport verification retries one transient navigation failure without retaining its failed request', async () => {
+  const listeners = new Map()
+  let attempts = 0
+  const page = {
+    setViewport: async () => {},
+    on: (event, handler) => listeners.set(event, handler),
+    goto: async () => {
+      attempts++
+      if (attempts === 1) {
+        listeners.get('requestfailed')?.({ url: () => 'https://example.com/en/about', failure: () => ({ errorText: 'net::ERR_HTTP2_PROTOCOL_ERROR' }) })
+        throw new Error('net::ERR_HTTP2_PROTOCOL_ERROR')
+      }
+    },
+    evaluate: async () => ({ overflow: false, brokenImages: [] }),
+    close: async () => {}
+  }
+  const issues = await verifyViewport({ browser: { newPage: async () => page }, url: 'https://example.com/en/about', viewport: { name: 'tablet', width: 820, height: 1180 } })
+  assert.equal(attempts, 2)
+  assert.deepEqual(issues, [])
 })
