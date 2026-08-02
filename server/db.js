@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import fs from 'fs'
 import { initializeProductReviewSchema } from './services/productReviewSchema.js'
+import { initializeTranslationTaskSchema } from './services/translationTaskSchema.js'
 import {
   DEFAULT_LLMS_TXT,
   DEFAULT_LLMS_FULL_TXT,
@@ -1284,6 +1285,7 @@ Requirements:
   `)
   // Unique index for translations
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_translations_unique ON translations(language_code, content_type, COALESCE(content_id,-1), content_field)') } catch (e) { }
+  initializeTranslationTaskSchema(db)
 
   // ── Background Translation Jobs ──────────────────────────────────────────────
   // Stores each background translation job (survives browser close / server restart)
