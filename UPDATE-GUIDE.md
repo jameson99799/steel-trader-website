@@ -207,3 +207,32 @@ node scripts/verifySeoDelivery.mjs
 `verifySeoDelivery.mjs` 会同时检查本地和公开域名的产品详情 SSR、首条可见评价、公开评价 API、`#product-jsonld` 中的 Review/aggregateRating、about、站点地图和构建资源。无评价是合法状态，但出现旧的固定 `Verified Buyer`、`Excellent quality and service.` 或 `reviewCount=89` 会导致验证失败。
 
 如果评价已发布但页面仍显示旧内容，先查看 PM2 日志中的 `[product-reviews] SEO cache invalidation failed` 或 `[product-review-translation] SEO cache invalidation failed` 警告，再重新执行上述交付验证；不要手工清空整个 `seo_render_cache` 表。
+
+## 全站公开体验只读检查（SEO、手机、平板、电脑）
+
+服务器更新成功后运行：
+
+```bash
+cd /www/wwwroot/steel-trader
+PUBLIC_SITE_URL=https://www.sunseasteel.com npm run verify:public
+```
+
+该命令只读取公开网页，不修改数据库。它会递归读取全部站点地图，检查所有公开 URL 的 HTTP 状态、标题、描述、canonical、hreflang、H1 和现有 JSON-LD；随后为每种页面模板选取代表页，在以下三种视口检查横向溢出、页面脚本错误、本站资源失败和主内容坏图：
+
+- 手机：390 × 844
+- 平板：820 × 1180
+- 电脑：1440 × 900
+
+耗时取决于站点地图 URL 和页面模板数量，通常为数分钟。输出格式为：
+
+```text
+URL | ERROR/WARNING 检查代码 | 说明
+```
+
+`ERROR` 会让命令以非零状态退出，必须检查；第三方聊天、分析服务等站外资源失败只记为 `WARNING`。若服务器资源有限，可降低 HTTP 并发：
+
+```bash
+PUBLIC_VERIFY_CONCURRENCY=3 PUBLIC_SITE_URL=https://www.sunseasteel.com npm run verify:public
+```
+
+检查通过表示本次技术交付未发现阻断问题，不代表或承诺 Google 排名。评价覆盖统计只统计后台真实保存的评价，不会自动生成或发布虚构评价。

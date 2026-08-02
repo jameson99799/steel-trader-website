@@ -9,6 +9,7 @@
     "dev:client": "vite",
     "build": "vite build",
     "test": "node --test test/*.test.js",
+    "verify:public": "node scripts/verifyPublicExperience.mjs",
     "start": "NODE_ENV=production node server/index.js"
   },
   "dependencies": {
