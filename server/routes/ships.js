@@ -495,6 +495,96 @@ function mergeLive(ship) {
   return { ...ship, live: null }
 }
 
+// ── ShipXY proxy whitelist (public dashboard endpoints) ───────────────────
+const SHIPXY_PROXY_WHITELIST = {
+  SearchShip: ['keywords', 'max'],
+  GetSingleShip: ['mmsi'],
+  GetManyShip: ['mmsis'],
+  GetNearbyShip: ['mmsi'],
+  GetAreaShip: ['lat1', 'lng1', 'lat2', 'lng2', 'ship_type'],
+  GetShipRegistry: ['mmsi'],
+  GetShipArchives: ['mmsi'],
+  SearchPort: ['keyword'],
+  GetPortBerthedShips: ['port_code'],
+  GetPortAnchoredShips: ['port_code'],
+  GetPortExpectedShips: ['port_code'],
+  GetShipTrack: ['mmsi', 'start_time', 'end_time'],
+  RouteByPoints: ['lat1', 'lng1', 'lat2', 'lng2'],
+  RouteByPorts: ['port1', 'port2'],
+  GetETA: ['mmsi', 'port_code'],
+  GetPointWeather: ['lat', 'lng'],
+  GetTyphoons: [],
+  GetGlobalPortTide: ['port_code'],
+  GetFleetShip: ['fleet_id']
+}
+
+// Ships shown on the public dashboard when no watchlist is configured
+const DASHBOARD_DEFAULT_MMSIS = [
+  '413961925', '477172700', '477276900', '636018258', '219265000',
+  '228379800', '412304788', '370286000', '413761246', '413761521',
+  '413698530', '413552478', '413215487', '412703890', '538008645',
+  '212759000', '311000576', '566914000', '636017492', '352898159'
+]
+
+// ── Public: dashboard fleet data (GetManyShip via ShipXY, demo fallback) ──
+router.get('/dashboard-data', async (req, res) => {
+  let mmsis = []
+  try {
+    const rows = getAll('SELECT mmsi FROM ship_watchlist WHERE mmsi IS NOT NULL')
+    mmsis = rows.map(r => String(r.mmsi))
+  } catch (e) { /* table may not exist */ }
+  if (mmsis.length === 0) mmsis = DASHBOARD_DEFAULT_MMSIS
+
+  let ships = []
+  if (getShipxyKey()) {
+    for (let i = 0; i < mmsis.length; i += 100) {
+      const batch = mmsis.slice(i, i + 100)
+      const data = await shipxyGet('GetManyShip', { mmsis: batch.join(',') })
+      if (Array.isArray(data)) {
+        for (const s of data) {
+          applyShipxyShip(s)
+          ships.push(s)
+        }
+      }
+    }
+  }
+
+  if (ships.length === 0) {
+    ships = DEMO_SHIPS.map(d => ({
+      mmsi: d.mmsi, imo: d.imo, call_sign: d.callsign, ship_name: d.name, ship_cnname: null,
+      ship_type: 90, length: d.loa, width: d.beam, draught: null,
+      dest: d.dest, eta: d.eta, navistat: d.status === 'underway' ? 0 : d.status === 'anchored' ? 1 : 5,
+      lat: d.lat, lng: d.lon, sog: d.sog, cog: d.cog, hdg: d.heading,
+      data_source: 0, last_time: new Date().toISOString().replace('T', ' ').slice(0, 19)
+    }))
+  }
+
+  res.json(ships)
+})
+
+// ── Public: ShipXY proxy (whitelist only, key stays server-side) ──────────
+router.get('/shipxy/:endpoint', async (req, res) => {
+  const endpoint = req.params.endpoint
+  const allowed = SHIPXY_PROXY_WHITELIST[endpoint]
+  if (!allowed) return res.status(400).json({ error: 'unsupported_endpoint' })
+
+  const params = {}
+  for (const k of allowed) {
+    if (req.query[k] !== undefined && req.query[k] !== '') params[k] = req.query[k]
+  }
+
+  if (!getShipxyKey()) {
+    return res.status(503).json({ error: 'shipxy_key_not_configured' })
+  }
+
+  const data = await shipxyGet(endpoint, params)
+  if (data === null) {
+    return res.status(502).json({ error: 'shipxy_request_failed' })
+  }
+
+  res.json({ status: 0, msg: '', data })
+})
+
 // ── Public: watchlist with live data ──────────────────────────────────────
 router.get('/list-data', (req, res) => {
   try {
