@@ -256,9 +256,24 @@ async function initMap() {
   await nextTick()
   if (!mapRef.value) return
   map = L.map(mapRef.value, { center: [20, 110], zoom: 3, zoomControl: true, attributionControl: false })
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd', maxZoom: 20
-  }).addTo(map)
+
+  let tileErrors = 0
+  let fallbackAdded = false
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  })
+  osm.on('tileerror', () => {
+    tileErrors++
+    if (tileErrors >= 6 && !fallbackAdded) {
+      fallbackAdded = true
+      map.removeLayer(osm)
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19
+      }).addTo(map)
+    }
+  })
+  osm.addTo(map)
   renderMarkers()
 }
 

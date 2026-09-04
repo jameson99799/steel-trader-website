@@ -98,10 +98,14 @@ async function vesselApiGet(path) {
       headers: { 'Authorization': `Bearer ${key}`, 'Accept': 'application/json' },
       signal: AbortSignal.timeout(10000)
     })
-    if (!resp.ok) return null
+    if (!resp.ok) {
+      const body = await resp.text()
+      console.error(`[ships] VesselAPI ${path.split('?')[0]} -> HTTP ${resp.status}:`, body.slice(0, 200))
+      return null
+    }
     return await resp.json()
   } catch (e) {
-    console.error('VesselAPI error:', e.message)
+    console.error('[ships] VesselAPI error:', e.message)
     return null
   }
 }
@@ -365,10 +369,16 @@ router.get('/search', async (req, res) => {
   const key = getVesselApiKey()
   if (key) {
     try {
-      const data = await vesselApiGet(`/search/vessels?query=${encodeURIComponent(q)}`)
-      const items = Array.isArray(data) ? data : (data?.vessels || data?.results || [])
-      for (const it of items.slice(0, 5)) {
-        const name = it.vesselName || it.name || it.shipName || ''
+      const cleanQ = q.replace(/[^A-Za-z0-9]/g, '')
+      const isMmsi = /^\d{9}$/.test(cleanQ)
+      const isImo = /^\d{7}$/.test(cleanQ)
+      const filterParam = isMmsi ? `filter.mmsi=${cleanQ}`
+        : isImo ? `filter.imo=${cleanQ}`
+        : `filter.name=${encodeURIComponent(q)}`
+      const data = await vesselApiGet(`/search/vessels?${filterParam}&pagination.limit=10`)
+      const items = data?.vessels || data?.results || []
+      for (const it of items) {
+        const name = it.name || it.vessel_name || ''
         if (!name) continue
         const exists = results.some(r => r.name.toUpperCase() === name.toUpperCase() ||
           (it.mmsi && r.mmsi === it.mmsi) || (it.imo && r.imo === it.imo))
@@ -378,17 +388,17 @@ router.get('/search', async (req, res) => {
           name_en: name,
           imo: it.imo || null,
           mmsi: it.mmsi || null,
-          callsign: it.callsign || it.callSign || null,
+          callsign: it.call_sign || it.callsign || null,
           flag: it.flag || null,
-          flagName: it.flagName || null,
+          flagName: it.country || it.flag_name || it.flag || null,
           flagNameZh: null,
-          type: it.vesselType || it.shipType || 'Cargo',
+          type: it.vessel_type || it.shipType || 'Cargo',
           typeZh: null,
-          built: it.yearBuilt || null,
-          gt: it.grossTonnage || null,
-          dwt: it.deadweight || null,
+          built: it.year_built || it.yearBuilt || null,
+          gt: it.gross_tonnage || it.grossTonnage || null,
+          dwt: it.deadweight_tonnage || it.deadweight || null,
           loa: it.length || null,
-          beam: it.beam || null
+          beam: it.breadth || it.beam || null
         }
         if (it.mmsi) {
           searchTTL.set(String(it.mmsi), Date.now() + SEARCH_TRACK_MS)
