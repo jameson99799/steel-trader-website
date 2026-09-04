@@ -47,6 +47,105 @@ function normalizeStatus(raw) {
   return 'na'
 }
 
+// ── ShipXY (船讯网) — primary data source (China-reachable) ──────────────
+// API v3: https://api.shipxy.com/apicall/v3 — key in query param, {status:0,data:[...]}
+const SHIPXY_BASE = 'https://api.shipxy.com/apicall/v3'
+
+const SHIPXY_TYPE = {
+  0: { en: 'Unknown', zh: '未知' },
+  30: { en: 'Fishing', zh: '渔船' },
+  50: { en: 'Pilot Vessel', zh: '引航船' },
+  60: { en: 'Passenger', zh: '客船' },
+  70: { en: 'Cargo', zh: '货船' },
+  71: { en: 'Container Ship', zh: '集装箱船' },
+  80: { en: 'Tanker', zh: '油轮' },
+  81: { en: 'Chemical Tanker', zh: '化学品船' },
+  82: { en: 'LNG Carrier', zh: '液化气船' },
+  90: { en: 'Bulk Carrier', zh: '散货船' },
+  100: { en: 'General Cargo', zh: '杂货船' }
+}
+
+const SHIPXY_NS = { 0: 'underway', 1: 'anchored', 5: 'moored' }
+
+const shipxyDiag = { lastPoll: null, lastPollCount: 0, lastError: null }
+
+function getShipxyKey() {
+  const s = loadSettingsCache()
+  return s.shipxy || process.env.SHIPXY_API_KEY || ''
+}
+
+async function shipxyGet(endpoint, params) {
+  const key = getShipxyKey()
+  if (!key) return null
+  try {
+    const qs = new URLSearchParams({ key, ...params })
+    const resp = await fetch(`${SHIPXY_BASE}/${endpoint}?${qs}`, { signal: AbortSignal.timeout(10000) })
+    if (!resp.ok) {
+      console.error(`[ships] ShipXY ${endpoint} -> HTTP ${resp.status}`)
+      return null
+    }
+    const json = await resp.json()
+    if (json.status !== 0) {
+      console.error(`[ships] ShipXY ${endpoint} status=${json.status}`, String(json.msg || '').slice(0, 150))
+      return null
+    }
+    return json.data
+  } catch (e) {
+    console.error('[ships] ShipXY error:', e.message)
+    shipxyDiag.lastError = { at: new Date().toISOString(), message: e.message }
+    return null
+  }
+}
+
+function applyShipxyShip(s) {
+  if (!s || !s.mmsi) return
+  const mmsi = String(s.mmsi)
+  let entry = liveCache.get(mmsi) || { mmsi }
+  if (s.lat !== undefined && s.lng !== undefined && s.lat !== null && s.lng !== null) {
+    entry.lat = s.lat
+    entry.lon = s.lng
+  }
+  if (s.sog !== undefined && s.sog !== -1) entry.sog = s.sog
+  if (s.cog !== undefined && s.cog !== -1) entry.cog = s.cog
+  if (s.navistat !== undefined) entry.navStatus = SHIPXY_NS[s.navistat] || 'na'
+  if (s.ship_name) entry.name = s.ship_name
+  if (s.ship_cnname) entry.nameZh = s.ship_cnname
+  if (s.imo) entry.imo = s.imo
+  if (s.call_sign) entry.callsign = s.call_sign
+  if (s.ship_type !== undefined) {
+    const t = SHIPXY_TYPE[s.ship_type]
+    if (t) { entry.type = t.en; entry.typeZh = t.zh }
+  }
+  if (s.dest) entry.dest = String(s.dest).toUpperCase()
+  if (s.eta) entry.eta = s.eta
+  if (s.length) entry.loa = s.length
+  if (s.width) entry.beam = s.width
+  if (s.draught !== undefined && s.draught !== null) entry.draught = s.draught
+  entry.dataSource = s.data_source === 0 ? 'AIS岸基' : 'AIS卫星'
+  entry.source = 'live'
+  entry.updatedAt = new Date().toISOString()
+  liveCache.set(mmsi, entry)
+}
+
+async function shipxyPollWatchlist() {
+  const key = getShipxyKey()
+  if (!key) return
+  try {
+    const rows = getAll('SELECT mmsi FROM ship_watchlist WHERE mmsi IS NOT NULL')
+    if (rows.length === 0) return
+    const mmsis = rows.map(r => r.mmsi)
+    for (let i = 0; i < mmsis.length; i += 100) {
+      const batch = mmsis.slice(i, i + 100)
+      const data = await shipxyGet('GetManyShip', { mmsis: batch.join(',') })
+      if (Array.isArray(data)) {
+        for (const s of data) applyShipxyShip(s)
+      }
+    }
+    shipxyDiag.lastPoll = new Date().toISOString()
+    shipxyDiag.lastPollCount = rows.length
+  } catch (e) { /* handled */ }
+}
+
 // ── API settings (admin-managed, stored in DB, env fallback) ──────────────
 let settingsCache = null
 let settingsCacheTime = 0
@@ -57,14 +156,16 @@ function loadSettingsCache(force = false) {
   if (!force && settingsCache && now - settingsCacheTime < SETTINGS_TTL) return settingsCache
   let ais = null
   let vessel = null
+  let shipxy = null
   try {
     const rows = getAll('SELECT key, value FROM ship_settings')
     for (const r of rows) {
       if (r.key === 'aisstream_api_key') ais = r.value
       else if (r.key === 'vessel_api_key') vessel = r.value
+      else if (r.key === 'shipxy_api_key') shipxy = r.value
     }
   } catch (e) { /* table may not exist yet */ }
-  settingsCache = { aisstream: ais || null, vessel: vessel || null }
+  settingsCache = { aisstream: ais || null, vessel: vessel || null, shipxy: shipxy || null }
   settingsCacheTime = now
   return settingsCache
 }
@@ -318,6 +419,10 @@ setInterval(() => {
 
 setTimeout(() => { connectAisstream() }, 1500)
 
+// ShipXY watchlist polling (primary position source when key configured)
+setTimeout(() => { shipxyPollWatchlist() }, 2000)
+setInterval(() => { shipxyPollWatchlist() }, 30000)
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 function shipRowToObject(row) {
   const demo = DEMO_SHIPS.find(s => s.name.toUpperCase() === String(row.name).toUpperCase()) || null
@@ -349,6 +454,12 @@ function mergeLive(ship) {
   if (cached) {
     return {
       ...ship,
+      name: cached.name || ship.name,
+      nameZh: cached.nameZh || null,
+      type: cached.type || ship.type,
+      typeZh: cached.typeZh || ship.typeZh || null,
+      loa: cached.loa || ship.loa,
+      beam: cached.beam || ship.beam,
       live: {
         lat: cached.lat, lon: cached.lon,
         sog: cached.sog !== undefined ? cached.sog : null,
@@ -358,6 +469,8 @@ function mergeLive(ship) {
         dest: cached.dest || null,
         destZh: cached.dest && ship.destZh && cached.dest === ship.dest ? ship.destZh : null,
         eta: cached.eta || null,
+        draught: cached.draught || null,
+        dataSource: cached.dataSource || null,
         lastPort: ship.lastPort || null,
         lastPortZh: ship.lastPortZh || null,
         updatedAt: cached.updatedAt,
@@ -405,8 +518,51 @@ router.get('/search', async (req, res) => {
     results.push(mergeLive({ ...demo, name_en: demo.name }))
   }
 
-  const key = getVesselApiKey()
-  if (key) {
+  // 1. ShipXY (primary — China reachable)
+  const shipxyKey = getShipxyKey()
+  if (shipxyKey) {
+    try {
+      const list = await shipxyGet('SearchShip', { keywords: q, max: 10 })
+      if (Array.isArray(list)) {
+        for (const s of list) {
+          const name = s.ship_name || s.ship_cnname || ''
+          if (!name) continue
+          const exists = results.some(r =>
+            r.name.toUpperCase() === name.toUpperCase() || (s.mmsi && r.mmsi === s.mmsi)
+          )
+          if (exists) continue
+          const t = SHIPXY_TYPE[s.ship_type]
+          results.push(mergeLive({
+            name,
+            name_en: s.ship_name || name,
+            nameZh: s.ship_cnname || null,
+            mmsi: s.mmsi || null,
+            imo: s.imo || null,
+            callsign: s.call_sign || null,
+            type: t?.en || 'Cargo',
+            typeZh: t?.zh || null,
+            loa: s.length || null,
+            beam: s.width || null
+          }))
+        }
+        // Enrich the top result with full position/voyage details (1 call)
+        const top = results.find(r => r.mmsi)
+        if (top) {
+          const detail = await shipxyGet('GetSingleShip', { mmsi: top.mmsi })
+          if (Array.isArray(detail) && detail[0]) {
+            applyShipxyShip(detail[0])
+          }
+        }
+        if (results.some(r => r.mmsi)) scheduleSubscriptionUpdate(2000)
+      }
+    } catch (e) {
+      console.error('ShipXY search error:', e.message)
+    }
+  }
+
+  // 2. VesselAPI (secondary search fallback)
+  const vesselKey = getVesselApiKey()
+  if (vesselKey) {
     try {
       const cleanQ = q.replace(/[^A-Za-z0-9]/g, '')
       const isMmsi = /^\d{9}$/.test(cleanQ)
@@ -512,6 +668,8 @@ router.delete('/:id', authMiddleware, (req, res) => {
 router.get('/settings', authMiddleware, (req, res) => {
   const s = loadSettingsCache(true)
   res.json({
+    shipxy_api_key_display: maskSecret(s.shipxy),
+    shipxy_api_key_configured: Boolean(s.shipxy || process.env.SHIPXY_API_KEY),
     aisstream_api_key_display: maskSecret(s.aisstream),
     aisstream_api_key_configured: Boolean(s.aisstream || process.env.AISSTREAM_API_KEY),
     vessel_api_key_display: maskSecret(s.vessel),
@@ -521,9 +679,16 @@ router.get('/settings', authMiddleware, (req, res) => {
 
 // ── Admin: update API settings ────────────────────────────────────────────
 router.put('/settings', authMiddleware, (req, res) => {
-  const { aisstream_api_key, vessel_api_key } = req.body
+  const { shipxy_api_key, aisstream_api_key, vessel_api_key } = req.body
   let aisChanged = false
 
+  if (typeof shipxy_api_key === 'string') {
+    run(
+      `INSERT INTO ship_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+      ['shipxy_api_key', shipxy_api_key.trim()]
+    )
+  }
   if (typeof aisstream_api_key === 'string') {
     run(
       `INSERT INTO ship_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
@@ -548,6 +713,10 @@ router.put('/settings', authMiddleware, (req, res) => {
 // ── Admin: live connection status ─────────────────────────────────────────
 router.get('/status', authMiddleware, (req, res) => {
   res.json({
+    shipxy_key_configured: Boolean(getShipxyKey()),
+    shipxy_last_poll: shipxyDiag.lastPoll,
+    shipxy_last_poll_count: shipxyDiag.lastPollCount,
+    shipxy_last_error: shipxyDiag.lastError,
     aisstream_key_configured: Boolean(getAisstreamKey()),
     aisstream_connected: Boolean(ws && ws.readyState === 1),
     tracked_count: requestedMMSIs.size,
@@ -568,6 +737,21 @@ router.post('/test-connection', authMiddleware, async (req, res) => {
   const steps = []
   const record = (name, ok, detail) => steps.push({ step: name, ok, detail: String(detail || '') })
 
+  // 1. ShipXY (primary) — direct API call test
+  if (getShipxyKey()) {
+    const data = await shipxyGet('SearchShip', { keywords: 'PACIFIC', max: 3 })
+    if (Array.isArray(data) && data.length > 0) {
+      record('船讯网 API', true, `搜索成功，返回 ${data.length} 条 (如 ${data[0].ship_name || data[0].ship_cnname || data[0].mmsi})`)
+    } else if (data === null) {
+      record('船讯网 API', false, '请求失败（Key 无效 / 无权限 / 网络不通），详见服务端日志')
+    } else {
+      record('船讯网 API', false, '返回结果为空')
+    }
+  } else {
+    record('船讯网 API', false, '未配置 SHIPXY_API_KEY')
+  }
+
+  // 2. aisstream (optional fallback) — DNS/TCP/WS handshake
   try {
     const dns = await import('node:dns/promises')
     const result = await dns.lookup('stream.aisstream.io')
@@ -585,9 +769,9 @@ router.post('/test-connection', authMiddleware, async (req, res) => {
     })
   })
 
-  const key = getAisstreamKey()
-  if (!key) {
-    record('WebSocket', false, '未配置 AISSTREAM_API_KEY')
+  const aisKey = getAisstreamKey()
+  if (!aisKey) {
+    record('WebSocket', false, '未配置 AISSTREAM_API_KEY（可选备用源）')
   } else {
     await new Promise((resolve) => {
       let finished = false
@@ -611,7 +795,7 @@ router.post('/test-connection', authMiddleware, async (req, res) => {
       sock.on('open', () => {
         record('WebSocket', true, '握手成功，正在发送订阅...')
         try {
-          sock.send(JSON.stringify({ APIKey: key, BoundingBoxes: [[[-90, -180], [90, 180]]] }))
+          sock.send(JSON.stringify({ APIKey: aisKey, BoundingBoxes: [[[-90, -180], [90, 180]]] }))
         } catch (e) {
           record('订阅', false, e.message)
           finish()

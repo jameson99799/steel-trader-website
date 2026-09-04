@@ -14,16 +14,30 @@
         </span>
       </div>
       <p class="hint">
-        AISSTREAM_API_KEY 用于实时船位（免费，无查询次数限制，在 <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a> 注册）；VESSEL_API_KEY 用于按船名搜索（免费档约 150 次/月，在 <a href="https://dashboard.vesselapi.com" target="_blank" rel="noopener">vesselapi.com</a> 注册）。不配置时前台使用演示数据。
+        <b>SHIPXY_API_KEY 是主数据源</b>（船讯网，国内直连，搜索+实时位置，在 <a href="https://api.shipxy.com/v3/console/overview" target="_blank" rel="noopener">船讯网控制台</a> 注册申请）；AISSTREAM_API_KEY（aisstream.io）和 VESSEL_API_KEY（vesselapi.com）为可选备用源。均不配置时前台使用演示数据。
       </p>
 
       <div class="api-row">
-        <label class="api-label">AISSTREAM_API_KEY <span class="api-role">实时位置</span></label>
+        <label class="api-label">SHIPXY_API_KEY <span class="api-role pri">主数据源</span></label>
+        <div class="api-input-row">
+          <input
+            :type="showShipxy ? 'text' : 'password'"
+            v-model="shipxyKey"
+            :placeholder="apiSettings.shipxy_api_key_configured ? apiSettings.shipxy_api_key_display + '（已配置，留空则保持不变）' : '输入船讯网 API Key'"
+            class="api-input"
+          />
+          <button class="api-toggle" @click="showShipxy = !showShipxy">{{ showShipxy ? '隐藏' : '显示' }}</button>
+          <button v-if="apiSettings.shipxy_api_key_configured" class="api-clear" @click="clearShipxy = true; shipxyKey = ''">清除</button>
+        </div>
+      </div>
+
+      <div class="api-row">
+        <label class="api-label">AISSTREAM_API_KEY <span class="api-role">备用实时源</span></label>
         <div class="api-input-row">
           <input
             :type="showAis ? 'text' : 'password'"
             v-model="aisKey"
-            :placeholder="apiSettings.aisstream_api_key_configured ? apiSettings.aisstream_api_key_display + '（已配置，留空则保持不变）' : '输入 aisstream.io API Key'"
+            :placeholder="apiSettings.aisstream_api_key_configured ? apiSettings.aisstream_api_key_display + '（已配置，留空则保持不变）' : '输入 aisstream.io API Key（可选）'"
             class="api-input"
           />
           <button class="api-toggle" @click="showAis = !showAis">{{ showAis ? '隐藏' : '显示' }}</button>
@@ -62,6 +76,11 @@
         <div class="test-summary" :class="testOverall ? 'ok' : 'bad'">
           {{ testOverall ? '✅ 连接正常，船舶数据应能实时推送' : '❌ 连接异常，见上方步骤' }}
         </div>
+      </div>
+      <div v-if="apiStatus.shipxy_key_configured" class="api-diag">
+        <div v-if="apiStatus.shipxy_last_poll">🟢 船讯网数据轮询正常（最近: {{ formatDiagTime(apiStatus.shipxy_last_poll) }}，{{ apiStatus.shipxy_last_poll_count ?? 0 }} 艘）</div>
+        <div v-else-if="apiStatus.shipxy_last_error">⚠️ 船讯网请求错误 ({{ formatDiagTime(apiStatus.shipxy_last_error.at) }}): <b>{{ apiStatus.shipxy_last_error.message }}</b></div>
+        <div v-else>⏳ 等待首次轮询（最多 30 秒）...</div>
       </div>
       <div v-if="apiStatus.last_error || apiStatus.last_close || apiStatus.opened_at" class="api-diag">
         <div v-if="apiStatus.opened_at">🟢 最近连接成功: {{ formatDiagTime(apiStatus.opened_at) }}（已订阅 {{ apiStatus.last_subscribe_count ?? 0 }} 艘，收到消息 {{ apiStatus.messages_received ?? 0 }} 条）</div>
@@ -179,15 +198,18 @@ const toast = ref({ show: false, type: 'success', msg: '' })
 let searchTimer = null
 const dragIndex = ref(null)
 
-const apiSettings = ref({ aisstream_api_key_configured: false, aisstream_api_key_display: '', vessel_api_key_configured: false, vessel_api_key_display: '' })
-const apiStatus = ref({ aisstream_connected: false, tracked_count: 0, connect_attempts: 0, opened_at: null, subscribed_at: null, last_subscribe_count: 0, messages_received: 0, last_error: null, last_close: null })
+const apiSettings = ref({ shipxy_api_key_configured: false, shipxy_api_key_display: '', aisstream_api_key_configured: false, aisstream_api_key_display: '', vessel_api_key_configured: false, vessel_api_key_display: '' })
+const apiStatus = ref({ shipxy_key_configured: false, shipxy_last_poll: null, shipxy_last_poll_count: 0, shipxy_last_error: null, aisstream_connected: false, tracked_count: 0, connect_attempts: 0, opened_at: null, subscribed_at: null, last_subscribe_count: 0, messages_received: 0, last_error: null, last_close: null })
 const testResults = ref([])
 const testOverall = ref(false)
 const testingConn = ref(false)
+const shipxyKey = ref('')
 const aisKey = ref('')
 const vesselKey = ref('')
+const showShipxy = ref(false)
 const showAis = ref(false)
 const showVessel = ref(false)
+const clearShipxy = ref(false)
 const clearAis = ref(false)
 const clearVessel = ref(false)
 const savingApi = ref(false)
@@ -236,6 +258,8 @@ async function saveApiSettings() {
   savingApi.value = true
   try {
     const payload = {}
+    if (clearShipxy.value) payload.shipxy_api_key = ''
+    else if (shipxyKey.value.trim()) payload.shipxy_api_key = shipxyKey.value.trim()
     if (clearAis.value) payload.aisstream_api_key = ''
     else if (aisKey.value.trim()) payload.aisstream_api_key = aisKey.value.trim()
     if (clearVessel.value) payload.vessel_api_key = ''
@@ -245,8 +269,10 @@ async function saveApiSettings() {
       return
     }
     await api.updateShipSettings(payload)
+    shipxyKey.value = ''
     aisKey.value = ''
     vesselKey.value = ''
+    clearShipxy.value = false
     clearAis.value = false
     clearVessel.value = false
     showToast('API 配置已保存')
@@ -375,6 +401,7 @@ onUnmounted(() => {
 .api-row { margin-bottom: 14px; }
 .api-label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
 .api-role { font-size: 10px; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; }
+.api-role.pri { background: #fef3c7; color: #92400e; }
 .api-input-row { display: flex; gap: 8px; }
 .api-input {
   flex: 1; padding: 10px 14px; border: 2px solid #e2e8f0;

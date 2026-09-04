@@ -62,7 +62,7 @@
           >
             <div class="c-l1">
               <div class="c-name">
-                {{ ship.name }}
+                {{ displayName(ship) }}
                 <span v-if="!hasPos(ship)" class="c-tag">{{ t('shipNoPosition') || '暂无位置' }}</span>
               </div>
               <span class="status-pill" :class="statusClass(ship)">{{ statusText(ship) }}</span>
@@ -92,7 +92,7 @@
           <button class="modal-close" @click="closeDetail">✕</button>
           <div class="modal-head">
             <div>
-              <h3>🚢 {{ selected.name }}</h3>
+              <h3>🚢 {{ displayName(selected) }}</h3>
               <div class="modal-meta">
                 <span v-if="selected.imo">IMO {{ selected.imo }}</span>
                 <span v-if="selected.mmsi">MMSI {{ selected.mmsi }}</span>
@@ -127,6 +127,7 @@
               <div class="sec-item"><div class="k">{{ t('shipDwt') || '载重吨' }}</div><div class="v">{{ selected.dwt ? selected.dwt.toLocaleString() + ' t' : '--' }}</div></div>
               <div class="sec-item"><div class="k">{{ t('shipLoa') || '总长' }}</div><div class="v">{{ selected.loa ? selected.loa + ' m' : '--' }}</div></div>
               <div class="sec-item"><div class="k">{{ t('shipBeam') || '船宽' }}</div><div class="v">{{ selected.beam ? selected.beam + ' m' : '--' }}</div></div>
+              <div class="sec-item" v-if="selected.live && selected.live.draught"><div class="k">{{ t('shipDraught') || '吃水' }}</div><div class="v">{{ selected.live.draught }} m</div></div>
             </div>
           </div>
 
@@ -181,6 +182,12 @@ function shipColor(ship) {
   if (type.includes('fish')) return TYPE_COLORS.fishing
   if (type.includes('cargo') || type.includes('container')) return TYPE_COLORS.cargo
   return TYPE_COLORS.other
+}
+
+function displayName(ship) {
+  if (!ship) return ''
+  if (lang.value === 'zh' && ship.nameZh) return ship.nameZh
+  return ship.name || ship.name_en || ''
 }
 
 function hasPos(ship) {
@@ -287,7 +294,7 @@ function renderMarkers() {
     let marker = markers.get(key)
     if (!marker) {
       const color = shipColor(ship)
-      const label = String(ship.name || key).slice(0, 10)
+      const label = String(displayName(ship) || key).slice(0, 10)
       const icon = L.divIcon({
         className: 'ship-marker-wrap',
         html: `<div class="ship-marker" style="--mc:${color}"><span class="m-dot"></span><span class="m-lbl">${label}</span></div>`,
