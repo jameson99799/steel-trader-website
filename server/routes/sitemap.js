@@ -148,6 +148,7 @@ router.get('/static', (req, res) => {
             { loc: '/news/ral-colors', priority: '0.5', changefreq: 'yearly', lastmod: '2024-03-01' },
             { loc: '/news/roofing-profiles', priority: '0.7', changefreq: 'weekly', lastmod: '2024-04-01' },
             { loc: '/news/futures-price', priority: '0.8', changefreq: 'daily', lastmod: new Date().toISOString().split('T')[0] }, // Only futures price changes daily truly
+            { loc: '/news/ship-tracker', priority: '0.8', changefreq: 'daily', lastmod: new Date().toISOString().split('T')[0] },
         ]
 
         const seoSettings = getSeoSettings()

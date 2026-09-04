@@ -152,6 +152,9 @@
                 <router-link :to="langPath('/news/futures-price')" @click="menuOpen = false" class="nav-dropdown-item">
                   {{ t('futuresTitle') || 'Futures Price' }}
                 </router-link>
+                <router-link :to="langPath('/news/ship-tracker')" @click="menuOpen = false" class="nav-dropdown-item">
+                  {{ t('shipTrackTitle') || 'Ship Tracker' }}
+                </router-link>
               </div>
             </div>
 

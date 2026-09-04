@@ -1329,6 +1329,31 @@ Requirements:
     )
   `)
 
+  // ── Ship Watchlist ───────────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ship_watchlist (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      imo INTEGER,
+      mmsi INTEGER,
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  const shipCount = db.prepare('SELECT COUNT(*) as count FROM ship_watchlist').get().count
+  if (shipCount === 0) {
+    const defaultShips = [
+      ['PACIFIC TALENT', 9712943, 477900500],
+      ['PACIFIC BLISS', 1047524, 477155700],
+      ['PACIFIC CHAMP', 9856244, 636024366],
+      ['PACIFIC MERIT', 9731987, 477148900],
+      ['PACIFIC VICTORY', 9731896, 477035200]
+    ]
+    const insertShip = db.prepare('INSERT INTO ship_watchlist (name, imo, mmsi, sort_order) VALUES (?, ?, ?, ?)')
+    defaultShips.forEach((s, i) => insertShip.run(s[0], s[1], s[2], i + 1))
+  }
+
   // ── Performance Indexes ──────────────────────────────────────────────────
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)') } catch (e) { }
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_slug ON products(slug)') } catch (e) { }

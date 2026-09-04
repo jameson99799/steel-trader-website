@@ -23,17 +23,23 @@
               <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
               <span class="breadcrumb-current">{{ t('futuresPriceBtn') }}</span>
             </template>
+            <template v-else-if="route.name === 'NewsShipTracker'">
+              <svg class="breadcrumb-separator" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+              <span class="breadcrumb-current">{{ t('shipTrackBtn') }}</span>
+            </template>
           </nav>
           <h1 class="page-title">
             <template v-if="route.name === 'NewsRalColors'">🎨 {{ t('ralColorChart') }}</template>
             <template v-else-if="route.name === 'NewsRoofingProfiles'">📐 {{ t('roofingTitle') }}</template>
             <template v-else-if="route.name === 'NewsFuturesPrice'">📈 {{ t('futuresTitle') }}</template>
+            <template v-else-if="route.name === 'NewsShipTracker'">🚢 {{ t('shipTrackTitle') }}</template>
             <template v-else>{{ activeCategory ? localizedValue(activeCategory, 'name') : t('newsUpdates') }}</template>
           </h1>
           <p class="page-subtitle">
             <template v-if="route.name === 'NewsRalColors'">{{ t('ralDesc') }}</template>
             <template v-else-if="route.name === 'NewsRoofingProfiles'">{{ t('roofingProfilesDesc') }}</template>
             <template v-else-if="route.name === 'NewsFuturesPrice'">{{ t('futuresDesc') }}</template>
+            <template v-else-if="route.name === 'NewsShipTracker'">{{ t('shipTrackDesc') }}</template>
             <template v-else>{{ activeCategory ? t('browseArticlesIn') + ' ' + localizedValue(activeCategory, 'name') : t('newsSubtitle') }}</template>
           </p>
 
@@ -63,6 +69,12 @@
             >
               <span class="ral-icon">📈</span> {{ t('futuresPriceBtn') }}
             </router-link>
+            <router-link 
+              :to="langPath('/news/ship-tracker')" 
+              :class="['cat-btn', 'ship-btn', route.name === 'NewsShipTracker' ? 'active' : '']"
+            >
+              <span class="ral-icon">🚢</span> {{ t('shipTrackBtn') }}
+            </router-link>
           </div>
         </div>
       </div>
@@ -78,6 +90,9 @@
         </template>
         <template v-else-if="route.name === 'NewsFuturesPrice'">
           <FuturesPrice />
+        </template>
+        <template v-else-if="route.name === 'NewsShipTracker'">
+          <ShipTracker />
         </template>
         <template v-else>
           <div v-if="loading" class="loading-state">
@@ -126,6 +141,7 @@ import api from '../api'
 import RalColors from './RalColors.vue'
 import RoofingProfiles from './RoofingProfiles.vue'
 const FuturesPrice = defineAsyncComponent(() => import('./FuturesPrice.vue'))
+const ShipTracker = defineAsyncComponent(() => import('./ShipTracker.vue'))
 
 const { lang, t, localizedValue, langPath } = useLang()
 const router = useRouter()
@@ -164,7 +180,7 @@ async function loadCategories() {
 }
 
 async function loadNews() {
-  if (route.name === 'NewsRalColors' || route.name === 'NewsRoofingProfiles' || route.name === 'NewsFuturesPrice') {
+  if (route.name === 'NewsRalColors' || route.name === 'NewsRoofingProfiles' || route.name === 'NewsFuturesPrice' || route.name === 'NewsShipTracker') {
     loading.value = false
     return
   }
@@ -300,6 +316,27 @@ onMounted(() => { loadCategories(); loadNews() })
     linear-gradient(135deg, #16a34a, #0891b2) border-box;
   color: #15803d; transform: translateY(-2px);
   box-shadow: 0 4px 16px rgba(22,163,74,.2);
+}
+
+/* Ship Tracker button */
+.ship-btn {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--white, #fff), var(--white, #fff)) padding-box,
+    linear-gradient(135deg, #0ea5e9, #6366f1) border-box;
+  color: #0369a1;
+}
+.ship-btn.active {
+  background: var(--primary, #1a56db);
+  color: #fff;
+  border-color: var(--primary, #1a56db);
+}
+.ship-btn:hover {
+  background:
+    linear-gradient(135deg, rgba(14,165,233,.06), rgba(99,102,241,.06)) padding-box,
+    linear-gradient(135deg, #0ea5e9, #6366f1) border-box;
+  color: #0c4a6e; transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(14,165,233,.2);
 }
 
 /* ── News Grid ── */

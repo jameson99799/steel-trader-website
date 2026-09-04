@@ -21,6 +21,7 @@ const publicRoutes = [
   { path: 'news/ral-colors', name: 'NewsRalColors', component: News },
   { path: 'news/roofing-profiles', name: 'NewsRoofingProfiles', component: News },
   { path: 'news/futures-price', name: 'NewsFuturesPrice', component: News },
+  { path: 'news/ship-tracker', name: 'NewsShipTracker', component: News },
   { path: 'news/:slug', name: 'NewsDetail', component: NewsDetail },
   { path: 'about', name: 'About', component: About },
   { path: 'contact', name: 'Contact', component: Contact },
@@ -94,7 +95,8 @@ const routes = [
       { path: 'mailer', name: 'AdminMailer', component: () => import('../views/admin/Mailer.vue') },
       { path: 'chat', name: 'AdminChat', component: () => import('../views/admin/ChatSettings.vue') },
       { path: 'media', name: 'AdminMedia', component: () => import('../views/admin/MediaLibrary.vue') },
-      { path: 'futures', name: 'AdminFutures', component: () => import('../views/admin/Futures.vue') }
+      { path: 'futures', name: 'AdminFutures', component: () => import('../views/admin/Futures.vue') },
+      { path: 'ships', name: 'AdminShips', component: () => import('../views/admin/Ships.vue') }
     ]
   },
   // ─── CRM Routes (Admin) ────────────────────────────────────────────────────
@@ -220,6 +222,7 @@ router.afterEach((to) => {
     'NewsRalColors': t('ralColorChart'),
     'NewsRoofingProfiles': t('roofingTitle'),
     'NewsFuturesPrice': t('futuresTitle'),
+    'NewsShipTracker': t('shipTrackTitle'),
     'About': t('aboutUs'),
     'Contact': t('contactUs'),
     'Factory': t('factoryTour'),

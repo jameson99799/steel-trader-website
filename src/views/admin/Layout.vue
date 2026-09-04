@@ -12,6 +12,7 @@
         <router-link to="/admin/reviews">⭐ 产品评价</router-link>
         <router-link to="/admin/roofing-profiles">🏠 瓦型图管理</router-link>
         <router-link to="/admin/futures">📈 期货价格</router-link>
+        <router-link to="/admin/ships">🚢 船舶追踪</router-link>
         <router-link to="/admin/media">📷 图库管理</router-link>
         <router-link to="/admin/inquiries">
           📬 询盘管理

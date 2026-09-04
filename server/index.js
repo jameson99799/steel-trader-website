@@ -65,6 +65,7 @@ import ralColorsRoutes from './routes/ral-colors.js'
 import roofingProfilesRoutes from './routes/roofing-profiles.js'
 import factoryRoutes from './routes/factory.js'
 import futuresRoutes from './routes/futures.js'
+import shipsRoutes from './routes/ships.js'
 import chatRoutes from './routes/chat.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -443,6 +444,7 @@ async function startServer() {
     app.use('/api/roofing-profiles', roofingProfilesRoutes)
     app.use('/api/factory', factoryRoutes)
     app.use('/api/futures', futuresRoutes)
+    app.use('/api/ships', shipsRoutes)
     app.use('/sitemap-news.xml', (req, res, next) => { req.url = '/news'; sitemapRoutes(req, res, next) })
     app.use('/api/languages', languagesRoutes)
     app.use('/api/translation', translationRoutes)
@@ -802,7 +804,7 @@ async function startServer() {
           }
 
           // ── News detail page (skip /news/category/ and static /news/ URLs) ──
-          const newsMatch = subPath.match(/^\/news\/(?!category\/|ral-colors\/?$|roofing-profiles\/?$|futures-price\/?$)(.+)$/)
+          const newsMatch = subPath.match(/^\/news\/(?!category\/|ral-colors\/?$|roofing-profiles\/?$|futures-price\/?$|ship-tracker\/?$)(.+)$/)
           if (newsMatch) {
             matchedRoute = true
             const slug = newsMatch[1]
@@ -1124,6 +1126,25 @@ async function startServer() {
                 return `<tr><td>${esc(name)}</td><td>${esc(w.symbol)}</td></tr>`
               }).join('')
               ssrContent = `<section id="ssr-futures"><h1>Real-time Steel Futures Prices</h1><table><thead><tr><th>Product Name</th><th>Symbol</th></tr></thead><tbody>${tableRows}</tbody></table></section>`
+            }
+          } else if (subPath === '/news/ship-tracker' || subPath === '/news/ship-tracker/') {
+            matchedRoute = true
+            isNotFound = false
+            pageTitle = `Live Ship Tracker & Vessel Positions | ${companyNameTranslated}`
+            pageDesc = `Track live vessel positions, ETA and ship particulars for bulk carriers carrying steel coils. Essential logistics data for steel buyers and traders from ${companyNameTranslated}.`
+            extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
+              { '@type': 'ListItem', position: 3, name: 'Ship Tracker', item: pageCanonical }
+            ] })
+
+            const shipWatchlist = getAll('SELECT id, name, imo, mmsi FROM ship_watchlist ORDER BY sort_order ASC')
+            if (shipWatchlist && shipWatchlist.length) {
+              const shipRows = shipWatchlist.map(s => {
+                const info = s.imo ? `IMO ${s.imo}` : (s.mmsi ? `MMSI ${s.mmsi}` : '')
+                return `<tr><td>${esc(s.name)}</td><td>${esc(info)}</td></tr>`
+              }).join('')
+              ssrContent = `<section id="ssr-ships"><h1>Live Ship Tracker</h1><p>Track bulk carriers and cargo vessels carrying steel products with live AIS positions, speed, course and ETA.</p><table><thead><tr><th>Vessel Name</th><th>Identification</th></tr></thead><tbody>${shipRows}</tbody></table></section>`
             }
           }
 

@@ -393,7 +393,15 @@ export const api = {
   reorderFutures: (items) => request('/futures/reorder', { method: 'PUT', body: JSON.stringify({ items }) }),
   deleteFutures: (id) => request(`/futures/${id}`, { method: 'DELETE' }),
   getFuturesSettings: () => request('/futures/settings'),
-  updateFuturesSettings: (data) => request('/futures/settings', { method: 'PUT', body: JSON.stringify(data) })
+  updateFuturesSettings: (data) => request('/futures/settings', { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Ship Tracker
+  getShipList: () => request('/ships'),
+  getShipListData: () => request('/ships/list-data'),
+  searchShips: (q) => request(`/ships/search?q=${encodeURIComponent(q)}`),
+  addShip: (data) => request('/ships', { method: 'POST', body: JSON.stringify(data) }),
+  reorderShips: (items) => request('/ships/reorder', { method: 'PUT', body: JSON.stringify({ items }) }),
+  deleteShip: (id) => request(`/ships/${id}`, { method: 'DELETE' })
 }
 
 export default api
