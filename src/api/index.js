@@ -401,7 +401,10 @@ export const api = {
   searchShips: (q) => request(`/ships/search?q=${encodeURIComponent(q)}`),
   addShip: (data) => request('/ships', { method: 'POST', body: JSON.stringify(data) }),
   reorderShips: (items) => request('/ships/reorder', { method: 'PUT', body: JSON.stringify({ items }) }),
-  deleteShip: (id) => request(`/ships/${id}`, { method: 'DELETE' })
+  deleteShip: (id) => request(`/ships/${id}`, { method: 'DELETE' }),
+  getShipSettings: () => request('/ships/settings'),
+  updateShipSettings: (data) => request('/ships/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  getShipStatus: () => request('/ships/status')
 }
 
 export default api

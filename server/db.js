@@ -1341,6 +1341,15 @@ Requirements:
     )
   `)
 
+  // ── Ship Tracker API Settings ─────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ship_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
   const shipCount = db.prepare('SELECT COUNT(*) as count FROM ship_watchlist').get().count
   if (shipCount === 0) {
     const defaultShips = [

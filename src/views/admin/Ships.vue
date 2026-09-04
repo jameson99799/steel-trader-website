@@ -5,6 +5,54 @@
       <p class="page-desc">添加需要在前台展示的船舶，支持按船名 / IMO / MMSI 搜索，可自定义排序。</p>
     </div>
 
+    <!-- API Settings -->
+    <div class="api-section">
+      <div class="api-header">
+        <h3>🔑 API 配置</h3>
+        <span class="api-badge" :class="apiStatus.aisstream_connected ? 'badge-on' : 'badge-off'">
+          {{ apiStatus.aisstream_connected ? '实时连接中 (' + apiStatus.tracked_count + ' 艘)' : '未连接' }}
+        </span>
+      </div>
+      <p class="hint">
+        AISSTREAM_API_KEY 用于实时船位（免费，无查询次数限制，在 <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a> 注册）；VESSEL_API_KEY 用于按船名搜索（免费档约 150 次/月，在 <a href="https://dashboard.vesselapi.com" target="_blank" rel="noopener">vesselapi.com</a> 注册）。不配置时前台使用演示数据。
+      </p>
+
+      <div class="api-row">
+        <label class="api-label">AISSTREAM_API_KEY <span class="api-role">实时位置</span></label>
+        <div class="api-input-row">
+          <input
+            :type="showAis ? 'text' : 'password'"
+            v-model="aisKey"
+            :placeholder="apiSettings.aisstream_api_key_configured ? apiSettings.aisstream_api_key_display + '（已配置，留空则保持不变）' : '输入 aisstream.io API Key'"
+            class="api-input"
+          />
+          <button class="api-toggle" @click="showAis = !showAis">{{ showAis ? '隐藏' : '显示' }}</button>
+          <button v-if="apiSettings.aisstream_api_key_configured" class="api-clear" @click="clearAis = true; aisKey = ''">清除</button>
+        </div>
+      </div>
+
+      <div class="api-row">
+        <label class="api-label">VESSEL_API_KEY <span class="api-role">船舶搜索</span></label>
+        <div class="api-input-row">
+          <input
+            :type="showVessel ? 'text' : 'password'"
+            v-model="vesselKey"
+            :placeholder="apiSettings.vessel_api_key_configured ? apiSettings.vessel_api_key_display + '（已配置，留空则保持不变）' : '输入 vesselapi.com API Key'"
+            class="api-input"
+          />
+          <button class="api-toggle" @click="showVessel = !showVessel">{{ showVessel ? '隐藏' : '显示' }}</button>
+          <button v-if="apiSettings.vessel_api_key_configured" class="api-clear" @click="clearVessel = true; vesselKey = ''">清除</button>
+        </div>
+      </div>
+
+      <div class="api-actions">
+        <button class="btn-save" @click="saveApiSettings" :disabled="savingApi">
+          {{ savingApi ? '保存中...' : '保存 API 配置' }}
+        </button>
+        <span class="api-note">保存后实时连接约 5 秒内自动生效，无需重启服务</span>
+      </div>
+    </div>
+
     <!-- Search & Add -->
     <div class="add-section">
       <h3>添加船舶</h3>
@@ -95,7 +143,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import api from '../../api'
 
 const watchlist = ref([])
@@ -109,9 +157,59 @@ const toast = ref({ show: false, type: 'success', msg: '' })
 let searchTimer = null
 const dragIndex = ref(null)
 
+const apiSettings = ref({ aisstream_api_key_configured: false, aisstream_api_key_display: '', vessel_api_key_configured: false, vessel_api_key_display: '' })
+const apiStatus = ref({ aisstream_connected: false, tracked_count: 0 })
+const aisKey = ref('')
+const vesselKey = ref('')
+const showAis = ref(false)
+const showVessel = ref(false)
+const clearAis = ref(false)
+const clearVessel = ref(false)
+const savingApi = ref(false)
+let statusTimer = null
+
 function showToast(msg, type = 'success') {
   toast.value = { show: true, type, msg }
   setTimeout(() => { toast.value.show = false }, 3000)
+}
+
+async function loadApiSettings() {
+  try {
+    apiSettings.value = await api.getShipSettings()
+  } catch (e) { /* ignore */ }
+}
+
+async function refreshApiStatus() {
+  try {
+    apiStatus.value = await api.getShipStatus()
+  } catch (e) { /* ignore */ }
+}
+
+async function saveApiSettings() {
+  savingApi.value = true
+  try {
+    const payload = {}
+    if (clearAis.value) payload.aisstream_api_key = ''
+    else if (aisKey.value.trim()) payload.aisstream_api_key = aisKey.value.trim()
+    if (clearVessel.value) payload.vessel_api_key = ''
+    else if (vesselKey.value.trim()) payload.vessel_api_key = vesselKey.value.trim()
+    if (Object.keys(payload).length === 0) {
+      showToast('没有需要保存的变更', 'error')
+      return
+    }
+    await api.updateShipSettings(payload)
+    aisKey.value = ''
+    vesselKey.value = ''
+    clearAis.value = false
+    clearVessel.value = false
+    showToast('API 配置已保存')
+    await loadApiSettings()
+    setTimeout(refreshApiStatus, 5000)
+  } catch (e) {
+    showToast('保存失败: ' + e.message, 'error')
+  } finally {
+    savingApi.value = false
+  }
 }
 
 function isAdded(item) {
@@ -195,7 +293,16 @@ async function onDrop() {
 }
 function onDragEnd() { dragIndex.value = null }
 
-onMounted(loadList)
+onMounted(() => {
+  loadList()
+  loadApiSettings()
+  refreshApiStatus()
+  statusTimer = setInterval(refreshApiStatus, 30000)
+})
+
+onUnmounted(() => {
+  if (statusTimer) clearInterval(statusTimer)
+})
 </script>
 
 <style scoped>
@@ -204,6 +311,51 @@ onMounted(loadList)
 .page-header { margin-bottom: 24px; }
 .page-header h1 { font-size: 24px; font-weight: 800; color: var(--text-primary); margin-bottom: 6px; }
 .page-desc { color: var(--text-secondary); font-size: 14px; }
+
+/* API Settings Section */
+.api-section {
+  background: #fff; border-radius: 12px;
+  padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 24px;
+  border: 1px solid #e0e7ff;
+}
+.api-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.api-header h3 { font-size: 16px; font-weight: 700; color: #1e293b; }
+.api-badge { font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 999px; }
+.badge-on { background: #dcfce7; color: #166534; }
+.badge-off { background: #fee2e2; color: #b91c1c; }
+.api-section .hint { font-size: 12px; color: #64748b; line-height: 1.7; margin-bottom: 16px; }
+.api-section .hint a { color: #2563eb; }
+.api-row { margin-bottom: 14px; }
+.api-label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+.api-role { font-size: 10px; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; }
+.api-input-row { display: flex; gap: 8px; }
+.api-input {
+  flex: 1; padding: 10px 14px; border: 2px solid #e2e8f0;
+  border-radius: 8px; font-size: 14px; transition: border-color 0.2s;
+  outline: none;
+}
+.api-input:focus { border-color: #3b82f6; }
+.api-toggle {
+  padding: 10px 14px; background: #f1f5f9; color: #475569;
+  border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: all 0.2s;
+}
+.api-toggle:hover { background: #e2e8f0; }
+.api-clear {
+  padding: 10px 14px; background: #fff; color: #ef4444;
+  border: 1px solid #fca5a5; border-radius: 8px; font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: all 0.2s;
+}
+.api-clear:hover { background: #ef4444; color: #fff; border-color: #ef4444; }
+.api-actions { display: flex; align-items: center; gap: 14px; margin-top: 6px; }
+.api-note { font-size: 12px; color: #94a3b8; }
+.btn-save {
+  padding: 10px 20px; background: #10b981; color: #fff;
+  border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: background 0.2s; white-space: nowrap;
+}
+.btn-save:hover:not(:disabled) { background: #059669; }
+.btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .add-section {
   background: #fff; border-radius: 12px;

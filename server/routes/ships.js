@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
+import { maskSecret } from '../config/secrets.js'
 
 const router = Router()
 
@@ -45,12 +46,48 @@ function normalizeStatus(raw) {
   return 'na'
 }
 
-// ── VesselAPI (search only — 1 query per search, free tier ≈150/month) ─────
-const VESSEL_API_BASE = 'https://api.vesselapi.com/v1'
+// ── API settings (admin-managed, stored in DB, env fallback) ──────────────
+let settingsCache = null
+let settingsCacheTime = 0
+const SETTINGS_TTL = 10000
+
+function loadSettingsCache(force = false) {
+  const now = Date.now()
+  if (!force && settingsCache && now - settingsCacheTime < SETTINGS_TTL) return settingsCache
+  let ais = null
+  let vessel = null
+  try {
+    const rows = getAll('SELECT key, value FROM ship_settings')
+    for (const r of rows) {
+      if (r.key === 'aisstream_api_key') ais = r.value
+      else if (r.key === 'vessel_api_key') vessel = r.value
+    }
+  } catch (e) { /* table may not exist yet */ }
+  settingsCache = { aisstream: ais || null, vessel: vessel || null }
+  settingsCacheTime = now
+  return settingsCache
+}
+
+function getAisstreamKey() {
+  const s = loadSettingsCache()
+  return s.aisstream || process.env.AISSTREAM_API_KEY || ''
+}
 
 function getVesselApiKey() {
-  return process.env.VESSEL_API_KEY || ''
+  const s = loadSettingsCache()
+  return s.vessel || process.env.VESSEL_API_KEY || ''
 }
+
+function restartAisstream() {
+  if (ws) {
+    try { ws.close(1000, 'settings-changed') } catch (e) { /* ignore */ }
+    ws = null
+  }
+  setTimeout(() => { connectAisstream() }, 500)
+}
+
+// ── VesselAPI (search only — 1 query per search, free tier ≈150/month) ─────
+const VESSEL_API_BASE = 'https://api.vesselapi.com/v1'
 
 async function vesselApiGet(path) {
   const key = getVesselApiKey()
@@ -82,10 +119,6 @@ const liveCache = new Map()       // mmsi -> latest PositionReport + ShipData
 const searchTTL = new Map()       // mmsi -> expiry timestamp (recent search tracking)
 
 const SEARCH_TRACK_MS = 30 * 60 * 1000  // keep searched ships subscribed for 30 min
-
-function getAisstreamKey() {
-  return process.env.AISSTREAM_API_KEY || ''
-}
 
 function findDemoShip(q) {
   q = String(q || '').trim().toUpperCase()
@@ -415,6 +448,53 @@ router.delete('/:id', authMiddleware, (req, res) => {
   run('DELETE FROM ship_watchlist WHERE id = ?', [req.params.id])
   scheduleSubscriptionUpdate(1000)
   res.json({ success: true })
+})
+
+// ── Admin: get API settings (masked) ──────────────────────────────────────
+router.get('/settings', authMiddleware, (req, res) => {
+  const s = loadSettingsCache(true)
+  res.json({
+    aisstream_api_key_display: maskSecret(s.aisstream),
+    aisstream_api_key_configured: Boolean(s.aisstream || process.env.AISSTREAM_API_KEY),
+    vessel_api_key_display: maskSecret(s.vessel),
+    vessel_api_key_configured: Boolean(s.vessel || process.env.VESSEL_API_KEY)
+  })
+})
+
+// ── Admin: update API settings ────────────────────────────────────────────
+router.put('/settings', authMiddleware, (req, res) => {
+  const { aisstream_api_key, vessel_api_key } = req.body
+  let aisChanged = false
+
+  if (typeof aisstream_api_key === 'string') {
+    run(
+      `INSERT INTO ship_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+      ['aisstream_api_key', aisstream_api_key.trim()]
+    )
+    aisChanged = true
+  }
+  if (typeof vessel_api_key === 'string') {
+    run(
+      `INSERT INTO ship_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+      ['vessel_api_key', vessel_api_key.trim()]
+    )
+  }
+
+  loadSettingsCache(true)
+  if (aisChanged) restartAisstream()
+  res.json({ success: true })
+})
+
+// ── Admin: live connection status ─────────────────────────────────────────
+router.get('/status', authMiddleware, (req, res) => {
+  res.json({
+    aisstream_key_configured: Boolean(getAisstreamKey()),
+    aisstream_connected: Boolean(ws && ws.readyState === 1),
+    tracked_count: requestedMMSIs.size,
+    vessel_key_configured: Boolean(getVesselApiKey())
+  })
 })
 
 export default router
