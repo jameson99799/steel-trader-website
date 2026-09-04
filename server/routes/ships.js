@@ -111,8 +111,9 @@ async function vesselApiGet(path) {
 }
 
 // ── aisstream.io WebSocket client (live positions, no query limits) ───────
-// https://aisstream.io — free tier: persistent connection, filter by MMSI.
-const AISSTREAM_URL = 'wss://stream.aisstream.io/v0.1'
+// https://aisstream.io/documentation — free tier: persistent connection,
+// filter by MMSI, permessage-deflate compression required since 2026-09.
+const AISSTREAM_URL = process.env.AISSTREAM_URL || 'wss://stream.aisstream.io/v0/stream'
 
 let ws = null
 let reconnectTimer = null
@@ -156,7 +157,10 @@ function scheduleSubscriptionUpdate(delayMs = 3000) {
     const same =
       requestedMMSIs.size === subscribedMMSIs.size &&
       [...requestedMMSIs].every(m => subscribedMMSIs.has(m))
-    if (!same && ws) {
+    if (same) return
+    if (ws && ws.readyState === 1) {
+      sendSubscribe()
+    } else if (ws) {
       ws.close(1000, 'resubscribe')
     }
   }, delayMs)
@@ -167,7 +171,7 @@ function handleAisMessage(raw) {
   try { msg = JSON.parse(raw) } catch { return }
 
   const meta = msg.MetaData || {}
-  const mmsi = meta.MMSI || msg.Message?.ShipData?.Mmsi
+  const mmsi = meta.MMSI || meta.mmsi || msg.Message?.ShipData?.Mmsi || msg.Message?.ShipStaticData?.Mmsi
   if (!mmsi) return
 
   let entry = liveCache.get(String(mmsi)) || { mmsi: String(mmsi) }
@@ -177,24 +181,34 @@ function handleAisMessage(raw) {
     if (meta.Latitude !== undefined && meta.Longitude !== undefined) {
       entry.lat = meta.Latitude
       entry.lon = meta.Longitude
+    } else if (meta.latitude !== undefined && meta.longitude !== undefined) {
+      entry.lat = meta.latitude
+      entry.lon = meta.longitude
     }
     if (p.Sog !== undefined) entry.sog = p.Sog
     if (p.Cog !== undefined) entry.cog = p.Cog
-    if (p.Heading !== undefined) entry.heading = p.Heading
-    if (p.NavStatus !== undefined) entry.navStatus = NAV_STATUS_MAP[p.NavStatus] || 'na'
-    if (meta.ShipName) entry.name = meta.ShipName
-  } else if (msg.MessageType === 'ShipData' && msg.Message?.ShipData) {
-    const s = msg.Message.ShipData
-    if (s.Name) entry.name = s.Name
-    if (s.Imo) entry.imo = s.Imo
-    if (s.ShipType !== undefined) entry.type = SHIP_TYPE_MAP[s.ShipType] || 'Cargo'
-    if (s.Dimension) {
-      const d = s.Dimension
-      entry.loa = (d.A !== undefined && d.B !== undefined) ? d.A + d.B : null
-      entry.beam = (d.C !== undefined && d.D !== undefined) ? d.C + d.D : null
-    }
-    if (s.Destination) entry.dest = String(s.Destination).toUpperCase()
-    if (s.Eta) entry.eta = s.Eta
+    const heading = p.TrueHeading ?? p.Heading
+    if (heading !== undefined) entry.heading = heading
+    const navStatus = p.NavigationalStatus ?? p.NavStatus
+    if (navStatus !== undefined) entry.navStatus = NAV_STATUS_MAP[navStatus] || 'na'
+    if (meta.ShipName || meta.shipName) entry.name = meta.ShipName || meta.shipName
+  } else if ((msg.MessageType === 'ShipData' || msg.MessageType === 'ShipStaticData') && msg.Message) {
+    const s = msg.Message.ShipData || msg.Message.ShipStaticData
+    if (!s) return
+    if (s.Name ?? s.name) entry.name = s.Name ?? s.name
+    if (s.Imo ?? s.imo) entry.imo = s.Imo ?? s.imo
+    const shipType = s.ShipType ?? s.shipType
+    if (shipType !== undefined) entry.type = SHIP_TYPE_MAP[shipType] || 'Cargo'
+    const bow = s.DimensionToBow ?? s.dimensionToBow
+    const stern = s.DimensionToStern ?? s.dimensionToStern
+    if (bow !== undefined && stern !== undefined) entry.loa = bow + stern
+    const port = s.DimensionToPort ?? s.dimensionToPort
+    const starboard = s.DimensionToStarboard ?? s.dimensionToStarboard
+    if (port !== undefined && starboard !== undefined) entry.beam = port + starboard
+    const dest = s.Destination ?? s.destination
+    if (dest) entry.dest = String(dest).toUpperCase()
+    const eta = s.Eta ?? s.eta
+    if (eta) entry.eta = eta
   }
 
   entry.updatedAt = new Date().toISOString()
@@ -225,7 +239,7 @@ function connectAisstream() {
 
   let socket
   try {
-    socket = new WebSocket(AISSTREAM_URL)
+    socket = new WebSocket(AISSTREAM_URL, { perMessageDeflate: true })
   } catch (e) {
     console.error('[ships] aisstream connection failed:', e.message)
     wsDiag.lastError = { at: new Date().toISOString(), message: e.message }
