@@ -123,7 +123,7 @@ let requestedMMSIs = new Set()   // watchlist MMSIs + recently searched MMSIs
 let subUpdateTimer = null
 const liveCache = new Map()       // mmsi -> latest PositionReport + ShipData
 const searchTTL = new Map()       // mmsi -> expiry timestamp (recent search tracking)
-const wsDiag = { lastError: null, lastClose: null, connectAttempts: 0 }
+const wsDiag = { lastError: null, lastClose: null, connectAttempts: 0, openedAt: null, subscribedAt: null, messagesReceived: 0, lastSubscribeAt: null, lastSubscribeCount: 0 }
 
 const SEARCH_TRACK_MS = 30 * 60 * 1000  // keep searched ships subscribed for 30 min
 
@@ -169,6 +169,14 @@ function scheduleSubscriptionUpdate(delayMs = 3000) {
 function handleAisMessage(raw) {
   let msg
   try { msg = JSON.parse(raw) } catch { return }
+
+  if (msg.MessageType === 'SubscriptionConfirmation') {
+    wsDiag.subscribedAt = new Date().toISOString()
+    console.log('[ships] aisstream subscription confirmed')
+    return
+  }
+
+  wsDiag.messagesReceived++
 
   const meta = msg.MetaData || {}
   const mmsi = meta.MMSI || meta.mmsi || msg.Message?.ShipData?.Mmsi || msg.Message?.ShipStaticData?.Mmsi
@@ -218,15 +226,17 @@ function handleAisMessage(raw) {
 function sendSubscribe() {
   const key = getAisstreamKey()
   if (!key || !ws) return
-  const mmsis = [...requestedMMSIs]
-  if (mmsis.length === 0) return
-  ws.send(JSON.stringify({
+  const mmsis = [...requestedMMSIs].slice(0, 200)
+  const payload = {
     APIKey: key,
     BoundingBoxes: [[[-90, -180], [90, 180]]],
-    FiltersShipMMSI: mmsis,
-    FilterMessageTypes: ['PositionReport', 'ShipData']
-  }))
+    FilterMessageTypes: ['PositionReport', 'ShipStaticData', 'StaticDataReport']
+  }
+  if (mmsis.length > 0) payload.FiltersShipMMSI = mmsis
+  ws.send(JSON.stringify(payload))
   subscribedMMSIs = new Set(mmsis)
+  wsDiag.lastSubscribeAt = new Date().toISOString()
+  wsDiag.lastSubscribeCount = mmsis.length
   backoffMs = 2000
 }
 
@@ -249,6 +259,7 @@ function connectAisstream() {
   }
 
   socket.on('open', () => {
+    wsDiag.openedAt = new Date().toISOString()
     console.log(`[ships] aisstream connected (tracking ${requestedMMSIs.size} vessels)`)
     sendSubscribe()
   })
@@ -257,11 +268,18 @@ function connectAisstream() {
     handleAisMessage(String(data))
   })
 
+  socket.on('unexpected-response', (req, rsp) => {
+    wsDiag.lastError = { at: new Date().toISOString(), message: `WebSocket upgrade rejected: HTTP ${rsp.statusCode} ${rsp.statusMessage || ''}` }
+    console.error(`[ships] aisstream upgrade rejected: HTTP ${rsp.statusCode} ${rsp.statusMessage || ''}`)
+    try { socket.terminate() } catch (e) { /* ignore */ }
+  })
+
   socket.on('close', (code, reason) => {
     if (ws === socket) ws = null
     subscribedMMSIs = new Set()
-    wsDiag.lastClose = { at: new Date().toISOString(), code, reason: String(reason || '') }
-    console.warn(`[ships] aisstream closed: code=${code} reason=${String(reason || '')}`)
+    const confirmed = Boolean(wsDiag.subscribedAt)
+    wsDiag.lastClose = { at: new Date().toISOString(), code, reason: String(reason || ''), confirmed }
+    console.warn(`[ships] aisstream closed: code=${code} reason=${String(reason || '')} confirmed=${confirmed}`)
     if (!getAisstreamKey()) return
     reconnectTimer = setTimeout(() => {
       connectAisstream()
@@ -277,10 +295,11 @@ function connectAisstream() {
   ws = socket
 }
 
-// Keep the connection alive — aisstream closes idle sockets
+// Keep the connection alive with protocol-level ping frames (RFC 6455).
+// Empty text messages could be mistaken for malformed subscription updates.
 setInterval(() => {
   if (ws && ws.readyState === 1) {
-    try { ws.send('') } catch (e) { /* ignore */ }
+    try { ws.ping() } catch (e) { /* ignore */ }
   }
 }, 30000)
 
@@ -534,9 +553,94 @@ router.get('/status', authMiddleware, (req, res) => {
     tracked_count: requestedMMSIs.size,
     vessel_key_configured: Boolean(getVesselApiKey()),
     connect_attempts: wsDiag.connectAttempts,
+    opened_at: wsDiag.openedAt,
+    subscribed_at: wsDiag.subscribedAt,
+    last_subscribe_at: wsDiag.lastSubscribeAt,
+    last_subscribe_count: wsDiag.lastSubscribeCount,
+    messages_received: wsDiag.messagesReceived,
     last_error: wsDiag.lastError,
     last_close: wsDiag.lastClose
   })
+})
+
+// ── Admin: step-by-step connection self-test ───────────────────────────────
+router.post('/test-connection', authMiddleware, async (req, res) => {
+  const steps = []
+  const record = (name, ok, detail) => steps.push({ step: name, ok, detail: String(detail || '') })
+
+  try {
+    const dns = await import('node:dns/promises')
+    const result = await dns.lookup('stream.aisstream.io')
+    record('DNS 解析', true, `stream.aisstream.io → ${result.address}`)
+  } catch (e) {
+    record('DNS 解析', false, e.message)
+  }
+
+  await new Promise((resolve) => {
+    import('node:net').then(({ default: net }) => {
+      const sock = net.connect({ host: 'stream.aisstream.io', port: 443, timeout: 6000 })
+      sock.once('connect', () => { record('TCP 443', true, 'TCP 连接成功'); sock.destroy(); resolve() })
+      sock.once('timeout', () => { record('TCP 443', false, 'TCP 连接超时 (6s)'); sock.destroy(); resolve() })
+      sock.once('error', (e) => { record('TCP 443', false, e.message); resolve() })
+    })
+  })
+
+  const key = getAisstreamKey()
+  if (!key) {
+    record('WebSocket', false, '未配置 AISSTREAM_API_KEY')
+  } else {
+    await new Promise((resolve) => {
+      let finished = false
+      let sock = null
+      const finish = () => {
+        if (finished) return
+        finished = true
+        try { sock?.terminate() } catch (e) { /* ignore */ }
+        resolve()
+      }
+
+      try {
+        sock = new WebSocket(process.env.AISSTREAM_URL || AISSTREAM_URL, { perMessageDeflate: true, handshakeTimeout: 6000 })
+      } catch (e) {
+        record('WebSocket', false, e.message)
+        return resolve()
+      }
+
+      const timer = setTimeout(() => { record('WebSocket', false, '等待订阅确认超时 (10s)'); finish() }, 10000)
+
+      sock.on('open', () => {
+        record('WebSocket', true, '握手成功，正在发送订阅...')
+        try {
+          sock.send(JSON.stringify({ APIKey: key, BoundingBoxes: [[[-90, -180], [90, 180]]] }))
+        } catch (e) {
+          record('订阅', false, e.message)
+          finish()
+        }
+      })
+      sock.on('message', (data) => {
+        clearTimeout(timer)
+        record('订阅', true, `已收到服务端消息: ${String(data).slice(0, 150)}`)
+        finish()
+      })
+      sock.on('unexpected-response', (r, rsp) => {
+        clearTimeout(timer)
+        record('WebSocket', false, `握手被拒绝: HTTP ${rsp.statusCode} ${rsp.statusMessage || ''}`)
+        finish()
+      })
+      sock.on('error', (e) => {
+        clearTimeout(timer)
+        record('WebSocket', false, e.message)
+        finish()
+      })
+      sock.on('close', (code, reason) => {
+        clearTimeout(timer)
+        if (!finished) record('WebSocket', false, `连接被关闭: code=${code} ${String(reason || '')}`)
+        finish()
+      })
+    })
+  }
+
+  res.json({ steps, overall: steps.every(s => s.ok) })
 })
 
 export default router

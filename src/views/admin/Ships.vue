@@ -49,12 +49,29 @@
         <button class="btn-save" @click="saveApiSettings" :disabled="savingApi">
           {{ savingApi ? '保存中...' : '保存 API 配置' }}
         </button>
+        <button class="btn-test" @click="testConnection" :disabled="testingConn">
+          {{ testingConn ? '测试中...' : '🔍 测试连接' }}
+        </button>
         <span class="api-note">保存后实时连接约 5 秒内自动生效，无需重启服务</span>
       </div>
-      <div v-if="apiStatus.last_error || apiStatus.last_close" class="api-diag">
+      <div v-if="testResults.length" class="test-results" :class="{ fail: !testOverall }">
+        <div v-for="(r, i) in testResults" :key="i" class="test-row">
+          <span class="test-icon">{{ r.ok ? '✅' : '❌' }}</span>
+          <b>{{ r.step }}</b>: {{ r.detail }}
+        </div>
+        <div class="test-summary" :class="testOverall ? 'ok' : 'bad'">
+          {{ testOverall ? '✅ 连接正常，船舶数据应能实时推送' : '❌ 连接异常，见上方步骤' }}
+        </div>
+      </div>
+      <div v-if="apiStatus.last_error || apiStatus.last_close || apiStatus.opened_at" class="api-diag">
+        <div v-if="apiStatus.opened_at">🟢 最近连接成功: {{ formatDiagTime(apiStatus.opened_at) }}（已订阅 {{ apiStatus.last_subscribe_count ?? 0 }} 艘，收到消息 {{ apiStatus.messages_received ?? 0 }} 条）</div>
+        <div v-if="apiStatus.subscribed_at">✅ 订阅确认: {{ formatDiagTime(apiStatus.subscribed_at) }}</div>
         <div v-if="apiStatus.last_error">⚠️ 连接错误 ({{ formatDiagTime(apiStatus.last_error.at) }}): <b>{{ apiStatus.last_error.message }}</b></div>
-        <div v-if="apiStatus.last_close">⚠️ 连接断开 ({{ formatDiagTime(apiStatus.last_close.at) }}): 代码 {{ apiStatus.last_close.code }} {{ apiStatus.last_close.reason }}</div>
-        <div class="diag-hint">断开代码 4401 = API Key 无效；4404 = 订阅参数错误；4413 = 触发频率限制。持续"未连接"且无错误信息 = 服务器网络无法访问 aisstream.io</div>
+        <div v-if="apiStatus.last_close">
+          ⚠️ 连接断开 ({{ formatDiagTime(apiStatus.last_close.at) }}): 代码 {{ apiStatus.last_close.code }} {{ apiStatus.last_close.reason }}
+          <span v-if="!apiStatus.last_close.confirmed && !apiStatus.subscribed_at" class="diag-warn">（未收到订阅确认就断开 → 通常是 Key 无效或复制了掩码 Key，请在 aisstream.io 的 Account 页面<b>重新生成</b>一个完整 Key）</span>
+        </div>
+        <div class="diag-hint">断开代码 4401 = API Key 无效；4404 = 订阅参数错误；4413 = 触发频率限制；1006 = 握手后无关闭帧断开（Key 无效/订阅非法/网络重置都可能是 1006）。点"测试连接"可定位到具体环节。</div>
       </div>
     </div>
 
@@ -163,7 +180,10 @@ let searchTimer = null
 const dragIndex = ref(null)
 
 const apiSettings = ref({ aisstream_api_key_configured: false, aisstream_api_key_display: '', vessel_api_key_configured: false, vessel_api_key_display: '' })
-const apiStatus = ref({ aisstream_connected: false, tracked_count: 0, connect_attempts: 0, last_error: null, last_close: null })
+const apiStatus = ref({ aisstream_connected: false, tracked_count: 0, connect_attempts: 0, opened_at: null, subscribed_at: null, last_subscribe_count: 0, messages_received: 0, last_error: null, last_close: null })
+const testResults = ref([])
+const testOverall = ref(false)
+const testingConn = ref(false)
 const aisKey = ref('')
 const vesselKey = ref('')
 const showAis = ref(false)
@@ -182,6 +202,22 @@ function formatDiagTime(iso) {
   if (!iso) return '--'
   const d = new Date(iso)
   return d.toLocaleString('zh-CN', { hour12: false })
+}
+
+async function testConnection() {
+  testingConn.value = true
+  testResults.value = []
+  try {
+    const r = await api.testShipConnection()
+    testResults.value = r.steps || []
+    testOverall.value = !!r.overall
+  } catch (e) {
+    testResults.value = [{ step: '请求失败', ok: false, detail: e.message }]
+    testOverall.value = false
+  } finally {
+    testingConn.value = false
+    refreshApiStatus()
+  }
 }
 
 async function loadApiSettings() {
@@ -367,6 +403,7 @@ onUnmounted(() => {
 }
 .api-diag b { color: #b45309; }
 .diag-hint { font-size: 11px; color: #a16207; opacity: .9; }
+.diag-warn { color: #b91c1c; font-weight: 600; }
 .btn-save {
   padding: 10px 20px; background: #10b981; color: #fff;
   border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
@@ -374,6 +411,24 @@ onUnmounted(() => {
 }
 .btn-save:hover:not(:disabled) { background: #059669; }
 .btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-test {
+  padding: 10px 20px; background: #3b82f6; color: #fff;
+  border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: background 0.2s; white-space: nowrap;
+}
+.btn-test:hover:not(:disabled) { background: #2563eb; }
+.btn-test:disabled { opacity: 0.6; cursor: not-allowed; }
+.test-results {
+  margin-top: 14px; padding: 12px 14px;
+  background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;
+  font-size: 12px; color: #166534; line-height: 2;
+}
+.test-results.fail { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.test-row { display: flex; gap: 6px; align-items: baseline; }
+.test-icon { flex-shrink: 0; }
+.test-summary { font-weight: 700; margin-top: 4px; }
+.test-summary.ok { color: #166534; }
+.test-summary.bad { color: #b91c1c; }
 
 .add-section {
   background: #fff; border-radius: 12px;
