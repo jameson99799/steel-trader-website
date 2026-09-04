@@ -46,7 +46,8 @@
     "sql.js": "^1.14.1",
     "uuid": "^14.0.1",
     "vue": "^3.5.40",
-    "vue-router": "^4.2.5"
+    "vue-router": "^4.2.5",
+    "ws": "^8.21.0"
   },
   "overrides": {
     "path-to-regexp": "0.1.13"

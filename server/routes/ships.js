@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { maskSecret } from '../config/secrets.js'
+import WebSocket from 'ws'
 
 const router = Router()
 
@@ -216,18 +217,26 @@ function connectAisstream() {
 
   loadRequestedMMSIs()
 
-  const socket = new WebSocket(AISSTREAM_URL)
+  let socket
+  try {
+    socket = new WebSocket(AISSTREAM_URL)
+  } catch (e) {
+    console.error('[ships] aisstream connection failed:', e.message)
+    reconnectTimer = setTimeout(() => { connectAisstream() }, backoffMs)
+    backoffMs = Math.min(backoffMs * 1.5, 60000)
+    return
+  }
 
-  socket.onopen = () => {
+  socket.on('open', () => {
     console.log(`[ships] aisstream connected (tracking ${requestedMMSIs.size} vessels)`)
     sendSubscribe()
-  }
+  })
 
-  socket.onmessage = (event) => {
-    handleAisMessage(event.data)
-  }
+  socket.on('message', (data) => {
+    handleAisMessage(String(data))
+  })
 
-  socket.onclose = () => {
+  socket.on('close', () => {
     if (ws === socket) ws = null
     subscribedMMSIs = new Set()
     if (!getAisstreamKey()) return
@@ -235,11 +244,11 @@ function connectAisstream() {
       connectAisstream()
     }, backoffMs)
     backoffMs = Math.min(backoffMs * 1.5, 60000)
-  }
+  })
 
-  socket.onerror = () => {
-    try { socket.close() } catch (e) { /* ignore */ }
-  }
+  socket.on('error', (err) => {
+    console.error('[ships] aisstream socket error:', err?.message || err)
+  })
 
   ws = socket
 }
