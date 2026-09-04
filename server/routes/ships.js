@@ -122,6 +122,7 @@ let requestedMMSIs = new Set()   // watchlist MMSIs + recently searched MMSIs
 let subUpdateTimer = null
 const liveCache = new Map()       // mmsi -> latest PositionReport + ShipData
 const searchTTL = new Map()       // mmsi -> expiry timestamp (recent search tracking)
+const wsDiag = { lastError: null, lastClose: null, connectAttempts: 0 }
 
 const SEARCH_TRACK_MS = 30 * 60 * 1000  // keep searched ships subscribed for 30 min
 
@@ -220,12 +221,14 @@ function connectAisstream() {
   if (!key || ws) return
 
   loadRequestedMMSIs()
+  wsDiag.connectAttempts++
 
   let socket
   try {
     socket = new WebSocket(AISSTREAM_URL)
   } catch (e) {
     console.error('[ships] aisstream connection failed:', e.message)
+    wsDiag.lastError = { at: new Date().toISOString(), message: e.message }
     reconnectTimer = setTimeout(() => { connectAisstream() }, backoffMs)
     backoffMs = Math.min(backoffMs * 1.5, 60000)
     return
@@ -240,9 +243,11 @@ function connectAisstream() {
     handleAisMessage(String(data))
   })
 
-  socket.on('close', () => {
+  socket.on('close', (code, reason) => {
     if (ws === socket) ws = null
     subscribedMMSIs = new Set()
+    wsDiag.lastClose = { at: new Date().toISOString(), code, reason: String(reason || '') }
+    console.warn(`[ships] aisstream closed: code=${code} reason=${String(reason || '')}`)
     if (!getAisstreamKey()) return
     reconnectTimer = setTimeout(() => {
       connectAisstream()
@@ -252,6 +257,7 @@ function connectAisstream() {
 
   socket.on('error', (err) => {
     console.error('[ships] aisstream socket error:', err?.message || err)
+    wsDiag.lastError = { at: new Date().toISOString(), message: err?.message || String(err) }
   })
 
   ws = socket
@@ -512,7 +518,10 @@ router.get('/status', authMiddleware, (req, res) => {
     aisstream_key_configured: Boolean(getAisstreamKey()),
     aisstream_connected: Boolean(ws && ws.readyState === 1),
     tracked_count: requestedMMSIs.size,
-    vessel_key_configured: Boolean(getVesselApiKey())
+    vessel_key_configured: Boolean(getVesselApiKey()),
+    connect_attempts: wsDiag.connectAttempts,
+    last_error: wsDiag.lastError,
+    last_close: wsDiag.lastClose
   })
 })
 

@@ -51,6 +51,11 @@
         </button>
         <span class="api-note">保存后实时连接约 5 秒内自动生效，无需重启服务</span>
       </div>
+      <div v-if="apiStatus.last_error || apiStatus.last_close" class="api-diag">
+        <div v-if="apiStatus.last_error">⚠️ 连接错误 ({{ formatDiagTime(apiStatus.last_error.at) }}): <b>{{ apiStatus.last_error.message }}</b></div>
+        <div v-if="apiStatus.last_close">⚠️ 连接断开 ({{ formatDiagTime(apiStatus.last_close.at) }}): 代码 {{ apiStatus.last_close.code }} {{ apiStatus.last_close.reason }}</div>
+        <div class="diag-hint">断开代码 4401 = API Key 无效；4404 = 订阅参数错误；4413 = 触发频率限制。持续"未连接"且无错误信息 = 服务器网络无法访问 aisstream.io</div>
+      </div>
     </div>
 
     <!-- Search & Add -->
@@ -158,7 +163,7 @@ let searchTimer = null
 const dragIndex = ref(null)
 
 const apiSettings = ref({ aisstream_api_key_configured: false, aisstream_api_key_display: '', vessel_api_key_configured: false, vessel_api_key_display: '' })
-const apiStatus = ref({ aisstream_connected: false, tracked_count: 0 })
+const apiStatus = ref({ aisstream_connected: false, tracked_count: 0, connect_attempts: 0, last_error: null, last_close: null })
 const aisKey = ref('')
 const vesselKey = ref('')
 const showAis = ref(false)
@@ -171,6 +176,12 @@ let statusTimer = null
 function showToast(msg, type = 'success') {
   toast.value = { show: true, type, msg }
   setTimeout(() => { toast.value.show = false }, 3000)
+}
+
+function formatDiagTime(iso) {
+  if (!iso) return '--'
+  const d = new Date(iso)
+  return d.toLocaleString('zh-CN', { hour12: false })
 }
 
 async function loadApiSettings() {
@@ -349,6 +360,13 @@ onUnmounted(() => {
 .api-clear:hover { background: #ef4444; color: #fff; border-color: #ef4444; }
 .api-actions { display: flex; align-items: center; gap: 14px; margin-top: 6px; }
 .api-note { font-size: 12px; color: #94a3b8; }
+.api-diag {
+  margin-top: 14px; padding: 10px 14px;
+  background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+  font-size: 12px; color: #92400e; line-height: 1.8;
+}
+.api-diag b { color: #b45309; }
+.diag-hint { font-size: 11px; color: #a16207; opacity: .9; }
 .btn-save {
   padding: 10px 20px; background: #10b981; color: #fff;
   border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
