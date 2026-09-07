@@ -41,7 +41,6 @@ function productSchema(overrides = {}) {
       reviewRating: { ratingValue: payload.reviews[0].rating, bestRating: 5, worstRating: 1 },
       reviewBody: payload.reviews[0].review_text
     }],
-    aggregateRating: { reviewCount: 12, ratingValue: 4.6 },
     ...overrides
   }
 }
@@ -180,15 +179,14 @@ test('review parity accepts an empty payload but rejects legacy fixed review con
   }
 })
 
-test('review parity reports missing SSR fields, schema field drift, and aggregate drift', () => {
+test('review parity reports missing SSR fields, schema field drift, and self-serving aggregate rating', () => {
   const payload = reviewPayload()
   assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml().replace('Strong &lt;coating&gt; &amp; careful packing.', ''), productSchema: productSchema(), payload }), /text|body/i)
   assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml(), productSchema: productSchema({ review: [{ ...productSchema().review[0], author: { name: 'Wrong' } }] }), payload }), /author/i)
   assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml(), productSchema: productSchema({ review: [{ ...productSchema().review[0], datePublished: '2020-01-01' }] }), payload }), /date/i)
   assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml(), productSchema: productSchema({ review: [{ ...productSchema().review[0], reviewRating: { ratingValue: 5 } }] }), payload }), /rating/i)
   assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml(), productSchema: productSchema({ review: [{ ...productSchema().review[0], reviewBody: 'Wrong' }] }), payload }), /body/i)
-  assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml(), productSchema: productSchema({ aggregateRating: { reviewCount: 11, ratingValue: 4.6 } }), payload }), /count/i)
-  assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml(), productSchema: productSchema({ aggregateRating: { reviewCount: 12, ratingValue: 4.5 } }), payload }), /average|ratingValue/i)
+  assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml(), productSchema: productSchema({ aggregateRating: { reviewCount: 12, ratingValue: 4.6 } }), payload }), /aggregate/i)
 })
 
 test('delivery verifier requests the review API and validates both local and public product HTML', async () => {

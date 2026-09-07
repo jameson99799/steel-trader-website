@@ -147,11 +147,8 @@ export function verifyProductReviewParity({ html, productSchema, payload }) {
   if (schemaReview?.reviewBody !== visible.review_text) {
     throw new Error('Review body differs between page and JSON-LD')
   }
-  if (Number(productSchema.aggregateRating?.reviewCount) !== Number(payload.summary.reviewCount)) {
-    throw new Error('Review count differs between API and JSON-LD')
-  }
-  if (Number(productSchema.aggregateRating?.ratingValue) !== Number(payload.summary.ratingValue)) {
-    throw new Error('Average rating differs between API and JSON-LD')
+  if (productSchema.aggregateRating) {
+    throw new Error('Product JSON-LD must not expose a self-serving AggregateRating')
   }
 }
 
