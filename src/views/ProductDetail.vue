@@ -592,7 +592,15 @@ function updateProductSeo(comp) {
     ...((comp?.name_en || comp?.name) && {
       brand: { '@type': 'Brand', name: comp.name_en || comp.name },
       manufacturer: { '@type': 'Organization', name: comp.name_en || comp.name }
-    })
+    }),
+    offers: {
+      '@type': 'Offer',
+      priceCurrency: 'USD',
+      availability: 'https://schema.org/InStock',
+      itemCondition: 'https://schema.org/NewCondition',
+      url: productUrl,
+      seller: { '@type': 'Organization', name: comp?.name_en || comp?.name || 'Shandong Sunsea Steel Co., Ltd' }
+    }
   }
   Object.assign(productSchema, buildReviewSchemaParts(publicReviews.value))
 

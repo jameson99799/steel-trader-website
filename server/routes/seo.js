@@ -5,6 +5,7 @@ import { upload } from '../middleware/upload.js'
 import { writeFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { stripSeoSecrets } from '../services/seoSanitizer.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -12,7 +13,7 @@ const router = Router()
 
 router.get('/', (req, res) => {
     const settings = getOne('SELECT * FROM seo_settings WHERE id = 1')
-    res.json(settings || {})
+    res.json(stripSeoSecrets(settings || {}))
 })
 
 router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {

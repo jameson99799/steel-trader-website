@@ -32,7 +32,7 @@ test('product schema adds only shared public review parts and article schema sta
   assert.doesNotMatch(articleBlock, /aggregateRating|review:/)
 })
 
-test('server and client product schemas omit unsupported commercial claims', () => {
+test('server and client product schemas add offers without fabricated prices or ratings', () => {
   const serverProductBlock = source.slice(
     source.indexOf("'@context': 'https://schema.org', '@type': 'Product'"),
     source.indexOf("jsonLd(productSchema, 'product-jsonld')")
@@ -43,8 +43,9 @@ test('server and client product schemas omit unsupported commercial claims', () 
   )
 
   for (const block of [serverProductBlock, clientProductBlock]) {
-    assert.doesNotMatch(block, /\boffers\s*:/)
-    assert.doesNotMatch(block, /priceCurrency|priceValidUntil|shippingDetails|hasMerchantReturnPolicy/)
+    assert.match(block, /\boffers\s*:\s*\{[\s\S]*?'@type': 'Offer'/)
+    assert.doesNotMatch(block, /price:\s|priceValidUntil|shippingDetails|hasMerchantReturnPolicy/)
+    assert.doesNotMatch(block, /aggregateRating:|review:\s*\{/)
   }
 
   assert.match(serverProductBlock, /buildReviewSchemaParts\(publicReviews\)/)

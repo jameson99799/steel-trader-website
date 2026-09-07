@@ -287,21 +287,35 @@ router.get('/news', (req, res) => {
         const activeLangs = getActiveLangs()
         const news = getAll(`SELECT slug, id, title_en, title, cover_image, COALESCE(updated_at, created_at) as lastmod_date FROM news WHERE status = 1 ORDER BY id DESC`)
 
+        // For non-English languages only include the variant when an actual translation
+        // exists in the translations table. This prevents serving untranslated (English)
+        // content under /es/, /fr/, … URLs, which Google treats as thin duplicates.
+        const translatedLangs = new Map() // newsId -> Set(langCode)
+        try {
+            const rows = getAll(`SELECT content_id, language_code FROM translations WHERE content_type='news' AND translated_text IS NOT NULL AND length(translated_text) > 0`)
+            for (const row of rows) {
+                if (!translatedLangs.has(String(row.content_id))) translatedLangs.set(String(row.content_id), new Set())
+                translatedLangs.get(String(row.content_id)).add(row.language_code)
+            }
+        } catch (e) {}
+
         const seoSettings = getSeoSettings()
         const urls = []
         for (const n of news) {
             const slug = n.slug || n.id
             const newsPath = `/news/${slug}`
             const lastmod = toDateStr(n.lastmod_date, fallbackDate)
-            
+            const translated = translatedLangs.get(String(n.id)) || new Set()
+
             for (const l of activeLangs) {
+                if (l.code !== 'en' && !translated.has(l.code)) continue
                 let imagesHTML = ''
                 if (n.cover_image) {
                     const titleStr = n[`title_${l.code}`] || n.title_en || n.title || 'news article'
                     const imgUrl = String(n.cover_image).startsWith('http') ? n.cover_image : BASE_URL + n.cover_image
                     imagesHTML = `    <image:image>\n      <image:loc>${escapeXml(imgUrl)}</image:loc>\n      <image:title>${escapeXml(titleStr)}</image:title>\n    </image:image>\n`
                 }
-                
+
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + newsPath,
                     lastmod,

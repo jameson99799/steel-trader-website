@@ -1,11 +1,11 @@
 export const publicHtmlCacheControl =
   'public, max-age=0, must-revalidate, s-maxage=300, stale-while-revalidate=60'
 
-export function getSeoResponsePolicy({ isPrivateRoute, isNotFound }) {
+export function getSeoResponsePolicy({ isPrivateRoute, isNotFound, forceNoindex }) {
   if (isPrivateRoute) {
     return { cacheControl: 'no-store', robots: 'noindex, nofollow' }
   }
-  if (isNotFound) {
+  if (isNotFound || forceNoindex) {
     return { cacheControl: 'no-store', robots: 'noindex, follow' }
   }
   return { cacheControl: publicHtmlCacheControl, robots: 'index, follow' }

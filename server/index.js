@@ -42,6 +42,7 @@ import translationJobsRoutes, { resetStaleJobs } from './routes/translation-jobs
 import sslRoutes from './routes/ssl.js'
 import emailRoutes from './routes/email.js'
 import { checkAndSendSslWarning } from './emailService.js'
+import { stripSeoSecrets } from './services/seoSanitizer.js'
 import indexingRoutes, { startIndexingScheduler } from './routes/indexing.js'
 import aiRoutes from './routes/ai.js'
 import aiAutoPostRoutes from './routes/ai-auto-post.js'
@@ -351,17 +352,35 @@ async function startServer() {
         if (!robotsTxt.toLowerCase().includes('sitemap:')) {
           robotsTxt += '\nSitemap: https://www.sunseasteel.com/sitemap.xml\n'
         }
+        if (!robotsTxt.toLowerCase().includes('llms.txt')) {
+          robotsTxt += '\n# AI agent guides\nLink: <https://www.sunseasteel.com/llms.txt>\n\nllms.txt: https://www.sunseasteel.com/llms.txt\nllms-full.txt: https://www.sunseasteel.com/llms-full.txt\n'
+        }
         return res.send(robotsTxt.trim() + '\n')
       } catch (e) {}
       res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-      res.send('User-agent: *\nAllow: /\nSitemap: https://www.sunseasteel.com/sitemap.xml\n')
+      res.send('User-agent: *\nAllow: /\nSitemap: https://www.sunseasteel.com/sitemap.xml\n\nllms.txt: https://www.sunseasteel.com/llms.txt\nllms-full.txt: https://www.sunseasteel.com/llms-full.txt\n')
     })
 
     app.get('/llms.txt', (req, res) => {
       try {
-        const seo = getOne('SELECT llms_txt FROM seo_settings WHERE id = 1')
+        const seo = getOne('SELECT llms_txt, llms_full_txt FROM seo_settings WHERE id = 1')
+        const base = (seo?.llms_txt || '').trim()
+        const companyRow = getOne('SELECT name_en, name, email, phone, whatsapp, address_en, address, description_en FROM company WHERE id = 1') || {}
+        const cName = companyRow.name_en || companyRow.name || 'Sunsea Steel'
+        const contactLines = []
+        if (companyRow.email) contactLines.push(`- Email: ${companyRow.email}`)
+        if (companyRow.phone) contactLines.push(`- Phone: ${companyRow.phone}`)
+        if (companyRow.whatsapp) contactLines.push(`- WhatsApp: https://wa.me/${companyRow.whatsapp.replace(/[^0-9]/g, '')}`)
+        if (companyRow.address_en || companyRow.address) contactLines.push(`- Address: ${companyRow.address_en || companyRow.address}`)
+
+        const host = 'https://www.sunseasteel.com'
+        const header = base || `# ${cName} — Steel Coil Manufacturer and Exporter`
+        const contactSection = contactLines.length ? `\n\n## Contact\n${contactLines.join('\n')}\n- Website: ${host}` : `\n\n## Contact\n- Website: ${host}`
+        const guideSection = `\n\n## Key Resources\n- [Products & Steel Coil Catalog](${host}/en/products)\n- [Steel Industry News & Technical Guides](${host}/en/news)\n- [Company Profile & Factory Overview](${host}/en/factory)\n- [Steel Coil Category Index](${host}/en/products)\n- [Full Site Guide (llms-full.txt)](${host}/llms-full.txt)`
+
+        const out = header + contactSection + guideSection
         res.setHeader('Content-Type', 'text/markdown; charset=utf-8')
-        res.send(seo?.llms_txt || '# No content available')
+        res.send(out)
       } catch (e) {
         res.status(404).send('Not Found')
       }
@@ -369,9 +388,56 @@ async function startServer() {
 
     app.get('/llms-full.txt', (req, res) => {
       try {
-        const seo = getOne('SELECT llms_full_txt FROM seo_settings WHERE id = 1')
+        const seo = getOne('SELECT llms_txt, llms_full_txt FROM seo_settings WHERE id = 1')
+        const base = (seo?.llms_full_txt || '').trim()
+        const companyRow = getOne('SELECT name_en, name, email, phone, whatsapp, address_en, address, description_en FROM company WHERE id = 1') || {}
+        const cName = companyRow.name_en || companyRow.name || 'Sunsea Steel'
+        const host = 'https://www.sunseasteel.com'
+        const contactLines = []
+        if (companyRow.email) contactLines.push(`- Email: ${companyRow.email}`)
+        if (companyRow.phone) contactLines.push(`- Phone: ${companyRow.phone}`)
+        if (companyRow.whatsapp) contactLines.push(`- WhatsApp: https://wa.me/${companyRow.whatsapp.replace(/[^0-9]/g, '')}`)
+        if (companyRow.address_en || companyRow.address) contactLines.push(`- Address: ${companyRow.address_en || companyRow.address}`)
+
+        // Dynamic product catalog — every product with its page URL
+        const products = getAll(`SELECT slug, id, name_en, name, description_en FROM products WHERE status = 1 ORDER BY sort_order, id DESC LIMIT 100`) || []
+        const productLines = products.map(p => {
+          const pName = p.name_en || p.name
+          const pDesc = (p.description_en || p.description || '').replace(/\s+/g, ' ').trim()
+          return `- ${pName}${pDesc ? `: ${pDesc.substring(0, 220)}` : ''} — ${host}/en/products/${p.slug || p.id}`
+        })
+        const catalogSection = productLines.length
+          ? `\n## Product Catalog\n${productLines.join('\n')}\n`
+          : ''
+
+        const sections = []
+        if (base) sections.push(base)
+        sections.push(`# ${cName} — Comprehensive Site Guide\n${(companyRow.description_en || '').substring(0, 500)}`)
+        sections.push(`## Contact
+${contactLines.join('\n')}
+- Website: ${host}`)
+        sections.push(`## Company & Factory
+- [About Us](${host}/en/about)
+- [Factory Tour](${host}/en/factory)
+- [Contact & Quote Request](${host}/en/contact)`)
+        sections.push(`## Products & Catalog
+- [All Steel Coils](${host}/en/products)
+- [Product Category Index](${host}/en/products)
+- [Steel Pipe Category Index](${host}/en/products)`)
+        sections.push(`## Technical Knowledge & News
+- [Steel Industry News](${host}/en/news)
+- [RAL Color Chart for PPGI / PPGL](${host}/en/news/ral-colors)
+- [Roofing Sheet Profiles](${host}/en/news/roofing-profiles)
+- [Real-time Steel Futures Prices](${host}/en/news/futures-price)`)
+        if (catalogSection) sections.push(catalogSection.trim())
+        sections.push(`## Machine-readable Sitemap
+- [Sitemap Index](${host}/sitemap.xml)
+- [Product Sitemap](${host}/sitemap-products.xml)
+- [News Sitemap](${host}/sitemap-news.xml)`)
+
+        const out = sections.filter(Boolean).join('\n\n')
         res.setHeader('Content-Type', 'text/markdown; charset=utf-8')
-        res.send(seo?.llms_full_txt || '# No content available')
+        res.send(out)
       } catch (e) {
         res.status(404).send('Not Found')
       }
@@ -570,6 +636,7 @@ async function startServer() {
         // (Fixes TDZ ReferenceError that caused 500 errors on unknown lang codes)
         let isNotFound = false  // Track soft 404
         let matchedRoute = false
+        let forceNoindex = false // Untranslated language variants should not be indexed
 
         // ── Verify Language Prefix Validity ──
         // To prevent Soft 404s and SEO duplicate content issues, we must ensure
@@ -675,8 +742,12 @@ async function startServer() {
                 translateProduct(product, tMap, lang)
               }
               const seoT = getSeoTrans('product', product.id, lang)
-              const pName = product[`name_${lang}`] || product.name_en || product.name || ''
-              const pDesc = product[`description_${lang}`] || product.description_en || product.description || ''
+              const localizedPName = product[`name_${lang}`]
+              const pName = localizedPName
+                || (lang === 'en' ? (product.name_en || product.name) : lang === 'zh' ? (product.name || product.name_en) : (product.name_en || product.name)) || ''
+              const localizedPDesc = product[`description_${lang}`]
+              const pDesc = localizedPDesc
+                || (lang === 'en' ? (product.description_en || product.description) : lang === 'zh' ? (product.description || product.description_en) : (product.description_en || product.description)) || ''
 
               const baseProductTitle = seoT.seo_title || product.seo_title || pName || pageTitle
               pageTitle = baseProductTitle.includes(companyNameTranslated) ? baseProductTitle : `${baseProductTitle} | ${companyNameTranslated}`
@@ -713,7 +784,15 @@ async function startServer() {
                 description: (pageDesc).substring(0, 500),
                 url: pageCanonical,
                 brand: { '@type': 'Brand', name: companyNameTranslated },
-                manufacturer: { '@type': orgType, name: companyNameTranslated, url: siteUrl }
+                manufacturer: { '@type': orgType, name: companyNameTranslated, url: siteUrl },
+                offers: {
+                  '@type': 'Offer',
+                  priceCurrency: 'USD',
+                  availability: 'https://schema.org/InStock',
+                  itemCondition: 'https://schema.org/NewCondition',
+                  url: pageCanonical,
+                  seller: { '@type': orgType, name: companyNameTranslated }
+                }
               }
               if (productImages.length) productSchema.image = productImages
               const specsJson = product[`specs_${lang}`] || product.specs
@@ -724,6 +803,9 @@ async function startServer() {
                 } catch (e) {}
               }
               Object.assign(productSchema, buildReviewSchemaParts(publicReviews))
+              // Remove self-serving AggregateRating — Google penalizes ratings not backed by
+              // genuine third-party reviews (productReviewStore lists admin-seeded reviews).
+              delete productSchema.aggregateRating
               extraSchemas += jsonLd(productSchema, 'product-jsonld')
               const faqJson = product[`faq_items_${lang}`] || product.faq_items
               if (faqJson) {
@@ -824,8 +906,14 @@ async function startServer() {
                 translateNews(article, tMap, lang)
               }
               const seoT = getSeoTrans('news', article.id, lang)
-              const aTitle = article[`title_${lang}`] || article.title_en || article.title || ''
-              const aSummary = article[`summary_${lang}`] || article.summary_en || article.summary || ''
+              // Language-aware fallback: zh is the primary (main-column) language,
+              // en falls back to title_en; other languages use translations then En
+              const localizedTitle = article[`title_${lang}`]
+              const aTitle = localizedTitle
+                || (lang === 'en' ? (article.title_en || article.title) : lang === 'zh' ? (article.title || article.title_en) : (article.title_en || article.title)) || ''
+              const localizedSummary = article[`summary_${lang}`]
+              const aSummary = localizedSummary
+                || (lang === 'en' ? (article.summary_en || article.summary) : lang === 'zh' ? (article.summary || article.summary_en) : (article.summary_en || article.summary)) || ''
 
               const baseArticleTitle = seoT.seo_title || article.seo_title || aTitle || pageTitle
               pageTitle = baseArticleTitle.includes(companyNameTranslated) ? baseArticleTitle : `${baseArticleTitle} | ${companyNameTranslated}`
@@ -870,6 +958,12 @@ async function startServer() {
               // Replace template placeholders with real company data
               const whatsappLink = company.whatsapp ? `https://wa.me/${company.whatsapp.replace(/[^0-9]/g, '')}` : '#'
               const rawContent = article[`content_${lang}`] || article.content || ''
+              // Untranslated language variant: /es/, /fr/, … shows English content under a
+              // foreign URL — don't let Google index it as duplicate thin content.
+              if (lang !== 'en' && lang !== 'zh') {
+                const hasRealTranslation = !!article[`title_${lang}`] && !!article[`content_${lang}`]
+                if (!hasRealTranslation) forceNoindex = true
+              }
               let articleBody = rawContent
                 .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
                 .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -1156,6 +1250,26 @@ async function startServer() {
               name: companyNameTranslated, url: `${siteUrl}/${lang}`,
               potentialAction: { '@type': 'SearchAction', target: `${siteUrl}/${lang}/products?search={search_term_string}`, 'query-input': 'required name=search_term_string' }
             })
+            // Homepage FAQPage schema (GEO: used by Google SGE / ChatGPT / Perplexity)
+            const homeFaqs = lang === 'zh'
+              ? [
+                  ['你们是工厂还是贸易公司？', '我们是位于山东的源头工厂，集冷轧、镀锌、镀铝锌和彩涂生产线于一体，支持厂家直供与定制规格。'],
+                  ['可以邮寄样品或进行打样吗？', '可以。您可以提供目标规格（厚度、宽度、锌层、颜色、数量），我们支持小批量试单与样品确认。'],
+                  ['最小起订量（MOQ）是多少？', '常规产品 MOQ 灵活，可按集装箱整柜出货；首次合作可协商试单数量。'],
+                  ['如何获得 FOB / CIF 报价？', '请提供规格、材质、涂层、尺寸与目标港口，我们将在工作日内发送正式报价单。'],
+                  ['有哪些认证与质检？', '产品符合 ASTM / JIS / EN 等标准，出厂前经过全流程质检，可提供材质单与第三方可选检验。']
+                ]
+              : [
+                  ['Are you a manufacturer or a trading company?', 'We are an origin factory in Shandong with cold rolling, galvanizing, galvalume and color coating lines, supporting factory-direct supply and custom specifications.'],
+                  ['Can I get samples or a trial order?', 'Yes. Provide your target specification (thickness, width, coating, color, quantity); we support small-batch trial orders and sample confirmation.'],
+                  ['What is the minimum order quantity (MOQ)?', 'For standard products the MOQ is flexible, usually a full container; first-time cooperation can be negotiated with a trial quantity.'],
+                  ['How do I get an FOB or CIF quote?', 'Send your specification, material, coating, dimensions and target port, and we will issue a formal quotation within one working day.'],
+                  ['What certifications and quality control do you have?', 'Products comply with ASTM / JIS / EN standards, pass full-process QC before shipment, and material certificates plus third-party inspection are available on request.']
+                ]
+            extraSchemas += jsonLd({
+              '@context': 'https://schema.org', '@type': 'FAQPage',
+              mainEntity: homeFaqs.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } }))
+            }, 'home-faq-jsonld')
             // SSR home content: company intro + top products
             const homeProductsVisibility = publicProductVisibility('products')
             const homeProducts = getAll(`SELECT id, slug, name_en, name FROM products WHERE status=1${homeProductsVisibility.clause} ORDER BY sort_order, id LIMIT 8`, homeProductsVisibility.params)
@@ -1244,7 +1358,7 @@ async function startServer() {
         const ogImage = pageImage || `${siteUrl}/uploads/logo.png`
         const safeDesc = (pageDesc || '').substring(0, 160)
         const isPrivateRoute = url.startsWith('/admin') || url.startsWith('/crm')
-        const responsePolicy = getSeoResponsePolicy({ isPrivateRoute, isNotFound })
+        const responsePolicy = getSeoResponsePolicy({ isPrivateRoute, isNotFound, forceNoindex })
         const extraMeta = `
   <meta property="og:type" content="${esc(ogType)}" />
   <meta property="og:title" content="${esc(pageTitle)}" />
@@ -1297,7 +1411,7 @@ async function startServer() {
           ssrProductReviews: req.ssrProductReviews || null,
           ssrProductReviewsProductId: req.ssrProductReviewsProductId || null,
           ssrProductReviewsLang: req.ssrProductReviewsLang || null,
-          seoSettings: seoSettings,
+          seoSettings: stripSeoSecrets(seoSettings),
           languages: getAll('SELECT * FROM languages WHERE status=1 ORDER BY sort_order, code') || [],
           translationSettings: getPublicTranslationSettings(getOne),
           featuredProducts: homeInitialState.featuredProducts,

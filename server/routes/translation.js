@@ -1131,6 +1131,7 @@ ${strictRule}
                 if (!root || blocks.length === 0) {
                     // No blocks found, skip (don't try single call which may timeout)
                     console.log('[translateBatch] No blocks extracted from HTML, skipping:', item.itemName)
+                    errors.push({ error: 'No HTML blocks could be extracted from content', errorCode: 'ERR_NO_BLOCKS', itemName: item.itemName })
                     return
                 }
                 const BLOCK_BATCH = 8  // small batches = faster per AI call = no timeout
@@ -1197,6 +1198,9 @@ Example output format:
                     const translatedHtml = reassembleFromBlocks(item.text, root, blocks)
                     upsertTranslation(targetLang, item.type, item.id, item.field, '[HTML]', translatedHtml)
                     results.push({ original: '[HTML ' + item.field + ']', translated: translatedCount + '/' + blocks.length + ' blocks', type: item.type, field: item.field, itemName: item.itemName })
+                } else {
+                    console.log('[translateBatch] All blocks failed for:', item.itemName)
+                    errors.push({ error: 'All HTML blocks failed to translate', errorCode: 'ERR_ALL_BLOCKS', itemName: item.itemName })
                 }
             } else {
                 // Normal HTML (<15000 chars): send ENTIRE content in ONE call
@@ -2753,9 +2757,9 @@ router.post('/batch-start', authMiddleware, async (req, res) => {
         for (const page of pages) {
             if (!PAGES[page]) continue;
             const items = PAGES[page]();
-            // Check untranslated
+            // Check untranslated — long_html fields (news content, product detail_content)
+            // are intentionally included: they are translated in batch by executeTranslationTask.
             for (const item of items) {
-                if (item.long_html) continue;
                 for (const tLang of targetLangs) {
                 const t = getOne(
                     'SELECT translated_text FROM translations WHERE language_code=? AND content_type=? AND content_id=? AND content_field=?',
