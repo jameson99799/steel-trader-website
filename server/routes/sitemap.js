@@ -245,12 +245,27 @@ router.get('/products', (req, res) => {
 
         const urls = []
         const seoSettings = getSeoSettings()
+
+        // For non-English languages only include the variant when an actual translation
+        // exists in the translations table. This prevents serving untranslated (English)
+        // content under /es/, /fr/, … URLs, which Google treats as thin duplicates.
+        const translatedLangs = new Map() // productId -> Set(langCode)
+        try {
+            const rows = getAll(`SELECT content_id, language_code FROM translations WHERE content_type='product' AND translated_text IS NOT NULL AND length(translated_text) > 0`)
+            for (const row of rows) {
+                if (!translatedLangs.has(String(row.content_id))) translatedLangs.set(String(row.content_id), new Set())
+                translatedLangs.get(String(row.content_id)).add(row.language_code)
+            }
+        } catch (e) {}
+
         for (const p of products || []) {
             const prodSlug = p.slug || p.id
             const prodPath = `/products/${prodSlug}`
             const lastmod = toDateStr(p.lastmod_date, fallbackDate)
-            
+            const translated = translatedLangs.get(String(p.id)) || new Set()
+
             for (const l of activeLangs) {
+                if (l.code !== 'en' && l.code !== 'zh' && !translated.has(l.code)) continue
                 let imagesHTML = ''
                 if (p.images) {
                     const titleStr = p[`name_${l.code}`] || p.name_en || p.name || 'product'

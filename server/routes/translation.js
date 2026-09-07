@@ -499,6 +499,19 @@ function collectPageTexts() {
     )
 }
 
+// Collect homepage SEO title/description/keywords so the AI translation system can
+// localize the <title> and meta description for every language. Rendered in SSR via
+// getSeoTrans('home_seo', 1, lang) inside server/index.js.
+function collectHomeSeo() {
+    const s = getOne('SELECT site_title, site_description, site_keywords FROM seo_settings WHERE id=1')
+    if (!s) return []
+    const items = []
+    if (s.site_title) items.push({ type: 'home_seo', id: 1, field: 'seo_title', text: s.site_title, itemName: '首页标题 (Title)' })
+    if (s.site_description) items.push({ type: 'home_seo', id: 1, field: 'seo_description', text: s.site_description, itemName: '首页描述 (Description)' })
+    if (s.site_keywords) items.push({ type: 'home_seo', id: 1, field: 'seo_keywords', text: s.site_keywords, itemName: '首页关键词 (Keywords)' })
+    return items
+}
+
 function collectCategories() {
     const cats = getAll('SELECT id, name_en FROM categories')
     return cats.flatMap(c =>
@@ -915,6 +928,7 @@ const PAGES = {
     news: collectNews,
     company: collectCompany,
     page_texts: collectPageTexts,
+    home_seo: collectHomeSeo,
     categories: collectCategories,
     news_categories: collectNewsCategories,
     hero: collectHero,

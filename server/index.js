@@ -741,6 +741,12 @@ ${contactLines.join('\n')}
               if (tMap) {
                 translateProduct(product, tMap, lang)
               }
+              // Untranslated language variant: product exists only in English under this
+              // /xx/ URL — don't let Google index it as duplicate thin content.
+              if (lang !== 'en' && lang !== 'zh') {
+                const hasRealTranslation = !!product[`name_${lang}`] && !!product[`description_${lang}`]
+                if (!hasRealTranslation) forceNoindex = true
+              }
               const seoT = getSeoTrans('product', product.id, lang)
               const localizedPName = product[`name_${lang}`]
               const pName = localizedPName
@@ -1224,8 +1230,15 @@ ${contactLines.join('\n')}
           // ── Homepage BreadcrumbList + WebSite schema + SSR content ──
           if (!subPath || subPath === '/') {
             matchedRoute = true
+            // Homepage SEO text per language, sourced from the translations table when a
+            // translation has been generated (content left to the AI translation system).
+            const homeSeoT = getSeoTrans('home_seo', 1, lang)
+            if (homeSeoT.seo_title) pageTitle = homeSeoT.seo_title
+            if (homeSeoT.seo_description) pageDesc = homeSeoT.seo_description
+            if (homeSeoT.seo_keywords) pageKeywords = homeSeoT.seo_keywords
+
             // Keyword-rich homepage title (overrides bare company name from seoSettings)
-            const baseTitle = seoSettings.site_title || companyNameTranslated
+            const baseTitle = pageTitle || seoSettings.site_title || companyNameTranslated
             
             if (lang === 'zh') {
               pageTitle = `镀锌钢卷、镀铝锌钢卷、彩涂钢卷与冷轧钢卷源头工厂供应商 | ${companyNameTranslated}`
@@ -1355,13 +1368,29 @@ ${contactLines.join('\n')}
 
         // ── Build OG meta tags ──
         // Use company logo as default og:image when no page-specific image is available
-        const ogImage = pageImage || `${siteUrl}/uploads/logo.png`
+        // Fall back through OG settings only when set, else company favicon (always served).
+        let ogImage = pageImage
+        if (!ogImage) {
+          const ogCfg = seoSettings.og_image
+          if (ogCfg) {
+            ogImage = ogCfg.startsWith('http') ? ogCfg : `${siteUrl}${ogCfg}`
+          } else {
+            ogImage = `${siteUrl}/favicon-192.png`
+          }
+        }
+        const ogTitle = (pageTitle || '').substring(0, 110)
         const safeDesc = (pageDesc || '').substring(0, 160)
         const isPrivateRoute = url.startsWith('/admin') || url.startsWith('/crm')
         const responsePolicy = getSeoResponsePolicy({ isPrivateRoute, isNotFound, forceNoindex })
+        const ogLocaleMap = {
+          en: 'en_US', zh: 'zh_CN', es: 'es_ES', fr: 'fr_FR', ru: 'ru_RU',
+          ar: 'ar_SA', pt: 'pt_BR', tr: 'tr_TR', hi: 'hi_IN', th: 'th_TH'
+        }
+        const ogLocale = ogLocaleMap[lang] || 'en_US'
         const extraMeta = `
+  <meta property="og:locale" content="${esc(ogLocale)}" />
   <meta property="og:type" content="${esc(ogType)}" />
-  <meta property="og:title" content="${esc(pageTitle)}" />
+  <meta property="og:title" content="${esc(ogTitle)}" />
   <meta property="og:description" content="${esc(safeDesc)}" />
   <meta property="og:url" content="${esc(pageCanonical)}" />
   <meta property="og:site_name" content="${esc(companyName)}" />
@@ -1369,7 +1398,7 @@ ${contactLines.join('\n')}
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="${esc(pageTitle)}" />
+  <meta name="twitter:title" content="${esc(ogTitle)}" />
   <meta name="twitter:description" content="${esc(safeDesc)}" />
   <meta name="twitter:image" content="${esc(ogImage)}" />${seoSettings.geo_region ? `\n  <meta name="geo.region" content="${esc(seoSettings.geo_region)}" />` : ''}${seoSettings.geo_placename ? `\n  <meta name="geo.placename" content="${esc(seoSettings.geo_placename)}" />` : ''}${(seoSettings.geo_lat && seoSettings.geo_lng) ? `\n  <meta name="geo.position" content="${esc(seoSettings.geo_lat)};${esc(seoSettings.geo_lng)}" />\n  <meta name="ICBM" content="${esc(seoSettings.geo_lat)}, ${esc(seoSettings.geo_lng)}" />` : ''}
   ${hreflangTags}`
