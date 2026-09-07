@@ -297,6 +297,7 @@ router.get('/:id', dualAuth, (req, res) => {
      LEFT JOIN crm_users u ON c.owner_id = u.id WHERE c.id = ?`, [req.params.id]
   )
   if (!c) return res.status(404).json({ error: '客户不存在' })
+  if (!canAccessCustomer(req, c)) return res.status(403).json({ error: '无权访问该客户' })
   c.claim_history = getAll(
     `SELECT h.*, fu.display_name as from_name, tu.display_name as to_name
      FROM crm_customer_history h LEFT JOIN crm_users fu ON h.from_user_id=fu.id
@@ -328,6 +329,7 @@ router.put('/:id', dualAuth, (req, res) => {
   const fn = first_name || ''
   const ln = last_name || ''
   const fullName = name || `${fn} ${ln}`.trim() || '未命名'
+  if (!canAccessCustomer(req, getOne('SELECT owner_id FROM crm_customers WHERE id=?', [req.params.id]))) return res.status(403).json({ error: '无权修改该客户' })
   run(`UPDATE crm_customers SET first_name=?,last_name=?,name=?,country=?,phone=?,email=?,whatsapp=?,wechat=?,company=?,status=?,tags=?,note=? WHERE id=?`,
     [fn, ln, fullName, country||'', phone||'', email||'', whatsapp||'', wechat||'', company||'', status||'开发中', JSON.stringify(tags||[]), note||'', req.params.id])
   res.json({ message: '更新成功' })
@@ -336,6 +338,7 @@ router.put('/:id', dualAuth, (req, res) => {
 // Delete customer
 router.delete('/:id', dualAuth, (req, res) => {
   const id = req.params.id
+  if (!canAccessCustomer(req, getOne('SELECT owner_id FROM crm_customers WHERE id=?', [id]))) return res.status(403).json({ error: '无权删除该客户' })
   run('DELETE FROM crm_inquiries WHERE customer_id=?', [id])
   run('DELETE FROM crm_quotations WHERE customer_id=?', [id])
   run('DELETE FROM crm_followups WHERE customer_id=?', [id])
@@ -346,6 +349,7 @@ router.delete('/:id', dualAuth, (req, res) => {
 
 // ─── Inquiries ──────────────────────────────────────────────────────────────────
 router.get('/:id/inquiries', dualAuth, (req, res) => {
+  if (!canAccessCustomer(req, getOne('SELECT owner_id FROM crm_customers WHERE id=?', [req.params.id]))) return res.status(403).json({ error: '无权访问该客户' })
   const list = getAll('SELECT * FROM crm_inquiries WHERE customer_id=? ORDER BY inquiry_time DESC', [req.params.id])
   list.forEach(i => {
     try { i.images = JSON.parse(i.images||'[]') } catch(e) { i.images = [] }
@@ -357,6 +361,7 @@ router.get('/:id/inquiries', dualAuth, (req, res) => {
 router.post('/:id/inquiries', dualAuth, (req, res) => {
   const { content_html, note, inquiry_time, images, files } = req.body
   const now = new Date().toISOString()
+  if (!canAccessCustomer(req, getOne('SELECT owner_id FROM crm_customers WHERE id=?', [req.params.id]))) return res.status(403).json({ error: '无权访问该客户' })
   const result = run(`INSERT INTO crm_inquiries (customer_id,content_html,note,images,files,inquiry_time,created_at) VALUES (?,?,?,?,?,?,?)`,
     [req.params.id, content_html||'', note||'', JSON.stringify(images||[]), JSON.stringify(files||[]), inquiry_time||now, now])
   run('UPDATE crm_customers SET last_activity_at=? WHERE id=?', [now, req.params.id])
@@ -365,18 +370,23 @@ router.post('/:id/inquiries', dualAuth, (req, res) => {
 
 router.put('/inquiries/:inqId', dualAuth, (req, res) => {
   const { content_html, note, inquiry_time, images, files } = req.body
+  const row = getOne('SELECT c.owner_id FROM crm_inquiries i JOIN crm_customers c ON c.id=i.customer_id WHERE i.id=?', [req.params.inqId])
+  if (!row || !canAccessCustomer(req, row)) return res.status(403).json({ error: '无权修改该询盘' })
   run(`UPDATE crm_inquiries SET content_html=?,note=?,images=?,files=?,inquiry_time=?,updated_at=? WHERE id=?`,
     [content_html, note||'', JSON.stringify(images||[]), JSON.stringify(files||[]), inquiry_time, new Date().toISOString(), req.params.inqId])
   res.json({ message: '更新成功' })
 })
 
 router.delete('/inquiries/:inqId', dualAuth, (req, res) => {
+  const row = getOne('SELECT c.owner_id FROM crm_inquiries i JOIN crm_customers c ON c.id=i.customer_id WHERE i.id=?', [req.params.inqId])
+  if (!row || !canAccessCustomer(req, row)) return res.status(403).json({ error: '无权删除该询盘' })
   run('DELETE FROM crm_inquiries WHERE id=?', [req.params.inqId])
   res.json({ message: '删除成功' })
 })
 
 // ─── Quotations ─────────────────────────────────────────────────────────────────
 router.get('/:id/quotations', dualAuth, (req, res) => {
+  if (!canAccessCustomer(req, getOne('SELECT owner_id FROM crm_customers WHERE id=?', [req.params.id]))) return res.status(403).json({ error: '无权访问该客户' })
   const list = getAll('SELECT * FROM crm_quotations WHERE customer_id=? ORDER BY quotation_time DESC', [req.params.id])
   list.forEach(q => {
     try { q.ports = JSON.parse(q.ports||'[]') } catch(e) { q.ports = [] }
@@ -390,6 +400,7 @@ router.get('/:id/quotations', dualAuth, (req, res) => {
 router.post('/:id/quotations', dualAuth, (req, res) => {
   const { content_html, note, freight_type, ports, price_rows, files, images, quotation_time } = req.body
   const now = new Date().toISOString()
+  if (!canAccessCustomer(req, getOne('SELECT owner_id FROM crm_customers WHERE id=?', [req.params.id]))) return res.status(403).json({ error: '无权访问该客户' })
   const result = run(
     `INSERT INTO crm_quotations (customer_id,content_html,note,freight_type,ports,price_rows,files,images,quotation_time,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
     [req.params.id, content_html||'', note||'', freight_type||'container', JSON.stringify(ports||[]), JSON.stringify(price_rows||[]), JSON.stringify(files||[]), JSON.stringify(images||[]), quotation_time||now, now])
@@ -399,12 +410,16 @@ router.post('/:id/quotations', dualAuth, (req, res) => {
 
 router.put('/quotations/:qId', dualAuth, (req, res) => {
   const { content_html, note, freight_type, ports, price_rows, files, images, quotation_time } = req.body
+  const row = getOne('SELECT c.owner_id FROM crm_quotations q JOIN crm_customers c ON c.id=q.customer_id WHERE q.id=?', [req.params.qId])
+  if (!row || !canAccessCustomer(req, row)) return res.status(403).json({ error: '无权修改该报价单' })
   run(`UPDATE crm_quotations SET content_html=?,note=?,freight_type=?,ports=?,price_rows=?,files=?,images=?,quotation_time=?,updated_at=? WHERE id=?`,
     [content_html, note||'', freight_type||'container', JSON.stringify(ports||[]), JSON.stringify(price_rows||[]), JSON.stringify(files||[]), JSON.stringify(images||[]), quotation_time, new Date().toISOString(), req.params.qId])
   res.json({ message: '更新成功' })
 })
 
 router.delete('/quotations/:qId', dualAuth, (req, res) => {
+  const row = getOne('SELECT c.owner_id FROM crm_quotations q JOIN crm_customers c ON c.id=q.customer_id WHERE q.id=?', [req.params.qId])
+  if (!row || !canAccessCustomer(req, row)) return res.status(403).json({ error: '无权删除该报价单' })
   run('DELETE FROM crm_quotations WHERE id=?', [req.params.qId])
   res.json({ message: '删除成功' })
 })

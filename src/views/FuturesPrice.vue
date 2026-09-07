@@ -151,6 +151,7 @@ import {
   DataZoomComponent,
   GridComponent,
   MarkLineComponent,
+  MarkPointComponent,
   TooltipComponent
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -162,6 +163,7 @@ echarts.use([
   TooltipComponent,
   AxisPointerComponent,
   MarkLineComponent,
+  MarkPointComponent,
   DataZoomComponent,
   CanvasRenderer
 ])

@@ -210,7 +210,7 @@ async function startServer() {
       }
     })
     
-    app.use('/api/admin/login', loginLimiter)
+    app.use('/api/auth/login', loginLimiter)
     app.use('/api/crm/auth/login', loginLimiter)
 
     const inquiryLimiter = rateLimit({
