@@ -211,6 +211,11 @@
           <small>超过此天数的产品页将自动刷新更新时间。0 = 不启用。建议值：60-90 天</small>
         </div>
       </div>
+      <div class="form-group" style="margin-bottom: 16px;">
+        <label>✍️ 默认新闻作者</label>
+        <input v-model="form.default_news_author" class="form-control" placeholder="例如：Ann, Steel Export Specialist" />
+        <small>用于文章 Article 结构化数据中的 Person 作者，如为空则回退为公司组织（Organization）。</small>
+      </div>
       <div class="refresh-actions">
         <button class="btn btn-refresh" @click="triggerRefresh" :disabled="refreshing">
           {{ refreshing ? '刷新中...' : '⚡ 立即应用并刷新超期内容' }}
@@ -343,8 +348,9 @@ const form = ref({
   geo_lng: '',
   hreflang_en: 'en',
   hreflang_zh: 'zh-CN',
-  local_business_type: 'Manufacturer',
+  local_business_type: 'Corporation',
   local_business_address: '',
+  default_news_author: '',
   article_refresh_days: 0,
   product_refresh_days: 0,
   llms_txt: '',
@@ -392,8 +398,9 @@ async function load() {
         geo_lng: data.geo_lng || '',
         hreflang_en: data.hreflang_en || 'en',
         hreflang_zh: data.hreflang_zh || 'zh-CN',
-        local_business_type: data.local_business_type || 'Manufacturer',
+        local_business_type: data.local_business_type || 'Corporation',
         local_business_address: data.local_business_address || '',
+        default_news_author: data.default_news_author || '',
         article_refresh_days: data.article_refresh_days || 0,
         product_refresh_days: data.product_refresh_days || 0,
         llms_txt: data.llms_txt || '',

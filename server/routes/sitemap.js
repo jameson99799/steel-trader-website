@@ -138,17 +138,20 @@ router.get('/static', (req, res) => {
     res.setHeader('Content-Type', 'application/xml; charset=utf-8')
     try {
         const activeLangs = getActiveLangs()
+        // Static pages are rendered dynamically per request — emit today's date
+        // instead of stale hardcoded 2024 values so crawlers re-crawl them.
+        const todayStr = new Date().toISOString().split('T')[0]
 
         const staticPages = [
-            { loc: '/', priority: '1.0', changefreq: 'weekly', lastmod: '2024-04-15' },
-            { loc: '/products', priority: '0.9', changefreq: 'weekly', lastmod: '2024-04-10' },
-            { loc: '/news', priority: '0.8', changefreq: 'weekly', lastmod: '2024-04-10' },
-            { loc: '/factory', priority: '0.8', changefreq: 'weekly', lastmod: '2024-03-25' },
-            { loc: '/about', priority: '0.7', changefreq: 'monthly', lastmod: '2024-03-01' },
-            { loc: '/contact', priority: '0.7', changefreq: 'monthly', lastmod: '2024-03-01' },
-            { loc: '/news/ral-colors', priority: '0.5', changefreq: 'yearly', lastmod: '2024-03-01' },
-            { loc: '/news/roofing-profiles', priority: '0.7', changefreq: 'weekly', lastmod: '2024-04-01' },
-            { loc: '/news/futures-price', priority: '0.8', changefreq: 'daily', lastmod: new Date().toISOString().split('T')[0] }, // Only futures price changes daily truly
+            { loc: '/', priority: '1.0', changefreq: 'weekly', lastmod: todayStr },
+            { loc: '/products', priority: '0.9', changefreq: 'weekly', lastmod: todayStr },
+            { loc: '/news', priority: '0.8', changefreq: 'weekly', lastmod: todayStr },
+            { loc: '/factory', priority: '0.8', changefreq: 'weekly', lastmod: todayStr },
+            { loc: '/about', priority: '0.7', changefreq: 'monthly', lastmod: todayStr },
+            { loc: '/contact', priority: '0.7', changefreq: 'monthly', lastmod: todayStr },
+            { loc: '/news/ral-colors', priority: '0.5', changefreq: 'yearly', lastmod: todayStr },
+            { loc: '/news/roofing-profiles', priority: '0.7', changefreq: 'weekly', lastmod: todayStr },
+            { loc: '/news/futures-price', priority: '0.8', changefreq: 'daily', lastmod: todayStr }, // Only futures price changes daily truly
         ]
 
         const seoSettings = getSeoSettings()
@@ -241,9 +244,11 @@ router.get('/products', (req, res) => {
         // Primary: status=1 (active). Fallback: all products (handles non-standard status values)
         let products = getAll(`SELECT p.id, p.slug, p.name_en, p.name, p.images, COALESCE(p.updated_at, p.created_at) as lastmod_date FROM products p WHERE p.status = 1${visibility.clause} ORDER BY p.id DESC`, visibility.params)
         if (!products || products.length === 0) {
-            products = getAll(`SELECT p.id, p.slug, p.name_en, p.name, p.images, COALESCE(p.updated_at, p.created_at) as lastmod_date FROM products p WHERE 1=1${visibility.clause} ORDER BY p.id DESC`, visibility.params)
+            // Fallback for non-standard status values — but NEVER leak offline
+            // (status = 0) or hidden products into the sitemap.
+            products = getAll(`SELECT p.id, p.slug, p.name_en, p.name, p.images, COALESCE(p.updated_at, p.created_at) as lastmod_date FROM products p WHERE p.status != 0${visibility.clause} ORDER BY p.id DESC`, visibility.params)
             if (products && products.length > 0) {
-                console.log(`[sitemap] WARN: No products with status=1 found; using all ${products.length} products as fallback`)
+                console.log(`[sitemap] WARN: No products with status=1 found; using ${products.length} products with status != 0 as fallback`)
             }
         } else {
             console.log(`[sitemap] Products sitemap: ${products.length} products found`)

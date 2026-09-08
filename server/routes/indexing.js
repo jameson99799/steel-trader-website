@@ -1,6 +1,7 @@
 import express from 'express'
 import { authMiddleware } from '../middleware/auth.js'
 import { getAll, getOne, run } from '../db.js'
+import { getLocalizedCoverage, indexableLangs } from '../services/indexingPolicy.js'
 
 const router = express.Router()
 const BASE_URL = 'https://www.sunseasteel.com'
@@ -59,18 +60,30 @@ function getAllSiteUrls() {
     try { langs = getAll('SELECT code FROM languages WHERE status = 1') } catch {}
     if (!langs.length) langs = [{ code: 'en' }]
 
+    const coverage = getLocalizedCoverage()
     const products = getAll('SELECT slug, id FROM products WHERE status = 1')
     const news = getAll('SELECT slug, id FROM news WHERE status = 1')
     const categories = getAll('SELECT id, slug FROM categories')
+    const newsCategories = getAll('SELECT id, slug FROM news_categories')
 
     const urls = []
-    const staticPaths = ['', '/products', '/news', '/about', '/contact']
-
-    for (const l of langs) {
+    // Static pages are only indexed in the primary locales; use canonical paths
+    // (no /products?category= query URLs, no untranslated variants, include /factory).
+    const staticPaths = ['', '/products', '/news', '/about', '/contact', '/factory', '/news/ral-colors', '/news/roofing-profiles', '/news/futures-price']
+    for (const l of indexableLangs(langs)) {
         for (const p of staticPaths) urls.push(`${BASE_URL}/${l.code}${p}`)
-        for (const p of products) urls.push(`${BASE_URL}/${l.code}/products/${p.slug || p.id}`)
-        for (const n of news) urls.push(`${BASE_URL}/${l.code}/news/${n.slug || n.id}`)
-        for (const c of categories) urls.push(`${BASE_URL}/${l.code}/products?category=${c.slug || c.id}`)
+
+        for (const c of categories) urls.push(`${BASE_URL}/${l.code}/products/category/${c.slug || c.id}`)
+        for (const c of newsCategories) urls.push(`${BASE_URL}/${l.code}/news/category/${c.slug || c.id}`)
+    }
+
+    for (const p of products) {
+        const localized = coverage.get(`product:${p.id}`) || null
+        for (const l of indexableLangs(langs, localized)) urls.push(`${BASE_URL}/${l.code}/products/${p.slug || p.id}`)
+    }
+    for (const n of news) {
+        const localized = coverage.get(`news:${n.id}`) || null
+        for (const l of indexableLangs(langs, localized)) urls.push(`${BASE_URL}/${l.code}/news/${n.slug || n.id}`)
     }
     return urls
 }

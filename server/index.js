@@ -350,6 +350,7 @@ async function startServer() {
       try {
         const seo = getOne('SELECT robots_txt FROM seo_settings WHERE id = 1')
         res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+        res.setHeader('Cache-Control', 'public, max-age=3600')
         let robotsTxt = (seo && seo.robots_txt) ? seo.robots_txt : 'User-agent: *\nAllow: /\n'
         if (!robotsTxt.toLowerCase().includes('sitemap:')) {
           robotsTxt += '\nSitemap: https://www.sunseasteel.com/sitemap.xml\n'
@@ -1409,8 +1410,17 @@ ${contactLines.join('\n')}
             ogImage = `${siteUrl}/favicon-192.png`
           }
         }
+        // Declare og:image:width/height only when the actual source is known, so
+        // crawlers never see hardcoded 1200×630 paired with a 192×192 favicon.
+        const ogImageDims = ogImage === `${siteUrl}/favicon-192.png`
+          ? '\n  <meta property="og:image:width" content="192" />\n  <meta property="og:image:height" content="192" />'
+          : seoSettings.og_image
+            ? '\n  <meta property="og:image:width" content="1200" />\n  <meta property="og:image:height" content="630" />'
+            : ''
         const ogTitle = (pageTitle || '').substring(0, 110)
         const safeDesc = (pageDesc || '').substring(0, 160)
+        // Google shows roughly 60 characters of the <title> in search results.
+        const titleForHead = (pageTitle || '').length > 60 ? (pageTitle || '').slice(0, 57).trimEnd() + '…' : pageTitle || ''
         const isPrivateRoute = url.startsWith('/admin') || url.startsWith('/crm')
         // Static/listing/category pages only have localized variants in the primary
         // locales; secondary languages picked up here render untranslated content.
@@ -1428,13 +1438,11 @@ ${contactLines.join('\n')}
   <meta property="og:description" content="${esc(safeDesc)}" />
   <meta property="og:url" content="${esc(pageCanonical)}" />
   <meta property="og:site_name" content="${esc(companyName)}" />
-  <meta property="og:image" content="${esc(ogImage)}" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
+  <meta property="og:image" content="${esc(ogImage)}" />${ogImageDims}
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${esc(ogTitle)}" />
   <meta name="twitter:description" content="${esc(safeDesc)}" />
-  <meta name="twitter:image" content="${esc(ogImage)}" />${seoSettings.geo_region ? `\n  <meta name="geo.region" content="${esc(seoSettings.geo_region)}" />` : ''}${seoSettings.geo_placename ? `\n  <meta name="geo.placename" content="${esc(seoSettings.geo_placename)}" />` : ''}${(seoSettings.geo_lat && seoSettings.geo_lng) ? `\n  <meta name="geo.position" content="${esc(seoSettings.geo_lat)};${esc(seoSettings.geo_lng)}" />\n  <meta name="ICBM" content="${esc(seoSettings.geo_lat)}, ${esc(seoSettings.geo_lng)}" />` : ''}
+  <meta name="twitter:image" content="${esc(ogImage)}" />${seoSettings.google_search_console ? `\n  <meta name="google-site-verification" content="${esc(seoSettings.google_search_console)}" />` : ''}${seoSettings.geo_region ? `\n  <meta name="geo.region" content="${esc(seoSettings.geo_region)}" />` : ''}${seoSettings.geo_placename ? `\n  <meta name="geo.placename" content="${esc(seoSettings.geo_placename)}" />` : ''}${(seoSettings.geo_lat && seoSettings.geo_lng) ? `\n  <meta name="geo.position" content="${esc(seoSettings.geo_lat)};${esc(seoSettings.geo_lng)}" />\n  <meta name="ICBM" content="${esc(seoSettings.geo_lat)}, ${esc(seoSettings.geo_lng)}" />` : ''}
   ${hreflangTags}`
 
         // ── Inject SSR content and INITIAL_STATE for hydration ──
@@ -1483,11 +1491,11 @@ ${contactLines.join('\n')}
         const stateTag = `<script>window.__INITIAL_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')}</script>`
         html = renderSeoDocument({
           html,
-          lang,
-          title: pageTitle,
-          description: pageDesc,
+          lang: lang === 'zh' ? (seoSettings.hreflang_zh || 'zh-CN') : lang,
+          title: titleForHead,
+          description: safeDesc,
           keywords: pageKeywords,
-          canonical: pageCanonical,
+          canonical: isNotFound ? '' : pageCanonical,
           robots: responsePolicy.robots,
           metaHtml: extraMeta,
           schemaHtml: extraSchemas,
@@ -1496,6 +1504,7 @@ ${contactLines.join('\n')}
 
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.setHeader('Cache-Control', responsePolicy.cacheControl)
+        res.setHeader('X-Robots-Tag', responsePolicy.robots)
         // Return 404 status for non-existent detail pages (fixes soft 404)
         if (isNotFound) {
           res.status(404).send(html)

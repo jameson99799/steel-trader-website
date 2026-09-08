@@ -70,7 +70,7 @@ onMounted(async () => {
 
       // ── LocalBusiness JSON-LD ──────────────────────────────
       if (geo_lat && geo_lng && company) {
-        const bizType = local_business_type || 'Manufacturer'
+        const bizType = ['Organization', 'Corporation', 'LocalBusiness', 'Store', 'WholesaleStore'].includes(local_business_type) ? local_business_type : 'Corporation'
         const bizName = company.name_en || company.name || ''
         const bizEmail = company.email || ''
         const bizPhone = company.phone || ''
@@ -81,7 +81,7 @@ onMounted(async () => {
           '@type': bizType,
           'name': bizName,
           'description': site_description || company.description_en || company.description || '',
-          'url': siteUrl,
+          'url': typeof window !== 'undefined' ? window.location.origin : '',
           ...(bizEmail && { 'email': bizEmail }),
           ...(bizPhone && { 'telephone': bizPhone }),
           ...(bizAddr && {
