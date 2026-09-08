@@ -240,52 +240,10 @@ async function runJobInBackground(jobId) {
                 continue
             }
 
-            // Determine if we should skip already translated fields.
-            // As per user request: "Fresh translation commands should always re-translate everything.
-            // ONLY skip already translated strings if this is an automatic or manual retry."
-            const isRetry = job.is_retry || item._retryCount > 0
-            
-            let items = itemsRaw
-            
-            if (isRetry) {
-                const alreadyTranslated = getAll(
-                    'SELECT content_field FROM translations WHERE language_code=? AND content_type=? AND content_id=?',
-                    [item.targetLang, item.type, item.id]
-                )
-                const translatedFieldsSet = new Set(alreadyTranslated.map(r => r.content_field))
-    
-                items = itemsRaw.map(pi => {
-                    if (pi.combined) {
-                        try {
-                            const subObj = JSON.parse(pi.text)
-                            const remainingSubObj = {}
-                            let hasRemaining = false
-                            for (const [subField, val] of Object.entries(subObj)) {
-                                if (!translatedFieldsSet.has(subField)) {
-                                    remainingSubObj[subField] = val
-                                    hasRemaining = true
-                                }
-                            }
-                            if (!hasRemaining) return null
-                            return { ...pi, text: JSON.stringify(remainingSubObj) }
-                        } catch (e) {}
-                    } else {
-                        const realField = pi.field.startsWith('name_NC_') || pi.field.startsWith('name_RC_') ? 'name' : pi.field
-                        if (translatedFieldsSet.has(realField)) return null
-                    }
-                    return pi
-                }).filter(Boolean)
-            }
-
-            if (items.length === 0) {
-                // Already fully translated!
-                okTotal++
-                processingItems.delete(item)
-                doneTotal++
-                updateJobProgress(jobId, { done_items: doneTotal, ok_items: okTotal, error_items: errTotal })
-                run('UPDATE languages SET ai_translated=1 WHERE code=?', [item.targetLang])
-                continue
-            }
+            // Always translate all fields for context coherence — even on retry.
+            // If ANY field in a batch failed, the entire item is retried from scratch
+            // so the AI receives the full document context for a consistent translation.
+            const items = itemsRaw
 
             const manualOverrides = getAll(
                 'SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1',
@@ -326,8 +284,8 @@ async function runJobInBackground(jobId) {
                     throw new Error('AI 无返回结果 (可能为空或格式错误)')
                 }
             } catch (e) {
-                // Auto-retry once inside the worker
-                if (!isRetry && (item._retryCount || 0) < 1) {
+                // Auto-retry once inside the worker — full re-translation for context coherence
+                if ((item._retryCount || 0) < 1) {
                     item._retryCount = (item._retryCount || 0) + 1
                     pendingItems.push(item) // put it back to queue
                     updateJobProgress(jobId, { auto_retried: 1 })

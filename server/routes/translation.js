@@ -2685,7 +2685,7 @@ try {
     if (s && s.concurrency) workerConcurrency = s.concurrency
 } catch(e) {}
 
-async function executeTranslationTask(targetLang, contentType, contentId, isRetry = false) {
+async function executeTranslationTask(targetLang, contentType, contentId) {
     const langRow = getOne('SELECT * FROM languages WHERE code=?', [targetLang])
     if (!langRow) throw new Error(`Language "${targetLang}" not found`)
 
@@ -2699,43 +2699,13 @@ async function executeTranslationTask(targetLang, contentType, contentId, isRetr
     if (!PAGES[pageKey]) throw new Error(`Unknown content type: ${contentType}`)
     
     const allItems = PAGES[pageKey]()
-    let items = allItems.filter(i => String(i.id) === String(contentId))
+    const items = allItems.filter(i => String(i.id) === String(contentId))
 
     if (items.length === 0) return { results: [], errors: [] }
 
-    // On retry, only re-translate fields that are still missing — never overwrite
-    // the fields that already succeeded in the previous (partial) run.
-    if (isRetry) {
-        const alreadyTranslated = getAll(
-            'SELECT content_field FROM translations WHERE language_code=? AND content_type=? AND content_id=?',
-            [targetLang, contentType, contentId]
-        )
-        const translatedFieldsSet = new Set(alreadyTranslated.map(r => r.content_field))
-
-        items = items.map(pi => {
-            if (pi.combined) {
-                try {
-                    const subObj = JSON.parse(pi.text)
-                    const remainingSubObj = {}
-                    let hasRemaining = false
-                    for (const [subField, val] of Object.entries(subObj)) {
-                        if (!translatedFieldsSet.has(subField)) {
-                            remainingSubObj[subField] = val
-                            hasRemaining = true
-                        }
-                    }
-                    if (!hasRemaining) return null
-                    return { ...pi, text: JSON.stringify(remainingSubObj) }
-                } catch (e) {}
-            } else {
-                const realField = pi.field.startsWith('name_NC_') || pi.field.startsWith('name_RC_') ? 'name' : pi.field
-                if (translatedFieldsSet.has(realField)) return null
-            }
-            return pi
-        }).filter(Boolean)
-
-        if (items.length === 0) return { results: [], errors: [] }
-    }
+    // Always translate all fields — even on retry. When ANY field in a batch
+    // failed previously, the entire item is re-submitted so the AI receives
+    // the complete document context, ensuring a coherent translation.
 
     const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
     const overrideNote = manualOverrides.length > 0
@@ -2752,7 +2722,7 @@ async function executeTranslationTask(targetLang, contentType, contentId, isRetr
 
 async function executeQueuedTranslationTask(task) {
     try {
-        const result = await executeTranslationTask(task.target_lang, task.item_type, task.item_id, task.retry_count > 0)
+        const result = await executeTranslationTask(task.target_lang, task.item_type, task.item_id)
         if (result.errors && result.errors.length > 0) {
             const errMsg = (result.errors[0].error || 'Unknown error').slice(0, 500)
             run("UPDATE translation_tasks SET status='error', error_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", [errMsg, task.id])

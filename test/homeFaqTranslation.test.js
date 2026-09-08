@@ -37,15 +37,14 @@ test('SSR homepage FAQ schema reads AI translations when present, falling back t
   assert.match(idx, /homeFaqs\.some|translatedFaqs\.some/)
 })
 
-test('queued retries only re-translate missing fields, never overwrite successful ones', () => {
+test('retries always re-translate the full item for context coherence, never skip already-translated fields', () => {
   const tr = read('server/routes/translation.js')
-  // executeTranslationTask accepts an isRetry flag
-  assert.match(tr, /async function executeTranslationTask\(targetLang, contentType, contentId, isRetry = false\)/)
-  // On retry, already-translated fields are filtered out
-  assert.ok(tr.indexOf('On retry, only re-translate fields that are still missing') < tr.indexOf('if (isRetry) {'))
-  assert.match(tr, /translatedFieldsSet\.has\(realField\)/)
-  // The queued worker propagates retry_count>0 semantics as isRetry
-  assert.match(tr, /executeTranslationTask\(task\.target_lang, task\.item_type, task\.item_id, task\.retry_count > 0\)/)
+  // executeTranslationTask does NOT accept an isRetry flag
+  assert.match(tr, /async function executeTranslationTask\(targetLang, contentType, contentId\)/)
+  // The comment explicitly states: always translate all fields, even on retry
+  assert.match(tr, /Always translate all fields/)
+  // No translatedFieldsSet filtering in executeTranslationTask
+  assert.doesNotMatch(tr.match(/function executeTranslationTask[\s\S]{0,2500}/)[0], /translatedFieldsSet/)
 })
 
 test('retry queue marks partial success without discarding successful translations', () => {
