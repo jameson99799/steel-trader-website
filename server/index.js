@@ -1264,7 +1264,10 @@ ${contactLines.join('\n')}
               potentialAction: { '@type': 'SearchAction', target: `${siteUrl}/${lang}/products?search={search_term_string}`, 'query-input': 'required name=search_term_string' }
             })
             // Homepage FAQPage schema (GEO: used by Google SGE / ChatGPT / Perplexity)
-            const homeFaqs = lang === 'zh'
+            // The 5 Q&A pairs can be AI-translated per language via the translation system
+            // (content_type='home_faq', fields faq_q_0..faq_a_4). Translations, when present,
+            // override the hardcoded English fallbacks so the schema matches the page language.
+            const defaultFaqs = lang === 'zh'
               ? [
                   ['你们是工厂还是贸易公司？', '我们是位于山东的源头工厂，集冷轧、镀锌、镀铝锌和彩涂生产线于一体，支持厂家直供与定制规格。'],
                   ['可以邮寄样品或进行打样吗？', '可以。您可以提供目标规格（厚度、宽度、锌层、颜色、数量），我们支持小批量试单与样品确认。'],
@@ -1279,6 +1282,24 @@ ${contactLines.join('\n')}
                   ['How do I get an FOB or CIF quote?', 'Send your specification, material, coating, dimensions and target port, and we will issue a formal quotation within one working day.'],
                   ['What certifications and quality control do you have?', 'Products comply with ASTM / JIS / EN standards, pass full-process QC before shipment, and material certificates plus third-party inspection are available on request.']
                 ]
+            let homeFaqs = defaultFaqs
+            if (lang !== 'en' && lang !== 'zh') {
+              try {
+                const translatedFaqs = []
+                for (let i = 0; i < defaultFaqs.length; i++) {
+                  const qRow = getOne('SELECT translated_text FROM translations WHERE content_type=? AND content_id=1 AND content_field=? AND language_code=?', ['home_faq', `faq_q_${i}`, lang])
+                  const aRow = getOne('SELECT translated_text FROM translations WHERE content_type=? AND content_id=1 AND content_field=? AND language_code=?', ['home_faq', `faq_a_${i}`, lang])
+                  const q = qRow?.translated_text
+                  const a = aRow?.translated_text
+                  if (q && a) translatedFaqs.push([q, a])
+                  else translatedFaqs.push(defaultFaqs[i])
+                }
+                // Only replace when at least one entry is actually translated
+                if (translatedFaqs.some(([q], i) => q && q !== defaultFaqs[i][0])) {
+                  homeFaqs = translatedFaqs
+                }
+              } catch (e) {}
+            }
             extraSchemas += jsonLd({
               '@context': 'https://schema.org', '@type': 'FAQPage',
               mainEntity: homeFaqs.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } }))

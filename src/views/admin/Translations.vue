@@ -886,8 +886,8 @@ const selectedPromptId = ref(localStorage.getItem('last_selected_prompt_id') || 
 watch(selectedPromptId, (newVal) => {
   localStorage.setItem('last_selected_prompt_id', newVal || '')
 })
-const allPages = ['products', 'reviews', 'news', 'news_categories', 'company', 'page_texts', 'home_seo', 'categories', 'hero', 'ui_texts_static', 'ral_colors', 'roofing_categories', 'factory', 'futures', 'chat']
-const pageLabels = { products: '产品', reviews: '⭐ 产品评价', news: '新闻', news_categories: '📰 新闻分类', company: '公司信息', page_texts: '页面文字', home_seo: '🏠 首页SEO', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字', ral_colors: '🎨 RAL颜色', roofing_categories: '🏠 瓦型分组', factory: '🏭 工厂展示', futures: '📈 期货行情', chat: '💬 在线客服' }
+const allPages = ['products', 'reviews', 'news', 'news_categories', 'company', 'page_texts', 'home_seo', 'home_faq', 'categories', 'hero', 'ui_texts_static', 'ral_colors', 'roofing_categories', 'factory', 'futures', 'chat']
+const pageLabels = { products: '产品', reviews: '⭐ 产品评价', news: '新闻', news_categories: '📰 新闻分类', company: '公司信息', page_texts: '页面文字', home_seo: '🏠 首页SEO', home_faq: '📋 首页FAQ', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字', ral_colors: '🎨 RAL颜色', roofing_categories: '🏠 瓦型分组', factory: '🏭 工厂展示', futures: '📈 期货行情', chat: '💬 在线客服' }
 const selectedPages = ref([...allPages])
 const concurrency = ref(3)
 const translating = ref(false)
@@ -1703,6 +1703,7 @@ function auditLangTotalMissing(lang) {
   count += (lang.news_categories?.missing?.length || 0)
   count += (lang.hero?.missing?.length || 0)
   count += (lang.home_seo?.missing?.length || 0)
+  count += (lang.home_faq?.missing?.length || 0)
   count += (lang.chat_welcome_preset?.missing?.length || 0)
   count += (lang.chat_auto_reply?.missing?.length || 0)
   count += (lang.chat_ui_texts?.missing?.length || 0)
@@ -1725,11 +1726,11 @@ const auditMissingAll = computed(() => {
     if (lang.chat_ui_texts?.missing?.length) {
       items.push({ type: 'chat_ui_text', id: 'static', name: '客服 UI 静态文字 (' + lang.chat_ui_texts.missing.length + ' keys)', lang: lang.code, langName: lang.name, langFlag: lang.flag })
     }
-    for (const section of ['company', 'page_texts', 'categories', 'news_categories', 'hero', 'home_seo', 'chat_welcome_preset', 'chat_auto_reply']) {
+    for (const section of ['company', 'page_texts', 'categories', 'news_categories', 'hero', 'home_seo', 'home_faq', 'chat_welcome_preset', 'chat_auto_reply']) {
       for (const m of (lang[section]?.missing || [])) {
         const typeMap = { 
           company: 'company', page_texts: 'page_text', categories: 'category', 
-          news_categories: 'news_category', hero: 'hero', home_seo: 'home_seo',
+          news_categories: 'news_category', hero: 'hero', home_seo: 'home_seo', home_faq: 'home_faq',
           chat_welcome_preset: 'chat_welcome_preset', chat_auto_reply: 'chat_auto_reply'
         }
         items.push({ type: typeMap[section], id: m.id, name: m.name, lang: lang.code, langName: lang.name, langFlag: lang.flag })
@@ -1764,7 +1765,7 @@ async function runAudit() {
       const uiMissing = lang.ui_texts?.missing?.length || 0
       const pMissing = lang.products?.missing?.length || 0
       const nMissing = lang.news?.missing?.length || 0
-      const otherMissing = (lang.company?.missing?.length || 0) + (lang.page_texts?.missing?.length || 0) + (lang.categories?.missing?.length || 0) + (lang.hero?.missing?.length || 0) + (lang.home_seo?.missing?.length || 0)
+      const otherMissing = (lang.company?.missing?.length || 0) + (lang.page_texts?.missing?.length || 0) + (lang.categories?.missing?.length || 0) + (lang.hero?.missing?.length || 0) + (lang.home_seo?.missing?.length || 0) + (lang.home_faq?.missing?.length || 0)
       if (totalMissing === 0) {
         auditAddLog('ok', (lang.flag || '') + ' ' + lang.name + ': ✅ 全部翻译完成')
       } else {

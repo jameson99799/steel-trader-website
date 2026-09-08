@@ -512,6 +512,26 @@ function collectHomeSeo() {
     return items
 }
 
+// Homepage FAQ entries — the SSR homepage renders a FAQPage schema (server/index.js).
+// These 5 Q&A pairs were previously hardcoded in English (all non-zh languages).
+// Exposing them as a translatable content type lets the AI translation system
+// localize the FAQPage schema (GEO: Google SGE / ChatGPT / Perplexity) for every language.
+function collectHomeFaqs() {
+    const faqs = [
+        ['Are you a manufacturer or a trading company?', 'We are an origin factory in Shandong with cold rolling, galvanizing, galvalume and color coating lines, supporting factory-direct supply and custom specifications.'],
+        ['Can I get samples or a trial order?', 'Yes. Provide your target specification (thickness, width, coating, color, quantity); we support small-batch trial orders and sample confirmation.'],
+        ['What is the minimum order quantity (MOQ)?', 'For standard products the MOQ is flexible, usually a full container; first-time cooperation can be negotiated with a trial quantity.'],
+        ['How do I get an FOB or CIF quote?', 'Send your specification, material, coating, dimensions and target port, and we will issue a formal quotation within one working day.'],
+        ['What certifications and quality control do you have?', 'Products comply with ASTM / JIS / EN standards, pass full-process QC before shipment, and material certificates plus third-party inspection are available on request.']
+    ]
+    return faqs.flatMap(([q, a], idx) => {
+        const items = []
+        if (q) items.push({ type: 'home_faq', id: 1, field: `faq_q_${idx}`, text: q, itemName: `首页FAQ ${idx + 1} 问题` })
+        if (a) items.push({ type: 'home_faq', id: 1, field: `faq_a_${idx}`, text: a, itemName: `首页FAQ ${idx + 1} 回答` })
+        return items
+    })
+}
+
 function collectCategories() {
     const cats = getAll('SELECT id, name_en FROM categories')
     return cats.flatMap(c =>
@@ -929,6 +949,7 @@ const PAGES = {
     company: collectCompany,
     page_texts: collectPageTexts,
     home_seo: collectHomeSeo,
+    home_faq: collectHomeFaqs,
     categories: collectCategories,
     news_categories: collectNewsCategories,
     hero: collectHero,
@@ -1354,7 +1375,7 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'AI API key not configured' })
     }
 
-    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq' }
     const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
     let overrideNote = manualOverrides.length > 0
         ? '\n\nUse these approved translations as reference:\n' +
@@ -1528,7 +1549,7 @@ router.post('/run-one', authMiddleware, async (req, res) => {
     if (!s?.api_key && !getOne('SELECT api_key FROM ai_channels WHERE is_default = 1')?.api_key) return res.status(400).json({ error: 'AI API key not configured. Please add an AI channel in AI Translation settings.' })
 
     // Map singular type names to PAGES keys (product -> products, category -> categories, etc.)
-    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq' }
     const pageKey = TYPE_TO_PAGE[content_type] || content_type
     if (!PAGES[pageKey]) return res.status(400).json({ error: `Unknown content type: ${content_type}` })
     const allItems = PAGES[pageKey]()
@@ -2025,6 +2046,7 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
     const uiTextFields = PAGES.ui_texts_static ? PAGES.ui_texts_static() : []
     const chatFields = PAGES.chat ? PAGES.chat() : []
     const homeSeoFields = PAGES.home_seo ? PAGES.home_seo() : []
+    const homeFaqFields = PAGES.home_faq ? PAGES.home_faq() : []
 
     // Group fields by item, EXPANDING combined fields into actual stored sub-field names
     function groupByItem(fields, type) {
@@ -2172,7 +2194,8 @@ router.get('/audit-translations', authMiddleware, (req, res) => {
             chat_welcome_preset: checkSimpleGroup(chatFields.filter(x => x.type === 'chat_welcome_preset'), 'chat_welcome_preset', lang),
             chat_auto_reply: checkSimpleGroup(chatFields.filter(x => x.type === 'chat_auto_reply'), 'chat_auto_reply', lang),
             chat_ui_texts: checkChatUITexts(lang),
-            home_seo: checkSimpleGroup(homeSeoFields, 'home_seo', lang)
+            home_seo: checkSimpleGroup(homeSeoFields, 'home_seo', lang),
+            home_faq: checkSimpleGroup(homeFaqFields, 'home_faq', lang)
         }
 
         for (const item of productItems) checkItem(item, langReport.products, lang)
@@ -2214,7 +2237,7 @@ router.post('/run-selective', authMiddleware, async (req, res) => {
     if (!langs.length) return res.status(400).json({ error: 'No valid languages found' })
 
     const enhanced = enhanceWithDefaultChannel(s)
-    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq' }
     const pageKey = TYPE_TO_PAGE[type]
     if (!PAGES[pageKey]) return res.status(400).json({ error: 'Invalid type' })
 
@@ -2662,7 +2685,7 @@ try {
     if (s && s.concurrency) workerConcurrency = s.concurrency
 } catch(e) {}
 
-async function executeTranslationTask(targetLang, contentType, contentId) {
+async function executeTranslationTask(targetLang, contentType, contentId, isRetry = false) {
     const langRow = getOne('SELECT * FROM languages WHERE code=?', [targetLang])
     if (!langRow) throw new Error(`Language "${targetLang}" not found`)
 
@@ -2671,14 +2694,48 @@ async function executeTranslationTask(targetLang, contentType, contentId) {
         throw new Error('AI API key not configured.')
     }
 
-    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq' }
     const pageKey = TYPE_TO_PAGE[contentType] || contentType
     if (!PAGES[pageKey]) throw new Error(`Unknown content type: ${contentType}`)
     
     const allItems = PAGES[pageKey]()
-    const items = allItems.filter(i => String(i.id) === String(contentId))
+    let items = allItems.filter(i => String(i.id) === String(contentId))
 
     if (items.length === 0) return { results: [], errors: [] }
+
+    // On retry, only re-translate fields that are still missing — never overwrite
+    // the fields that already succeeded in the previous (partial) run.
+    if (isRetry) {
+        const alreadyTranslated = getAll(
+            'SELECT content_field FROM translations WHERE language_code=? AND content_type=? AND content_id=?',
+            [targetLang, contentType, contentId]
+        )
+        const translatedFieldsSet = new Set(alreadyTranslated.map(r => r.content_field))
+
+        items = items.map(pi => {
+            if (pi.combined) {
+                try {
+                    const subObj = JSON.parse(pi.text)
+                    const remainingSubObj = {}
+                    let hasRemaining = false
+                    for (const [subField, val] of Object.entries(subObj)) {
+                        if (!translatedFieldsSet.has(subField)) {
+                            remainingSubObj[subField] = val
+                            hasRemaining = true
+                        }
+                    }
+                    if (!hasRemaining) return null
+                    return { ...pi, text: JSON.stringify(remainingSubObj) }
+                } catch (e) {}
+            } else {
+                const realField = pi.field.startsWith('name_NC_') || pi.field.startsWith('name_RC_') ? 'name' : pi.field
+                if (translatedFieldsSet.has(realField)) return null
+            }
+            return pi
+        }).filter(Boolean)
+
+        if (items.length === 0) return { results: [], errors: [] }
+    }
 
     const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
     const overrideNote = manualOverrides.length > 0
@@ -2695,7 +2752,7 @@ async function executeTranslationTask(targetLang, contentType, contentId) {
 
 async function executeQueuedTranslationTask(task) {
     try {
-        const result = await executeTranslationTask(task.target_lang, task.item_type, task.item_id)
+        const result = await executeTranslationTask(task.target_lang, task.item_type, task.item_id, task.retry_count > 0)
         if (result.errors && result.errors.length > 0) {
             const errMsg = (result.errors[0].error || 'Unknown error').slice(0, 500)
             run("UPDATE translation_tasks SET status='error', error_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", [errMsg, task.id])
