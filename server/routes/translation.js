@@ -240,7 +240,15 @@ async function callAI(settings, messages, maxTokens = 8000) {
             : result.body
         throw new Error(`API Error ${result.status}: ${errMsg}`)
     }
-    return result.body?.choices?.[0]?.message?.content || ''
+    // Hard-truncation guard: if the model hit max_tokens the response is cut off mid-sentence.
+    // Saving a half sentence as if it were a complete translation would corrupt the article.
+    // Fail the whole batch instead and let the retry logic handle it.
+    const choice = result.body?.choices?.[0]
+    if (!choice?.message?.content) throw new Error('AI response had no content')
+    if (choice?.finish_reason === 'length') {
+        throw new Error(`AI 输出达到 max_tokens(${maxTokens}) 上限被截断（finish_reason=length）`)
+    }
+    return choice.message.content
 }
 
 // ─── Models ──────────────────────────────────────────────────────────────────
@@ -1141,10 +1149,24 @@ ${strictRule}
                     errors.push({ error: 'No HTML blocks could be extracted from content', errorCode: 'ERR_NO_BLOCKS', itemName: item.itemName, field: item.field })
                     return
                 }
-                const BLOCK_BATCH = 8  // small batches = faster per AI call = no timeout
+                const MAX_BATCH_CHARS = 6000  // cap per-batch source size so output stays far under max_tokens (no truncation)
+                const groupBatches = []
+                let batch = []
+                let batchChars = 0
+                for (const b of blocks) {
+                    const len = (b.innerHTML || '').length
+                    if (batch.length > 0 && batchChars + len > MAX_BATCH_CHARS) {
+                        groupBatches.push(batch)
+                        batch = []
+                        batchChars = 0
+                    }
+                    batch.push(b)
+                    batchChars += len
+                }
+                if (batch.length > 0) groupBatches.push(batch)
+
                 const blockTasks = []
-                for (let i = 0; i < blocks.length; i += BLOCK_BATCH) {
-                    const batch = blocks.slice(i, i + BLOCK_BATCH)
+                for (const batch of groupBatches) {
                     blockTasks.push(async () => {
                         const numberedText = batch.map((b, idx) => `---BLOCK ${idx + 1}---\n${b.innerHTML}`).join('\n')
                         // Avoid paradox if target is actually Chinese or English
@@ -1157,6 +1179,7 @@ Return the translated blocks in the exact same format using ---BLOCK N--- separa
 Rules:
 ${strictRuleBlock}
 - Keep ALL HTML tags, attributes, URLs unchanged. Translate only visible text.
+- Translate every BLOCK completely. NEVER end a block mid-sentence - if a block is long, still return its full translation.
 Example output format:
 ---BLOCK 1---
 <p>Translated HTML</p>
