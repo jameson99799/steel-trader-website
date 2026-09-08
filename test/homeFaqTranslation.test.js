@@ -37,29 +37,15 @@ test('SSR homepage FAQ schema reads AI translations when present, falling back t
   assert.match(idx, /homeFaqs\.some|translatedFaqs\.some/)
 })
 
-test('per-field translation: each short field gets its own AI call (title/summary/seo_combined/faq_combined)', () => {
+test('queued retries only re-translate missing fields, never overwrite successful ones', () => {
   const tr = read('server/routes/translation.js')
-  // short fields are translated independently via shortTasks
-  assert.match(tr, /const shortTasks = shortItems\.map\(item => async \(\) => \{/)
-  // each item builds its own numbered input and its own AI call
-  assert.match(tr, /const numberedInput = fieldVals\.map\(\(v, i\) => `\$\{i \+ 1\}\. \$\{v\}`\)\.join/)
-  // errors carry the failing field so a retry can target exactly that field
-  assert.match(tr, /field: item\.field/)
-})
-
-test('retries only re-translate the fields that failed, never rewrite successful ones', () => {
-  const tr = read('server/routes/translation.js')
-  const jobs = read('server/routes/translation-jobs.js')
-  // executeTranslationTask regains its isRetry flag
+  // executeTranslationTask accepts an isRetry flag
   assert.match(tr, /async function executeTranslationTask\(targetLang, contentType, contentId, isRetry = false\)/)
-  // on retry, already-translated/still-missing fields are filtered to just the missing ones
-  assert.match(tr, /if \(isRetry\) \{/)
+  // On retry, already-translated fields are filtered out
+  assert.ok(tr.indexOf('On retry, only re-translate fields that are still missing') < tr.indexOf('if (isRetry) {'))
   assert.match(tr, /translatedFieldsSet\.has\(realField\)/)
-  // the queued worker propagates retry_count>0 semantics as isRetry
+  // The queued worker propagates retry_count>0 semantics as isRetry
   assert.match(tr, /executeTranslationTask\(task\.target_lang, task\.item_type, task\.item_id, task\.retry_count > 0\)/)
-  // jobs worker records the failed fields and re-translates ONLY those on auto-retry
-  assert.match(jobs, /item\._failedFields = \[\.\.\.new Set/)
-  assert.match(jobs, /item\._failedFields\.includes\(realField\)/)
 })
 
 test('retry queue marks partial success without discarding successful translations', () => {

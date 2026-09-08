@@ -240,12 +240,9 @@ async function callAI(settings, messages, maxTokens = 8000) {
             : result.body
         throw new Error(`API Error ${result.status}: ${errMsg}`)
     }
-    // Hard-truncation guard: if the model hit max_tokens the response is cut off mid-sentence.
-    // Saving a half sentence as if it were a complete translation would corrupt the article.
-    // Fail the whole batch instead and let the retry logic handle it.
     const choice = result.body?.choices?.[0]
     if (!choice?.message?.content) {
-        console.log(`[callAI] empty content | finish_reason=${choice?.finish_reason || 'null'} | model=${(settings?.model_name || 'n/a')} | msgChars=${messages.map(m => (m.content || '').length).join(',')}`)
+        console.log(`[callAI] empty content | finish_reason=${choice?.finish_reason || 'null'} | model=${settings?.model_name || 'n/a'} | msgChars=${messages.map(m => (m.content || '').length).join(',')}`)
         throw new Error('AI response had no content (finish_reason=' + (choice?.finish_reason || 'null') + ')')
     }
     if (choice?.finish_reason === 'length') {
@@ -1003,52 +1000,41 @@ async function translateBatch(settings, items, targetLang, langName, overrideNot
     } catch (e) {}
     const fullOverride = businessRules + (overrideNote ? `\n\n${overrideNote}` : '')
 
-const shortItems = items.filter(i => !i.long_html)
+    const shortItems = items.filter(i => !i.long_html)
     const longItems = items.filter(i => i.long_html)
 
-    const AI_CONCURRENCY = aiConcurrency  // controlled per call-site to avoid rate limit when multiple langs are concurrent
-    const runConcurrently = async (tasks, limit) => {
-        const executing = new Set()
-        for (const task of tasks) {
-            const p = task().then(() => executing.delete(p))
-            executing.add(p)
-            if (executing.size >= limit) await Promise.race(executing)
-        }
-        await Promise.all(executing)
-    }
-
-    // ── SHORT TEXT: translate each field INDEPENDENTLY ──
-    // title / summary / seo_combined / faq_combined each get their OWN AI call so
-    // success & failure can be tracked per field, and a retry only re-translates
-    // the specific field that failed instead of the whole article.
+    // ── SHORT TEXT: Send ALL fields in ONE API call ──
     if (shortItems.length > 0) {
-        const shortTasks = shortItems.map(item => async () => {
-            const contextName = item.itemName || 'steel product'
-            // Expand combined sub-fields (seo_title/seo_desc/faq_q_N/faq_a_N...) into a flat object
-            const fieldsObj = {}
-            try {
-                if (item.combined) {
+        // Build a merged JSON object — combined fields get expanded into sub-fields
+        const fieldsObj = {}
+        for (const item of shortItems) {
+            if (item.combined) {
+                try {
                     const subObj = JSON.parse(item.text)
                     Object.assign(fieldsObj, subObj)
-                } else {
-                    fieldsObj.__text = item.text
+                } catch (e) {
+                    fieldsObj[item.field] = item.text
                 }
-            } catch {
-                fieldsObj.__text = item.text
+            } else {
+                item._uniqueFieldObjKey = `${item.type}_${item.id}_${item.field}_${Math.random().toString(36).substring(2,7)}`
+                fieldsObj[item._uniqueFieldObjKey] = item.text
             }
-            const fieldKeys = Object.keys(fieldsObj)
-            const fieldVals = Object.values(fieldsObj)
+        }
+        const fieldKeys = Object.keys(fieldsObj)
+        const fieldVals = Object.values(fieldsObj)
+        console.log('[translateBatch] Sending', fieldKeys.length, 'fields | JSON size:', JSON.stringify(fieldsObj).length, 'chars')
 
-            // read-frog style: use NUMBERED lines instead of JSON to avoid ERR_NO_JSON
-            const numberedInput = fieldVals.map((v, i) => `${i + 1}. ${v}`).join('\n')
-            console.log('[translateBatch] Translating', item.type, '#' + item.id, item.field, '|', fieldKeys.length, 'field(s) |', numberedInput.length, 'chars')
+        // read-frog style: use NUMBERED lines instead of JSON to avoid ERR_NO_JSON
+        // Format: "1. text1\n2. text2\n..." → AI returns "1. trans1\n2. trans2\n..."
+        // Much more reliable than JSON for 3rd-party AI proxies
+        const numberedInput = fieldVals.map((v, i) => `${i + 1}. ${v}`).join('\n')
 
-            // Avoid paradox if target is actually Chinese or English
-            const strictRule = (langName.toLowerCase().includes('chinese') || langName.toLowerCase().includes('english'))
-                ? `- You MUST translate the text into ${langName}.`
-                : `- DO NOT output the original Chinese or English text. You MUST translate it into ${langName}.`
+        // Avoid paradox if target is actually Chinese or English
+        const strictRule = (langName.toLowerCase().includes('chinese') || langName.toLowerCase().includes('english'))
+            ? `- You MUST translate the text into ${langName}.`
+            : `- DO NOT output the original Chinese or English text. You MUST translate it into ${langName}.`
 
-            const systemPrompt = `Translate the following ${fieldVals.length} numbered item(s) into ${langName} (the source text may be in English or Chinese). This is the "${contextName}" page of a steel products company website.
+        const systemPrompt = `Translate the following ${fieldVals.length} numbered items into ${langName} (the source text may be in English or Chinese). This is content for a steel products company website.
 Return ONLY numbered lines in the SAME order. YOU MUST OUTPUT EXACTLY ${fieldVals.length} NUMBERED ITEMS. Do not merge or skip items.
 1. [translation of item 1]
 2. [translation of item 2]
@@ -1061,81 +1047,120 @@ ${strictRule}
 - Keep URLs, email addresses unchanged
 - DO NOT merge identical items. Each input number MUST have an output number.${fullOverride}`
 
-            const MAX_RETRIES = 2
-            for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-                try {
-                    const aiContent = await callAI(settings, [
-                        { role: 'system', content: systemPrompt },
-                        { role: 'user', content: numberedInput }
-                    ], 12000)
+        const MAX_RETRIES = 2
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                const aiContent = await callAI(settings, [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: numberedInput }
+                ], 16000)
 
-                    // Clean DeepSeek R1 thinking blocks and markdown ticks, then split
-                    let cleanedContent = aiContent.replace(/ thinking[\s\S]*?<\/think>/gi, '')
-                    cleanedContent = cleanedContent.replace(/```[a-z]*\n/gi, '').replace(/```/g, '')
-                    const lines = cleanedContent.split('\n').map(l => l.trim()).filter(Boolean)
-                    const translatedArr = []
-                    for (const line of lines) {
-                        const m = line.match(/^[\*\s\[\(]*\d+[\*\s\]\)\.]+(.+)$/)
-                        if (m) translatedArr.push(m[1].trim())
-                    }
+                // Clean DeepSeek R1 <think> blocks and markdown ticks, then split
+                let cleanedContent = aiContent.replace(/<think>[\s\S]*?<\/think>/gi, '')
+                cleanedContent = cleanedContent.replace(/```[a-z]*\n/gi, '').replace(/```/g, '')
+                
+                const lines = cleanedContent.split('\n').map(l => l.trim()).filter(Boolean)
+                const translatedArr = []
+                for (const line of lines) {
+                    const m = line.match(/^[\*\s\[\(]*\d+[\*\s\]\)\.]+(.+)$/)
+                    if (m) translatedArr.push(m[1].trim())
+                }
 
-                    if (translatedArr.length < Math.floor(fieldVals.length * 0.5)) {
-                        // Fallback: try JSON format if numbered parsing got too few results
-                        const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
-                        if (jsonMatch) {
-                            try {
-                                const jsonTranslations = JSON.parse(jsonMatch[0])
-                                let anySuccess = false
-                                const entries = item.combined ? Object.entries(fieldsObj) : [[item.field, item.text]]
-                                for (const [subField, origVal] of entries) {
-                                    const trans = jsonTranslations[subField] || jsonTranslations[item.field]
+                if (translatedArr.length < Math.floor(fieldVals.length * 0.5)) {
+                    // Fallback: try JSON format if numbered parsing got too few results
+                    const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
+                    if (jsonMatch) {
+                        try {
+                            const jsonTranslations = JSON.parse(jsonMatch[0])
+                            // Map JSON response back to items
+                            let anySuccess = false
+                            for (const item of shortItems) {
+                                const realField = item.field.startsWith('name_NC_') || item.field.startsWith('name_RC_') ? 'name' : item.field
+                                if (item.combined) {
+                                    try {
+                                        const subObj = JSON.parse(item.text)
+                                        for (const [subField, origVal] of Object.entries(subObj)) {
+                                            const trans = jsonTranslations[subField]
+                                            if (trans && typeof trans === 'string') {
+                                                upsertTranslation(targetLang, item.type, item.id, subField, origVal, trans)
+                                                results.push({ original: origVal.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: subField, itemName: item.itemName })
+                                                anySuccess = true
+                                            } else {
+                                                errors.push({ item: subField, error: 'Missing JSON translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
+                                            }
+                                        }
+                                    } catch {}
+                                } else {
+                                    const trans = jsonTranslations[item._uniqueFieldObjKey] || jsonTranslations[item.field] || jsonTranslations[realField]
                                     if (trans && typeof trans === 'string') {
-                                        const realField = item.field.startsWith('name_NC_') || item.field.startsWith('name_RC_') ? 'name' : subField
-                                        upsertTranslation(targetLang, item.type, item.id, subField, origVal, trans)
-                                        results.push({ original: origVal.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
+                                        upsertTranslation(targetLang, item.type, item.id, realField, item.text, trans)
+                                        results.push({ original: item.text.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
                                         anySuccess = true
                                     } else {
-                                        errors.push({ item: subField, error: 'Missing JSON translation', errorCode: 'ERR_MISSING', itemName: item.itemName, field: item.field })
+                                        errors.push({ item: item.field, error: 'Missing JSON translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
                                     }
                                 }
-                                if (anySuccess) break
-                            } catch {}
-                        }
-                        if (attempt >= MAX_RETRIES) {
-                            errors.push({ error: `Numbered parsing got ${translatedArr.length}/${fieldVals.length} items (retried ${MAX_RETRIES}x)`, errorCode: 'ERR_PARTIAL', itemName: item.itemName, field: item.field })
-                        }
-                        continue
+                            }
+                            if (anySuccess) break
+                        } catch {}
                     }
-
-                    // Map numbered translations back to sub-fields
-                    let transIdx = 0
-                    let mappedOk = 0
-                    const entries = item.combined ? Object.entries(fieldsObj) : [[item.field, item.text]]
-                    for (const [subField, origVal] of entries) {
-                        const trans = translatedArr[transIdx++]
-                        const realField = item.field.startsWith('name_NC_') || item.field.startsWith('name_RC_') ? 'name' : subField
-                        if (trans) {
-                            upsertTranslation(targetLang, item.type, item.id, subField, origVal, trans)
-                            results.push({ original: origVal.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
-                            mappedOk++
-                        } else {
-                            errors.push({ item: subField, error: 'Missing numbered translation', errorCode: 'ERR_MISSING', itemName: item.itemName, field: item.field })
-                        }
-                    }
-                    console.log('[translateBatch] Numbered format: mapped', mappedOk, '/', entries.length, 'for', item.type, '#' + item.id, item.field)
-                    break  // Success
-                } catch (e) {
                     if (attempt >= MAX_RETRIES) {
-                        errors.push({ error: e.message + ' (retried ' + MAX_RETRIES + 'x)', errorCode: 'ERR_API', itemName: item.itemName, field: item.field })
+                        errors.push({ error: `Numbered parsing got ${translatedArr.length}/${fieldVals.length} items (retried ${MAX_RETRIES}x)`, errorCode: 'ERR_PARTIAL', itemName: shortItems[0]?.itemName })
+                    }
+                    continue
+                }
+
+                // Map numbered translations back to items
+                let transIdx = 0
+                for (const item of shortItems) {
+                    const realField = item.field.startsWith('name_NC_') || item.field.startsWith('name_RC_') ? 'name' : item.field
+                    if (item.combined) {
+                        try {
+                            const subObj = JSON.parse(item.text)
+                            for (const [subField, origVal] of Object.entries(subObj)) {
+                                const trans = translatedArr[transIdx++]
+                                if (trans) {
+                                    upsertTranslation(targetLang, item.type, item.id, subField, origVal, trans)
+                                    results.push({ original: origVal.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: subField, itemName: item.itemName })
+                                } else {
+                                    errors.push({ item: subField, error: 'Missing numbered translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
+                                }
+                            }
+                        } catch (e) {
+                            errors.push({ item: item.field, error: 'Combined field parse error', errorCode: 'ERR_PARSE', itemName: item.itemName })
+                        }
+                    } else {
+                        const trans = translatedArr[transIdx++]
+                        if (trans) {
+                            upsertTranslation(targetLang, item.type, item.id, realField, item.text, trans)
+                            results.push({ original: item.text.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
+                        } else {
+                            errors.push({ item: item.field, error: 'Missing numbered translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
+                        }
                     }
                 }
+                console.log('[translateBatch] Numbered format: mapped', translatedArr.length, 'translations to', shortItems.length, 'items')
+                break  // Success
+            } catch (e) {
+                if (attempt >= MAX_RETRIES) {
+                    errors.push({ error: e.message + ' (retried ' + MAX_RETRIES + 'x)', errorCode: 'ERR_API', itemName: shortItems[0]?.itemName })
+                }
             }
-        })
-        await runConcurrently(shortTasks, AI_CONCURRENCY)
+        }
     }
 
     // ── LONG HTML: Send as COMPLETE text in ONE call (no block splitting) ──
     // For long HTML, send the entire content at once for coherent translation
+    const AI_CONCURRENCY = aiConcurrency  // controlled per call-site to avoid rate limit when multiple langs are concurrent
+    const runConcurrently = async (tasks, limit) => {
+        const executing = new Set()
+        for (const task of tasks) {
+            const p = task().then(() => executing.delete(p))
+            executing.add(p)
+            if (executing.size >= limit) await Promise.race(executing)
+        }
+        await Promise.all(executing)
+    }
 
     const htmlTasks = longItems.map(item => async () => {
         try {
@@ -1149,27 +1174,13 @@ ${strictRule}
                 if (!root || blocks.length === 0) {
                     // No blocks found, skip (don't try single call which may timeout)
                     console.log('[translateBatch] No blocks extracted from HTML, skipping:', item.itemName)
-                    errors.push({ error: 'No HTML blocks could be extracted from content', errorCode: 'ERR_NO_BLOCKS', itemName: item.itemName, field: item.field })
+                    errors.push({ error: 'No HTML blocks could be extracted from content', errorCode: 'ERR_NO_BLOCKS', itemName: item.itemName })
                     return
                 }
-                const MAX_BATCH_CHARS = 3000  // cap per-batch source size so output stays far under max_tokens (no truncation)
-                const groupBatches = []
-                let batch = []
-                let batchChars = 0
-                for (const b of blocks) {
-                    const len = (b.innerHTML || '').length
-                    if (batch.length > 0 && batchChars + len > MAX_BATCH_CHARS) {
-                        groupBatches.push(batch)
-                        batch = []
-                        batchChars = 0
-                    }
-                    batch.push(b)
-                    batchChars += len
-                }
-                if (batch.length > 0) groupBatches.push(batch)
-
+                const BLOCK_BATCH = 8  // small batches = faster per AI call = no timeout
                 const blockTasks = []
-                for (const batch of groupBatches) {
+                for (let i = 0; i < blocks.length; i += BLOCK_BATCH) {
+                    const batch = blocks.slice(i, i + BLOCK_BATCH)
                     blockTasks.push(async () => {
                         const numberedText = batch.map((b, idx) => `---BLOCK ${idx + 1}---\n${b.innerHTML}`).join('\n')
                         // Avoid paradox if target is actually Chinese or English
@@ -1182,7 +1193,6 @@ Return the translated blocks in the exact same format using ---BLOCK N--- separa
 Rules:
 ${strictRuleBlock}
 - Keep ALL HTML tags, attributes, URLs unchanged. Translate only visible text.
-- Translate every BLOCK completely. NEVER end a block mid-sentence - if a block is long, still return its full translation.
 Example output format:
 ---BLOCK 1---
 <p>Translated HTML</p>
@@ -1193,7 +1203,7 @@ Example output format:
                                 const aiContent = await callAI(settings, [
                                     { role: 'system', content: blockPrompt },
                                     { role: 'user', content: numberedText }
-                                ], 4000)
+                                ], 8000)
                                 
                                 const blockMatches = [...aiContent.matchAll(/---[\s]*BLOCK[\s]+(\d+)[\s]*---[\r\n]+([\s\S]*?)(?=\r?\n---[\s]*BLOCK|$)/gi)]
                                 if (blockMatches.length > 0) {
@@ -1218,35 +1228,7 @@ Example output format:
                                     throw new Error('No valid block separators or JSON found in AI response')
                                 }
                             } catch (e) {
-
-                                if (retry >= 2) {
-                                    // Batch failed -> degrade: translate each block individually with a minimal request.
-                                    // Small inputs are far more reliable on third-party proxies and keep sentences intact.
-                                    let degraded = 0
-                                    for (const single of batch) {
-                                        if (single.translated) continue
-                                        try {
-                                            const singlePrompt = `Translate this single HTML block to ${langName} (steel product page "${contextName}"). Source may be English or Chinese.
-Rules:
-${strictRuleBlock}
-- Keep ALL HTML tags, attributes, URLs unchanged. Translate only visible text.
-- Return ONLY the translated HTML (no separators, no explanations).${fullOverride}`
-                                            const singleText = await callAI(settings, [
-                                                { role: 'system', content: singlePrompt },
-                                                { role: 'user', content: single.innerHTML }
-                                            ], 4000)
-                                            if (singleText && singleText.trim().length > 10) {
-                                                single.translated = singleText.trim()
-                                                degraded++
-                                            } else {
-                                                errors.push({ error: 'Single-block translate returned empty content', errorCode: 'ERR_BLOCK', itemName: item.itemName, field: item.field })
-                                            }
-                                        } catch (e2) {
-                                            errors.push({ error: e2.message, errorCode: 'ERR_BLOCK', itemName: item.itemName, field: item.field })
-                                        }
-                                    }
-                                    if (degraded > 0) break
-                                }
+                                if (retry >= 2) errors.push({ error: e.message, errorCode: 'ERR_BLOCK', itemName: item.itemName })
                             }
                         }
                     })
@@ -1255,13 +1237,13 @@ ${strictRuleBlock}
                 await runConcurrently(blockTasks, AI_CONCURRENCY)
 
                 const translatedCount = blocks.filter(b => b.translated).length
-                if (translatedCount === blocks.length) {
+                if (translatedCount > 0) {
                     const translatedHtml = reassembleFromBlocks(item.text, root, blocks)
                     upsertTranslation(targetLang, item.type, item.id, item.field, '[HTML]', translatedHtml)
                     results.push({ original: '[HTML ' + item.field + ']', translated: translatedCount + '/' + blocks.length + ' blocks', type: item.type, field: item.field, itemName: item.itemName })
                 } else {
                     console.log('[translateBatch] All blocks failed for:', item.itemName)
-                    errors.push({ error: 'All HTML blocks failed to translate', errorCode: 'ERR_ALL_BLOCKS', itemName: item.itemName, field: item.field })
+                    errors.push({ error: 'All HTML blocks failed to translate', errorCode: 'ERR_ALL_BLOCKS', itemName: item.itemName })
                 }
             } else {
                 // Normal HTML (<15000 chars): send ENTIRE content in ONE call
@@ -1290,12 +1272,12 @@ ${strictRuleHtml}
                             break
                         }
                     } catch (e) {
-                        if (retry >= 2) errors.push({ error: e.message + ' (retried 2x)', errorCode: 'ERR_HTML', itemName: item.itemName, field: item.field })
+                        if (retry >= 2) errors.push({ error: e.message + ' (retried 2x)', errorCode: 'ERR_HTML', itemName: item.itemName })
                     }
                 }
             }
         } catch (e) {
-            errors.push({ error: e.message, errorCode: 'ERR_API', itemName: item.itemName, field: item.field })
+            errors.push({ error: e.message, errorCode: 'ERR_API', itemName: item.itemName })
         }
     })
 
@@ -2729,15 +2711,14 @@ async function executeTranslationTask(targetLang, contentType, contentId, isRetr
 
     if (items.length === 0) return { results: [], errors: [] }
 
-    // On retry (auto or manual), only re-translate fields that are STILL MISSING.
-    // Fields that already succeeded in a previous (partial) run are skipped, so a
-    // broken field is retried on its own instead of re-generating the whole article.
+    // On retry, only re-translate fields that are still missing — never overwrite
+    // the fields that already succeeded in the previous (partial) run.
     if (isRetry) {
-        const translatedFields = getAll(
+        const alreadyTranslated = getAll(
             'SELECT content_field FROM translations WHERE language_code=? AND content_type=? AND content_id=?',
             [targetLang, contentType, contentId]
         )
-        const translatedFieldsSet = new Set(translatedFields.map(r => r.content_field))
+        const translatedFieldsSet = new Set(alreadyTranslated.map(r => r.content_field))
 
         items = items.map(pi => {
             if (pi.combined) {
@@ -2763,6 +2744,7 @@ async function executeTranslationTask(targetLang, contentType, contentId, isRetr
 
         if (items.length === 0) return { results: [], errors: [] }
     }
+
     const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
     const overrideNote = manualOverrides.length > 0
         ? '\n\nUse these approved translations as reference:\n' +

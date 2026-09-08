@@ -240,17 +240,45 @@ async function runJobInBackground(jobId) {
                 continue
             }
 
-            // Each field (title/summary/seo_combined/faq_combined/content) is translated
-            // independently. On retry, ONLY the fields that failed get re-translated.
-            const items = (item._retryCount > 0 && item._failedFields && item._failedFields.length > 0)
-                ? itemsRaw.filter(pi => {
-                    const realField = pi.field.startsWith('name_NC_') || pi.field.startsWith('name_RC_') ? 'name' : pi.field
-                    return item._failedFields.includes(realField)
-                })
-                : itemsRaw
+            // Determine if we should skip already translated fields.
+            // As per user request: "Fresh translation commands should always re-translate everything.
+            // ONLY skip already translated strings if this is an automatic or manual retry."
+            const isRetry = job.is_retry || item._retryCount > 0
+            
+            let items = itemsRaw
+            
+            if (isRetry) {
+                const alreadyTranslated = getAll(
+                    'SELECT content_field FROM translations WHERE language_code=? AND content_type=? AND content_id=?',
+                    [item.targetLang, item.type, item.id]
+                )
+                const translatedFieldsSet = new Set(alreadyTranslated.map(r => r.content_field))
+    
+                items = itemsRaw.map(pi => {
+                    if (pi.combined) {
+                        try {
+                            const subObj = JSON.parse(pi.text)
+                            const remainingSubObj = {}
+                            let hasRemaining = false
+                            for (const [subField, val] of Object.entries(subObj)) {
+                                if (!translatedFieldsSet.has(subField)) {
+                                    remainingSubObj[subField] = val
+                                    hasRemaining = true
+                                }
+                            }
+                            if (!hasRemaining) return null
+                            return { ...pi, text: JSON.stringify(remainingSubObj) }
+                        } catch (e) {}
+                    } else {
+                        const realField = pi.field.startsWith('name_NC_') || pi.field.startsWith('name_RC_') ? 'name' : pi.field
+                        if (translatedFieldsSet.has(realField)) return null
+                    }
+                    return pi
+                }).filter(Boolean)
+            }
 
             if (items.length === 0) {
-                // All fields already translated — nothing left to retry
+                // Already fully translated!
                 okTotal++
                 processingItems.delete(item)
                 doneTotal++
@@ -281,25 +309,14 @@ async function runJobInBackground(jobId) {
 
             try {
                 const { results, errors } = await translateBatch(enhanced, items, item.targetLang, langRow.name, overrideNote, 3, customRules)
-
-                // Per-field progress logging
-                for (const r of results) {
-                    jobLog(jobId, 'ok', `${item.itemName} 的 ${r.field} 翻译成功`)
-                }
-                for (const e of errors) {
-                    jobLog(jobId, 'error', `${item.itemName} 的 ${e.field || '?'} 翻译失败（${(e.error || e.message || '').slice(0, 80)}）`)
-                }
-
                 const ok = results.length
                 const errs = errors.length
 
-                if (errs > 0) {
-                    // Remember WHICH fields failed so the retry pass re-translates only those
-                    item._failedFields = [...new Set(errors.map(e => e.field).filter(Boolean))]
-                    const fieldsStr = item._failedFields.join(', ') || '全部'
-                    const errMsg = (errs > 0 && ok === 0)
-                        ? `${errors[0]?.error || '未知错误'}（字段: ${fieldsStr}）`
-                        : `部分成功: ${ok}成功, ${errs}错误（字段: ${fieldsStr}）`
+                if (errs > 0 && ok === 0) {
+                    const errMsg = errors[0]?.error || '未知错误'
+                    throw new Error(errMsg)
+                } else if (errs > 0) {
+                    const errMsg = `部分成功: ${ok}成功, ${errs}错误`
                     throw new Error(errMsg)
                 } else if (ok > 0) {
                     okTotal++
@@ -309,12 +326,12 @@ async function runJobInBackground(jobId) {
                     throw new Error('AI 无返回结果 (可能为空或格式错误)')
                 }
             } catch (e) {
-                // Auto-retry once inside the worker, re-translating ONLY the failed fields
-                if ((item._retryCount || 0) < 1) {
+                // Auto-retry once inside the worker
+                if (!isRetry && (item._retryCount || 0) < 1) {
                     item._retryCount = (item._retryCount || 0) + 1
                     pendingItems.push(item) // put it back to queue
                     updateJobProgress(jobId, { auto_retried: 1 })
-                    jobLog(jobId, 'warn', `${item.itemName} 翻译 ${langRow.name} 失败（${(e.message || '').slice(0, 80)}），已加入重试队列，仅重翻失败字段: ${(item._failedFields || []).join(', ') || '全部'}`)
+                    jobLog(jobId, 'warn', `${item.itemName} 翻译 ${langRow.name} 失败（${(e.message || '').slice(0, 80)}），已加入重试队列`)
                     continue
                 }
 
