@@ -48,15 +48,26 @@ function replaceTitle(html, title) {
   return html.replace('</head>', `  ${tag}\n</head>`)
 }
 
+// ISO 639-1 codes for right-to-left languages. Arabic is the only RTL language in this site's language list.
+const RTL_LANGS = new Set(['ar', 'fa', 'he', 'ur'])
+
 function replaceDocumentLanguage(html, lang) {
   const escapedLang = escapeHtml(lang)
+  const dirAttr = RTL_LANGS.has(lang) ? ' dir="rtl"' : ''
   if (/<html\b[^>]*\blang=["'][^"']*["']/i.test(html)) {
+    if (RTL_LANGS.has(lang)) {
+      if (/<html\b[^>]*\bdir=/i.test(html)) {
+        html = html.replace(/(<html\b[^>]*?)\s+dir=["'][^"']*["']([^>]*>)/i, `$1 dir="rtl"$2`)
+      } else {
+        html = html.replace(/(<html\b[^>]*?)>/i, `$1${dirAttr}>`)
+      }
+    }
     return html.replace(
       /<html\b([^>]*?)\blang=["'][^"']*["']([^>]*)>/i,
       `<html$1lang="${escapedLang}"$2>`
     )
   }
-  return html.replace(/<html\b([^>]*)>/i, `<html lang="${escapedLang}"$1>`)
+  return html.replace(/<html\b([^>]*)>/i, `<html lang="${escapedLang}"${dirAttr}$1>`)
 }
 
 export function renderSeoDocument({

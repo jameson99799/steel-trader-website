@@ -85,6 +85,42 @@ test('uses revalidation caching and emits a non-indexable error document', () =>
   assert.match(html, /<title>Server Error<\/title>/)
 })
 
+test('sets dir="rtl" on the document root for RTL languages and ltr otherwise', () => {
+  const ar = renderSeoDocument({
+    html: shell,
+    lang: 'ar',
+    title: 'قائمة',
+    description: 'وصف',
+    keywords: 'صلب,لفائف',
+    canonical: 'https://www.sunseasteel.com/ar'
+  })
+  assert.match(ar, /<html lang="ar" dir="rtl">/)
+  assert.match(ar, /<html[^>]*dir="rtl"/)
+
+  const es = renderSeoDocument({
+    html: shell,
+    lang: 'es',
+    title: 'Título',
+    description: 'Descripción',
+    keywords: 'acero',
+    canonical: 'https://www.sunseasteel.com/es'
+  })
+  assert.match(es, /<html lang="es">/)
+  assert.doesNotMatch(es, /dir=/)
+
+  // Preserve an existing dir attr when hardening placeholder html roots
+  const withLtr = shell.replace('<html lang="en">', '<html lang="en" dir="ltr">')
+  const arWithLtr = renderSeoDocument({
+    html: withLtr,
+    lang: 'ar',
+    title: 'x',
+    description: 'y',
+    keywords: 'z',
+    canonical: 'https://www.sunseasteel.com/ar'
+  })
+  assert.match(arWithLtr, /<html lang="ar" dir="rtl">/)
+})
+
 test('keeps private and not-found documents out of shared caches and search', () => {
   assert.deepEqual(getSeoResponsePolicy({ isPrivateRoute: true, isNotFound: false }), {
     cacheControl: 'no-store',

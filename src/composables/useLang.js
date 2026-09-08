@@ -355,10 +355,16 @@ watch(lang, (newLang) => {
   _fromRouter = false
 })
 
+const RTL_LANGS = new Set(['ar', 'fa', 'he', 'ur'])
+
 export function useLang() {
   const setLang = async (newLang, fromRouter = false) => {
     _fromRouter = fromRouter
     lang.value = newLang
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.setAttribute('lang', newLang === 'zh' ? 'zh-CN' : newLang)
+      document.documentElement.setAttribute('dir', RTL_LANGS.has(newLang) ? 'rtl' : 'ltr')
+    }
     localStorage.setItem('lang', newLang)
     if (!fromRouter) {
       document.cookie = `locale_preference=${encodeURIComponent(newLang)}; Path=/; Max-Age=31536000; SameSite=Lax`
