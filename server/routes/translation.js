@@ -244,7 +244,10 @@ async function callAI(settings, messages, maxTokens = 8000) {
     // Saving a half sentence as if it were a complete translation would corrupt the article.
     // Fail the whole batch instead and let the retry logic handle it.
     const choice = result.body?.choices?.[0]
-    if (!choice?.message?.content) throw new Error('AI response had no content')
+    if (!choice?.message?.content) {
+        console.log(`[callAI] empty content | finish_reason=${choice?.finish_reason || 'null'} | model=${(settings?.model_name || 'n/a')} | msgChars=${messages.map(m => (m.content || '').length).join(',')}`)
+        throw new Error('AI response had no content (finish_reason=' + (choice?.finish_reason || 'null') + ')')
+    }
     if (choice?.finish_reason === 'length') {
         throw new Error(`AI 输出达到 max_tokens(${maxTokens}) 上限被截断（finish_reason=length）`)
     }
@@ -1149,7 +1152,7 @@ ${strictRule}
                     errors.push({ error: 'No HTML blocks could be extracted from content', errorCode: 'ERR_NO_BLOCKS', itemName: item.itemName, field: item.field })
                     return
                 }
-                const MAX_BATCH_CHARS = 6000  // cap per-batch source size so output stays far under max_tokens (no truncation)
+                const MAX_BATCH_CHARS = 3000  // cap per-batch source size so output stays far under max_tokens (no truncation)
                 const groupBatches = []
                 let batch = []
                 let batchChars = 0
@@ -1190,7 +1193,7 @@ Example output format:
                                 const aiContent = await callAI(settings, [
                                     { role: 'system', content: blockPrompt },
                                     { role: 'user', content: numberedText }
-                                ], 8000)
+                                ], 4000)
                                 
                                 const blockMatches = [...aiContent.matchAll(/---[\s]*BLOCK[\s]+(\d+)[\s]*---[\r\n]+([\s\S]*?)(?=\r?\n---[\s]*BLOCK|$)/gi)]
                                 if (blockMatches.length > 0) {
@@ -1215,7 +1218,35 @@ Example output format:
                                     throw new Error('No valid block separators or JSON found in AI response')
                                 }
                             } catch (e) {
-                                if (retry >= 2) errors.push({ error: e.message, errorCode: 'ERR_BLOCK', itemName: item.itemName, field: item.field })
+
+                                if (retry >= 2) {
+                                    // Batch failed -> degrade: translate each block individually with a minimal request.
+                                    // Small inputs are far more reliable on third-party proxies and keep sentences intact.
+                                    let degraded = 0
+                                    for (const single of batch) {
+                                        if (single.translated) continue
+                                        try {
+                                            const singlePrompt = `Translate this single HTML block to ${langName} (steel product page "${contextName}"). Source may be English or Chinese.
+Rules:
+${strictRuleBlock}
+- Keep ALL HTML tags, attributes, URLs unchanged. Translate only visible text.
+- Return ONLY the translated HTML (no separators, no explanations).${fullOverride}`
+                                            const singleText = await callAI(settings, [
+                                                { role: 'system', content: singlePrompt },
+                                                { role: 'user', content: single.innerHTML }
+                                            ], 4000)
+                                            if (singleText && singleText.trim().length > 10) {
+                                                single.translated = singleText.trim()
+                                                degraded++
+                                            } else {
+                                                errors.push({ error: 'Single-block translate returned empty content', errorCode: 'ERR_BLOCK', itemName: item.itemName, field: item.field })
+                                            }
+                                        } catch (e2) {
+                                            errors.push({ error: e2.message, errorCode: 'ERR_BLOCK', itemName: item.itemName, field: item.field })
+                                        }
+                                    }
+                                    if (degraded > 0) break
+                                }
                             }
                         }
                     })
@@ -1224,7 +1255,7 @@ Example output format:
                 await runConcurrently(blockTasks, AI_CONCURRENCY)
 
                 const translatedCount = blocks.filter(b => b.translated).length
-                if (translatedCount > 0) {
+                if (translatedCount === blocks.length) {
                     const translatedHtml = reassembleFromBlocks(item.text, root, blocks)
                     upsertTranslation(targetLang, item.type, item.id, item.field, '[HTML]', translatedHtml)
                     results.push({ original: '[HTML ' + item.field + ']', translated: translatedCount + '/' + blocks.length + ' blocks', type: item.type, field: item.field, itemName: item.itemName })
