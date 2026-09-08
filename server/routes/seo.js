@@ -6,6 +6,7 @@ import { writeFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { stripSeoSecrets } from '../services/seoSanitizer.js'
+import { sanitizeOrganizationType } from '../services/seoSettingsSchema.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -39,6 +40,7 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
         llms_full_txt = existing.llms_full_txt
     } = req.body
     const og_image = req.file ? `/uploads/${req.file.filename}` : (req.body.og_image !== undefined ? req.body.og_image : existing?.og_image)
+    const safeBusinessType = sanitizeOrganizationType(local_business_type)
 
     if (existing && existing.id) {
         run(
@@ -52,7 +54,7 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
             [site_title, site_description, site_keywords, og_image,
                 google_analytics, google_search_console, robots_txt,
                 geo_region, geo_placename, geo_lat, geo_lng,
-                hreflang_en, hreflang_zh, local_business_type, local_business_address,
+                hreflang_en, hreflang_zh, safeBusinessType, local_business_address,
                 parseInt(article_refresh_days) || 0, parseInt(product_refresh_days) || 0,
                 llms_txt, llms_full_txt]
         )
@@ -66,7 +68,7 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
             [site_title, site_description, site_keywords, og_image,
                 google_analytics, google_search_console, robots_txt,
                 geo_region, geo_placename, geo_lat, geo_lng,
-                hreflang_en, hreflang_zh, local_business_type, local_business_address,
+                hreflang_en, hreflang_zh, safeBusinessType, local_business_address,
                 parseInt(article_refresh_days) || 0, parseInt(product_refresh_days) || 0,
                 llms_txt, llms_full_txt]
         )

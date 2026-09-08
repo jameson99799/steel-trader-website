@@ -6,6 +6,7 @@ import {
     PRODUCT_CATEGORY_SITEMAP_QUERY,
     NEWS_CATEGORY_SITEMAP_QUERY
 } from '../services/sitemapCategoryQueries.js'
+import { getLocalizedCoverage, indexableLangs } from '../services/indexingPolicy.js'
 
 const router = Router()
 
@@ -151,16 +152,19 @@ router.get('/static', (req, res) => {
         ]
 
         const seoSettings = getSeoSettings()
+        // Static pages only have indexed variants in the primary authoring
+        // locales; other languages currently serve untranslated English content.
+        const staticLangs = indexableLangs(activeLangs)
         const urls = []
         for (const p of staticPages) {
-            for (const l of activeLangs) {
+            for (const l of staticLangs) {
                 const langPath = `/${l.code}${p.loc === '/' ? '' : p.loc}`
                 urls.push(urlEntry({
                     loc: BASE_URL + langPath,
                     lastmod: p.lastmod,
                     changefreq: p.changefreq,
                     priority: p.priority,
-                    hreflang: hreflangLinks(p.loc, activeLangs, seoSettings)
+                    hreflang: hreflangLinks(p.loc, staticLangs, seoSettings)
                 }))
             }
         }
@@ -179,6 +183,8 @@ router.get('/categories', (req, res) => {
         const fallbackDate = '2024-03-01'
         const activeLangs = getActiveLangs()
         const seoSettings = getSeoSettings()
+        // Category pages render English-only content outside the primary locales.
+        const catLangs = indexableLangs(activeLangs)
         const urls = []
 
         // Product categories
@@ -189,13 +195,13 @@ router.get('/categories', (req, res) => {
             const catSlug = c.slug || c.name_en?.toLowerCase().replace(/\\s+/g, '-') || c.id
             const locPath = `/products/category/${catSlug}`
             const lastmod = toDateStr(c.lastmod_date, fallbackDate)
-            for (const l of activeLangs) {
+            for (const l of catLangs) {
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + locPath,
                     lastmod,
                     changefreq: 'weekly',
                     priority: '0.9',
-                    hreflang: hreflangLinks(locPath, activeLangs, seoSettings)
+                    hreflang: hreflangLinks(locPath, catLangs, seoSettings)
                 }))
             }
         }
@@ -206,13 +212,13 @@ router.get('/categories', (req, res) => {
             if (!nc.slug) continue
             const locPath = `/news/category/${nc.slug}`
             const lastmod = toDateStr(nc.lastmod_date, fallbackDate)
-            for (const l of activeLangs) {
+            for (const l of catLangs) {
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + locPath,
                     lastmod,
                     changefreq: 'weekly',
                     priority: '0.8',
-                    hreflang: hreflangLinks(locPath, activeLangs, seoSettings)
+                    hreflang: hreflangLinks(locPath, catLangs, seoSettings)
                 }))
             }
         }
@@ -246,26 +252,19 @@ router.get('/products', (req, res) => {
         const urls = []
         const seoSettings = getSeoSettings()
 
-        // For non-English languages only include the variant when an actual translation
-        // exists in the translations table. This prevents serving untranslated (English)
-        // content under /es/, /fr/, … URLs, which Google treats as thin duplicates.
-        const translatedLangs = new Map() // productId -> Set(langCode)
-        try {
-            const rows = getAll(`SELECT content_id, language_code FROM translations WHERE content_type='product' AND translated_text IS NOT NULL AND length(translated_text) > 0`)
-            for (const row of rows) {
-                if (!translatedLangs.has(String(row.content_id))) translatedLangs.set(String(row.content_id), new Set())
-                translatedLangs.get(String(row.content_id)).add(row.language_code)
-            }
-        } catch (e) {}
+        // For non-English/non-Chinese languages only include the variant when a
+        // *fully localizing* translation exists (name AND description in the
+        // translations table). Mirrors the SSR forceNoindex check in server/index.js.
+        const coverage = getLocalizedCoverage()
 
         for (const p of products || []) {
             const prodSlug = p.slug || p.id
             const prodPath = `/products/${prodSlug}`
             const lastmod = toDateStr(p.lastmod_date, fallbackDate)
-            const translated = translatedLangs.get(String(p.id)) || new Set()
+            const localized = coverage.get(`product:${p.id}`) || null
+            const langs = indexableLangs(activeLangs, localized)
 
-            for (const l of activeLangs) {
-                if (l.code !== 'en' && l.code !== 'zh' && !translated.has(l.code)) continue
+            for (const l of langs) {
                 let imagesHTML = ''
                 if (p.images) {
                     const titleStr = p[`name_${l.code}`] || p.name_en || p.name || 'product'
@@ -281,7 +280,7 @@ router.get('/products', (req, res) => {
                     lastmod,
                     changefreq: 'weekly',
                     priority: '0.8',
-                    hreflang: hreflangLinks(prodPath, activeLangs, seoSettings),
+                    hreflang: hreflangLinks(prodPath, langs, seoSettings),
                     imagesHTML
                 }))
             }
@@ -302,17 +301,10 @@ router.get('/news', (req, res) => {
         const activeLangs = getActiveLangs()
         const news = getAll(`SELECT slug, id, title_en, title, cover_image, COALESCE(updated_at, created_at) as lastmod_date FROM news WHERE status = 1 ORDER BY id DESC`)
 
-        // For non-English languages only include the variant when an actual translation
-        // exists in the translations table. This prevents serving untranslated (English)
-        // content under /es/, /fr/, … URLs, which Google treats as thin duplicates.
-        const translatedLangs = new Map() // newsId -> Set(langCode)
-        try {
-            const rows = getAll(`SELECT content_id, language_code FROM translations WHERE content_type='news' AND translated_text IS NOT NULL AND length(translated_text) > 0`)
-            for (const row of rows) {
-                if (!translatedLangs.has(String(row.content_id))) translatedLangs.set(String(row.content_id), new Set())
-                translatedLangs.get(String(row.content_id)).add(row.language_code)
-            }
-        } catch (e) {}
+        // For non-English/non-Chinese languages only include the variant when a
+        // *fully localizing* translation exists (title AND content). Mirrors the
+        // SSR forceNoindex check in server/index.js.
+        const coverage = getLocalizedCoverage()
 
         const seoSettings = getSeoSettings()
         const urls = []
@@ -320,10 +312,10 @@ router.get('/news', (req, res) => {
             const slug = n.slug || n.id
             const newsPath = `/news/${slug}`
             const lastmod = toDateStr(n.lastmod_date, fallbackDate)
-            const translated = translatedLangs.get(String(n.id)) || new Set()
+            const localized = coverage.get(`news:${n.id}`) || null
+            const langs = indexableLangs(activeLangs, localized)
 
-            for (const l of activeLangs) {
-                if (l.code !== 'en' && !translated.has(l.code)) continue
+            for (const l of langs) {
                 let imagesHTML = ''
                 if (n.cover_image) {
                     const titleStr = n[`title_${l.code}`] || n.title_en || n.title || 'news article'
@@ -336,7 +328,7 @@ router.get('/news', (req, res) => {
                     lastmod,
                     changefreq: 'monthly',
                     priority: '0.6',
-                    hreflang: hreflangLinks(newsPath, activeLangs, seoSettings),
+                    hreflang: hreflangLinks(newsPath, langs, seoSettings),
                     imagesHTML
                 }))
             }

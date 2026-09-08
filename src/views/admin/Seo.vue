@@ -142,12 +142,11 @@
           <div class="form-group">
             <label>🏭 业务类型</label>
             <select v-model="form.local_business_type" class="form-control">
-              <option value="Manufacturer">制造商（Manufacturer）</option>
+              <option value="Corporation">制造公司（Corporation）（推荐）</option>
               <option value="WholesaleStore">批发商（WholesaleStore）</option>
               <option value="Store">零售商（Store）</option>
               <option value="LocalBusiness">本地业务（LocalBusiness）</option>
               <option value="Organization">组织机构（Organization）</option>
-              <option value="Corporation">公司（Corporation）</option>
             </select>
             <small>用于 Google LocalBusiness 结构化数据</small>
           </div>

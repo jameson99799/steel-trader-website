@@ -278,6 +278,9 @@ async function initDb() {
   try { db.exec('ALTER TABLE page_texts ADD COLUMN show_contact_panel INTEGER DEFAULT 0') } catch (e) { }
   // Create/upgrade SEO settings before any fresh-database seed reads modern columns.
   initializeSeoSettingsSchema(db)
+  // Migration: 'Manufacturer' is not a valid schema.org type — coerce stored values
+  // to a valid organization type so emitted JSON-LD remains parseable.
+  try { db.exec("UPDATE seo_settings SET local_business_type = 'Corporation' WHERE local_business_type = 'Manufacturer'") } catch (e) { }
   // Migration: add faq_items for GEO (Generative Engine Optimization) FAQ schema
   try { db.exec("ALTER TABLE products ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }
   try { db.exec("ALTER TABLE news ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }

@@ -1,3 +1,19 @@
+// Valid schema.org organization types that may be used as the site's
+// Organization / publisher @type. 'Manufacturer' is NOT a schema.org type —
+// emitting it in JSON-LD makes the entity unparseable for Google & AI engines.
+export const ORGANIZATION_TYPES = Object.freeze([
+  'Organization',
+  'Corporation',
+  'LocalBusiness',
+  'Store',
+  'WholesaleStore'
+])
+
+export function sanitizeOrganizationType(value) {
+  const v = typeof value === 'string' ? value.trim() : ''
+  return ORGANIZATION_TYPES.includes(v) ? v : 'Corporation'
+}
+
 const ADDITIVE_COLUMNS = [
   ['site_title', 'TEXT'],
   ['site_description', 'TEXT'],
@@ -12,7 +28,7 @@ const ADDITIVE_COLUMNS = [
   ['geo_lng', "TEXT DEFAULT ''"],
   ['hreflang_en', "TEXT DEFAULT 'en'"],
   ['hreflang_zh', "TEXT DEFAULT 'zh-CN'"],
-  ['local_business_type', "TEXT DEFAULT 'Manufacturer'"],
+  ['local_business_type', "TEXT DEFAULT 'Corporation'"],
   ['local_business_address', "TEXT DEFAULT ''"],
   ['service_account_json', "TEXT DEFAULT ''"],
   ['oauth_client_id', "TEXT DEFAULT ''"],
@@ -45,7 +61,7 @@ export function initializeSeoSettingsSchema(db) {
       geo_lng TEXT DEFAULT '',
       hreflang_en TEXT DEFAULT 'en',
       hreflang_zh TEXT DEFAULT 'zh-CN',
-      local_business_type TEXT DEFAULT 'Manufacturer',
+      local_business_type TEXT DEFAULT 'Corporation',
       local_business_address TEXT DEFAULT '',
       service_account_json TEXT DEFAULT '',
       oauth_client_id TEXT DEFAULT '',

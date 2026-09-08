@@ -43,6 +43,8 @@ import sslRoutes from './routes/ssl.js'
 import emailRoutes from './routes/email.js'
 import { checkAndSendSslWarning } from './emailService.js'
 import { stripSeoSecrets } from './services/seoSanitizer.js'
+import { sanitizeOrganizationType } from './services/seoSettingsSchema.js'
+import { PRIMARY_CONTENT_LANGS, getLocalizedLangsFor } from './services/indexingPolicy.js'
 import indexingRoutes, { startIndexingScheduler } from './routes/indexing.js'
 import aiRoutes from './routes/ai.js'
 import aiAutoPostRoutes from './routes/ai-auto-post.js'
@@ -637,6 +639,10 @@ ${contactLines.join('\n')}
         let isNotFound = false  // Track soft 404
         let matchedRoute = false
         let forceNoindex = false // Untranslated language variants should not be indexed
+        // URL variants that are safe to index/emit for the current page: primary
+        // locales (en/zh) always; fully-localized secondary locales get added for
+        // product/news detail routes below.
+        let routeIndexableLangs = new Set(PRIMARY_CONTENT_LANGS)
 
         // ── Verify Language Prefix Validity ──
         // To prevent Soft 404s and SEO duplicate content issues, we must ensure
@@ -715,7 +721,7 @@ ${contactLines.join('\n')}
         let pageImage = seoSettings.og_image ? `${siteUrl}${seoSettings.og_image}` : ''
         let ogType = 'website'
         let extraSchemas = ''
-        const orgType = seoSettings.local_business_type || 'Organization'
+        const orgType = sanitizeOrganizationType(seoSettings.local_business_type)
         let ssrContent = ''    // Server-rendered content for SEO/GEO crawlers
 
           // ── Product detail page ──
@@ -747,6 +753,8 @@ ${contactLines.join('\n')}
                 const hasRealTranslation = !!product[`name_${lang}`] && !!product[`description_${lang}`]
                 if (!hasRealTranslation) forceNoindex = true
               }
+              // hreflang/canonical variants may only point at fully-localized locales.
+              routeIndexableLangs = new Set([...PRIMARY_CONTENT_LANGS, ...getLocalizedLangsFor('product', product.id)])
               const seoT = getSeoTrans('product', product.id, lang)
               const localizedPName = product[`name_${lang}`]
               const pName = localizedPName
@@ -970,6 +978,8 @@ ${contactLines.join('\n')}
                 const hasRealTranslation = !!article[`title_${lang}`] && !!article[`content_${lang}`]
                 if (!hasRealTranslation) forceNoindex = true
               }
+              // hreflang/canonical variants may only point at fully-localized locales.
+              routeIndexableLangs = new Set([...PRIMARY_CONTENT_LANGS, ...getLocalizedLangsFor('news', article.id)])
               let articleBody = rawContent
                 .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
                 .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -1376,7 +1386,7 @@ ${contactLines.join('\n')}
           const languages = getAll('SELECT code FROM languages WHERE status=1') || []
           const langCodes = languages.map(l => l.code)
           if (!langCodes.includes('en')) langCodes.unshift('en')
-          hreflangTags = langCodes.map(code => {
+          hreflangTags = langCodes.filter(code => routeIndexableLangs.has(code)).map(code => {
             let actualHreflang = code
             if (code === 'en' && seoSettings.hreflang_en) actualHreflang = seoSettings.hreflang_en
             if (code === 'zh' && seoSettings.hreflang_zh) actualHreflang = seoSettings.hreflang_zh
@@ -1402,6 +1412,9 @@ ${contactLines.join('\n')}
         const ogTitle = (pageTitle || '').substring(0, 110)
         const safeDesc = (pageDesc || '').substring(0, 160)
         const isPrivateRoute = url.startsWith('/admin') || url.startsWith('/crm')
+        // Static/listing/category pages only have localized variants in the primary
+        // locales; secondary languages picked up here render untranslated content.
+        if (matchedRoute && !isNotFound && !routeIndexableLangs.has(lang)) forceNoindex = true
         const responsePolicy = getSeoResponsePolicy({ isPrivateRoute, isNotFound, forceNoindex })
         const ogLocaleMap = {
           en: 'en_US', zh: 'zh_CN', es: 'es_ES', fr: 'fr_FR', ru: 'ru_RU',

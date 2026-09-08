@@ -603,6 +603,8 @@ function updateProductSeo(comp) {
     }
   }
   Object.assign(productSchema, buildReviewSchemaParts(publicReviews.value))
+  // Match the SSR behavior: never emit a self-serving AggregateRating (Google policy).
+  delete productSchema.aggregateRating
 
   const specsJson = localizedValue(p, 'specs') || p.specs
   if (specsJson) {
