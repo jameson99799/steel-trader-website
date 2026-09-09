@@ -1370,7 +1370,15 @@ ${contactLines.join('\n')}
           url: siteUrl,
           logo: `${siteUrl}/uploads/logo.png`,
           description: (company.description_en || '').substring(0, 300),
-          address: seoSettings.local_business_address || company.address_en || company.address || '',
+          // Address as a structured PostalAddress improves entity parsing by
+          // Google and AI (GEO) engines.
+          address: (seoSettings.local_business_address || company.address_en || company.address)
+            ? {
+                '@type': 'PostalAddress',
+                streetAddress: seoSettings.local_business_address || company.address_en || company.address,
+                ...((seoSettings.geo_region || '').split('-')[0] ? { addressCountry: seoSettings.geo_region.split('-')[0] } : { addressCountry: 'CN' })
+              }
+            : undefined,
           areaServed: 'Worldwide',
           contactPoint: []
         }

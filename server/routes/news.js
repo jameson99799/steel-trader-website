@@ -125,6 +125,11 @@ router.post('/', authMiddleware, upload.single('cover_image'), (req, res) => {
             [title, title_en || null, cleanSlug, summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status), parseInt(sort_order), render_mode, resolvedCatId]
         )
         const newId = result.lastInsertRowid
+
+        // Persist the shared "default author" used by every article schema.
+        if (req.body.default_news_author !== undefined) {
+            run(`UPDATE seo_settings SET default_news_author=? WHERE id=1`, [req.body.default_news_author])
+        }
         
         res.json({ id: newId, slug: cleanSlug, category_id: resolvedCatId, message: '创建成功' })
     } catch (err) {
@@ -155,6 +160,11 @@ router.put('/:id', authMiddleware, upload.single('cover_image'), (req, res) => {
          WHERE id=?`,
             [title, title_en || null, updatedSlug, summary || null, summary_en || null, content || null, cover_image, seo_title || null, seo_description || null, seo_keywords || null, parseInt(status || 1), parseInt(sort_order || 0), render_mode || 'direct', resolvedCatId, id]
         )
+
+        // Persist the shared "default author" used by every article schema.
+        if (req.body.default_news_author !== undefined) {
+            run(`UPDATE seo_settings SET default_news_author=? WHERE id=1`, [req.body.default_news_author])
+        }
         res.json({ message: '更新成功', slug: updatedSlug, category_id: resolvedCatId })
 
     } catch (err) {

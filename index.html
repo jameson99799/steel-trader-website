@@ -68,12 +68,17 @@
         const isAudit = ua.includes('Lighthouse') || ua.includes('Speed Insights') || ua.includes('Chrome-Lighthouse') || ua.includes('GTmetrix') || ua.includes('moto g') || ua.includes('nexus 5x');
         if (isAudit || navigator.webdriver) return;
 
+        // Prefer the GA4 ID configured in the SEO settings (injected via SSR
+        // __INITIAL_STATE__); fall back to the built-in ID when unconfigured.
+        var gaId = (window.__INITIAL_STATE__ && window.__INITIAL_STATE__.seoSettings && window.__INITIAL_STATE__.seoSettings.google_analytics) || 'G-9XX57W2ZKS';
+        if (!gaId) return;
+
         var s = document.createElement('script');
-        s.src = 'https://www.googletagmanager.com/gtag/js?id=G-9XX57W2ZKS';
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
         s.async = true;
         document.head.appendChild(s);
         gtag('js', new Date());
-        gtag('config', 'G-9XX57W2ZKS', { 'page_path': window.location.pathname });
+        gtag('config', gaId, { 'page_path': window.location.pathname });
       }
       
       // Delay GA significantly until real user interaction
