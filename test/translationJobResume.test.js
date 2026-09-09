@@ -6,39 +6,11 @@ import { dirname, join } from 'node:path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-// The resume-path helpers are imported from the REAL job engine so the
-// pause→resume breakpoint test drives production code.
-const { filterPageItemsByExisting, filterToUntranslated } = await import(
+// The skip-translated helper is imported from the REAL job engine so the
+// worker's retry/fill-missing semantics drive production code.
+const { filterPageItemsByExisting } = await import(
   pathToFileURL(join(__dirname, '..', 'server', 'routes', 'translation-jobs.js')).href
 )
-
-// ── Fake page-items (mirrors server/routes/translation.js collectNews) ──
-function newsPageItems(articleIds) {
-  const out = []
-  for (const id of articleIds) {
-    const itemName = `News #${id}`
-    out.push({ type: 'news', id, field: 'title', text: `Title ${id}`, itemName })
-    out.push({ type: 'news', id, field: 'summary', text: `Summary ${id}`, itemName })
-    out.push({
-      type: 'news', id, field: 'seo_combined', combined: true,
-      subFields: ['seo_title', 'seo_description', 'seo_keywords'],
-      text: JSON.stringify({ seo_title: `ST ${id}`, seo_description: `SD ${id}`, seo_keywords: `SK ${id}` }),
-      itemName
-    })
-    out.push({ type: 'news', id, field: 'content', text: `<p>content ${id}</p>`, long_html: true, itemName })
-  }
-  return out
-}
-
-function articleQueue(articleIds, langs) {
-  const items = []
-  for (const id of articleIds) {
-    for (const lang of langs) {
-      items.push({ type: 'news', id, itemName: `News #${id}`, targetLang: lang })
-    }
-  }
-  return items
-}
 
 test('filterPageItemsByExisting: combined + plain + name_NC_ field semantics', () => {
   const pageItems = [
@@ -69,51 +41,21 @@ test('filterPageItemsByExisting: combined + plain + name_NC_ field semantics', (
   assert.deepStrictEqual(JSON.parse(after[0].text), { seo_description: 'B' })
 })
 
-test('filterToUntranslated: resume rebuilds the exact remaining queue', () => {
-  const articleIds = Array.from({ length: 100 }, (_, i) => i + 1)   // 100 articles
-  const langs = ['es', 'fr', 'de']                                  // 300 queue items
-  const allItems = articleQueue(articleIds, langs)
-
-  // Simulate: paused with 150 shown, but in-flight drain actually completed
-  // articles 1..59 for es/fr and 1..60 for de → 178 of the 300 items done.
-  const getPageItems = () => newsPageItems(articleIds)
-  const getTranslatedByItem = (lang, type) => {
-    const map = new Map()
-    const doneArticles = lang === 'de' ? 60 : 59
-    for (let id = 1; id <= doneArticles; id++) {
-      map.set(String(id), new Set(['title', 'summary', 'seo_title', 'seo_description', 'seo_keywords', 'content']))
-    }
-    return map
-  }
-
-  const remaining = filterToUntranslated(allItems, { getPageItems, getTranslatedByItem })
-  assert.equal(remaining.length, 122, '178 done ⇒ exactly 122 left')
-
-  // Order is preserved and it starts exactly after the last finished item.
-  for (const lang of langs) {
-    const doneForLang = lang === 'de' ? 60 : 59
-    const firstForLang = remaining.find(r => r.targetLang === lang)
-    assert.equal(firstForLang.id, doneForLang + 1, `${lang} must resume at the true breakpoint`)
-    for (let id = 1; id <= doneForLang; id++) {
-      const dup = remaining.some(r => r.targetLang === lang && r.id === id)
-      assert.equal(dup, false, `${lang} item ${id} is already done and must not be re-added`)
-    }
-  }
+test('resumed jobs continue the saved queue EXACTLY, never skipping pre-translated items', () => {
+  const source = readFileSync(join(__dirname, '..', 'server', 'routes', 'translation-jobs.js'), 'utf8')
+  // Resume must use the persisted queue snapshot regardless of what translations
+  // already exist — re-running the same scope is a full re-translate workflow.
+  assert.match(source, /pendingItems = JSON\.parse\(job\.pending_items\)/)
+  // The ground-truth skip filter must NOT appear anywhere in the job engine.
+  assert.doesNotMatch(source, /filterToUntranslated/)
+  assert.doesNotMatch(source, /resumeFromPauseFlags/)
+  // The resume log tells the user the exact continuation position.
+  assert.match(source, /将从第 \$\{startPos\} 项开始/)
+  assert.match(source, /恢复后将从第 \$\{doneTotal \+ 1\} 项继续/)
 })
 
-test('filterToUntranslated: partially-translated items are kept', () => {
-  const allItems = articleQueue([1], ['es'])
-  const getPageItems = () => newsPageItems([1])
-  const getTranslatedByItem = () => new Map([['1', new Set(['title'])]]) // only 1 of 6 fields
-
-  const remaining = filterToUntranslated(allItems, { getPageItems, getTranslatedByItem })
-  assert.equal(remaining.length, 1, 'partial items must be resumed, not skipped')
-})
-
-test('TODO-less guard: worker + resume paths both use the shared ground-truth filter', () => {
+test('worker still uses skip-translated engine for retry / fill-missing mode', () => {
   const source = readFileSync(join(__dirname, '..', 'server', 'routes', 'translation-jobs.js'), 'utf8')
   assert.match(source, /filterPageItemsByExisting\(itemsRaw, translatedFieldsSet\)/)
-  assert.match(source, /resumeFromPauseFlags\.set\(id, true\)/)
-  assert.match(source, /const rebuilt = collectTranslationItems\(job, langCodes\)/)
-  assert.match(source, /pendingItems = filterToUntranslated\(rebuilt\)/)
+  assert.match(source, /const filteredByExisting = isRetry \|\| !!job\.skip_translated/)
 })
