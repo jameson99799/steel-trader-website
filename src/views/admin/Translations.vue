@@ -1143,6 +1143,13 @@ watch(concurrency, async (newVal) => {
     await api.setTranslationConcurrency(newVal)
   } catch(e) {}
 })
+
+// Changing the translation scope checkboxes switches the job back to scope mode:
+// clear any leftover "指定产品/文章" (explicitItems) selection so the run actually
+// uses the NEW scope instead of silently translating the previously specified items.
+watch(selectedPages, () => {
+  if (explicitItems.value.length) explicitItems.value = []
+})
 const saveSettings = async () => {
   saving.value = true; savedMsg.value = false
   try {

@@ -10,6 +10,14 @@ import {
     saveManualTranslation,
     syncProductReviewTranslation
 } from '../services/productReviewTranslation.js'
+import {
+    acquireRpmSlot,
+    resolveRpmLimit,
+    retryDelayMs,
+    sleep,
+    httpAgent,
+    httpsAgent
+} from '../services/aiRateLimit.js'
 
 const router = Router()
 
@@ -21,7 +29,10 @@ function enhanceWithDefaultChannel(settings) {
     // Use channel's API url and key if translation_settings has defaults or empty
     if (ch.api_url) s.api_url = ch.api_url
     if (ch.api_key) s.api_key = ch.api_key
-    s.rpm_limit = ch.rpm_limit || 0
+    // Channel limit wins ONLY when it is actually configured (> 0) — a channel
+    // without rpm_limit must never silently zero out the admin's configured
+    // translation_settings.rpm_limit.
+    s.rpm_limit = resolveRpmLimit(settings?.rpm_limit, ch.rpm_limit)
     // Use channel's default_model, or first model in list
     if (ch.default_model) s.model_name = ch.default_model
     else {
@@ -101,13 +112,22 @@ router.get('/settings', authMiddleware, (req, res) => {
 })
 
 router.put('/settings', authMiddleware, (req, res) => {
-    const { api_url, api_key, model_name, multilingual_enabled, rpm_limit, rpm_interval } = req.body
+    const body = req.body || {}
+    const { api_url, api_key, model_name, multilingual_enabled, rpm_limit, rpm_interval } = body
     const existing = getOne('SELECT * FROM translation_settings WHERE id = 1')
     const finalKey = (api_key && !api_key.includes('****')) ? api_key : (existing?.api_key || '')
-    // Preserve rpm_limit / rpm_interval when omitted, so the admin save form
-    // never accidentally resets an intentionally configured rate limit to 0.
-    const finalRpmLimit = rpm_limit != null ? (parseInt(rpm_limit) || 0) : (existing?.rpm_limit || 0)
-    const finalRpmInterval = rpm_interval != null ? (parseInt(rpm_interval) || 60) : (existing?.rpm_interval || 60)
+    // Preserve rpm_limit / rpm_interval when omitted OR sent as an empty value
+    // ("" / null), so an admin save form without those inputs never accidentally
+    // resets an intentionally configured rate limit to 0. Use hasOwnProperty —
+    // not truthiness — because an explicit 0 must still be saved.
+    const hasRpmLimit = Object.prototype.hasOwnProperty.call(body, 'rpm_limit')
+    const hasRpmInterval = Object.prototype.hasOwnProperty.call(body, 'rpm_interval')
+    const finalRpmLimit = (hasRpmLimit && rpm_limit !== null && String(rpm_limit).trim() !== '')
+        ? (parseInt(rpm_limit) || 0)
+        : (existing?.rpm_limit || 0)
+    const finalRpmInterval = (hasRpmInterval && rpm_interval !== null && String(rpm_interval).trim() !== '')
+        ? (parseInt(rpm_interval) || 60)
+        : (existing?.rpm_interval || 60)
     run(
         'UPDATE translation_settings SET api_url=?, api_key=?, model_name=?, multilingual_enabled=?, rpm_limit=?, rpm_interval=?, updated_at=CURRENT_TIMESTAMP WHERE id=1',
         [api_url || 'https://api.openai.com/v1', finalKey, model_name || 'gpt-3.5-turbo', multilingual_enabled != null ? (multilingual_enabled ? 1 : 0) : 1, finalRpmLimit, finalRpmInterval]
@@ -129,7 +149,7 @@ router.get('/concurrency', authMiddleware, (req, res) => {
 
 router.put('/concurrency', authMiddleware, (req, res) => {
     const { concurrency } = req.body
-    const c = Math.min(8, Math.max(1, parseInt(concurrency) || 3))
+    const c = Math.min(10, Math.max(1, parseInt(concurrency) || 3))
     run('UPDATE translation_settings SET concurrency = ? WHERE id = 1', [c])
     // Update memory variable for background worker if it exists
     workerConcurrency = c
@@ -173,7 +193,11 @@ function httpRequest(urlStr, options = {}, body = null, timeoutMs = 120000) {
                 'Accept': 'application/json',
                 ...(options.headers || {})
             },
-            timeout: timeoutMs
+            timeout: timeoutMs,
+            // Shared keep-alive agent (maxSockets 64) — connection reuse is
+            // critical when 30-40 AI calls run concurrently against the same
+            // API origin (otherwise every call pays a fresh TCP+TLS handshake).
+            agent: url.protocol === 'https:' ? httpsAgent : httpAgent
         }
         const req = lib.request(reqOptions, (res) => {
             res.setEncoding('utf8')
@@ -196,39 +220,22 @@ function httpRequest(urlStr, options = {}, body = null, timeoutMs = 120000) {
     })
 }
 
-// ─── Global RPM Tracker ───
-const channelRpmTrackers = new Map() // key -> { minuteStart, count }
-const rateLimitLoggedAt = new Map()  // channelKey -> last console.log timestamp
+// ─── Global RPM limiting (shared service, see server/services/aiRateLimit.js) ───
+// The limiter now lives in ONE shared module keyed by api_key + api_url so
+// translation.js and news-enhance.js share the same per-channel window
+// instead of each keeping an independent counter.
 
 async function callAI(settings, messages, maxTokens = 8000) {
     const limit = parseInt(settings.rpm_limit) || 0
     if (limit > 0) {
-        const channelKey = `${settings.api_key}_${settings.api_url}`
-        while (true) {
-            let tracker = channelRpmTrackers.get(channelKey)
-            const now = Date.now()
-            if (!tracker || (now - tracker.minuteStart) >= 60000) {
-                tracker = { minuteStart: now, count: 0 }
-                channelRpmTrackers.set(channelKey, tracker)
-            }
-            if (tracker.count < limit) {
-                tracker.count++
-                break
-            }
-            const waitTime = 60000 - (now - tracker.minuteStart)
-            if (waitTime > 0) {
-                // Throttle the log so N concurrent callers don't spam the console
-                // with one line each per minute of waiting.
-                if ((rateLimitLoggedAt.get(channelKey) || 0) < Date.now() - 60000) {
-                    rateLimitLoggedAt.set(channelKey, Date.now())
-                    console.log(`[RateLimit] API 请求已达该渠道阈值 (${limit}次/分钟)，休眠 ${Math.round(waitTime/1000)} 秒后重新检查...`)
-                }
-                await new Promise(resolve => setTimeout(resolve, waitTime + 50))
-            } else {
-                tracker.minuteStart = Date.now()
-                tracker.count = 0
-            }
-        }
+        // Honor the configured rpm_interval (seconds; ai_channels only stores
+        // rpm_limit). Defaults to 60s when unset.
+        await acquireRpmSlot({
+            key: `${settings.api_key}_${settings.api_url}`,
+            limit,
+            intervalMs: (parseInt(settings.rpm_interval) || 60) * 1000,
+            logTag: '[Translation]'
+        })
     }
 
     const apiUrl = (settings.api_url || 'https://api.openai.com/v1').replace(/\/$/, '') + '/chat/completions'
@@ -986,6 +993,56 @@ const PAGES = {
         return text.replace(/\uFFFD/g, '').replace(/\u{FFFD}/gu, '').replace(/\ufffd/g, '').replace(/\ufffd\ufffd\ufffd/g, '').trim()
     }
 
+// Detect a max_tokens truncation error (finish_reason=length). Retrying such
+// a call with the SAME payload deterministically re-truncates, so callers
+// split the batch instead of burning retries.
+function isTruncationError(e) {
+    return !!e && typeof e.message === 'string' && e.message.includes('finish_reason=length')
+}
+
+// Parse "N. text" numbered AI output into an index-aligned array of strings.
+// - Continuation lines WITHOUT a number prefix are merged into the previous
+//   entry (FAQ answers / long values often contain raw newlines).
+// - Only a number equal to the NEXT expected index opens a new entry, so
+//   content that merely starts with digits ("0.5mm", "12 mm") is treated as
+//   continuation text instead of a phantom item.
+// - Returns null unless the numbering is EXACTLY contiguous 1..expectedCount:
+//   dropped, merged or duplicated numbers would silently shift every
+//   following translation, so the caller must retry instead of saving
+//   shifted content.
+function parseNumberedLines(content, expectedCount) {
+    if (!content || typeof content !== 'string') return null
+    const lines = content.split('\n').map(l => l.trim())
+    const parsed = []
+    for (const line of lines) {
+        if (!line) continue
+        const m = line.match(/^[\*\s\[\(#>\-—]*(\d+)[\*\s\]\)\.:：、\-]+(.*)$/)
+        if (m) {
+            const num = parseInt(m[1], 10)
+            if (num === parsed.length + 1) {
+                parsed.push({ num, text: m[2].trim() })
+            } else if (parsed.length > 0 && num === parsed.length) {
+                // Duplicated current number — model merged/repeated items.
+                return null
+            } else if (parsed.length > 0) {
+                // Out-of-sequence number: belongs to the previous entry.
+                const prev = parsed[parsed.length - 1]
+                prev.text += (prev.text ? '\n' : '') + line
+            }
+            // A numbered line before the first item (preamble) is ignored.
+        } else if (parsed.length > 0) {
+            const prev = parsed[parsed.length - 1]
+            prev.text += (prev.text ? '\n' : '') + line
+        }
+    }
+    if (parsed.length !== expectedCount) return null
+    for (let i = 0; i < parsed.length; i++) {
+        if (parsed[i].num !== i + 1) return null
+        if (!parsed[i].text) return null
+    }
+    return parsed.map(p => p.text)
+}
+
 // ─── Translation core — handles both short text batches and long HTML ─────────
 // ─── Translation core — SINGLE-CALL approach (like read-frog) ─────────────────
 // Sends ALL short text fields in ONE API call as a JSON object.
@@ -1015,22 +1072,30 @@ async function translateBatch(settings, items, targetLang, langName, overrideNot
 
     // ── SHORT TEXT: Send ALL fields in ONE API call ──
     if (shortItems.length > 0) {
-        // Build a merged JSON object — combined fields get expanded into sub-fields
-        const fieldsObj = {}
+        // Expand every short item into ONE ordered list of (item, field, origVal)
+        // entries. Combined JSON fields are flattened into their real sub-fields
+        // up front, so the numbered prompt, the AI output order and the upsert
+        // mapping all reference the SAME canonical list — two different items can
+        // never collide on the same key or shift each other out of alignment.
+        const fieldEntries = []
         for (const item of shortItems) {
+            const realField = item.field.startsWith('name_NC_') || item.field.startsWith('name_RC_') ? 'name' : item.field
             if (item.combined) {
                 try {
                     const subObj = JSON.parse(item.text)
-                    Object.assign(fieldsObj, subObj)
+                    for (const [subField, origVal] of Object.entries(subObj)) {
+                        if (origVal != null && String(origVal).trim() !== '') {
+                            fieldEntries.push({ item, field: subField, origVal: String(origVal) })
+                        }
+                    }
                 } catch (e) {
-                    fieldsObj[item.field] = item.text
+                    fieldEntries.push({ item, field: realField, origVal: item.text })
                 }
             } else {
-                item._uniqueFieldObjKey = `${item.type}_${item.id}_${item.field}_${Math.random().toString(36).substring(2,7)}`
-                fieldsObj[item._uniqueFieldObjKey] = item.text
+                fieldEntries.push({ item, field: realField, origVal: item.text })
             }
         }
-        const fieldVals = Object.values(fieldsObj)
+        const fieldVals = fieldEntries.map(e => e.origVal)
 
         // read-frog style: use NUMBERED lines instead of JSON to avoid ERR_NO_JSON
         // Format: "1. text1\n2. text2\n..." → AI returns "1. trans1\n2. trans2\n..."
@@ -1063,94 +1128,50 @@ ${strictRule}
                     { role: 'user', content: numberedInput }
                 ], 16000)
 
-                // Clean DeepSeek R1 <think> blocks and markdown ticks, then split
-                let cleanedContent = aiContent.replace(/<think>[\s\S]*?<\/think>/gi, '')
+                // Clean DeepSeek R1  thinking blocks and markdown ticks
+                let cleanedContent = aiContent.replace(/ thinking[\s\S]*?<\/think>/gi, '')
                 cleanedContent = cleanedContent.replace(/```[a-z]*\n/gi, '').replace(/```/g, '')
-                
-                const lines = cleanedContent.split('\n').map(l => l.trim()).filter(Boolean)
-                const translatedArr = []
-                for (const line of lines) {
-                    const m = line.match(/^[\*\s\[\(]*\d+[\*\s\]\)\.]+(.+)$/)
-                    if (m) translatedArr.push(m[1].trim())
-                }
 
-                if (translatedArr.length < Math.floor(fieldVals.length * 0.5)) {
-                    // Fallback: try JSON format if numbered parsing got too few results
-                    const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
-                    if (jsonMatch) {
-                        try {
-                            const jsonTranslations = JSON.parse(jsonMatch[0])
-                            // Map JSON response back to items
-                            let anySuccess = false
-                            for (const item of shortItems) {
-                                const realField = item.field.startsWith('name_NC_') || item.field.startsWith('name_RC_') ? 'name' : item.field
-                                if (item.combined) {
-                                    try {
-                                        const subObj = JSON.parse(item.text)
-                                        for (const [subField, origVal] of Object.entries(subObj)) {
-                                            const trans = jsonTranslations[subField]
-                                            if (trans && typeof trans === 'string') {
-                                                upsertTranslation(targetLang, item.type, item.id, subField, origVal, trans)
-                                                results.push({ original: origVal.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: subField, itemName: item.itemName })
-                                                anySuccess = true
-                                            } else {
-                                                errors.push({ item: subField, error: 'Missing JSON translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
-                                            }
-                                        }
-                                    } catch {}
-                                } else {
-                                    const trans = jsonTranslations[item._uniqueFieldObjKey] || jsonTranslations[item.field] || jsonTranslations[realField]
-                                    if (trans && typeof trans === 'string') {
-                                        upsertTranslation(targetLang, item.type, item.id, realField, item.text, trans)
-                                        results.push({ original: item.text.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
-                                        anySuccess = true
-                                    } else {
-                                        errors.push({ item: item.field, error: 'Missing JSON translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
-                                    }
-                                }
-                            }
-                            if (anySuccess) break
-                        } catch {}
-                    }
+                // Strict numbered parse: exactly contiguous 1..fieldVals.length with
+                // continuation lines merged into the previous entry. Anything else
+                // returns null and we retry instead of saving shifted translations.
+                const translatedArr = parseNumberedLines(cleanedContent, fieldVals.length)
+                if (!translatedArr) {
                     if (attempt >= MAX_RETRIES) {
-                        errors.push({ error: `Numbered parsing got ${translatedArr.length}/${fieldVals.length} items (retried ${MAX_RETRIES}x)`, errorCode: 'ERR_PARTIAL', itemName: shortItems[0]?.itemName })
+                        errors.push({ error: `Numbered parsing failed (expected ${fieldVals.length} items) after ${MAX_RETRIES + 1} attempts`, errorCode: 'ERR_PARTIAL', itemName: shortItems[0]?.itemName })
+                    } else {
+                        await sleep(retryDelayMs(attempt + 1))
                     }
                     continue
                 }
 
-                // Map numbered translations back to items
-                let transIdx = 0
-                for (const item of shortItems) {
-                    const realField = item.field.startsWith('name_NC_') || item.field.startsWith('name_RC_') ? 'name' : item.field
-                    if (item.combined) {
-                        try {
-                            const subObj = JSON.parse(item.text)
-                            for (const [subField, origVal] of Object.entries(subObj)) {
-                                const trans = translatedArr[transIdx++]
-                                if (trans) {
-                                    upsertTranslation(targetLang, item.type, item.id, subField, origVal, trans)
-                                    results.push({ original: origVal.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: subField, itemName: item.itemName })
-                                } else {
-                                    errors.push({ item: subField, error: 'Missing numbered translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
-                                }
-                            }
-                        } catch (e) {
-                            errors.push({ item: item.field, error: 'Combined field parse error', errorCode: 'ERR_PARSE', itemName: item.itemName })
-                        }
+                // Map numbered translations back to the canonical fieldEntries list.
+                // fieldEntries is in the SAME order as the numbered input, so a
+                // straight index match can never misalign (no per-item key reuse).
+                for (let i = 0; i < fieldEntries.length; i++) {
+                    const entry = fieldEntries[i]
+                    const trans = translatedArr[i]
+                    if (trans) {
+                        upsertTranslation(targetLang, entry.item.type, entry.item.id, entry.field, entry.origVal, trans)
+                        results.push({ original: entry.origVal.slice(0, 80), translated: trans.slice(0, 120), type: entry.item.type, field: entry.field, itemName: entry.item.itemName })
                     } else {
-                        const trans = translatedArr[transIdx++]
-                        if (trans) {
-                            upsertTranslation(targetLang, item.type, item.id, realField, item.text, trans)
-                            results.push({ original: item.text.slice(0, 80), translated: trans.slice(0, 120), type: item.type, field: realField, itemName: item.itemName })
-                        } else {
-                            errors.push({ item: item.field, error: 'Missing numbered translation', errorCode: 'ERR_MISSING', itemName: item.itemName })
-                        }
+                        errors.push({ item: entry.field, error: 'Missing numbered translation', errorCode: 'ERR_MISSING', itemName: entry.item.itemName })
                     }
                 }
                 break  // Success
             } catch (e) {
+                if (isTruncationError(e)) {
+                    // finish_reason=length: the batch is too big for max_tokens.
+                    // Blindly re-sending the same payload just re-truncates, so fail
+                    // this batch with a specific error (the job-level auto-retry
+                    // re-runs it; a fresh run can pick a smaller batch).
+                    errors.push({ error: e.message, errorCode: 'ERR_TRUNCATED', itemName: shortItems[0]?.itemName })
+                    break
+                }
                 if (attempt >= MAX_RETRIES) {
                     errors.push({ error: e.message + ' (retried ' + MAX_RETRIES + 'x)', errorCode: 'ERR_API', itemName: shortItems[0]?.itemName })
+                } else {
+                    await sleep(retryDelayMs(attempt + 1))
                 }
             }
         }
@@ -1236,6 +1257,7 @@ Example output format:
                                 }
                             } catch (e) {
                                 if (retry >= 2) errors.push({ error: e.message, errorCode: 'ERR_BLOCK', itemName: item.itemName })
+                                else await sleep(retryDelayMs(retry + 1))
                             }
                         }
                     })
@@ -1244,10 +1266,16 @@ Example output format:
                 await runConcurrently(blockTasks, AI_CONCURRENCY)
 
                 const translatedCount = blocks.filter(b => b.translated).length
-                if (translatedCount > 0) {
+                if (translatedCount === blocks.length) {
                     const translatedHtml = reassembleFromBlocks(item.text, root, blocks)
                     upsertTranslation(targetLang, item.type, item.id, item.field, '[HTML]', translatedHtml)
                     results.push({ original: '[HTML ' + item.field + ']', translated: translatedCount + '/' + blocks.length + ' blocks', type: item.type, field: item.field, itemName: item.itemName })
+                } else if (translatedCount > 0) {
+                    // PARTIAL: never persist a page that mixes translated and
+                    // untranslated blocks — a stored field would later be treated
+                    // as "already translated" and the missing blocks could never
+                    // be repaired. Fail the item so it retries.
+                    errors.push({ error: `Only ${translatedCount}/${blocks.length} blocks translated`, errorCode: 'ERR_PARTIAL_BLOCKS', itemName: item.itemName })
                 } else {
                     console.log('[translateBatch] All blocks failed for:', item.itemName)
                     errors.push({ error: 'All HTML blocks failed to translate', errorCode: 'ERR_ALL_BLOCKS', itemName: item.itemName })
@@ -1280,6 +1308,7 @@ ${strictRuleHtml}
                         }
                     } catch (e) {
                         if (retry >= 2) errors.push({ error: e.message + ' (retried 2x)', errorCode: 'ERR_HTML', itemName: item.itemName })
+                        else await sleep(retryDelayMs(retry + 1))
                     }
                 }
             }
@@ -1423,6 +1452,20 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
         for (const item of pageItems) {
             if (item.long_html) {
                 allLongItems.push({ ...item, _reqType: ri.type, _reqId: ri.id })
+            } else if (item.combined) {
+                // Expand combined JSON into real sub-fields so translations land
+                // under content_field = subField (SSR reads the sub-keys, never
+                // 'seo_combined'/'faq_combined'/'spec_combined').
+                try {
+                    const subObj = JSON.parse(item.text)
+                    for (const [subField, val] of Object.entries(subObj)) {
+                        if (val != null && String(val).trim() !== '') {
+                            allShortItems.push({ ...item, combined: false, field: subField, text: String(val), _reqType: ri.type, _reqId: ri.id })
+                        }
+                    }
+                } catch (e) {
+                    allShortItems.push({ ...item, _reqType: ri.type, _reqId: ri.id })
+                }
             } else {
                 allShortItems.push({ ...item, _reqType: ri.type, _reqId: ri.id })
             }
@@ -1494,6 +1537,8 @@ Keep unchanged: codes, HTML, ASTM/JIS/EN/GB/T.${overrideNote}`
                 attempt++
                 if (attempt > MAX_RETRIES) {
                     errors.push({ error: e.message + ' (retried ' + MAX_RETRIES + 'x)', errorCode: 'ERR_API', itemName: batch.map(b => b.itemName).filter(Boolean).join(', ') })
+                } else {
+                    await sleep(retryDelayMs(attempt))
                 }
             }
         }
@@ -1529,16 +1574,24 @@ Return ONLY a JSON object like {"1":"<translated html>","2":"<translated html>"}
                         const translations = JSON.parse(jsonMatch[0])
                         for (let j = 0; j < batch.length; j++) {
                             const translated = translations[String(j + 1)]
-                            if (translated) batch[j].set_innerHTML(translated)
+                            if (translated) { batch[j].set_innerHTML(translated); batch[j]._translated = true }
                         }
                     }
                 } catch (e) {
                     errors.push({ error: e.message, errorCode: 'ERR_BLOCK', itemName: item.itemName })
                 }
             }
-            const translatedHtml = root.toString()
-            upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translatedHtml)
-            results.push({ type: item.type, field: item.field, itemName: item.itemName, original: '[HTML]', translated: '[HTML translated]' })
+            const okBlocks = blocks.filter(b => b._translated).length
+            if (okBlocks === blocks.length) {
+                const translatedHtml = root.toString()
+                upsertTranslation(targetLang, item.type, item.id, item.field, item.text, translatedHtml)
+                results.push({ type: item.type, field: item.field, itemName: item.itemName, original: '[HTML]', translated: '[HTML translated]' })
+            } else {
+                // PARTIAL: never persist a page that mixes translated and
+                // untranslated blocks — a stored field would be treated as
+                // "already translated" and the gaps could never be repaired.
+                errors.push({ error: `Only ${okBlocks}/${blocks.length} HTML blocks translated`, errorCode: 'ERR_PARTIAL_BLOCKS', itemName: item.itemName })
+            }
         } catch (e) {
             errors.push({ error: e.message, errorCode: 'ERR_HTML', itemName: item.itemName })
         }
@@ -1625,7 +1678,9 @@ router.post('/run', authMiddleware, async (req, res) => {
     if (!langRow) return res.status(400).json({ error: `Language "${targetLang}" not found` })
 
     const s = getOne('SELECT * FROM translation_settings WHERE id=1')
-    if (!s?.api_key) return res.status(400).json({ error: 'AI API key not configured. Please save your API key first.' })
+    if (!s?.api_key && !getOne('SELECT api_key FROM ai_channels WHERE is_default = 1')?.api_key) {
+        return res.status(400).json({ error: 'AI API key not configured. Please save your API key first.' })
+    }
 
     // Collect items
     const pageNames = page && page !== 'all' ? [page] : Object.keys(PAGES)
@@ -2786,7 +2841,15 @@ async function processTranslationQueue() {
 
     try {
         while (!workerPaused) {
-            const concurrency = Math.min(8, Math.max(1, Number.parseInt(workerConcurrency, 10) || 1))
+            // The new background-job system (translation_jobs) runs in parallel
+            // and also auto-resumes on boot. If one of its jobs is active, idle
+            // this legacy worker to avoid double-translating the same content.
+            const activeJob = getOne("SELECT id FROM translation_jobs WHERE status IN ('pending', 'running', 'pausing', 'aborting')")
+            if (activeJob) {
+                await sleep(3000)
+                continue
+            }
+            const concurrency = Math.min(10, Math.max(1, Number.parseInt(workerConcurrency, 10) || 1))
             const tasks = getAll(`SELECT * FROM translation_tasks WHERE status='pending' ORDER BY id ASC LIMIT ${concurrency}`)
             if (!tasks.length) {
                 const errorCount = run("UPDATE translation_tasks SET status='pending', retry_count=retry_count+1 WHERE status='error' AND retry_count=0")
@@ -2814,7 +2877,7 @@ router.post('/batch-start', authMiddleware, async (req, res) => {
     if (!pages || !lang) return res.status(400).json({ error: 'pages and lang are required' });
     
     if (concurrency) {
-        workerConcurrency = Math.min(8, Math.max(1, parseInt(concurrency) || 3));
+        workerConcurrency = Math.min(10, Math.max(1, parseInt(concurrency) || 3));
         run('UPDATE translation_settings SET concurrency = ? WHERE id = 1', [workerConcurrency])
     }
     workerPaused = false;

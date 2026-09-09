@@ -3,6 +3,7 @@ import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import https from 'https'
 import http from 'http'
+import { acquireRpmSlot, resolveRpmLimit, httpAgent, httpsAgent } from '../services/aiRateLimit.js'
 
 const router = Router()
 
@@ -16,7 +17,8 @@ function httpRequest(urlStr, options = {}, body = null) {
             port: url.port || (url.protocol === 'https:' ? 443 : 80),
             path: url.pathname + url.search,
             method: options.method || 'GET',
-            headers: options.headers || {}
+            headers: options.headers || {},
+            agent: url.protocol === 'https:' ? httpsAgent : httpAgent
         }
         const req = lib.request(reqOptions, (res) => {
             let data = ''
@@ -39,44 +41,29 @@ function getAISettings() {
     if (ch) {
         if (ch.api_url) s.api_url = ch.api_url
         if (ch.api_key) s.api_key = ch.api_key
-        s.rpm_limit = ch.rpm_limit || 0
+        // Only override with the channel's limit when it is actually configured;
+        // a channel without rpm_limit must never zero out the settings value.
+        s.rpm_limit = resolveRpmLimit(s.rpm_limit, ch.rpm_limit)
         if (ch.default_model) s.model_name = ch.default_model
         else {
             const models = JSON.parse(ch.models || '[]')
             if (models.length > 0) s.model_name = models[0]
         }
-    } else {
-        s.rpm_limit = 0
     }
     return s
 }
 
-const channelRpmTrackers = new Map() // key -> { minuteStart, count }
-
 async function callAI(settings, messages, maxTokens = 4000) {
     const limit = parseInt(settings.rpm_limit) || 0
     if (limit > 0) {
-        const channelKey = `${settings.api_key}_${settings.api_url}`
-        while (true) {
-            let tracker = channelRpmTrackers.get(channelKey)
-            const now = Date.now()
-            if (!tracker || (now - tracker.minuteStart) >= 60000) {
-                tracker = { minuteStart: now, count: 0 }
-                channelRpmTrackers.set(channelKey, tracker)
-            }
-            if (tracker.count < limit) {
-                tracker.count++
-                break
-            }
-            const waitTime = 60000 - (now - tracker.minuteStart)
-            if (waitTime > 0) {
-                console.log(`[RateLimit] AI增强: API 请求已达该渠道阈值 (${limit}次/分钟)，休眠 ${Math.round(waitTime/1000)} 秒后重新检查...`)
-                await new Promise(resolve => setTimeout(resolve, waitTime + 50))
-            } else {
-                tracker.minuteStart = Date.now()
-                tracker.count = 0
-            }
-        }
+        // Shared process-wide limiter (same window as translation.js), honoring
+        // the configured rpm_interval.
+        await acquireRpmSlot({
+            key: `${settings.api_key}_${settings.api_url}`,
+            limit,
+            intervalMs: (parseInt(settings.rpm_interval) || 60) * 1000,
+            logTag: '[AI增强]'
+        })
     }
 
     const apiUrl = (settings.api_url || 'https://api.openai.com/v1').replace(/\/$/, '') + '/chat/completions'
@@ -93,6 +80,10 @@ async function callAI(settings, messages, maxTokens = 4000) {
         const errMsg = typeof result.body === 'object'
             ? (result.body?.error?.message || JSON.stringify(result.body)) : result.body
         throw new Error(`API Error ${result.status}: ${errMsg}`)
+    }
+    // A truncated completion must surface as an error, never be saved as-is.
+    if (result.body?.choices?.[0]?.finish_reason === 'length') {
+        throw new Error('finish_reason=length: content truncated by max_tokens')
     }
     return result.body?.choices?.[0]?.message?.content || ''
 }

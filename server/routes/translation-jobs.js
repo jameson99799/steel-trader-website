@@ -12,20 +12,36 @@ const abortFlags = new Map()
 
 export function normalizeTranslationConcurrency(value) {
     const parsed = Number.parseInt(value, 10)
-    return Number.isFinite(parsed) ? Math.min(8, Math.max(1, parsed)) : 1
+    if (!Number.isFinite(parsed) || parsed <= 0) return 1
+    // Cap raised to 10 to match the UI dial (user-set 10 must start 10 workers).
+    return Math.min(10, Math.max(1, parsed))
+}
+
+// Resolve the effective concurrency for a job: an explicit valid request value
+// wins; otherwise fall back to the saved admin setting; otherwise 3. Treats
+// null/''/NaN/<=0 as "not provided" — never silently single-threaded.
+function resolveJobConcurrency(requested) {
+    const parsed = Number.parseInt(requested, 10)
+    if (Number.isFinite(parsed) && parsed > 0) return normalizeTranslationConcurrency(parsed)
+    const saved = getOne('SELECT concurrency FROM translation_settings WHERE id=1')
+    const savedParsed = Number.parseInt(saved?.concurrency, 10)
+    if (Number.isFinite(savedParsed) && savedParsed > 0) return normalizeTranslationConcurrency(savedParsed)
+    return 3
 }
 
 // ── Log auto-cleanup: called on startup + daily ──
 function cleanupOldLogs() {
     try {
-        // Delete logs for jobs older than 3 days
+        // One shared cutoff+status filter: purge the logs of old finished jobs
+        // and the job records themselves in a single cleanup pass (identical
+        // criteria, so no job record is ever deleted while orphaning logs).
+        const oldFinishedFilter = `created_at < datetime('now', '-3 days') AND status IN ('done','aborted','error')`
         const deleted = run(
             `DELETE FROM translation_job_logs WHERE job_id IN (
-               SELECT id FROM translation_jobs WHERE created_at < datetime('now', '-3 days')
+               SELECT id FROM translation_jobs WHERE ${oldFinishedFilter}
              )`
         )
-        // Delete old completed/aborted job records (keep 3 days for history)
-        run(`DELETE FROM translation_jobs WHERE created_at < datetime('now', '-3 days') AND status IN ('done','aborted','error')`)
+        run(`DELETE FROM translation_jobs WHERE ${oldFinishedFilter}`)
         if (deleted?.changes > 0) {
             console.log(`[translation-jobs] Cleaned up ${deleted.changes} old log entries`)
         }
@@ -50,7 +66,7 @@ export function resetStaleJobs() {
         // A pause that was requested but not yet flushed must land as paused.
         run(`UPDATE translation_jobs SET status='paused', finished_at=NULL WHERE status='pausing'`)
         // An abort that was in-flight when we died is treated as aborted.
-        run(`UPDATE translation_jobs SET status='aborted' WHERE status='aborting'`)
+        run(`UPDATE translation_jobs SET status='aborted', finished_at=NULL WHERE status='aborting'`)
 
         if (interruptedIds.length > 0) {
             console.log(`[translation-jobs] Auto-resuming ${interruptedIds.length} interrupted translation job(s)`)
@@ -88,6 +104,16 @@ function updateJobProgress(jobId, fields) {
 
 // ─── Core background executor ─────────────────────────────────────────────────
 async function runJobInBackground(jobId) {
+    // An abort may have been recorded between the job being created/resumed and
+    // this start (the API route marks the row 'aborted' immediately). Check the
+    // flag BEFORE the 'running' write below — otherwise the first write would
+    // silently overwrite the user's abort and a restart would re-run the job.
+    if (abortFlags.get(jobId) === 'abort') {
+        abortFlags.delete(jobId)
+        updateJobProgress(jobId, { status: 'aborted', finished_at: new Date().toISOString(), pending_items: null })
+        jobLog(jobId, 'warn', '🛑 任务已在中止后停止，未再次启动')
+        return
+    }
     // Mark as running
     updateJobProgress(jobId, { status: 'running' })
     jobLog(jobId, 'info', '🚀 后台翻译任务正在运行中...')
@@ -210,6 +236,23 @@ async function runJobInBackground(jobId) {
     // the global RPM limiter still provides backpressure when configured.
     const innerAiConcurrency = Math.min(4, Math.max(1, concurrencyLevel))
     const processingItems = new Set()
+    // Set when any worker throws unexpectedly. Every worker checks it in its
+    // loop (like the abort flag) so one crash stops the whole job cleanly
+    // instead of leaving the others translating a job that will never finish.
+    let workerFailure = null
+
+    // Preload manual-translation overrides once per job: the per-item query
+    // only varied by target_lang, so group them by language up front — one
+    // query for the whole job instead of one per item. Cosmetic prompt hint
+    // only, so a failure here must never kill the job.
+    const manualOverridesByLang = new Map()
+    try {
+        for (const o of getAll('SELECT language_code, original_text, translated_text FROM translations WHERE is_manual=1')) {
+            let list = manualOverridesByLang.get(o.language_code)
+            if (!list) { list = []; manualOverridesByLang.set(o.language_code, list) }
+            list.push(o)
+        }
+    } catch (e) { /* non-fatal: fall back to empty override lists */ }
     
     let okTotal = job.ok_items || 0
     let errTotal = job.error_items || 0
@@ -245,7 +288,7 @@ async function runJobInBackground(jobId) {
     // ── Process items with concurrency ──
     async function worker() {
         while (pendingItems.length > 0) {
-            if (abortFlags.get(jobId)) break
+            if (abortFlags.get(jobId) || workerFailure) break
             
             const item = pendingItems.shift()
             processingItems.add(item)
@@ -326,10 +369,7 @@ async function runJobInBackground(jobId) {
                 continue
             }
 
-            const manualOverrides = getAll(
-                'SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1',
-                [item.targetLang]
-            )
+            const manualOverrides = manualOverridesByLang.get(item.targetLang) || []
             const overrideNote = manualOverrides.length > 0
                 ? '\n\nUse these approved translations as reference:\n' +
                 manualOverrides.slice(0, 8).map(o => `"${o.original_text}" → "${o.translated_text}"`).join('\n')
@@ -370,6 +410,7 @@ async function runJobInBackground(jobId) {
                 // otherwise users waste quota re-trying it manually.
                 if (!isRetry && (item._retryCount || 0) < 1) {
                     item._retryCount = (item._retryCount || 0) + 1
+                    processingItems.delete(item) // it goes back to the queue, it is not in-flight
                     pendingItems.push(item) // put it back to queue
                     updateJobProgress(jobId, { auto_retried: 1 })
                     continue
@@ -390,38 +431,72 @@ async function runJobInBackground(jobId) {
         }
     }
 
-    const workers = Array.from({ length: Math.min(concurrencyLevel, pendingItems.length) }, () => worker())
-    await Promise.all(workers)
+    const workers = Array.from({ length: Math.min(concurrencyLevel, pendingItems.length) }, () =>
+        // A worker that throws must not take the job down as an unhandled
+        // rejection: record the failure so every worker's loop stops, and the
+        // terminal-state block below writes a clean status='error' exit.
+        worker().catch(e => { workerFailure = workerFailure || e })
+    )
+    await Promise.allSettled(workers)
 
-    const abortReason = abortFlags.get(jobId)
-    abortFlags.delete(jobId)
+    try {
+        const abortReason = abortFlags.get(jobId)
+        abortFlags.delete(jobId)
 
-    if (abortReason === 'pause') {
-        const remaining = [...processingItems, ...pendingItems]
-        updateJobProgress(jobId, { status: 'paused', pending_items: JSON.stringify(remaining) })
-        jobLog(jobId, 'warn', `⏸ 任务已暂停，剩余 ${remaining.length} 项等待翻译`)
-        return
+        if (abortReason === 'pause') {
+            const remaining = [...processingItems, ...pendingItems]
+            updateJobProgress(jobId, { status: 'paused', pending_items: JSON.stringify(remaining) })
+            jobLog(jobId, 'warn', `⏸ 任务已暂停，剩余 ${remaining.length} 项等待翻译`)
+            return
+        }
+
+        if (abortReason === 'abort') {
+            // ALWAYS persist the terminal state here (idempotent): never rely on
+            // the abort API route having written it — its write can be lost in a
+            // race, and a leftover 'running' row would be auto-resumed on restart,
+            // silently reversing the user's abort into a full re-run.
+            updateJobProgress(jobId, { status: 'aborted', finished_at: new Date().toISOString(), pending_items: null })
+            jobLog(jobId, 'warn', '🛑 任务已中止')
+            return
+        }
+
+        if (workerFailure) {
+            // A worker crashed unexpectedly: fold the in-flight + queued items
+            // back into pending_items so nothing is lost, then fail the job.
+            const remaining = [...processingItems, ...pendingItems]
+            jobLog(jobId, 'error', `💥 任务内部异常终止: ${workerFailure.message || String(workerFailure)}`)
+            updateJobProgress(jobId, {
+                status: 'error',
+                finished_at: new Date().toISOString(),
+                failed_items: JSON.stringify(newFailed),
+                pending_items: JSON.stringify(remaining)
+            })
+            return
+        }
+
+        updateJobProgress(jobId, { failed_items: JSON.stringify(newFailed) })
+        if (newFailed.length > 0) {
+            const firstErr = newFailed[0]?.error || '未知错误'
+            jobLog(jobId, 'warn', `${okTotal}个产品或者文章翻译成功，${newFailed.length}个产品翻译失败，请手动重试，失败原因：${firstErr.slice(0, 80)}`)
+        } else {
+            jobLog(jobId, 'ok', `${okTotal}个项目翻译成功，现在已经全部完整的翻译完成`)
+        }
+
+        updateJobProgress(jobId, {
+            status: newFailed.length > 0 ? 'partial' : 'done',
+            pending_items: null,
+            finished_at: new Date().toISOString()
+        })
+    } finally {
+        // Last-resort guard covering ALL exits (pause/abort/error/normal): if
+        // anything above ever failed midway, never leave the row in a live or
+        // transitional state with no worker left to flush it.
+        const row = getOne('SELECT status FROM translation_jobs WHERE id=?', [jobId])
+        if (row && ['running', 'pausing', 'aborting'].includes(row.status)) {
+            updateJobProgress(jobId, { status: 'error', finished_at: new Date().toISOString() })
+            jobLog(jobId, 'error', '💥 任务异常退出，已强制结束')
+        }
     }
-
-    if (abortReason === 'abort') {
-        // Status is immediately set to 'aborted' by the API route already.
-        // We just skip overwriting it to 'done'.
-        return
-    }
-
-    updateJobProgress(jobId, { failed_items: JSON.stringify(newFailed) })
-    if (newFailed.length > 0) {
-        const firstErr = newFailed[0]?.error || '未知错误'
-        jobLog(jobId, 'warn', `${okTotal}个产品或者文章翻译成功，${newFailed.length}个产品翻译失败，请手动重试，失败原因：${firstErr.slice(0, 80)}`)
-    } else {
-        jobLog(jobId, 'ok', `${okTotal}个项目翻译成功，现在已经全部完整的翻译完成`)
-    }
-
-    updateJobProgress(jobId, {
-        status: newFailed.length > 0 ? 'partial' : 'done',
-        pending_items: null,
-        finished_at: new Date().toISOString()
-    })
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -531,13 +606,9 @@ router.post('/', authMiddleware, async (req, res) => {
             })
         }
 
-        // Fall back to the saved concurrency when the caller omits it, so a job
-        // never silently drops to single-threaded because of a missing field.
-        let level = normalizeTranslationConcurrency(concurrency)
-        if (concurrency == null) {
-            const saved = getOne('SELECT concurrency FROM translation_settings WHERE id=1')
-            if (saved?.concurrency) level = normalizeTranslationConcurrency(saved.concurrency)
-        }
+        // Resolve effective concurrency: an explicit valid value wins; null/''/NaN/<=0
+        // falls back to the saved admin setting — never silently single-threaded.
+        const level = resolveJobConcurrency(concurrency)
 
         const result = run(
             `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items, concurrency, prompt_id, skip_translated) VALUES ('pending', ?, ?, ?, ?, ?, ?)`,
@@ -564,6 +635,11 @@ router.post('/', authMiddleware, async (req, res) => {
 router.post('/:id/abort', authMiddleware, (req, res) => {
     try {
         const id = parseInt(req.params.id)
+        const job = getOne('SELECT status FROM translation_jobs WHERE id=?', [id])
+        if (!job) return res.status(404).json({ error: 'Job not found' })
+        if (!['pending', 'running', 'pausing', 'aborting'].includes(job.status)) {
+            return res.status(409).json({ error: `任务当前状态为 ${job.status}，无法中止`, status: job.status })
+        }
         abortFlags.set(id, 'abort')
         updateJobProgress(id, { status: 'aborted', finished_at: new Date().toISOString() })
         jobLog(id, 'warn', '🛑 用户已中止任务，当前正在进行的请求完成前不再发送新请求，已放弃当前任务...')
@@ -577,6 +653,12 @@ router.post('/:id/abort', authMiddleware, (req, res) => {
 router.post('/:id/pause', authMiddleware, (req, res) => {
     try {
         const id = parseInt(req.params.id)
+        const job = getOne('SELECT status FROM translation_jobs WHERE id=?', [id])
+        if (!job) return res.status(404).json({ error: 'Job not found' })
+        if (job.status === 'pausing') return res.json({ success: true, message: '任务正在暂停中' })
+        if (job.status !== 'running') {
+            return res.status(409).json({ error: `任务当前状态为 ${job.status}，无法暂停`, status: job.status })
+        }
         abortFlags.set(id, 'pause')
         updateJobProgress(id, { status: 'pausing' })
         jobLog(id, 'warn', '⏸ 正在暂停，等待当前项目完成翻译即可安全暂停...')
@@ -592,6 +674,9 @@ router.post('/:id/resume', authMiddleware, async (req, res) => {
         const id = parseInt(req.params.id)
         const job = getOne('SELECT * FROM translation_jobs WHERE id=?', [id])
         if (!job) return res.status(404).json({ error: 'Job not found' })
+        if (job.status === 'pausing') {
+            return res.status(409).json({ error: '任务正在暂停中，请稍候再恢复', status: job.status })
+        }
         if (job.status !== 'paused') return res.status(400).json({ error: '任务不是暂停状态' })
 
         const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('pending', 'running', 'pausing', 'aborting')")
@@ -640,7 +725,7 @@ router.post('/:id/retry-failed', authMiddleware, async (req, res) => {
         const result = run(
             `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items, is_retry, concurrency, prompt_id)
              VALUES ('pending', ?, '[]', ?, 1, ?, ?)`,
-            [parentJob.target_lang, JSON.stringify(failedItems), parentJob.concurrency || 1, parentJob.prompt_id || null]
+            [parentJob.target_lang, JSON.stringify(failedItems), resolveJobConcurrency(parentJob.concurrency), parentJob.prompt_id || null]
         )
         const jobId = result.lastInsertRowid
 
