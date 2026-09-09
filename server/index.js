@@ -356,12 +356,17 @@ async function startServer() {
           robotsTxt += '\nSitemap: https://www.sunseasteel.com/sitemap.xml\n'
         }
         if (!robotsTxt.toLowerCase().includes('llms.txt')) {
-          robotsTxt += '\n# AI agent guides\nLink: <https://www.sunseasteel.com/llms.txt>\n\nllms.txt: https://www.sunseasteel.com/llms.txt\nllms-full.txt: https://www.sunseasteel.com/llms-full.txt\n'
+          // Referencing llms.txt via 'Link:' / 'llms.txt:' lines is NOT valid
+          // robots.txt (RFC 9309) and Google Search Console flags each as an
+          // "Unknown directive" error. Keep the references as comments only —
+          // parsers ignore comment lines, and LLM crawlers look up /llms.txt
+          // by convention anyway.
+          robotsTxt += '\n# LLM agent guides:\n# llms.txt: https://www.sunseasteel.com/llms.txt\n# llms-full.txt: https://www.sunseasteel.com/llms-full.txt\n'
         }
         return res.send(robotsTxt.trim() + '\n')
       } catch (e) {}
       res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-      res.send('User-agent: *\nAllow: /\nSitemap: https://www.sunseasteel.com/sitemap.xml\n\nllms.txt: https://www.sunseasteel.com/llms.txt\nllms-full.txt: https://www.sunseasteel.com/llms-full.txt\n')
+      res.send('User-agent: *\nAllow: /\nSitemap: https://www.sunseasteel.com/sitemap.xml\n\n# LLM agent guides:\n# llms.txt: https://www.sunseasteel.com/llms.txt\n# llms-full.txt: https://www.sunseasteel.com/llms-full.txt\n')
     })
 
     app.get('/llms.txt', (req, res) => {

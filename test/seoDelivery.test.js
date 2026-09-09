@@ -223,3 +223,18 @@ test('delivery verifier rejects a public generic shell', async () => {
     /public.*canonical|canonical.*public/i
   )
 })
+
+test('robots.txt route emits only standards-valid directives (RFC 9309)', () => {
+  const source = fs.readFileSync(new URL('../server/index.js', import.meta.url), 'utf8')
+  const robotsSection = source.slice(
+    source.indexOf("app.get('/robots.txt'"),
+    source.indexOf("app.get('/llms.txt'")
+  )
+  // llms.txt references must be comments only — 'Link:' and bare 'llms.txt:'
+  // directives are not valid robots.txt and Google Search Console flags them
+  // as "Unknown directive".
+  assert.match(robotsSection, /Sitemap: https:\/\/www\.sunseasteel\.com\/sitemap\.xml/)
+  assert.doesNotMatch(robotsSection, /\nLink: </, 'no raw Link: directive')
+  assert.doesNotMatch(robotsSection, /\nllms(-full)?\.txt:/, 'llms.*.txt must be commented, never a directive line')
+  assert.match(robotsSection, /# llms\.txt: https:\/\/www\.sunseasteel\.com\/llms\.txt/)
+})
