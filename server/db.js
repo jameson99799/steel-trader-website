@@ -1293,6 +1293,7 @@ Requirements:
       is_retry INTEGER DEFAULT 0,
       auto_retried INTEGER DEFAULT 0,
       concurrency INTEGER DEFAULT 1,
+      skip_translated INTEGER DEFAULT 0,
       pending_items TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -1318,6 +1319,9 @@ Requirements:
   try { db.exec("ALTER TABLE translation_jobs ADD COLUMN concurrency INTEGER DEFAULT 1") } catch (e) { }
   try { db.exec("ALTER TABLE translation_jobs ADD COLUMN pending_items TEXT") } catch (e) { }
   try { db.exec("ALTER TABLE translation_jobs ADD COLUMN prompt_id INTEGER") } catch (e) { }
+  // Migrate: when 1 (or true), a fresh job skips fields already translated,
+  // behaving like the old "translate only what's missing" batch for speed.
+  try { db.exec("ALTER TABLE translation_jobs ADD COLUMN skip_translated INTEGER DEFAULT 0") } catch (e) { }
 
   // ── Futures Watchlist ────────────────────────────────────────────────────
   db.exec(`

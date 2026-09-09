@@ -54,7 +54,13 @@ test('retry queue marks partial success without discarding successful translatio
   // jobs worker: partial success ("N成功, M错误") triggers exactly one auto-retry
   assert.match(jobs, /部分成功: \$\{ok\}成功/)
   assert.match(jobs, /item\._retryCount \|\| 0\) < 1/)
-  assert.match(jobs, /已加入重试队列/)
+  // The auto-retry is tracked via the auto_retried flag and NOT logged as a
+  // task failure, so an item that succeeds on retry never shows up among the
+  // failed items (users don't waste quota re-trying it by hand).
+  assert.match(jobs, /auto_retried: 1/)
+  assert.match(jobs, /自动重试.*成功.*不得|not show up among failed items/)
+  // A retried item only surfaces as an error when its FINAL attempt also fails.
+  assert.match(jobs, /最终失败/)
   // partial success is counted as an error so it can be re-queued, but results are kept
   assert.match(tr, /UPDATE translation_tasks SET status='error'/)
   assert.match(tr, /retry_count=retry_count\+1 WHERE status='error' AND retry_count=0/)

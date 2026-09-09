@@ -295,9 +295,14 @@
           </div>
           <!-- Job log panel after completion -->
           <div v-if="latestJobLogs.length" class="log-panel" style="margin-top:12px">
-            <div class="log-header"><span>📝 任务日志 ({{ latestJobLogs.length }} 条)</span></div>
+            <div class="log-header">
+              <span>📝 任务日志 ({{ (logFilterErrors ? latestErrorLogs : latestJobLogs).length }} 条)</span>
+              <button v-if="latestErrorLogs.length" class="btn btn-xs btn-outline" @click="logFilterErrors = !logFilterErrors" style="margin-left:8px;font-size:11px">
+                {{ logFilterErrors ? '显示全部日志' : `只显示失败/异常 (${latestErrorLogs.length})` }}
+              </button>
+            </div>
             <div class="log-body">
-              <div v-for="log in latestJobLogs" :key="log.id" :class="['log-entry', log.level]">
+              <div v-for="log in logFilterErrors ? latestErrorLogs : latestJobLogs" :key="log.id" :class="['log-entry', log.level]">
                 <span class="log-time">{{ log.created_at?.slice(11,19) }}</span>
                 <span class="log-icon">{{ log.level === 'ok' ? '✅' : log.level === 'error' ? '❌' : log.level === 'warn' ? '⚠️' : 'ℹ️' }}</span>
                 <span class="log-msg">{{ log.message }}</span>
@@ -370,6 +375,13 @@
                 <option value="">(使用默认规则)</option>
                 <option v-for="p in prompts" :key="p.id" :value="p.id">{{ p.name }}</option>
               </select>
+            </div>
+            <div class="form-group" style="min-width:170px">
+              <label class="checkbox-label" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" v-model="skipTranslated" />
+                <span>跳过已翻译内容</span>
+              </label>
+              <small style="color:#94a3b8">仅翻译缺失字段，跳过已完成的，大幅加速</small>
             </div>
           </div>
           <div class="btn-row" style="gap:8px; margin-bottom:8px">
@@ -890,6 +902,7 @@ const allPages = ['products', 'reviews', 'news', 'news_categories', 'company', '
 const pageLabels = { products: '产品', reviews: '⭐ 产品评价', news: '新闻', news_categories: '📰 新闻分类', company: '公司信息', page_texts: '页面文字', home_seo: '🏠 首页SEO', home_faq: '📋 首页FAQ', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字', ral_colors: '🎨 RAL颜色', roofing_categories: '🏠 瓦型分组', factory: '🏭 工厂展示', futures: '📈 期货行情', chat: '💬 在线客服' }
 const selectedPages = ref([...allPages])
 const concurrency = ref(3)
+const skipTranslated = ref(false)
 const translating = ref(false)
 const translateResult = ref(null)
 const logEntries = ref([])
@@ -915,6 +928,8 @@ const activeJob = ref(null)        // currently running job (or null)
 const latestJob = ref(null)        // most recently completed job
 const activeJobLogs = ref([])      // live logs for active job
 const latestJobLogs = ref([])      // logs for latest completed job
+const logFilterErrors = ref(false) // default to only failed/abnormal lines after completion
+const latestErrorLogs = computed(() => latestJobLogs.value.filter(l => l.level === 'error' || l.level === 'warn'))
 const jobLogPanelRef = ref(null)
 let jobPollTimer = null
 let lastLogId = 0
@@ -997,6 +1012,10 @@ async function viewJobLogs(jobId) {
     const detail = await api.getTranslationJob(jobId)
     latestJob.value = { ...detail, logs: undefined }
     latestJobLogs.value = detail.logs || []
+    // After a job finishes, default the view to just failed/abnormal lines so
+    // the user can retry what actually failed without scrolling all progress.
+    const finalStates = ['done', 'partial', 'error', 'aborted']
+    logFilterErrors.value = finalStates.includes(detail.status)
   } catch (e) { /* silent */ }
 }
 
@@ -1011,7 +1030,8 @@ async function startBackgroundTranslate() {
       pages: selectedPages.value, 
       concurrency: concurrency.value,
       explicitItems: explicitItems.value.length ? explicitItems.value : null,
-      promptId: selectedPromptId.value || undefined
+      promptId: selectedPromptId.value || undefined,
+      skipTranslated: skipTranslated.value
     })
     jobPanelCollapsed.value = false
     // Immediately reflect new running state

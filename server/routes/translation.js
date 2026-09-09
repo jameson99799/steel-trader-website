@@ -104,9 +104,13 @@ router.put('/settings', authMiddleware, (req, res) => {
     const { api_url, api_key, model_name, multilingual_enabled, rpm_limit, rpm_interval } = req.body
     const existing = getOne('SELECT * FROM translation_settings WHERE id = 1')
     const finalKey = (api_key && !api_key.includes('****')) ? api_key : (existing?.api_key || '')
+    // Preserve rpm_limit / rpm_interval when omitted, so the admin save form
+    // never accidentally resets an intentionally configured rate limit to 0.
+    const finalRpmLimit = rpm_limit != null ? (parseInt(rpm_limit) || 0) : (existing?.rpm_limit || 0)
+    const finalRpmInterval = rpm_interval != null ? (parseInt(rpm_interval) || 60) : (existing?.rpm_interval || 60)
     run(
         'UPDATE translation_settings SET api_url=?, api_key=?, model_name=?, multilingual_enabled=?, rpm_limit=?, rpm_interval=?, updated_at=CURRENT_TIMESTAMP WHERE id=1',
-        [api_url || 'https://api.openai.com/v1', finalKey, model_name || 'gpt-3.5-turbo', multilingual_enabled != null ? (multilingual_enabled ? 1 : 0) : 1, parseInt(rpm_limit) || 0, parseInt(rpm_interval) || 60]
+        [api_url || 'https://api.openai.com/v1', finalKey, model_name || 'gpt-3.5-turbo', multilingual_enabled != null ? (multilingual_enabled ? 1 : 0) : 1, finalRpmLimit, finalRpmInterval]
     )
     res.json({ message: 'Saved' })
 })

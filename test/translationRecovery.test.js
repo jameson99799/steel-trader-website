@@ -11,9 +11,15 @@ test('legacy queue recovers running rows and treats partial output as an error',
   assert.doesNotMatch(source, /result\.errors && result\.errors\.length > 0 && \(!result\.results/)
 })
 
-test('background jobs recover to resumable pause and persist pending work', () => {
+test('background jobs survive restarts: auto-resume interrupted work, keep paused/aborted', () => {
   const source = read('server/routes/translation-jobs.js')
-  assert.match(source, /status='paused'[\s\S]{0,180}status IN \('pending', 'running', 'pausing', 'aborting'\)/)
+  // Interrupted (pending/running) jobs are automatically resumed on boot ...
+  assert.match(source, /status IN \('pending', 'running'\)/)
+  assert.match(source, /runJobInBackground\(id\)/)
+  // ... while a manually pausing job lands paused and aborting lands aborted.
+  assert.match(source, /status='paused'[\s\S]{0,120}WHERE status='pausing'/)
+  assert.match(source, /status='aborted'[\s\S]{0,120}WHERE status='aborting'/)
+  // Remaining work is persisted so a resume continues where it left off.
   assert.match(source, /pending_items: JSON\.stringify/)
   assert.match(source, /status IN \('pending', 'running', 'pausing', 'aborting'\)/)
 })

@@ -39,15 +39,30 @@ setTimeout(cleanupOldLogs, 5000)
 // Run daily at ~02:00
 setInterval(cleanupOldLogs, 24 * 60 * 60 * 1000)
 
-// ── Reset any jobs stuck in 'running' state at startup (crashed jobs) ──
+// ── Reset/restore jobs interrupted by a crash or restart ──
+// Intent: a job that was actively running (or created but not yet started) when
+// the server went down must AUTO-RESUME after restart. A job the user manually
+// paused or is pausing stays paused; a manually aborted job stays aborted.
 export function resetStaleJobs() {
     try {
-        const stale = run(
-            `UPDATE translation_jobs SET status='paused', finished_at=NULL, updated_at=CURRENT_TIMESTAMP
-             WHERE status IN ('pending', 'running', 'pausing', 'aborting')`
-        )
-        if (stale?.changes > 0) {
-            console.log(`[translation-jobs] Recovered ${stale.changes} interrupted jobs as resumable 'paused' jobs`)
+        // Interrupted fresh/pending jobs: keep as-is, resume them below.
+        const interruptedIds = getAll("SELECT id FROM translation_jobs WHERE status IN ('pending', 'running')").map(r => r.id)
+        // A pause that was requested but not yet flushed must land as paused.
+        run(`UPDATE translation_jobs SET status='paused', finished_at=NULL WHERE status='pausing'`)
+        // An abort that was in-flight when we died is treated as aborted.
+        run(`UPDATE translation_jobs SET status='aborted' WHERE status='aborting'`)
+
+        if (interruptedIds.length > 0) {
+            console.log(`[translation-jobs] Auto-resuming ${interruptedIds.length} interrupted translation job(s)`)
+            for (const id of interruptedIds) {
+                setImmediate(() => runJobInBackground(id).catch(e => {
+                    console.error(`[translation-jobs] Auto-resume of job ${id} failed:`, e)
+                    try {
+                        updateJobProgress(id, { status: 'error', finished_at: new Date().toISOString() })
+                        jobLog(id, 'error', `💥 恢复任务异常终止: ${e.message}`)
+                    } catch (err2) { /* non-fatal */ }
+                }))
+            }
         }
     } catch (e) { /* table may not exist on first run */ }
 }
@@ -189,6 +204,11 @@ async function runJobInBackground(jobId) {
     }
 
     const concurrencyLevel = normalizeTranslationConcurrency(job.concurrency)
+    // Inner block-level concurrency inside one long-HTML item scales with the
+    // concurrency dial (the old code hardcoded 3 regardless of the dial).
+    // Capped at 4 so the worst case stays ~32 in-flight calls (outer×inner) and
+    // the global RPM limiter still provides backpressure when configured.
+    const innerAiConcurrency = Math.min(4, Math.max(1, concurrencyLevel))
     const processingItems = new Set()
     
     let okTotal = job.ok_items || 0
@@ -260,10 +280,13 @@ async function runJobInBackground(jobId) {
             // As per user request: "Fresh translation commands should always re-translate everything.
             // ONLY skip already translated strings if this is an automatic or manual retry."
             const isRetry = job.is_retry || item._retryCount > 0
+            // Skip already-translated fields when retrying OR when the user asked
+            // to only fill what's missing (speed). Fresh full runs re-translate all.
+            const filteredByExisting = isRetry || !!job.skip_translated
             
             let items = itemsRaw
             
-            if (isRetry) {
+            if (filteredByExisting) {
                 const alreadyTranslated = getAll(
                     'SELECT content_field FROM translations WHERE language_code=? AND content_type=? AND content_id=?',
                     [item.targetLang, item.type, item.id]
@@ -322,7 +345,7 @@ async function runJobInBackground(jobId) {
             }
 
             try {
-                const { results, errors } = await translateBatch(enhanced, items, item.targetLang, langRow.name, overrideNote, 3, customRules)
+                const { results, errors } = await translateBatch(enhanced, items, item.targetLang, langRow.name, overrideNote, innerAiConcurrency, customRules)
                 const ok = results.length
                 const errs = errors.length
 
@@ -339,12 +362,13 @@ async function runJobInBackground(jobId) {
                     throw new Error('AI 无返回结果 (可能为空或格式错误)')
                 }
             } catch (e) {
-                // Auto-retry once inside the worker
+                // Auto-retry once inside the worker. The item is NOT logged here: if the
+                // retry later succeeds it must not show up among failed items,
+                // otherwise users waste quota re-trying it manually.
                 if (!isRetry && (item._retryCount || 0) < 1) {
                     item._retryCount = (item._retryCount || 0) + 1
                     pendingItems.push(item) // put it back to queue
                     updateJobProgress(jobId, { auto_retried: 1 })
-                    jobLog(jobId, 'warn', `${item.itemName} 翻译 ${langRow.name} 失败（${(e.message || '').slice(0, 80)}），已加入重试队列`)
                     continue
                 }
 
@@ -466,10 +490,18 @@ router.get('/:id/logs-since/:logId', authMiddleware, (req, res) => {
     try {
         const id = parseInt(req.params.id)
         const logId = parseInt(req.params.logId)
-        const logs = getAll(
-            'SELECT id, level, message, created_at FROM translation_job_logs WHERE job_id=? AND id>? ORDER BY id ASC LIMIT 200',
-            [id, logId]
-        )
+        // First open (logId<=0) should show the MOST RECENT 200 lines. Fetching
+        // the earliest 200 and then polling forward made the live view lag far
+        // behind on large jobs (thousands of logs).
+        const logs = Number.isFinite(logId) && logId > 0
+            ? getAll(
+                'SELECT id, level, message, created_at FROM translation_job_logs WHERE job_id=? AND id>? ORDER BY id ASC LIMIT 200',
+                [id, logId]
+              )
+            : getAll(
+                'SELECT id, level, message, created_at FROM translation_job_logs WHERE job_id=? ORDER BY id DESC LIMIT 200',
+                [id]
+              ).reverse()
         const job = getOne('SELECT status, done_items, ok_items, error_items, total_items, failed_items, auto_retried, finished_at FROM translation_jobs WHERE id=?', [id])
         res.json({
             logs,
@@ -483,7 +515,7 @@ router.get('/:id/logs-since/:logId', authMiddleware, (req, res) => {
 // POST /translation-jobs — create & start a new background job
 router.post('/', authMiddleware, async (req, res) => {
     try {
-        const { lang, pages, concurrency, explicitItems, promptId } = req.body
+        const { lang, pages, concurrency, explicitItems, promptId, skipTranslated } = req.body
         if (!lang) return res.status(400).json({ error: 'lang is required' })
         if ((!pages || !pages.length) && (!explicitItems || !explicitItems.length)) return res.status(400).json({ error: 'pages or explicitItems is required' })
 
@@ -496,9 +528,17 @@ router.post('/', authMiddleware, async (req, res) => {
             })
         }
 
+        // Fall back to the saved concurrency when the caller omits it, so a job
+        // never silently drops to single-threaded because of a missing field.
+        let level = normalizeTranslationConcurrency(concurrency)
+        if (concurrency == null) {
+            const saved = getOne('SELECT concurrency FROM translation_settings WHERE id=1')
+            if (saved?.concurrency) level = normalizeTranslationConcurrency(saved.concurrency)
+        }
+
         const result = run(
-            `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items, concurrency, prompt_id) VALUES ('pending', ?, ?, ?, ?, ?)`,
-            [lang, JSON.stringify(pages || []), JSON.stringify(explicitItems || []), normalizeTranslationConcurrency(concurrency), promptId || null]
+            `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items, concurrency, prompt_id, skip_translated) VALUES ('pending', ?, ?, ?, ?, ?, ?)`,
+            [lang, JSON.stringify(pages || []), JSON.stringify(explicitItems || []), level, promptId || null, skipTranslated ? 1 : 0]
         )
         const jobId = result.lastInsertRowid
 
