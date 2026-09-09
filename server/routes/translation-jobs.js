@@ -230,11 +230,12 @@ async function runJobInBackground(jobId) {
     }
 
     const concurrencyLevel = normalizeTranslationConcurrency(job.concurrency)
-    // Inner block-level concurrency inside one long-HTML item scales with the
-    // concurrency dial (the old code hardcoded 3 regardless of the dial).
-    // Capped at 4 so the worst case stays ~32 in-flight calls (outer×inner) and
-    // the global RPM limiter still provides backpressure when configured.
-    const innerAiConcurrency = Math.min(4, Math.max(1, concurrencyLevel))
+    // Block-level concurrency inside one long-HTML item: fixed at 1 so the
+    // TOTAL concurrent AI HTTP requests = outerConcurrency (not outer × blocks).
+    // With concurrency=10 and innerAiConcurrency=4, the old code sent up to
+    // 40 simultaneous requests — far exceeding the user's setting and causing
+    // the "keeps sending without waiting" behavior.
+    const innerAiConcurrency = 1
     const processingItems = new Set()
     // Set when any worker throws unexpectedly. Every worker checks it in its
     // loop (like the abort flag) so one crash stops the whole job cleanly
