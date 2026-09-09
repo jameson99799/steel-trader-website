@@ -344,6 +344,8 @@ async function runJobInBackground(jobId) {
                 }
             }
 
+            jobLog(jobId, 'info', `🔄 正在翻译「${item.itemName}」${langRow.name}...`)
+
             try {
                 const { results, errors } = await translateBatch(enhanced, items, item.targetLang, langRow.name, overrideNote, innerAiConcurrency, customRules)
                 const ok = results.length
@@ -358,6 +360,7 @@ async function runJobInBackground(jobId) {
                 } else if (ok > 0) {
                     okTotal++
                     run('UPDATE languages SET ai_translated=1 WHERE code=?', [item.targetLang])
+                    jobLog(jobId, 'ok', `✅ 「${item.itemName}」${langRow.name} 翻译成功`)
                 } else {
                     throw new Error('AI 无返回结果 (可能为空或格式错误)')
                 }
