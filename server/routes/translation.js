@@ -194,6 +194,7 @@ function httpRequest(urlStr, options = {}, body = null, timeoutMs = 120000) {
 
 // ─── Global RPM Tracker ───
 const channelRpmTrackers = new Map() // key -> { minuteStart, count }
+const rateLimitLoggedAt = new Map()  // channelKey -> last console.log timestamp
 
 async function callAI(settings, messages, maxTokens = 8000) {
     const limit = parseInt(settings.rpm_limit) || 0
@@ -212,7 +213,12 @@ async function callAI(settings, messages, maxTokens = 8000) {
             }
             const waitTime = 60000 - (now - tracker.minuteStart)
             if (waitTime > 0) {
-                console.log(`[RateLimit] API 请求已达该渠道阈值 (${limit}次/分钟)，休眠 ${Math.round(waitTime/1000)} 秒后重新检查...`)
+                // Throttle the log so N concurrent callers don't spam the console
+                // with one line each per minute of waiting.
+                if ((rateLimitLoggedAt.get(channelKey) || 0) < Date.now() - 60000) {
+                    rateLimitLoggedAt.set(channelKey, Date.now())
+                    console.log(`[RateLimit] API 请求已达该渠道阈值 (${limit}次/分钟)，休眠 ${Math.round(waitTime/1000)} 秒后重新检查...`)
+                }
                 await new Promise(resolve => setTimeout(resolve, waitTime + 50))
             } else {
                 tracker.minuteStart = Date.now()
@@ -1020,9 +1026,7 @@ async function translateBatch(settings, items, targetLang, langName, overrideNot
                 fieldsObj[item._uniqueFieldObjKey] = item.text
             }
         }
-        const fieldKeys = Object.keys(fieldsObj)
         const fieldVals = Object.values(fieldsObj)
-        console.log('[translateBatch] Sending', fieldKeys.length, 'fields | JSON size:', JSON.stringify(fieldsObj).length, 'chars')
 
         // read-frog style: use NUMBERED lines instead of JSON to avoid ERR_NO_JSON
         // Format: "1. text1\n2. text2\n..." → AI returns "1. trans1\n2. trans2\n..."
@@ -1139,7 +1143,6 @@ ${strictRule}
                         }
                     }
                 }
-                console.log('[translateBatch] Numbered format: mapped', translatedArr.length, 'translations to', shortItems.length, 'items')
                 break  // Success
             } catch (e) {
                 if (attempt >= MAX_RETRIES) {

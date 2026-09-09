@@ -196,6 +196,23 @@ async function runJobInBackground(jobId) {
     let doneTotal = job.done_items || 0
     const newFailed = JSON.parse(job.failed_items || '[]')
 
+    // Throttle costly state persistence. Writing the FULL remaining-items array
+    // (JSON.stringify of every pending item) on EACH processed item is O(n) work
+    // per item — on jobs with thousands of items this serializes & rewrites the
+    // whole queue hundreds of thousands of times, silently slowing the job down.
+    // The snapshot only needs to be fresh enough for pause/resume recovery, so
+    // persist it every SNAPSHOT_EVERY items (plus on pause/abort/exit).
+    let snapCount = 0
+    const SNAPSHOT_EVERY = 25
+    const totalGoal = job.total_items || 0
+    function persistPendingState() {
+        updateJobProgress(jobId, { pending_items: JSON.stringify([...processingItems, ...pendingItems]) })
+    }
+    function progressHeartbeat() {
+        if (snapCount % SNAPSHOT_EVERY !== 0) return
+        jobLog(jobId, 'info', `⏳ 进度 ${doneTotal}/${totalGoal || (doneTotal + pendingItems.length)} | 成功 ${okTotal} | 失败 ${errTotal}`)
+    }
+
     const TYPE_TO_PAGE = {
         product: 'products', product_review: 'reviews', news: 'news', company: 'company',
         page_text: 'page_texts', category: 'categories', news_category: 'news_categories',
@@ -212,7 +229,6 @@ async function runJobInBackground(jobId) {
             
             const item = pendingItems.shift()
             processingItems.add(item)
-            updateJobProgress(jobId, { pending_items: JSON.stringify([...processingItems, ...pendingItems]) })
 
             const langRow = getOne('SELECT name FROM languages WHERE code=?', [item.targetLang])
             if (!langRow) {
@@ -305,8 +321,6 @@ async function runJobInBackground(jobId) {
                 }
             }
 
-            jobLog(jobId, 'info', `正在翻译${item.itemName}至${langRow.name}语言`)
-
             try {
                 const { results, errors } = await translateBatch(enhanced, items, item.targetLang, langRow.name, overrideNote, 3, customRules)
                 const ok = results.length
@@ -320,7 +334,6 @@ async function runJobInBackground(jobId) {
                     throw new Error(errMsg)
                 } else if (ok > 0) {
                     okTotal++
-                    jobLog(jobId, 'ok', `${item.itemName}翻译${langRow.name}语言成功`)
                     run('UPDATE languages SET ai_translated=1 WHERE code=?', [item.targetLang])
                 } else {
                     throw new Error('AI 无返回结果 (可能为空或格式错误)')
@@ -343,7 +356,10 @@ async function runJobInBackground(jobId) {
 
             processingItems.delete(item)
             doneTotal++
-            updateJobProgress(jobId, { done_items: doneTotal, ok_items: okTotal, error_items: errTotal, failed_items: JSON.stringify(newFailed), pending_items: JSON.stringify([...processingItems, ...pendingItems]) })
+            snapCount++
+            updateJobProgress(jobId, { done_items: doneTotal, ok_items: okTotal, error_items: errTotal, failed_items: JSON.stringify(newFailed) })
+            if (snapCount % SNAPSHOT_EVERY === 0) persistPendingState()
+            progressHeartbeat()
         }
     }
 
