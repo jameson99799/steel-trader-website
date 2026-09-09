@@ -3,7 +3,7 @@ import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import https from 'https'
 import http from 'http'
-import { acquireRpmSlot, resolveRpmLimit, httpAgent, httpsAgent } from '../services/aiRateLimit.js'
+import { acquireRpmSlot, acquireAiConcurrencySlot, resolveRpmLimit, httpAgent, httpsAgent } from '../services/aiRateLimit.js'
 
 const router = Router()
 
@@ -67,25 +67,33 @@ async function callAI(settings, messages, maxTokens = 4000) {
     }
 
     const apiUrl = (settings.api_url || 'https://api.openai.com/v1').replace(/\/$/, '') + '/chat/completions'
-    const result = await httpRequest(apiUrl, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${settings.api_key}`, 'Content-Type': 'application/json' }
-    }, {
-        model: settings.model_name || 'gpt-4o-mini',
-        messages,
-        temperature: 0.4,
-        max_tokens: maxTokens
-    })
-    if (result.status !== 200) {
-        const errMsg = typeof result.body === 'object'
-            ? (result.body?.error?.message || JSON.stringify(result.body)) : result.body
-        throw new Error(`API Error ${result.status}: ${errMsg}`)
+    // Shared global cap (same semaphore as translation.js): the total number
+    // of in-flight AI requests across every module can never exceed the
+    // configured concurrency.
+    const releaseConcurrency = await acquireAiConcurrencySlot(settings.concurrency || 3)
+    try {
+        const result = await httpRequest(apiUrl, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${settings.api_key}`, 'Content-Type': 'application/json' }
+        }, {
+            model: settings.model_name || 'gpt-4o-mini',
+            messages,
+            temperature: 0.4,
+            max_tokens: maxTokens
+        })
+        if (result.status !== 200) {
+            const errMsg = typeof result.body === 'object'
+                ? (result.body?.error?.message || JSON.stringify(result.body)) : result.body
+            throw new Error(`API Error ${result.status}: ${errMsg}`)
+        }
+        // A truncated completion must surface as an error, never be saved as-is.
+        if (result.body?.choices?.[0]?.finish_reason === 'length') {
+            throw new Error('finish_reason=length: content truncated by max_tokens')
+        }
+        return result.body?.choices?.[0]?.message?.content || ''
+    } finally {
+        releaseConcurrency()
     }
-    // A truncated completion must surface as an error, never be saved as-is.
-    if (result.body?.choices?.[0]?.finish_reason === 'length') {
-        throw new Error('finish_reason=length: content truncated by max_tokens')
-    }
-    return result.body?.choices?.[0]?.message?.content || ''
 }
 
 function stripHtml(html) {

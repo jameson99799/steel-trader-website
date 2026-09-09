@@ -12,6 +12,7 @@ import {
 } from '../services/productReviewTranslation.js'
 import {
     acquireRpmSlot,
+    acquireAiConcurrencySlot,
     resolveRpmLimit,
     retryDelayMs,
     sleep,
@@ -239,33 +240,43 @@ async function callAI(settings, messages, maxTokens = 8000) {
     }
 
     const apiUrl = (settings.api_url || 'https://api.openai.com/v1').replace(/\/$/, '') + '/chat/completions'
-    const result = await httpRequest(apiUrl, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${settings.api_key}`,
-            'Content-Type': 'application/json'
+    // Hard global cap: total concurrent AI HTTP requests across ALL workers,
+    // jobs and route modules never exceeds the configured concurrency. The
+    // request is only sent after a slot frees up, and the slot is held for the
+    // duration of the HTTP call — so "并发 N" really means at most N requests
+    // in flight, with the next one waiting for a response to come back.
+    const releaseConcurrency = await acquireAiConcurrencySlot(settings.concurrency || 3)
+    try {
+        const result = await httpRequest(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${settings.api_key}`,
+                'Content-Type': 'application/json'
+            }
+        }, {
+            model: settings.model_name || 'gpt-3.5-turbo',
+            messages,
+            temperature: 0.3,
+            max_tokens: maxTokens
+        })
+        if (result.status !== 200) {
+            const errMsg = typeof result.body === 'object'
+                ? (result.body?.error?.message || JSON.stringify(result.body))
+                : result.body
+            throw new Error(`API Error ${result.status}: ${errMsg}`)
         }
-    }, {
-        model: settings.model_name || 'gpt-3.5-turbo',
-        messages,
-        temperature: 0.3,
-        max_tokens: maxTokens
-    })
-    if (result.status !== 200) {
-        const errMsg = typeof result.body === 'object'
-            ? (result.body?.error?.message || JSON.stringify(result.body))
-            : result.body
-        throw new Error(`API Error ${result.status}: ${errMsg}`)
+        const choice = result.body?.choices?.[0]
+        if (!choice?.message?.content) {
+            console.log(`[callAI] empty content | finish_reason=${choice?.finish_reason || 'null'} | model=${settings?.model_name || 'n/a'} | msgChars=${messages.map(m => (m.content || '').length).join(',')}`)
+            throw new Error('AI response had no content (finish_reason=' + (choice?.finish_reason || 'null') + ')')
+        }
+        if (choice?.finish_reason === 'length') {
+            throw new Error(`AI 输出达到 max_tokens(${maxTokens}) 上限被截断（finish_reason=length）`)
+        }
+        return choice.message.content
+    } finally {
+        releaseConcurrency()
     }
-    const choice = result.body?.choices?.[0]
-    if (!choice?.message?.content) {
-        console.log(`[callAI] empty content | finish_reason=${choice?.finish_reason || 'null'} | model=${settings?.model_name || 'n/a'} | msgChars=${messages.map(m => (m.content || '').length).join(',')}`)
-        throw new Error('AI response had no content (finish_reason=' + (choice?.finish_reason || 'null') + ')')
-    }
-    if (choice?.finish_reason === 'length') {
-        throw new Error(`AI 输出达到 max_tokens(${maxTokens}) 上限被截断（finish_reason=length）`)
-    }
-    return choice.message.content
 }
 
 // ─── Models ──────────────────────────────────────────────────────────────────

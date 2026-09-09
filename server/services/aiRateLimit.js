@@ -76,3 +76,46 @@ export function retryDelayMs(attempt, baseMs = 500) {
 // concurrent calls from BOTH route modules reuse the same sockets.
 export const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000, maxSockets: 64 })
 export const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000, maxSockets: 64 })
+
+// ─── Global concurrent-request semaphore (one process-wide cap) ─────────────
+// Every module that calls the AI provider funnels its HTTP requests through
+// this single semaphore, so the TOTAL number of in-flight AI requests can
+// NEVER exceed the configured concurrency — no matter how many workers,
+// background jobs, legacy batch tasks, or client-side (陪读蛙) runners are
+// firing at once. This implements the hard rule the user expects: "并发 N"
+// means at most N simultaneous requests, and a new request is only issued
+// after a previous one returns a response.
+
+let _aiActive = 0
+let _aiPeak = 0
+const _aiWaiters = []
+
+export function getActiveAiRequests() {
+    return _aiActive
+}
+
+// Peak in-flight count since the last reset — diagnostics so a job can report
+// how close it actually got to the configured cap (proof the cap held).
+export function getAiPeak() {
+    return _aiPeak
+}
+
+export function resetAiPeak() {
+    _aiPeak = 0
+}
+
+export async function acquireAiConcurrencySlot(limit) {
+    const cap = Math.max(1, parseInt(limit) || 3)
+    // Called inside a tight wait loop: a spurious wake simply re-checks the
+    // (possibly changed) cap, so this can never overflow the limit.
+    while (_aiActive >= cap) {
+        await new Promise(resolve => { _aiWaiters.push(resolve) })
+    }
+    _aiActive++
+    if (_aiActive > _aiPeak) _aiPeak = _aiActive
+    return () => {
+        _aiActive = Math.max(0, _aiActive - 1)
+        const next = _aiWaiters.shift()
+        if (next) next()
+    }
+}

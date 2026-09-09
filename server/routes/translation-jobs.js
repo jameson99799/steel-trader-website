@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/auth.js'
 
 // ── Import core translation engine functions from translation.js ──
 import { PAGES, translateBatch, enhanceWithDefaultChannel } from './translation.js'
+import { getAiPeak, resetAiPeak } from '../services/aiRateLimit.js'
 
 const router = Router()
 
@@ -230,6 +231,10 @@ async function runJobInBackground(jobId) {
     }
 
     const concurrencyLevel = normalizeTranslationConcurrency(job.concurrency)
+    // The process-wide AI-request cap (the semaphore inside callAI) must match
+    // THIS job's concurrency — override whatever stale value the settings row
+    // holds so the global limit equals what the user chose for this job.
+    enhanced.concurrency = concurrencyLevel
     // Block-level concurrency inside one long-HTML item: fixed at 1 so the
     // TOTAL concurrent AI HTTP requests = outerConcurrency (not outer × blocks).
     // With concurrency=10 and innerAiConcurrency=4, the old code sent up to
@@ -406,13 +411,19 @@ async function runJobInBackground(jobId) {
                     throw new Error('AI 无返回结果 (可能为空或格式错误)')
                 }
             } catch (e) {
-                // Auto-retry once inside the worker. The item is NOT logged here: if the
-                // retry later succeeds it must not show up among failed items,
-                // otherwise users waste quota re-trying it manually.
+                // Auto-retry once inside the worker. The retry IS logged so the
+                // user can SEE that this request returned (and failed) before a
+                // new one is sent — silence here made jobs look like they fired
+                // requests "without ever getting a response".
                 if (!isRetry && (item._retryCount || 0) < 1) {
                     item._retryCount = (item._retryCount || 0) + 1
                     processingItems.delete(item) // it goes back to the queue, it is not in-flight
-                    pendingItems.push(item) // put it back to queue
+                    jobLog(jobId, 'warn', `⚠️ 「${item.itemName}」${langRow.name} 首次失败，立即自动重试: ${(e.message || '').slice(0, 150)}`)
+                    // Re-queue at the FRONT so THIS worker re-picks it immediately.
+                    // Pushing to the queue end on a long job meant retried items
+                    // only got their second attempt after the whole queue cycled —
+                    // a long stretch with zero visible success/failure logs.
+                    pendingItems.unshift(item)
                     updateJobProgress(jobId, { auto_retried: 1 })
                     continue
                 }
@@ -476,6 +487,11 @@ async function runJobInBackground(jobId) {
         }
 
         updateJobProgress(jobId, { failed_items: JSON.stringify(newFailed) })
+        // Diagnostic: report how many AI requests were ACTUALLY in flight at
+        // the busiest moment. The global semaphore caps this at concurrency,
+        // so this value is the proof the limit was honored.
+        jobLog(jobId, 'info', `📊 任务期间 AI 峰值并发请求: ${getAiPeak() || 0} (并发上限 ${concurrencyLevel})`)
+        resetAiPeak()
         if (newFailed.length > 0) {
             const firstErr = newFailed[0]?.error || '未知错误'
             jobLog(jobId, 'warn', `${okTotal}个产品或者文章翻译成功，${newFailed.length}个产品翻译失败，请手动重试，失败原因：${firstErr.slice(0, 80)}`)
