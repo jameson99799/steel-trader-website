@@ -353,7 +353,12 @@ test('translation route wires reviews through every type mapping and every gener
 test('background translation jobs map product reviews to the reviews collector without a separate write path', () => {
   const source = readFileSync(new URL('../server/routes/translation-jobs.js', import.meta.url), 'utf8')
 
-  assert.ok((source.match(/product_review\s*:\s*['"]reviews['"]/g) || []).length >= 2)
+  // The type→page map is now SHARED (one module-level map used by collection,
+  // the worker and the resume rebuild), so one authoritative occurrence is
+  // correct — it must still exist and be referenced where items are fetched.
+  assert.ok((source.match(/product_review\s*:\s*['"]reviews['"]/g) || []).length >= 1)
+  assert.match(source, /collectTranslationItems\s*\(/)
+  assert.match(source, /filterToUntranslated\s*\(/)
   assert.match(source, /import\s*\{[^}]*translateBatch[^}]*\}\s*from\s*['"]\.\/translation\.js['"]/s)
   assert.doesNotMatch(source, /INSERT INTO\s+translations/i)
 })

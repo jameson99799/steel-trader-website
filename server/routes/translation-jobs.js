@@ -30,6 +30,157 @@ function resolveJobConcurrency(requested) {
     return 3
 }
 
+// ── type → DB page-name map (shared by collection, the worker and resume ──)
+const TYPE_TO_PAGE = {
+    product: 'products', product_review: 'reviews', news: 'news', company: 'company',
+    page_text: 'page_texts', category: 'categories', news_category: 'news_categories',
+    hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors',
+    roofing_profile: 'roofing_profiles', roofing_category: 'roofing_categories',
+    factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures',
+    chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq'
+}
+
+// Tracks jobs that were resumed from a PAUSED state (set by POST /:id/resume).
+// runJobInBackground uses it to rebuild the queue from ground truth so the
+// breakpoint is exact. Crash auto-resumes (resetStaleJobs) never set it.
+const resumeFromPauseFlags = new Map()
+
+// ─── Field-level "already translated" filter ─────────────────────────────────
+// Used BOTH as the skip-translated engine in the worker AND as the definition
+// of "this item is finished" when a paused job is resumed. Keeping the two in
+// sync is what makes the resume breakpoint exact: whatever the worker counts
+// as "fully translated" is exactly what the resume excludes.
+export function filterPageItemsByExisting(pageItems, translatedFieldsSet) {
+    return pageItems.map(pi => {
+        if (pi.combined) {
+            try {
+                const subObj = JSON.parse(pi.text)
+                const remainingSubObj = {}
+                let hasRemaining = false
+                for (const [subField, val] of Object.entries(subObj)) {
+                    if (!translatedFieldsSet.has(subField)) {
+                        remainingSubObj[subField] = val
+                        hasRemaining = true
+                    }
+                }
+                if (!hasRemaining) return null
+                return { ...pi, text: JSON.stringify(remainingSubObj) }
+            } catch (e) {}
+        } else {
+            const realField = pi.field.startsWith('name_NC_') || pi.field.startsWith('name_RC_') ? 'name' : pi.field
+            if (translatedFieldsSet.has(realField)) return null
+        }
+        return pi
+    }).filter(Boolean)
+}
+
+// ─── Build the authoritative item queue for a job (same code as save-time) ──
+// Order matches the original run: an article's items appear in the same
+// position, so a resume never "jumps" past or re-does items.
+// `log` (optional (level, message)) is passed only on first runs to surface
+// the collection progress; the resume path rebuilds quietly.
+function collectTranslationItems(job, langCodes, log = null) {
+    const pages = JSON.parse(job.pages || '[]')
+    const explicitItems = JSON.parse(job.explicit_items || '[]')
+    let allItems = []
+    if (explicitItems && explicitItems.length > 0) {
+        for (const ei of explicitItems) {
+            if (!ei.itemName || ei.itemName === `${ei.type}_${ei.id}`) {
+                const pageKey = TYPE_TO_PAGE[ei.type] || ei.type
+                if (PAGES[pageKey]) {
+                    const pageItems = PAGES[pageKey]()
+                    const match = pageItems.find(x => String(x.id) === String(ei.id))
+                    if (match && match.itemName) ei.itemName = match.itemName
+                }
+            }
+            if (ei.targetLang) {
+                allItems.push(ei)
+            } else {
+                for (const lc of langCodes) {
+                    allItems.push({ ...ei, itemName: ei.itemName || `${ei.type}_${ei.id}`, targetLang: lc })
+                }
+            }
+        }
+        if (log) log('info', `🎯 精确指定模式: ${explicitItems.length} 个项目`)
+    } else {
+        if (log) log('info', `📋 正在收集翻译内容 (${pages.join(', ')})...`)
+        for (const page of pages) {
+            if (!PAGES[page]) continue
+            try {
+                const pageItems = PAGES[page]()
+                for (const item of pageItems) {
+                    for (const lc of langCodes) {
+                        allItems.push({ type: item.type, id: item.id, itemName: item.itemName || `${item.type}_${item.id}`, targetLang: lc })
+                    }
+                }
+            } catch (e) {
+                if (log) log('warn', `⚠️ 获取页面 ${page} 内容失败: ${e.message}`)
+            }
+        }
+    }
+    // Deduplicate by type+id+lang
+    const seen = new Set()
+    allItems = allItems.filter(item => {
+        const k = `${item.targetLang}_${item.type}_${item.id}`
+        if (seen.has(k)) return false
+        seen.add(k)
+        return true
+    })
+    return allItems
+}
+
+// ─── Ground-truth "what is still missing" filter (resume) ───────────────────
+// Ignores whatever the persisted queue snapshot claims and derives the REAL
+// remaining work from the translations table. Items whose every field already
+// has a saved translation are dropped (they are "done"), everything else is
+// kept in its original order. This makes pause→resume immune to snapshot
+// drift, counting races, and in-flight drain — the breakpoint is exact by
+// construction. Deps are injectable so the logic is unit-testable without a DB.
+export function filterToUntranslated(items, opts = {}) {
+    const getPageItems = opts.getPageItems
+        || ((key) => (PAGES[key] ? PAGES[key]() : null))
+    const getTranslatedByItem = opts.getTranslatedByItem
+        || ((lang, type) => {
+            const rows = getAll(
+                'SELECT content_id, content_field FROM translations WHERE language_code=? AND content_type=?',
+                [lang, type]
+            )
+            const map = new Map()
+            for (const r of rows) {
+                const idKey = String(r.content_id)
+                if (!map.has(idKey)) map.set(idKey, new Set())
+                map.get(idKey).add(r.content_field)
+            }
+            return map
+        })
+
+    const pageCache = new Map()
+    const translatedCache = new Map()
+    const remaining = []
+    for (const item of items) {
+        const pageKey = TYPE_TO_PAGE[item.type] || item.type
+        let pageItems = pageCache.get(pageKey)
+        if (pageItems === undefined) {
+            pageItems = getPageItems(pageKey)
+            pageCache.set(pageKey, pageItems)
+        }
+        if (!pageItems) continue // worker skips unknown types too
+        const itemPageItems = pageItems.filter(pi => String(pi.id) === String(item.id))
+        if (itemPageItems.length === 0) continue // deleted/missing rows are skipped by the worker too
+
+        let translatedByItem = translatedCache.get(`${item.targetLang}|${item.type}`)
+        if (!translatedByItem) {
+            translatedByItem = getTranslatedByItem(item.targetLang, item.type)
+            translatedCache.set(`${item.targetLang}|${item.type}`, translatedByItem)
+        }
+        const fieldsDone = translatedByItem.get(String(item.id)) || new Set()
+        if (filterPageItemsByExisting(itemPageItems, fieldsDone).length > 0) {
+            remaining.push(item)
+        }
+    }
+    return remaining
+}
+
 // ── Log auto-cleanup: called on startup + daily ──
 function cleanupOldLogs() {
     try {
@@ -51,10 +202,11 @@ function cleanupOldLogs() {
     }
 }
 
-// Run cleanup on module load (server start)
-setTimeout(cleanupOldLogs, 5000)
+// Run cleanup on module load (server start) — unref'ed so a test importing
+// this module (or a graceful shutdown) is never held open by these timers.
+setTimeout(cleanupOldLogs, 5000).unref()
 // Run daily at ~02:00
-setInterval(cleanupOldLogs, 24 * 60 * 60 * 1000)
+setInterval(cleanupOldLogs, 24 * 60 * 60 * 1000).unref()
 
 // ── Reset/restore jobs interrupted by a crash or restart ──
 // Intent: a job that was actively running (or created but not yet started) when
@@ -115,6 +267,16 @@ async function runJobInBackground(jobId) {
         jobLog(jobId, 'warn', '🛑 任务已在中止后停止，未再次启动')
         return
     }
+    // Capture the PRIOR status BEFORE flipping to 'running': the pause/resume
+    // contract needs to know whether this execution is (a) an explicit resume
+    // of a paused job → rebuild the queue from ground truth for an EXACT
+    // breakpoint; (b) a crash auto-resume of a running job → also filter the
+    // persisted queue by ground truth (drops items that actually completed);
+    // or (c) a first run / never-started job → use the full saved queue.
+    const preStatus = getOne('SELECT status FROM translation_jobs WHERE id=?', [jobId])?.status
+    const resumeFromPause = resumeFromPauseFlags.get(jobId)
+    if (resumeFromPause) resumeFromPauseFlags.delete(jobId)
+
     // Mark as running
     updateJobProgress(jobId, { status: 'running' })
     jobLog(jobId, 'info', '🚀 后台翻译任务正在运行中...')
@@ -123,8 +285,6 @@ async function runJobInBackground(jobId) {
     if (!job) return
 
     const targetLang = job.target_lang
-    const pages = JSON.parse(job.pages || '[]')
-    const explicitItems = JSON.parse(job.explicit_items || '[]')
     const isRetry = !!job.is_retry
 
     // Gather target languages
@@ -148,79 +308,31 @@ async function runJobInBackground(jobId) {
     let pendingItems = []
 
     if (job.pending_items) {
-        pendingItems = JSON.parse(job.pending_items)
-        jobLog(jobId, 'info', `▶️ 任务已恢复，继续翻译剩余 ${pendingItems.length} 个项目...`)
-    } else {
-        let allItems = [] // { type, id, itemName, targetLang }
-        if (explicitItems && explicitItems.length > 0) {
-            // Explicit mode (either retry or user selected granular items)
-            const TYPE_TO_PAGE_MAP = {
-                product: 'products', product_review: 'reviews', news: 'news', company: 'company',
-                page_text: 'page_texts', category: 'categories', news_category: 'news_categories',
-                hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors',
-                roofing_profile: 'roofing_profiles', roofing_category: 'roofing_categories',
-                factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures',
-                chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq'
-            }
-            
-            for (const ei of explicitItems) {
-                // Determine item name if missing
-                if (!ei.itemName || ei.itemName === `${ei.type}_${ei.id}`) {
-                    const pageKey = TYPE_TO_PAGE_MAP[ei.type] || ei.type
-                    if (PAGES[pageKey]) {
-                        const pageItems = PAGES[pageKey]()
-                        const match = pageItems.find(x => String(x.id) === String(ei.id))
-                        if (match && match.itemName) {
-                            ei.itemName = match.itemName
-                        }
-                    }
-                }
-
-                // If it's a retry item it might already have targetLang set, otherwise we generate for all langs
-                if (ei.targetLang) {
-                    allItems.push(ei)
-                } else {
-                    for (const lc of langCodes) {
-                        allItems.push({ ...ei, itemName: ei.itemName || `${ei.type}_${ei.id}`, targetLang: lc })
-                    }
-                }
-            }
-            jobLog(jobId, 'info', `🎯 精确指定模式: ${explicitItems.length} 个项目, 共计 ${allItems.length} 个翻译项`)
-            // Deduplicate
-            const seen = new Set()
-            allItems = allItems.filter(item => {
-                const k = `${item.targetLang}_${item.type}_${item.id}`
-                if (seen.has(k)) return false
-                seen.add(k)
-                return true
+        if (resumeFromPause || preStatus === 'running') {
+            // Rebuild the REAL remaining queue from ground truth instead of
+            // trusting the persisted snapshot array. The translations table is
+            // the single source of truth for "what is actually still missing",
+            // so the resume continues EXACTLY where the work stops: no
+            // double-translating already-finished items and no skipping ahead,
+            // regardless of snapshot drift or whatever drained in-flight while
+            // the pause was taking effect.
+            const rebuilt = collectTranslationItems(job, langCodes)
+            pendingItems = filterToUntranslated(rebuilt)
+            const doneTrue = rebuilt.length - pendingItems.length
+            updateJobProgress(jobId, {
+                total_items: rebuilt.length,
+                done_items: doneTrue,
+                ok_items: job.ok_items || 0,
+                error_items: job.error_items || 0
             })
+            jobLog(jobId, 'info', `▶️ 任务已恢复: 已完成 ${doneTrue}/${rebuilt.length}, 继续翻译剩余 ${pendingItems.length} 项`)
         } else {
-            // Normal mode: collect from pages
-            jobLog(jobId, 'info', `📋 正在收集翻译内容 (${pages.join(', ')})...`)
-            for (const page of pages) {
-                if (!PAGES[page]) continue
-                try {
-                    const pageItems = PAGES[page]()
-                    for (const item of pageItems) {
-                        for (const lc of langCodes) {
-                            allItems.push({ type: item.type, id: item.id, itemName: item.itemName || `${item.type}_${item.id}`, targetLang: lc })
-                        }
-                    }
-                } catch (e) {
-                    jobLog(jobId, 'warn', `⚠️ 获取页面 ${page} 内容失败: ${e.message}`)
-                }
-            }
-            // Deduplicate by type+id+lang
-            const seen = new Set()
-            allItems = allItems.filter(item => {
-                const k = `${item.targetLang}_${item.type}_${item.id}`
-                if (seen.has(k)) return false
-                seen.add(k)
-                return true
-            })
-            jobLog(jobId, 'ok', `📋 共 ${allItems.length} 个待翻译项目`)
+            pendingItems = JSON.parse(job.pending_items)
+            jobLog(jobId, 'info', `▶️ 任务已恢复，继续翻译剩余 ${pendingItems.length} 个项目...`)
         }
-        pendingItems = allItems
+    } else {
+        pendingItems = collectTranslationItems(job, langCodes, (level, msg) => jobLog(jobId, level, msg))
+        jobLog(jobId, 'ok', `📋 共 ${pendingItems.length} 个待翻译项目`)
         updateJobProgress(jobId, { total_items: pendingItems.length, done_items: 0, ok_items: 0, error_items: 0, pending_items: JSON.stringify(pendingItems) })
     }
 
@@ -282,15 +394,6 @@ async function runJobInBackground(jobId) {
         jobLog(jobId, 'info', `⏳ 进度 ${doneTotal}/${totalGoal || (doneTotal + pendingItems.length)} | 成功 ${okTotal} | 失败 ${errTotal}`)
     }
 
-    const TYPE_TO_PAGE = {
-        product: 'products', product_review: 'reviews', news: 'news', company: 'company',
-        page_text: 'page_texts', category: 'categories', news_category: 'news_categories',
-        hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors',
-        roofing_profile: 'roofing_profiles', roofing_category: 'roofing_categories',
-        factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures',
-        chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq'
-    }
-
     // ── Process items with concurrency ──
     async function worker() {
         while (pendingItems.length > 0) {
@@ -341,28 +444,8 @@ async function runJobInBackground(jobId) {
                     [item.targetLang, item.type, item.id]
                 )
                 const translatedFieldsSet = new Set(alreadyTranslated.map(r => r.content_field))
-    
-                items = itemsRaw.map(pi => {
-                    if (pi.combined) {
-                        try {
-                            const subObj = JSON.parse(pi.text)
-                            const remainingSubObj = {}
-                            let hasRemaining = false
-                            for (const [subField, val] of Object.entries(subObj)) {
-                                if (!translatedFieldsSet.has(subField)) {
-                                    remainingSubObj[subField] = val
-                                    hasRemaining = true
-                                }
-                            }
-                            if (!hasRemaining) return null
-                            return { ...pi, text: JSON.stringify(remainingSubObj) }
-                        } catch (e) {}
-                    } else {
-                        const realField = pi.field.startsWith('name_NC_') || pi.field.startsWith('name_RC_') ? 'name' : pi.field
-                        if (translatedFieldsSet.has(realField)) return null
-                    }
-                    return pi
-                }).filter(Boolean)
+
+                items = filterPageItemsByExisting(itemsRaw, translatedFieldsSet)
             }
 
             if (items.length === 0) {
@@ -458,7 +541,7 @@ async function runJobInBackground(jobId) {
         if (abortReason === 'pause') {
             const remaining = [...processingItems, ...pendingItems]
             updateJobProgress(jobId, { status: 'paused', pending_items: JSON.stringify(remaining) })
-            jobLog(jobId, 'warn', `⏸ 任务已暂停，剩余 ${remaining.length} 项等待翻译`)
+            jobLog(jobId, 'warn', `⏸ 任务已暂停: 已完成 ${doneTotal}/${totalGoal || doneTotal + remaining.length}, 剩余 ${remaining.length} 项待翻译`)
             return
         }
 
@@ -706,7 +789,10 @@ router.post('/:id/resume', authMiddleware, async (req, res) => {
 
         updateJobProgress(id, { status: 'pending' })
         abortFlags.delete(id)
-        
+        // Mark this as an explicit pause→resume so runJobInBackground rebuilds
+        // the queue from ground truth (exact breakpoint, no drift).
+        resumeFromPauseFlags.set(id, true)
+
         setImmediate(() => runJobInBackground(id).catch(e => {
             console.error(`[translation-jobs] Resume job ${id} fatal error:`, e)
             try {
