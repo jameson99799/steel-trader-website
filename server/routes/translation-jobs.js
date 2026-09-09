@@ -373,12 +373,18 @@ async function runJobInBackground(jobId) {
             }
 
             if (items.length === 0) {
-                // Already fully translated!
+                // Already fully translated (skip-mode, or the auto-retry just
+                // finished the fields that were missing). ALWAYS log the item's
+                // outcome — before this log the counters silently bumped and a
+                // user saw "首次失败，立即自动重试" followed by NO trace of the
+                // retried item succeeding, so they could not tell whether the
+                // retry was successful or the failure was ignored.
                 okTotal++
                 processingItems.delete(item)
                 doneTotal++
                 updateJobProgress(jobId, { done_items: doneTotal, ok_items: okTotal, error_items: errTotal })
                 run('UPDATE languages SET ai_translated=1 WHERE code=?', [item.targetLang])
+                jobLog(jobId, 'ok', `✅ 「${item.itemName}」${langRow.name} 无需翻译（内容已全部翻译）`)
                 continue
             }
 
@@ -397,7 +403,9 @@ async function runJobInBackground(jobId) {
                 }
             }
 
-            jobLog(jobId, 'info', `🔄 正在翻译「${item.itemName}」${langRow.name}...`)
+            jobLog(jobId, 'info', item._retryCount > 0
+                ? `🔁 「${item.itemName}」${langRow.name} 自动重试中（只补齐上次失败的缺失内容）...`
+                : `🔄 正在翻译「${item.itemName}」${langRow.name}...`)
 
             try {
                 const { results, errors } = await translateBatch(enhanced, items, item.targetLang, langRow.name, overrideNote, innerAiConcurrency, customRules)
@@ -413,7 +421,9 @@ async function runJobInBackground(jobId) {
                 } else if (ok > 0) {
                     okTotal++
                     run('UPDATE languages SET ai_translated=1 WHERE code=?', [item.targetLang])
-                    jobLog(jobId, 'ok', `✅ 「${item.itemName}」${langRow.name} 翻译成功`)
+                    jobLog(jobId, 'ok', item._retryCount > 0
+                        ? `✅ 「${item.itemName}」${langRow.name} 重试成功，缺失内容已补齐`
+                        : `✅ 「${item.itemName}」${langRow.name} 翻译成功`)
                 } else {
                     throw new Error('AI 无返回结果 (可能为空或格式错误)')
                 }

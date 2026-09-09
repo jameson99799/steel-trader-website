@@ -67,3 +67,16 @@ test('retry queue marks partial success without discarding successful translatio
   assert.match(tr, /UPDATE translation_tasks SET status='error'/)
   assert.match(tr, /retry_count=retry_count\+1 WHERE status='error' AND retry_count=0/)
 })
+
+test('auto-retry outcomes are always visible in the job log', () => {
+  const jobs = read('server/routes/translation-jobs.js')
+  // The re-queued retry attempt is logged distinctly, so a user who just saw
+  // "首次失败，立即自动重试: 部分成功: 5成功, 2错误" can SEE the item being retried.
+  assert.match(jobs, /自动重试中/)
+  // A successful retry is labeled as such — otherwise the item's ✅ looks like
+  // a normal first-time success and the user cannot tell the retry succeeded.
+  assert.match(jobs, /重试成功，缺失内容已补齐/)
+  // The "already fully translated" shortcut (which used to bump counters with
+  // NO log at all) now always logs an outcome.
+  assert.match(jobs, /无需翻译（内容已全部翻译）/)
+})
