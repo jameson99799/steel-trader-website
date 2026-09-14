@@ -295,6 +295,11 @@
               </div>
             </div>
 
+            <div class="form-group">
+              <label>价格 (USD/吨) <span class="hint">用于 Google 商品结构化数据（offers），留空则不输出价格</span></label>
+              <input v-model.number="form.price_usd" type="number" min="0" step="5" class="form-control" placeholder="例如：620" />
+            </div>
+
             <!-- SEO Settings Section -->
             <div class="seo-section">
               <h4 class="seo-section-title">🔍 SEO设置（可选）</h4>
@@ -1052,6 +1057,7 @@ const form = reactive({
   is_featured: 0,
   status: 1,
   sort_order: 0,
+  price_usd: null,
   seo_title: '',
   seo_description: '',
   seo_keywords: ''
@@ -1167,6 +1173,7 @@ const openModal = async (product = null) => {
   form.is_featured = fullProduct?.is_featured || 0
   form.status = fullProduct?.status ?? 1
   form.sort_order = fullProduct?.sort_order || 0
+  form.price_usd = fullProduct?.price_usd ?? null
   form.seo_title = fullProduct?.seo_title || ''
   form.seo_description = fullProduct?.seo_description || ''
   form.seo_keywords = fullProduct?.seo_keywords || ''
@@ -1221,6 +1228,7 @@ const handleSubmit = async () => {
     formData.append('is_featured', form.is_featured)
     formData.append('status', form.status)
     formData.append('sort_order', form.sort_order)
+    formData.append('price_usd', form.price_usd ?? '')
     formData.append('seo_title', form.seo_title || '')
     formData.append('seo_description', form.seo_description || '')
     formData.append('seo_keywords', form.seo_keywords || '')

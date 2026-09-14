@@ -17,7 +17,7 @@ test('detail SSR does not generate or persist synthetic reviews', () => {
   assert.doesNotMatch(source, /INSERT INTO seo_reviews/)
 })
 
-test('product schema claims no reviews/ratings and article schema stays review-free', () => {
+test('product schema uses the shared review parts (review + aggregateRating) and article schema stays review-free', () => {
   const productBlock = source.slice(
     source.indexOf("'@context': 'https://schema.org', '@type': 'Product'"),
     source.indexOf("jsonLd(productSchema, 'product-jsonld')")
@@ -27,15 +27,14 @@ test('product schema claims no reviews/ratings and article schema stays review-f
     source.indexOf("jsonLd(articleSchema, 'article-jsonld')")
   )
 
-  // Reviews stay visible on the page, but the Product JSON-LD must not attach
-  // review/aggregateRating parts: review without aggregateRating fails Google
-  // validation, and an aggregate of admin-seeded reviews is self-serving.
-  assert.doesNotMatch(productBlock, /buildReviewSchemaParts/)
-  assert.doesNotMatch(productBlock, /aggregateRating\s*:|review\s*:/)
+  // Genuine customer reviews: Google requires review AND aggregateRating
+  // together. The shared builder emits both from the visible review store.
+  assert.match(productBlock, /buildReviewSchemaParts\(publicReviews\)/)
+  assert.doesNotMatch(productBlock, /delete\s+productSchema\.aggregateRating/)
   assert.doesNotMatch(articleBlock, /aggregateRating|review:/)
 })
 
-test('server and client product schemas omit offers and never fabricate prices or ratings', () => {
+test('server and client product schemas emit offers only with a real price and no fabricated policy fields', () => {
   const serverProductBlock = source.slice(
     source.indexOf("'@context': 'https://schema.org', '@type': 'Product'"),
     source.indexOf("jsonLd(productSchema, 'product-jsonld')")
@@ -46,12 +45,17 @@ test('server and client product schemas omit offers and never fabricate prices o
   )
 
   for (const block of [serverProductBlock, clientProductBlock]) {
-    // No offers at all: an Offer without a real price fails Google validation.
-    assert.doesNotMatch(block, /'@type': 'Offer'|\boffers\s*:/)
-    assert.doesNotMatch(block, /price:\s|priceValidUntil|shippingDetails|hasMerchantReturnPolicy/)
-    assert.doesNotMatch(block, /aggregateRating:|review:\s*\{/)
+    assert.match(block, /'@type': 'Offer'/)
+    assert.match(block, /priceCurrency:\s*'USD'/)
+    // The offer is gated on a real positive per-product price; no fabricated
+    // price/valid-until/shipping/return constants are emitted.
+    assert.doesNotMatch(block, /price:\s*(?:'0'|0\b)/)
+    assert.doesNotMatch(block, /priceValidUntil|shippingDetails|hasMerchantReturnPolicy/)
   }
 
-  assert.doesNotMatch(serverProductBlock, /buildReviewSchemaParts/)
-  assert.doesNotMatch(clientSource, /buildReviewSchemaParts/)
+  assert.match(serverProductBlock, /const productPrice = Number\(product\.price_usd\)/)
+  assert.match(serverProductBlock, /if \(Number\.isFinite\(productPrice\) && productPrice > 0\)/)
+  assert.match(clientProductBlock, /const productPrice = Number\(p\.price_usd\)/)
+  assert.match(serverProductBlock, /buildReviewSchemaParts\(publicReviews\)/)
+  assert.match(clientSource, /buildReviewSchemaParts\(publicReviews\.value\)/)
 })

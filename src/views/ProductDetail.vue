@@ -64,6 +64,7 @@
           <div class="product-info">
             <div class="product-header">
               <h1 class="product-title">{{ localizedValue(product, 'name') }}</h1>
+              <div class="product-price" v-if="product.price_usd">US$ {{ product.price_usd }} / ton</div>
               <div class="product-meta">
                 <span class="product-id">ID: {{ product.id }}</span>
               </div>
@@ -275,6 +276,7 @@ import { sanitizeRichHtml } from '../utils/sanitizeHtml.js'
 import InquiryModal from '../components/InquiryModal.vue'
 import ProductReviews from '../components/ProductReviews.vue'
 import {
+  buildReviewSchemaParts,
   isMatchingProductReviewContext
 } from '../../shared/productReviewSeo.js'
 
@@ -593,10 +595,21 @@ function updateProductSeo(comp) {
       manufacturer: { '@type': 'Organization', name: comp.name_en || comp.name }
     })
   }
-  // Match the SSR behavior: no `offers` without a real price (Google requires
-  // offers.price — the catalog has no prices), and no `review`/`aggregateRating`
-  // claims (reviews without aggregateRating are invalid; an aggregate of
-  // admin-seeded reviews would be a self-serving rating claim).
+  // Match the SSR behavior: offers only with a real price (Google requires
+  // offers.price), and review + aggregateRating from the same public reviews
+  // shown on the page (review entries alone are invalid for Google).
+  const productPrice = Number(p.price_usd)
+  if (Number.isFinite(productPrice) && productPrice > 0) {
+    productSchema.offers = {
+      '@type': 'Offer',
+      price: productPrice,
+      priceCurrency: 'USD',
+      availability: 'https://schema.org/InStock',
+      itemCondition: 'https://schema.org/NewCondition',
+      url: productUrl,
+      seller: { '@type': 'Organization', name: comp?.name_en || comp?.name || 'Shandong Sunsea Steel Co., Ltd' }
+    }
+  }
 
   const specsJson = localizedValue(p, 'specs') || p.specs
   if (specsJson) {
@@ -611,6 +624,9 @@ function updateProductSeo(comp) {
       }
     } catch (error) {}
   }
+
+  // Same public reviews as the SSR page/schema: review + aggregateRating.
+  Object.assign(productSchema, buildReviewSchemaParts(publicReviews.value))
 
   let script = document.getElementById('product-jsonld')
   if (!script) {
@@ -1026,6 +1042,14 @@ watch([() => route.params.slug, lang], () => loadProductPage())
   color: var(--text-primary);
   margin-bottom: var(--spacing-sm);
   line-height: var(--leading-tight);
+}
+
+/* Visible price — must accompany the Offer price in the Product JSON-LD. */
+.product-price {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--primary, #2563eb);
+  margin-bottom: var(--spacing-sm);
 }
 
 .product-meta {

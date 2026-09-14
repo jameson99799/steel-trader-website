@@ -806,13 +806,21 @@ ${contactLines.join('\n')}
                 brand: { '@type': 'Brand', name: companyNameTranslated },
                 manufacturer: { '@type': orgType, name: companyNameTranslated, url: siteUrl }
               }
-              // No `offers`: this catalog is inquiry-based and the products table
-              // has no price column. Google requires offers to carry a real
-              // price/priceSpecification.price — an Offer without a price fails
-              // Search Console validation ("应指定 price 或 priceSpecification.price")
-              // and drags in the shipping/return-policy warnings. The Product
-              // schema stays valid without offers; adding a price field later is
-              // the prerequisite for re-enabling them.
+              // Real per-product wholesale price (USD/ton). Google requires an
+              // Offer to carry a real price; products without one simply omit
+              // offers (an Offer without a price fails Search Console).
+              const productPrice = Number(product.price_usd)
+              if (Number.isFinite(productPrice) && productPrice > 0) {
+                productSchema.offers = {
+                  '@type': 'Offer',
+                  price: productPrice,
+                  priceCurrency: 'USD',
+                  availability: 'https://schema.org/InStock',
+                  itemCondition: 'https://schema.org/NewCondition',
+                  url: pageCanonical,
+                  seller: { '@type': orgType, name: companyNameTranslated }
+                }
+              }
               if (productImages.length) productSchema.image = productImages
               const specsJson = product[`specs_${lang}`] || product.specs
               if (specsJson) {
@@ -821,12 +829,10 @@ ${contactLines.join('\n')}
                   if (specsList.length) productSchema.additionalProperty = specsList.map(s => ({ '@type': 'PropertyValue', name: s.name, value: s.value }))
                 } catch (e) {}
               }
-              // No `review` / `aggregateRating` in the Product JSON-LD: multiple
-              // review entries without an aggregateRating are invalid for Google
-              // ("有多项评价缺少 aggregateRating"), and an AggregateRating built
-              // from admin-seeded reviews is a self-serving rating claim. The
-              // reviews stay VISIBLE on the page (renderPublicReviewsHtml) — they
-              // are simply not claimed as structured data.
+              // Genuine customer reviews: Google requires `review` and
+              // `aggregateRating` together (review entries alone are invalid).
+              // Both come from the same public review store shown on the page.
+              Object.assign(productSchema, buildReviewSchemaParts(publicReviews))
               extraSchemas += jsonLd(productSchema, 'product-jsonld')
               const faqJson = product[`faq_items_${lang}`] || product.faq_items
               if (faqJson) {
@@ -875,6 +881,10 @@ ${contactLines.join('\n')}
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
               const hasFaqInDetail = /frequently asked|<h[23][^>]*>\\s*faq/i.test(detailHtml)
               const ssrFeaturedImage = productImages.length ? `<img src="${esc(productImages[0])}" alt="${escPName}" style="display:none;" />` : ''
+              // The Offer price must be visible on the page too (Google policy).
+              const ssrPriceHtml = (Number.isFinite(productPrice) && productPrice > 0)
+                ? `<p class="product-price">US$ ${esc(String(productPrice))} / ton</p>`
+                : ''
               const publicReviewsHtml = renderPublicReviewsHtml(publicReviews, reviewLabels)
               
               // Internal linking for GEO crawler topic clusters
@@ -889,7 +899,7 @@ ${contactLines.join('\n')}
                 }).join('') + '</ul>'
               }
               
-              ssrContent = `<article id="ssr-product">${ssrFeaturedImage}<h1>${escPName}</h1><p>${escPDesc}</p>${specsHtml}${detailHtml}${publicReviewsHtml}${hasFaqInDetail ? '' : faqHtml}${relatedHtml}</article>`
+              ssrContent = `<article id="ssr-product">${ssrFeaturedImage}<h1>${escPName}</h1>${ssrPriceHtml}<p>${escPDesc}</p>${specsHtml}${detailHtml}${publicReviewsHtml}${hasFaqInDetail ? '' : faqHtml}${relatedHtml}</article>`
               
               // Expose ssrData for client-side Vue hydration
               req.ssrProduct = product

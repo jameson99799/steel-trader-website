@@ -19,6 +19,15 @@ export function getAdminProductDetail(id, queryOne = getOne) {
   )
 }
 
+// Product price in USD/ton for Google Product offers. Only a positive integer
+// is stored; empty/invalid input clears the price (offers are then omitted).
+export function normalizePriceUsd(value) {
+  if (value === undefined || value === null || String(value).trim() === '') return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+  return Math.round(parsed)
+}
+
 function listProducts(req, res, { publicOnly }) {
   const { category_id, featured, status, page = 1, limit = 20 } = req.query
   let sql = 'SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.images, p.description, p.description_en, p.is_featured, p.status, p.sort_order, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE 1=1'
@@ -163,11 +172,11 @@ router.post('/', authMiddleware, upload.array('images', 10), async (req, res) =>
   let result
   try {
     result = run(`
-      INSERT INTO products (name, name_en, category_id, description, description_en, specs, images, detail_content, is_featured, sort_order, status, seo_title, seo_description, seo_keywords, faq_items)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO products (name, name_en, category_id, description, description_en, specs, images, detail_content, is_featured, sort_order, status, seo_title, seo_description, seo_keywords, faq_items, price_usd)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [name, name_en || null, category_id || null, description || null, description_en || null, specs || null, images,
       req.body.detail_content || null, parseInt(is_featured), parseInt(sort_order), parseInt(status),
-      seo_title || null, seo_description || null, seo_keywords || null, req.body.faq_items || '[]'])
+      seo_title || null, seo_description || null, seo_keywords || null, req.body.faq_items || '[]', normalizePriceUsd(req.body.price_usd)])
   } catch (err) {
     console.error('[POST /products] Error during insert:', err)
     return res.status(500).json({ error: '数据库记录创建失败：' + err.message })
@@ -221,11 +230,11 @@ router.put('/:id', authMiddleware, upload.array('images', 10), async (req, res) 
   try {
     run(`
       UPDATE products SET name=?, name_en=?, category_id=?, description=?, description_en=?, specs=?, images=?, detail_content=?,
-      is_featured=?, sort_order=?, status=?, seo_title=?, seo_description=?, seo_keywords=?, slug=?, faq_items=?
+      is_featured=?, sort_order=?, status=?, seo_title=?, seo_description=?, seo_keywords=?, slug=?, faq_items=?, price_usd=?
       WHERE id=?
     `, [name, name_en || null, category_id || null, description || null, description_en || null, specs || null, images,
       req.body.detail_content || null, parseInt(is_featured || 0), parseInt(sort_order || 0), parseInt(status || 1),
-      seo_title || null, seo_description || null, seo_keywords || null, newSlug, req.body.faq_items || '[]', id])
+      seo_title || null, seo_description || null, seo_keywords || null, newSlug, req.body.faq_items || '[]', normalizePriceUsd(req.body.price_usd), id])
 
     res.json({ message: '更新成功', slug: newSlug })
   } catch (err) {

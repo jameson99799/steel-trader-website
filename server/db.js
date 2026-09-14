@@ -248,6 +248,20 @@ async function initDb() {
   try { db.exec('ALTER TABLE products ADD COLUMN seo_keywords TEXT') } catch (e) { }
   // Migration: add product slug for SEO-friendly URLs
   try { db.exec('ALTER TABLE products ADD COLUMN slug TEXT') } catch (e) { }
+  // Migration: per-product wholesale price (USD/ton) — required by Google for
+  // Product `offers` (an Offer without a price fails Search Console validation).
+  try { db.exec('ALTER TABLE products ADD COLUMN price_usd INTEGER') } catch (e) { }
+  // One-time seed: the real wholesale band is 600–650 USD/ton in $5 steps.
+  // Guarded by an app_migrations marker so an admin-cleared price is never
+  // silently re-randomized on the next restart.
+  try {
+    db.exec('CREATE TABLE IF NOT EXISTS app_migrations (id TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)')
+    const seeded = db.prepare("SELECT 1 FROM app_migrations WHERE id = 'products_price_usd_seed'").get()
+    if (!seeded) {
+      db.prepare('UPDATE products SET price_usd = 600 + 5 * ((RANDOM() % 11 + 11) % 11) WHERE price_usd IS NULL').run()
+      db.prepare("INSERT INTO app_migrations (id) VALUES ('products_price_usd_seed')").run()
+    }
+  } catch (e) { console.warn('[db] product price seed failed:', e.message) }
   // Migration: add category slug for SEO-friendly filter URLs
   try { db.exec('ALTER TABLE categories ADD COLUMN slug TEXT') } catch (e) { }
   // Auto-generate slugs for categories without one
