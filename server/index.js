@@ -804,16 +804,15 @@ ${contactLines.join('\n')}
                 description: (pageDesc).substring(0, 500),
                 url: pageCanonical,
                 brand: { '@type': 'Brand', name: companyNameTranslated },
-                manufacturer: { '@type': orgType, name: companyNameTranslated, url: siteUrl },
-                offers: {
-                  '@type': 'Offer',
-                  priceCurrency: 'USD',
-                  availability: 'https://schema.org/InStock',
-                  itemCondition: 'https://schema.org/NewCondition',
-                  url: pageCanonical,
-                  seller: { '@type': orgType, name: companyNameTranslated }
-                }
+                manufacturer: { '@type': orgType, name: companyNameTranslated, url: siteUrl }
               }
+              // No `offers`: this catalog is inquiry-based and the products table
+              // has no price column. Google requires offers to carry a real
+              // price/priceSpecification.price — an Offer without a price fails
+              // Search Console validation ("应指定 price 或 priceSpecification.price")
+              // and drags in the shipping/return-policy warnings. The Product
+              // schema stays valid without offers; adding a price field later is
+              // the prerequisite for re-enabling them.
               if (productImages.length) productSchema.image = productImages
               const specsJson = product[`specs_${lang}`] || product.specs
               if (specsJson) {
@@ -822,10 +821,12 @@ ${contactLines.join('\n')}
                   if (specsList.length) productSchema.additionalProperty = specsList.map(s => ({ '@type': 'PropertyValue', name: s.name, value: s.value }))
                 } catch (e) {}
               }
-              Object.assign(productSchema, buildReviewSchemaParts(publicReviews))
-              // Remove self-serving AggregateRating — Google penalizes ratings not backed by
-              // genuine third-party reviews (productReviewStore lists admin-seeded reviews).
-              delete productSchema.aggregateRating
+              // No `review` / `aggregateRating` in the Product JSON-LD: multiple
+              // review entries without an aggregateRating are invalid for Google
+              // ("有多项评价缺少 aggregateRating"), and an AggregateRating built
+              // from admin-seeded reviews is a self-serving rating claim. The
+              // reviews stay VISIBLE on the page (renderPublicReviewsHtml) — they
+              // are simply not claimed as structured data.
               extraSchemas += jsonLd(productSchema, 'product-jsonld')
               const faqJson = product[`faq_items_${lang}`] || product.faq_items
               if (faqJson) {

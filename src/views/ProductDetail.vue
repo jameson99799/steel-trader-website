@@ -275,7 +275,6 @@ import { sanitizeRichHtml } from '../utils/sanitizeHtml.js'
 import InquiryModal from '../components/InquiryModal.vue'
 import ProductReviews from '../components/ProductReviews.vue'
 import {
-  buildReviewSchemaParts,
   isMatchingProductReviewContext
 } from '../../shared/productReviewSeo.js'
 
@@ -592,19 +591,12 @@ function updateProductSeo(comp) {
     ...((comp?.name_en || comp?.name) && {
       brand: { '@type': 'Brand', name: comp.name_en || comp.name },
       manufacturer: { '@type': 'Organization', name: comp.name_en || comp.name }
-    }),
-    offers: {
-      '@type': 'Offer',
-      priceCurrency: 'USD',
-      availability: 'https://schema.org/InStock',
-      itemCondition: 'https://schema.org/NewCondition',
-      url: productUrl,
-      seller: { '@type': 'Organization', name: comp?.name_en || comp?.name || 'Shandong Sunsea Steel Co., Ltd' }
-    }
+    })
   }
-  Object.assign(productSchema, buildReviewSchemaParts(publicReviews.value))
-  // Match the SSR behavior: never emit a self-serving AggregateRating (Google policy).
-  delete productSchema.aggregateRating
+  // Match the SSR behavior: no `offers` without a real price (Google requires
+  // offers.price — the catalog has no prices), and no `review`/`aggregateRating`
+  // claims (reviews without aggregateRating are invalid; an aggregate of
+  // admin-seeded reviews would be a self-serving rating claim).
 
   const specsJson = localizedValue(p, 'specs') || p.specs
   if (specsJson) {

@@ -17,7 +17,7 @@ test('detail SSR does not generate or persist synthetic reviews', () => {
   assert.doesNotMatch(source, /INSERT INTO seo_reviews/)
 })
 
-test('product schema adds only shared public review parts and article schema stays review-free', () => {
+test('product schema claims no reviews/ratings and article schema stays review-free', () => {
   const productBlock = source.slice(
     source.indexOf("'@context': 'https://schema.org', '@type': 'Product'"),
     source.indexOf("jsonLd(productSchema, 'product-jsonld')")
@@ -27,27 +27,31 @@ test('product schema adds only shared public review parts and article schema sta
     source.indexOf("jsonLd(articleSchema, 'article-jsonld')")
   )
 
-  assert.match(productBlock, /buildReviewSchemaParts\(publicReviews\)/)
+  // Reviews stay visible on the page, but the Product JSON-LD must not attach
+  // review/aggregateRating parts: review without aggregateRating fails Google
+  // validation, and an aggregate of admin-seeded reviews is self-serving.
+  assert.doesNotMatch(productBlock, /buildReviewSchemaParts/)
   assert.doesNotMatch(productBlock, /aggregateRating\s*:|review\s*:/)
   assert.doesNotMatch(articleBlock, /aggregateRating|review:/)
 })
 
-test('server and client product schemas add offers without fabricated prices or ratings', () => {
+test('server and client product schemas omit offers and never fabricate prices or ratings', () => {
   const serverProductBlock = source.slice(
     source.indexOf("'@context': 'https://schema.org', '@type': 'Product'"),
     source.indexOf("jsonLd(productSchema, 'product-jsonld')")
   )
   const clientProductBlock = clientSource.slice(
     clientSource.indexOf("'@type': 'Product'"),
-    clientSource.indexOf('Object.assign(productSchema, buildReviewSchemaParts')
+    clientSource.indexOf("document.getElementById('product-jsonld')")
   )
 
   for (const block of [serverProductBlock, clientProductBlock]) {
-    assert.match(block, /\boffers\s*:\s*\{[\s\S]*?'@type': 'Offer'/)
+    // No offers at all: an Offer without a real price fails Google validation.
+    assert.doesNotMatch(block, /'@type': 'Offer'|\boffers\s*:/)
     assert.doesNotMatch(block, /price:\s|priceValidUntil|shippingDetails|hasMerchantReturnPolicy/)
     assert.doesNotMatch(block, /aggregateRating:|review:\s*\{/)
   }
 
-  assert.match(serverProductBlock, /buildReviewSchemaParts\(publicReviews\)/)
-  assert.match(clientSource, /buildReviewSchemaParts\(publicReviews\.value\)/)
+  assert.doesNotMatch(serverProductBlock, /buildReviewSchemaParts/)
+  assert.doesNotMatch(clientSource, /buildReviewSchemaParts/)
 })

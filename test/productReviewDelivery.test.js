@@ -32,15 +32,11 @@ function reviewPayload(overrides = {}) {
 }
 
 function productSchema(overrides = {}) {
-  const payload = reviewPayload()
+  // Matches production: the Product JSON-LD claims no review/aggregateRating
+  // (reviews stay visible on the page instead).
   return {
     '@type': 'Product',
-    review: [{
-      author: { '@type': 'Person', name: payload.reviews[0].author_name },
-      datePublished: payload.reviews[0].review_date,
-      reviewRating: { ratingValue: payload.reviews[0].rating, bestRating: 5, worstRating: 1 },
-      reviewBody: payload.reviews[0].review_text
-    }],
+    name: 'GL Steel Coil',
     ...overrides
   }
 }
@@ -163,7 +159,7 @@ test('translation upsert and stale deletion invalidate only the target language'
   assert.deepEqual(invalidated, [])
 })
 
-test('review parity accepts matching visible SSR, Product JSON-LD, and API data', () => {
+test('review parity accepts matching visible SSR, review-free Product JSON-LD, and API data', () => {
   assert.equal(typeof delivery.verifyProductReviewParity, 'function')
   assert.doesNotThrow(() => delivery.verifyProductReviewParity({
     html: productHtml(),
@@ -179,14 +175,11 @@ test('review parity accepts an empty payload but rejects legacy fixed review con
   }
 })
 
-test('review parity reports missing SSR fields, schema field drift, and self-serving aggregate rating', () => {
+test('review parity reports missing SSR fields and rejects self-serving schema markup', () => {
   const payload = reviewPayload()
-  assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml().replace('Strong &lt;coating&gt; &amp; careful packing.', ''), productSchema: productSchema(), payload }), /text|body/i)
-  assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml(), productSchema: productSchema({ review: [{ ...productSchema().review[0], author: { name: 'Wrong' } }] }), payload }), /author/i)
-  assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml(), productSchema: productSchema({ review: [{ ...productSchema().review[0], datePublished: '2020-01-01' }] }), payload }), /date/i)
-  assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml(), productSchema: productSchema({ review: [{ ...productSchema().review[0], reviewRating: { ratingValue: 5 } }] }), payload }), /rating/i)
-  assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml(), productSchema: productSchema({ review: [{ ...productSchema().review[0], reviewBody: 'Wrong' }] }), payload }), /body/i)
-  assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml(), productSchema: productSchema({ aggregateRating: { reviewCount: 12, ratingValue: 4.6 } }), payload }), /aggregate/i)
+  assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml().replace('Strong &lt;coating&gt; &amp; careful packing.', ''), productSchema: productSchema(), payload }), /visible review|missing/i)
+  assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml(), productSchema: productSchema({ review: [{ author: { name: 'Wrong' } }] }), payload }), /self-serving/i)
+  assert.throws(() => delivery.verifyProductReviewParity({ html: productHtml(), productSchema: productSchema({ aggregateRating: { reviewCount: 12, ratingValue: 4.6 } }), payload }), /self-serving/i)
 })
 
 test('delivery verifier requests the review API and validates both local and public product HTML', async () => {

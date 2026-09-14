@@ -132,23 +132,13 @@ export function verifyProductReviewParity({ html, productSchema, payload }) {
     }
   }
 
-  const schemaReview = Array.isArray(productSchema.review)
-    ? productSchema.review[0]
-    : productSchema.review
-  if (schemaReview?.author?.name !== visible.author_name) {
-    throw new Error('Review author differs between page and JSON-LD')
-  }
-  if (schemaReview?.datePublished !== visible.review_date) {
-    throw new Error('Review date differs between page and JSON-LD')
-  }
-  if (Number(schemaReview?.reviewRating?.ratingValue) !== Number(visible.rating)) {
-    throw new Error('Review rating differs between page and JSON-LD')
-  }
-  if (schemaReview?.reviewBody !== visible.review_text) {
-    throw new Error('Review body differs between page and JSON-LD')
-  }
-  if (productSchema.aggregateRating) {
-    throw new Error('Product JSON-LD must not expose a self-serving AggregateRating')
+  // The Product JSON-LD must NOT claim reviews or ratings: a `review` array
+  // without `aggregateRating` fails Google validation ("有多项评价缺少
+  // aggregateRating"), and an aggregate of admin-seeded first-party reviews
+  // is a self-serving rating claim. The reviews stay VISIBLE on the page —
+  // which is what this parity check asserts.
+  if (productSchema.review !== undefined || productSchema.aggregateRating !== undefined) {
+    throw new Error('Product JSON-LD must not expose self-serving review/aggregateRating markup')
   }
 }
 

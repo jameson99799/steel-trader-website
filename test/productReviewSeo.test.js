@@ -214,7 +214,9 @@ test('ProductDetail consumes matching SSR review state and protects product-lang
   const detail = readIfPresent(detailUrl)
   const component = readIfPresent(reviewsComponentUrl)
   assert.match(detail, /import ProductReviews from/)
-  assert.match(detail, /import\s*\{[^}]*buildReviewSchemaParts[^}]*\}\s*from ['"]\.\.\/\.\.\/shared\/productReviewSeo\.js['"]/s)
+  // The client must NOT attach review/aggregateRating to the Product JSON-LD
+  // (invalid without aggregateRating; self-serving with admin-seeded reviews).
+  assert.doesNotMatch(detail, /buildReviewSchemaParts/)
   assert.match(detail, /<ProductReviews/)
   assert.match(detail, /getPublicProductReviews\(productId,\s*\{\s*lang:\s*language,\s*page:\s*1,\s*limit:\s*10\s*\}\)/s)
   assert.match(detail, /ssrProductReviews/)
@@ -222,7 +224,6 @@ test('ProductDetail consumes matching SSR review state and protects product-lang
   assert.match(detail, /ssrProductReviewsLang/)
   assert.match(detail, /reviewRequestToken/)
   assert.match(detail, /watch\(\s*\[\(\) => route\.params\.slug, lang\]/)
-  assert.match(detail, /buildReviewSchemaParts\(publicReviews\.value\)/)
 
   const pageLoad = detail.slice(detail.indexOf('async function loadProductPage'))
   const firstAwait = pageLoad.indexOf('await Promise.all')
