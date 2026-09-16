@@ -22,10 +22,16 @@ export function getAdminProductDetail(id, queryOne = getOne) {
 // Product price in USD/ton for Google Product offers. Only a positive integer
 // is stored; empty/invalid input clears the price (offers are then omitted).
 export function normalizePriceUsd(value) {
-  if (value === undefined || value === null || String(value).trim() === '') return null
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string' && typeof value !== 'number') return null
+  if (typeof value === 'string' && value.trim() === '') return null
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || parsed <= 0) return null
-  return Math.round(parsed)
+  const rounded = Math.round(parsed)
+  // Never store absurd/non-integer-safe values (they would end up in
+  // offers.price and be rejected by Google).
+  if (!Number.isSafeInteger(rounded) || rounded > 1000000000) return null
+  return rounded
 }
 
 function listProducts(req, res, { publicOnly }) {
@@ -48,6 +54,9 @@ function listProducts(req, res, { publicOnly }) {
     const visibility = publicProductVisibility()
     sql += visibility.clause
     params.push(...visibility.params)
+    // Public listings must never expose offline/draft products, regardless of
+    // any status query param (the admin list uses publicOnly=false).
+    sql += ' AND p.status = 1'
   }
   if (featured === '1') sql += ' AND p.is_featured = 1'
   if (status !== undefined) {
@@ -126,13 +135,13 @@ router.get('/:slug', (req, res) => {
   const isId = /^\d+$/.test(slug)
   const visibility = publicProductVisibility()
   let product = isId
-    ? getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?${visibility.clause}`, [slug, ...visibility.params])
-    : getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.slug = ?${visibility.clause}`, [slug, ...visibility.params])
+    ? getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?${visibility.clause} AND p.status = 1`, [slug, ...visibility.params])
+    : getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.slug = ?${visibility.clause} AND p.status = 1`, [slug, ...visibility.params])
 
   if (!product && !isId) {
     const fallbackProduct = findFuzzyBySlug('products', slug)
     if (fallbackProduct) {
-      product = getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?${visibility.clause}`, [fallbackProduct.id, ...visibility.params])
+      product = getOne(`SELECT p.*, c.name as category_name, c.name_en as category_name_en FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?${visibility.clause} AND p.status = 1`, [fallbackProduct.id, ...visibility.params])
     }
   }
 
@@ -226,6 +235,11 @@ router.put('/:id', authMiddleware, upload.array('images', 10), async (req, res) 
 
   const newBase = slugify(name_en || name)
   const newSlug = req.body.slug || product.slug || uniqueSlug(newBase, id)
+  // Partial updates (e.g. the AI detail editor) do not send every column:
+  // keep the stored price unless the request actually carries the field.
+  const nextPrice = req.body.price_usd !== undefined
+    ? normalizePriceUsd(req.body.price_usd)
+    : product.price_usd
 
   try {
     run(`
@@ -234,7 +248,7 @@ router.put('/:id', authMiddleware, upload.array('images', 10), async (req, res) 
       WHERE id=?
     `, [name, name_en || null, category_id || null, description || null, description_en || null, specs || null, images,
       req.body.detail_content || null, parseInt(is_featured || 0), parseInt(sort_order || 0), parseInt(status || 1),
-      seo_title || null, seo_description || null, seo_keywords || null, newSlug, req.body.faq_items || '[]', normalizePriceUsd(req.body.price_usd), id])
+      seo_title || null, seo_description || null, seo_keywords || null, newSlug, req.body.faq_items || '[]', nextPrice, id])
 
     res.json({ message: '更新成功', slug: newSlug })
   } catch (err) {

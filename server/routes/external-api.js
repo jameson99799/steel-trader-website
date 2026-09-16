@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import nodemailer from 'nodemailer'
 import { normalizeEmail, smtpTransportOptions } from '../services/mailerPolicy.js'
 import { applyUnsubscribe } from '../services/mailCompliance.js'
+import { normalizePriceUsd } from './products.js'
 import {
     createLegacySeoReviewHandler,
     productReviewStore,
@@ -264,7 +265,7 @@ router.get('/products', apiKeyMiddleware, (req, res) => {
     const total = getOne(`SELECT COUNT(*) as c FROM products p WHERE ${where.join(' AND ')}`, params)?.c || 0
     const offset = (parseInt(page) - 1) * parseInt(limit)
     const products = getAll(
-        `SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.description_en, p.images, p.is_featured, p.status, p.created_at
+        `SELECT p.id, p.name, p.name_en, p.slug, p.category_id, p.description_en, p.images, p.is_featured, p.status, p.price_usd, p.created_at
          FROM products p WHERE ${where.join(' AND ')} ORDER BY p.sort_order DESC, p.id DESC LIMIT ? OFFSET ?`,
         [...params, parseInt(limit), offset]
     )
@@ -492,7 +493,7 @@ router.post('/products', apiKeyMiddleware, (req, res) => {
     const {
         name, name_en, category_id, description, description_en, specs,
         detail_content, images, is_featured, sort_order, status,
-        seo_title, seo_description, seo_keywords, faq_items, slug
+        seo_title, seo_description, seo_keywords, faq_items, slug, price_usd
     } = req.body
 
     if (!name && !name_en) return res.status(400).json({ error: 'name or name_en is required' })
@@ -511,15 +512,15 @@ router.post('/products', apiKeyMiddleware, (req, res) => {
     let newId
     try {
         const result = run(`
-            INSERT INTO products (name, name_en, slug, category_id, description, description_en, specs, images, detail_content, is_featured, sort_order, status, seo_title, seo_description, seo_keywords, faq_items)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO products (name, name_en, slug, category_id, description, description_en, specs, images, detail_content, is_featured, sort_order, status, seo_title, seo_description, seo_keywords, faq_items, price_usd)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             name || name_en, name_en || null, finalSlug, category_id || null,
             description || null, description_en || null, specs || null,
             images || '', detail_content || null,
             parseInt(is_featured || 0), parseInt(sort_order || 0), parseInt(status ?? 1),
             finalSeoTitle, finalSeoDesc, finalSeoKw,
-            faq_items || '[]'
+            faq_items || '[]', normalizePriceUsd(price_usd)
         ])
         newId = result.lastInsertRowid
     } catch (err) {
@@ -613,7 +614,7 @@ router.put('/products/:id', apiKeyMiddleware, (req, res) => {
     const {
         name, name_en, category_id, description, description_en, specs,
         detail_content, images, is_featured, sort_order, status,
-        seo_title, seo_description, seo_keywords, faq_items, slug
+        seo_title, seo_description, seo_keywords, faq_items, slug, price_usd
     } = req.body
 
     const sets = []
@@ -634,7 +635,7 @@ router.put('/products/:id', apiKeyMiddleware, (req, res) => {
     if (seo_keywords !== undefined) { sets.push('seo_keywords=?'); vals.push(seo_keywords) }
     if (faq_items !== undefined) { sets.push('faq_items=?'); vals.push(faq_items) }
     if (slug !== undefined) { sets.push('slug=?'); vals.push(slug) }
-    if (slug !== undefined) { sets.push('slug=?'); vals.push(slug) }
+    if (price_usd !== undefined) { sets.push('price_usd=?'); vals.push(normalizePriceUsd(price_usd)) }
 
     if (!sets.length) return res.status(400).json({ error: 'No fields to update' })
     vals.push(id)
@@ -1168,10 +1169,11 @@ router.get('/docs', (req, res) => {
                         seo_title: '(string) SEO标题',
                         seo_description: '(string) SEO描述',
                         seo_keywords: '(string) SEO关键词',
-                        faq_items: '(JSON string) FAQ数组，参考field_formats.faq_items'
+                        faq_items: '(JSON string) FAQ数组，参考field_formats.faq_items',
+                        price_usd: '(integer, optional) 产品美元/吨价格（正整数），用于 Google 商品结构化数据 offers；留空则不输出价格'
                     }
                 },
-                update: { method: 'PUT', path: '/api/external/products/:id', note: '只传需要更新的字段. Supports slug.' },
+                update: { method: 'PUT', path: '/api/external/products/:id', note: '只传需要更新的字段. Supports slug and price_usd.' },
                 delete: { method: 'DELETE', path: '/api/external/products/:id' }
             },
             news: {

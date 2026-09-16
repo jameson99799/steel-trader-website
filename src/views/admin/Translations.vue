@@ -745,7 +745,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, nextTick, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import api from '../../api'
 import { flattenCategoryTree } from '../../utils/categoryTree'
 
@@ -1000,6 +1000,12 @@ async function pollJobStatus(jobId) {
         activeJob.value = null
         await loadJobList()
       }
+    } else {
+      // The job row no longer exists (e.g. deleted by a cleanup). Without this
+      // the interval kept polling forever and the start button stayed disabled.
+      stopJobPolling()
+      activeJob.value = null
+      await loadJobList()
     }
   } catch (e) { /* silent */ }
   finally {
@@ -1136,6 +1142,12 @@ onMounted(async () => {
   } catch (e) {
     console.error('Failed to load settings:', e)
   }
+})
+
+// Leaving the page must stop the 2s job poller; otherwise a long background
+// job keeps hitting the API from a component that no longer exists.
+onUnmounted(() => {
+  stopJobPolling()
 })
 
 watch(concurrency, async (newVal) => {

@@ -21,6 +21,7 @@ import {
 import { renderUrl } from './services/puppeteerRenderer.js'
 import { getPublicTranslationSettings } from './services/publicInitialState.js'
 import { buildHomeInitialState } from './services/homeInitialState.js'
+import { resolveHomeFaqs } from './services/homeFaq.js'
 import { createFaviconHandler } from './services/favicon.js'
 import authRoutes from './routes/auth.js'
 import securityRoutes from './routes/security.js'
@@ -407,8 +408,11 @@ async function startServer() {
         if (companyRow.whatsapp) contactLines.push(`- WhatsApp: https://wa.me/${companyRow.whatsapp.replace(/[^0-9]/g, '')}`)
         if (companyRow.address_en || companyRow.address) contactLines.push(`- Address: ${companyRow.address_en || companyRow.address}`)
 
-        // Dynamic product catalog — every product with its page URL
-        const products = getAll(`SELECT slug, id, name_en, name, description_en FROM products WHERE status = 1 ORDER BY sort_order, id DESC LIMIT 100`) || []
+        // Dynamic product catalog — every product with its page URL. Must honor
+        // the same category visibility as the sitemap/SSR, otherwise AI crawlers
+        // get links to products whose pages 404.
+        const catalogVisibility = publicProductVisibility('p')
+        const products = getAll(`SELECT p.slug, p.id, p.name_en, p.name, p.description_en FROM products p WHERE p.status = 1${catalogVisibility.clause} ORDER BY p.sort_order, p.id DESC LIMIT 100`, catalogVisibility.params) || []
         const productLines = products.map(p => {
           const pName = p.name_en || p.name
           const pDesc = (p.description_en || p.description || '').replace(/\s+/g, ' ').trim()
@@ -879,7 +883,7 @@ ${contactLines.join('\n')}
               detailHtml = formatSsrMailtoLinks(detailHtml, company.email || '')
               detailHtml = sanitizeRichHtml(detailHtml)
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
-              const hasFaqInDetail = /frequently asked|<h[23][^>]*>\\s*faq/i.test(detailHtml)
+              const hasFaqInDetail = /frequently asked|<h[23][^>]*>\s*faq/i.test(detailHtml)
               const ssrFeaturedImage = productImages.length ? `<img src="${esc(productImages[0])}" alt="${escPName}" style="display:none;" />` : ''
               // The Offer price must be visible on the page too (Google policy).
               const ssrPriceHtml = (Number.isFinite(productPrice) && productPrice > 0)
@@ -969,8 +973,8 @@ ${contactLines.join('\n')}
                 headline: (baseArticleTitle).substring(0, 110),
                 description: (pageDesc).substring(0, 300),
                 url: pageCanonical,
-                datePublished: article.created_at,
-                ...(article.updated_at && { dateModified: article.updated_at }),
+                datePublished: String(article.created_at || '').replace(' ', 'T'),
+                ...(article.updated_at && { dateModified: String(article.updated_at).replace(' ', 'T') }),
                 ...(pageImage && { image: pageImage }),
                 author: articleAuthor,
                 publisher: { '@type': orgType, name: companyNameTranslated, logo: { '@type': 'ImageObject', url: `${siteUrl}/uploads/logo.png` } },
@@ -1291,42 +1295,11 @@ ${contactLines.join('\n')}
               potentialAction: { '@type': 'SearchAction', target: `${siteUrl}/${lang}/products?search={search_term_string}`, 'query-input': 'required name=search_term_string' }
             })
             // Homepage FAQPage schema (GEO: used by Google SGE / ChatGPT / Perplexity)
-            // The 5 Q&A pairs can be AI-translated per language via the translation system
-            // (content_type='home_faq', fields faq_q_0..faq_a_4). Translations, when present,
-            // override the hardcoded English fallbacks so the schema matches the page language.
-            const defaultFaqs = lang === 'zh'
-              ? [
-                  ['你们是工厂还是贸易公司？', '我们是位于山东的源头工厂，集冷轧、镀锌、镀铝锌和彩涂生产线于一体，支持厂家直供与定制规格。'],
-                  ['可以邮寄样品或进行打样吗？', '可以。您可以提供目标规格（厚度、宽度、锌层、颜色、数量），我们支持小批量试单与样品确认。'],
-                  ['最小起订量（MOQ）是多少？', '常规产品 MOQ 灵活，可按集装箱整柜出货；首次合作可协商试单数量。'],
-                  ['如何获得 FOB / CIF 报价？', '请提供规格、材质、涂层、尺寸与目标港口，我们将在工作日内发送正式报价单。'],
-                  ['有哪些认证与质检？', '产品符合 ASTM / JIS / EN 等标准，出厂前经过全流程质检，可提供材质单与第三方可选检验。']
-                ]
-              : [
-                  ['Are you a manufacturer or a trading company?', 'We are an origin factory in Shandong with cold rolling, galvanizing, galvalume and color coating lines, supporting factory-direct supply and custom specifications.'],
-                  ['Can I get samples or a trial order?', 'Yes. Provide your target specification (thickness, width, coating, color, quantity); we support small-batch trial orders and sample confirmation.'],
-                  ['What is the minimum order quantity (MOQ)?', 'For standard products the MOQ is flexible, usually a full container; first-time cooperation can be negotiated with a trial quantity.'],
-                  ['How do I get an FOB or CIF quote?', 'Send your specification, material, coating, dimensions and target port, and we will issue a formal quotation within one working day.'],
-                  ['What certifications and quality control do you have?', 'Products comply with ASTM / JIS / EN standards, pass full-process QC before shipment, and material certificates plus third-party inspection are available on request.']
-                ]
-            let homeFaqs = defaultFaqs
-            if (lang !== 'en' && lang !== 'zh') {
-              try {
-                const translatedFaqs = []
-                for (let i = 0; i < defaultFaqs.length; i++) {
-                  const qRow = getOne('SELECT translated_text FROM translations WHERE content_type=? AND content_id=1 AND content_field=? AND language_code=?', ['home_faq', `faq_q_${i}`, lang])
-                  const aRow = getOne('SELECT translated_text FROM translations WHERE content_type=? AND content_id=1 AND content_field=? AND language_code=?', ['home_faq', `faq_a_${i}`, lang])
-                  const q = qRow?.translated_text
-                  const a = aRow?.translated_text
-                  if (q && a) translatedFaqs.push([q, a])
-                  else translatedFaqs.push(defaultFaqs[i])
-                }
-                // Only replace when at least one entry is actually translated
-                if (translatedFaqs.some(([q], i) => q && q !== defaultFaqs[i][0])) {
-                  homeFaqs = translatedFaqs
-                }
-              } catch (e) {}
-            }
+            // plus the SAME Q&A rendered visibly below — structured data must
+            // match content users can see on the page. Translations come from
+            // content_type='home_faq' (faq_q_0..faq_a_4).
+            const homeFaqs = resolveHomeFaqs(getOne, lang)
+            req.ssrHomeFaqs = homeFaqs
             extraSchemas += jsonLd({
               '@context': 'https://schema.org', '@type': 'FAQPage',
               mainEntity: homeFaqs.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } }))
@@ -1363,7 +1336,9 @@ ${contactLines.join('\n')}
             
             const quickLinks = `<li><a href="${siteUrl}/${lang}/products">${labAllProd}</a></li><li><a href="${siteUrl}/${lang}/news">${labNews}</a></li><li><a href="${siteUrl}/${lang}/contact">${labContact}</a></li><li><a href="${siteUrl}/${lang}/about">${labAbout}</a></li>`
             
-            ssrContent = `<section id="ssr-home"><h1>${esc(pageTitle)}</h1><p>${companyDesc}</p><h2>${labCat}</h2><ul>${homeCatList}</ul><h2>${labProd}</h2><ul>${homeProductList}</ul><h2>${labLink}</h2><ul>${quickLinks}</ul></section>`
+            const labFaq = lang === 'zh' ? '常见问题' : 'Frequently Asked Questions'
+            const homeFaqHtml = `<h2>${labFaq}</h2>${homeFaqs.map(([q, a]) => `<h3>${esc(q)}</h3><p>${esc(a)}</p>`).join('')}`
+            ssrContent = `<section id="ssr-home"><h1>${esc(pageTitle)}</h1><p>${companyDesc}</p><h2>${labCat}</h2><ul>${homeCatList}</ul><h2>${labProd}</h2><ul>${homeProductList}</ul>${homeFaqHtml}<h2>${labLink}</h2><ul>${quickLinks}</ul></section>`
           }
 
           // ── Catch-all for invalid routes ──
@@ -1403,6 +1378,16 @@ ${contactLines.join('\n')}
         if (company.facebook || company.linkedin || company.instagram) {
           orgSchema.sameAs = [company.facebook, company.linkedin, company.instagram, company.tiktok, company.twitter].filter(Boolean)
         }
+        // Coordinates belong to the SAME entity the client used to inject
+        // separately — emitting them here removes the duplicate Organization
+        // entity and keeps one canonical organization node per page.
+        if (seoSettings.geo_lat && seoSettings.geo_lng) {
+          orgSchema.geo = {
+            '@type': 'GeoCoordinates',
+            latitude: parseFloat(seoSettings.geo_lat),
+            longitude: parseFloat(seoSettings.geo_lng)
+          }
+        }
         extraSchemas += jsonLd(orgSchema)
 
         // ── Build hreflang tags ──
@@ -1435,10 +1420,14 @@ ${contactLines.join('\n')}
           }
         }
         // Declare og:image:width/height only when the actual source is known, so
-        // crawlers never see hardcoded 1200×630 paired with a 192×192 favicon.
+        // crawlers never see hardcoded 1200×630 paired with a 192×192 favicon or
+        // with an arbitrary product/news image.
+        const configuredOgImage = seoSettings.og_image
+          ? (seoSettings.og_image.startsWith('http') ? seoSettings.og_image : `${siteUrl}${seoSettings.og_image}`)
+          : ''
         const ogImageDims = ogImage === `${siteUrl}/favicon-192.png`
           ? '\n  <meta property="og:image:width" content="192" />\n  <meta property="og:image:height" content="192" />'
-          : seoSettings.og_image
+          : configuredOgImage && ogImage === configuredOgImage
             ? '\n  <meta property="og:image:width" content="1200" />\n  <meta property="og:image:height" content="630" />'
             : ''
         const ogTitle = (pageTitle || '').substring(0, 110)
@@ -1510,7 +1499,8 @@ ${contactLines.join('\n')}
           languages: getAll('SELECT * FROM languages WHERE status=1 ORDER BY sort_order, code') || [],
           translationSettings: getPublicTranslationSettings(getOne),
           featuredProducts: homeInitialState.featuredProducts,
-          categories: homeInitialState.categories
+          categories: homeInitialState.categories,
+          homeFaqs: req.ssrHomeFaqs || null
         }
         const stateTag = `<script>window.__INITIAL_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')}</script>`
         html = renderSeoDocument({

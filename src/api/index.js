@@ -234,6 +234,7 @@ export const api = {
 
   // Page Texts — cached (rarely changes)
   getPageTexts: () => cachedGet('/pagetexts'),
+  getHomeFaq: () => cachedGet('/pagetexts/home-faq'),
   updatePageTexts: (data) => {
     invalidateCachesByPrefix('/pagetexts')
     return request('/pagetexts', { method: 'PUT', body: JSON.stringify(data) })
@@ -253,6 +254,7 @@ export const api = {
     return request(`/news${query ? `?${query}` : ''}`)
   },
   getNewsItem: (slug) => request(appendLang(`/news/${slug}`)),
+  getAdminNewsItem: (id) => request(`/news/admin/${id}`),
   createNews: (data) => request('/news', { method: 'POST', body: data }),
   updateNews: (id, data) => request(`/news/${id}`, { method: 'PUT', body: data }),
   deleteNews: (id) => request(`/news/${id}`, { method: 'DELETE' }),

@@ -218,6 +218,19 @@
       </div>
     </section>
 
+    <!-- FAQ Section — same Q&A as the FAQPage structured data -->
+    <section class="section faq-section" v-if="homeFaqs.length">
+      <div class="container">
+        <h2 class="section-title">{{ lang === 'zh' ? '常见问题' : 'Frequently Asked Questions' }}</h2>
+        <div class="faq-list">
+          <details v-for="(pair, index) in homeFaqs" :key="index" class="faq-item">
+            <summary class="faq-question">{{ pair[0] }}</summary>
+            <p class="faq-answer">{{ pair[1] }}</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
     <!-- CTA Section -->
     <section class="section cta-section">
       <div class="container">
@@ -271,6 +284,8 @@ const featuredProducts = ref(reuseInitialState ? initialState.featuredProducts |
 const categories = ref(reuseInitialState ? initialState.categories || [] : [])
 const pageTexts = ref(reuseInitialState ? initialState.pageTexts || {} : {})
 const company = ref(reuseInitialState ? initialState.company || {} : {})
+// Visible FAQ — must match the FAQPage structured data declared by the SSR.
+const homeFaqs = ref(reuseInitialState && Array.isArray(initialState.homeFaqs) ? initialState.homeFaqs : [])
 const refreshCommit = createLatestOnlyCommit()
 
 const videoLightboxActive = ref(false)
@@ -357,6 +372,7 @@ function clearLocalizedPageData() {
   categories.value = []
   pageTexts.value = {}
   company.value = {}
+  homeFaqs.value = []
 }
 
 async function refreshLocalizedPageData() {
@@ -368,7 +384,8 @@ async function refreshLocalizedPageData() {
     Promise.resolve().then(() => api.getProducts({ featured: '1', limit: 12 })),
     Promise.resolve().then(() => api.getCategoryTree()),
     Promise.resolve().then(() => api.getPageTexts()),
-    Promise.resolve().then(() => api.getCompany())
+    Promise.resolve().then(() => api.getCompany()),
+    Promise.resolve().then(() => api.getHomeFaq())
   ])
 
   if (!refreshCommit.isLatest(refreshVersion)) return
@@ -379,6 +396,10 @@ async function refreshLocalizedPageData() {
   categories.value = localizedData.categories
   pageTexts.value = localizedData.pageTexts
   company.value = localizedData.company
+  const faqResult = results[5]
+  homeFaqs.value = faqResult?.status === 'fulfilled' && Array.isArray(faqResult.value?.faqs)
+    ? faqResult.value.faqs
+    : []
 
   for (const { group, error } of localizedData.errors) {
     console.error(`Failed to refresh localized home ${group}`, error)
@@ -556,6 +577,40 @@ watch(lang, refreshLocalizedPageData)
 .section-footer {
   text-align: center;
   margin-top: var(--spacing-lg);
+}
+
+/* FAQ (visible counterpart of the FAQPage structured data) */
+.faq-section {
+  background: var(--gray-50);
+  content-visibility: auto;
+  contain-intrinsic-size: 0 600px;
+}
+
+.faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing);
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.faq-item {
+  background: #fff;
+  border: 1px solid var(--gray-200, #e5e7eb);
+  border-radius: var(--radius, 8px);
+  padding: var(--spacing);
+}
+
+.faq-question {
+  font-weight: 700;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.faq-answer {
+  margin-top: var(--spacing-sm, 8px);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed, 1.7);
 }
 
 /* Featured Products */

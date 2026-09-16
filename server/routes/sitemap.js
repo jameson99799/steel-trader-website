@@ -195,7 +195,7 @@ router.get('/categories', (req, res) => {
         const categories = getAll(PRODUCT_CATEGORY_SITEMAP_QUERY)
             .filter(category => ids.has(category.id))
         for (const c of categories) {
-            const catSlug = c.slug || c.name_en?.toLowerCase().replace(/\\s+/g, '-') || c.id
+            const catSlug = c.slug || c.name_en?.toLowerCase().replace(/\s+/g, '-') || c.id
             const locPath = `/products/category/${catSlug}`
             const lastmod = toDateStr(c.lastmod_date, fallbackDate)
             for (const l of catLangs) {

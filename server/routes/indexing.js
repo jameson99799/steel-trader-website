@@ -2,6 +2,7 @@ import express from 'express'
 import { authMiddleware } from '../middleware/auth.js'
 import { getAll, getOne, run } from '../db.js'
 import { getLocalizedCoverage, indexableLangs } from '../services/indexingPolicy.js'
+import { getVisibleCategoryIds, visibleProductWhere } from '../services/catalogVisibility.js'
 
 const router = express.Router()
 const BASE_URL = 'https://www.sunseasteel.com'
@@ -61,9 +62,15 @@ function getAllSiteUrls() {
     if (!langs.length) langs = [{ code: 'en' }]
 
     const coverage = getLocalizedCoverage()
-    const products = getAll('SELECT slug, id FROM products WHERE status = 1')
+    // Only submit URLs that actually render (SSR 404s on products in disabled
+    // categories, disabled categories, and drafts) — otherwise the Indexing API
+    // burns quota on 404s.
+    const categoryRows = getAll('SELECT id, parent_id, is_enabled FROM categories')
+    const visibleIds = getVisibleCategoryIds(categoryRows)
+    const visibility = visibleProductWhere('p', visibleIds)
+    const products = getAll(`SELECT p.slug, p.id FROM products p WHERE p.status = 1${visibility.clause}`, visibility.params)
     const news = getAll('SELECT slug, id FROM news WHERE status = 1')
-    const categories = getAll('SELECT id, slug FROM categories')
+    const categories = getAll('SELECT id, slug FROM categories').filter(c => visibleIds.has(Number(c.id)))
     const newsCategories = getAll('SELECT id, slug FROM news_categories')
 
     const urls = []

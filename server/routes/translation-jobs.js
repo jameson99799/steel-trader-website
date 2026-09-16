@@ -127,10 +127,11 @@ function collectTranslationItems(job, langCodes, log = null) {
 // ── Log auto-cleanup: called on startup + daily ──
 function cleanupOldLogs() {
     try {
-        // One shared cutoff+status filter: purge the logs of old finished jobs
-        // and the job records themselves in a single cleanup pass (identical
-        // criteria, so no job record is ever deleted while orphaning logs).
-        const oldFinishedFilter = `created_at < datetime('now', '-3 days') AND status IN ('done','aborted','error')`
+        // Purge jobs whose WORK FINISHED more than 3 days ago (keyed on
+        // finished_at, not created_at: a long job that only finished today must
+        // keep its history). 'partial' is terminal too and previously never got
+        // cleaned up at all.
+        const oldFinishedFilter = `finished_at IS NOT NULL AND finished_at < datetime('now', '-3 days') AND status IN ('done','partial','aborted','error')`
         const deleted = run(
             `DELETE FROM translation_job_logs WHERE job_id IN (
                SELECT id FROM translation_jobs WHERE ${oldFinishedFilter}
@@ -217,6 +218,11 @@ async function runJobInBackground(jobId) {
     const job = getOne('SELECT * FROM translation_jobs WHERE id=?', [jobId])
     if (!job) return
 
+    // Fresh peak measurement for THIS run: pause/abort/error paths return before
+    // the end-of-job reset, which used to leak the previous run's peak into the
+    // next job's diagnostic line.
+    resetAiPeak()
+
     const targetLang = job.target_lang
     const isRetry = !!job.is_retry
 
@@ -251,9 +257,15 @@ async function runJobInBackground(jobId) {
         // happened to already have a saved translation (e.g. a 100-item job
         // with 5 done would resume around item 80 instead of item 6).
         pendingItems = JSON.parse(job.pending_items)
-        const startPos = (job.done_items || 0) + 1
+        // Position reported to the user must match the queue that will actually
+        // be processed: for a pause→resume done_items already equals
+        // total - queue; for a crash auto-resume it can be higher (snapshot
+        // older than the counters), so rebase both the log and the counters.
         const totalN = job.total_items || pendingItems.length
-        jobLog(jobId, 'info', `▶️ 任务已恢复: 已完成 ${job.done_items || 0}/${totalN}, 剩余 ${pendingItems.length} 项, 将从第 ${startPos} 项开始`)
+        const resumedDone = job.total_items > 0
+            ? Math.max(0, job.total_items - pendingItems.length)
+            : (job.done_items || 0)
+        jobLog(jobId, 'info', `▶️ 任务已恢复: 已完成 ${resumedDone}/${totalN}, 剩余 ${pendingItems.length} 项, 将从第 ${resumedDone + 1} 项开始`)
     } else {
         pendingItems = collectTranslationItems(job, langCodes, (level, msg) => jobLog(jobId, level, msg))
         jobLog(jobId, 'ok', `📋 共 ${pendingItems.length} 个待翻译项目`)
@@ -299,6 +311,14 @@ async function runJobInBackground(jobId) {
     let okTotal = job.ok_items || 0
     let errTotal = job.error_items || 0
     let doneTotal = job.done_items || 0
+    // Crash auto-resume: the persisted snapshot can be up to SNAPSHOT_EVERY items
+    // older than done_items, so items already counted are still in the queue and
+    // will be processed again. Rebase "done" onto the queue so the final count
+    // can never exceed total_items. (For a normal pause→resume the persisted
+    // done_items already equals total - queue, so this is a no-op.)
+    if (job.pending_items && job.total_items > 0) {
+        doneTotal = Math.max(0, job.total_items - pendingItems.length)
+    }
     const newFailed = JSON.parse(job.failed_items || '[]')
 
     // Throttle costly state persistence. Writing the FULL remaining-items array
@@ -328,8 +348,14 @@ async function runJobInBackground(jobId) {
 
             const langRow = getOne('SELECT name FROM languages WHERE code=?', [item.targetLang])
             if (!langRow) {
+                // The language was deleted after the job started (creation-time
+                // validation covers new jobs). Never discard items silently:
+                // log each skip and count it as a failure.
                 processingItems.delete(item)
                 doneTotal++
+                errTotal++
+                jobLog(jobId, 'warn', `⚠️ 目标语言 ${item.targetLang} 不存在或已删除，「${item.itemName}」已跳过`)
+                updateJobProgress(jobId, { done_items: doneTotal, ok_items: okTotal, error_items: errTotal })
                 continue
             }
 
@@ -447,7 +473,13 @@ async function runJobInBackground(jobId) {
 
                 errTotal++
                 const errMsg = e.message || '未知错误'
-                newFailed.push({ ...item, error: errMsg })
+                // Dedupe: a crash auto-resume re-processes items that may have
+                // failed before the crash; they must not appear twice in the
+                // retry list. Keep the newest error message.
+                const failKey = `${item.targetLang}|${item.type}|${item.id}`
+                const alreadyFailed = newFailed.findIndex(f => `${f.targetLang}|${f.type}|${f.id}` === failKey)
+                if (alreadyFailed >= 0) newFailed[alreadyFailed] = { ...item, error: errMsg }
+                else newFailed.push({ ...item, error: errMsg })
                 jobLog(jobId, 'error', `${item.itemName}翻译${langRow.name}语言最终失败（${errMsg.slice(0, 150)}）`)
             }
 
@@ -630,6 +662,12 @@ router.post('/', authMiddleware, async (req, res) => {
         const { lang, pages, concurrency, explicitItems, promptId, skipTranslated } = req.body
         if (!lang) return res.status(400).json({ error: 'lang is required' })
         if ((!pages || !pages.length) && (!explicitItems || !explicitItems.length)) return res.status(400).json({ error: 'pages or explicitItems is required' })
+        // Reject a target language that does not exist (or is disabled) up
+        // front — otherwise every item silently fell through the worker's
+        // unknown-language branch and the job "finished" with 0 translations.
+        if (lang !== 'all' && !getOne('SELECT 1 FROM languages WHERE code = ? AND status = 1', [lang])) {
+            return res.status(400).json({ error: `目标语言不存在或未启用：${lang}` })
+        }
 
         // Only allow one running job at a time
         const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('pending', 'running', 'pausing', 'aborting')")
@@ -778,12 +816,32 @@ router.post('/:id/retry-failed', authMiddleware, async (req, res) => {
     }
 })
 
-// DELETE /translation-jobs/logs — manually clear all logs and job records
+// DELETE /translation-jobs/logs — manually clear logs and finished job records
 router.delete('/logs', authMiddleware, (req, res) => {
     try {
-        const resultLogs = run('DELETE FROM translation_job_logs')
-        const resultJobs = run(`DELETE FROM translation_jobs WHERE status NOT IN ('running', 'pausing')`)
-        res.json({ success: true, deletedLogs: resultLogs.changes, deletedJobs: resultJobs.changes })
+        // Only TERMINAL jobs may be removed. A paused job's row is the ONLY copy
+        // of its resumable queue (pending_items) — deleting it silently destroys
+        // the remaining work. Live jobs (pending/running/pausing/aborting) are
+        // still being written to: deleting them would orphan every subsequent
+        // log row and lose the job's terminal state.
+        const terminalIds = getAll(
+            `SELECT id FROM translation_jobs WHERE status IN ('done','partial','aborted','error')`
+        ).map(r => r.id)
+
+        let deletedLogs = 0
+        for (const id of terminalIds) {
+            deletedLogs += run('DELETE FROM translation_job_logs WHERE job_id = ?', [id]).changes
+        }
+        // Orphan logs (no matching job row) can never be shown again — purge.
+        deletedLogs += run(
+            'DELETE FROM translation_job_logs WHERE job_id NOT IN (SELECT id FROM translation_jobs)'
+        ).changes
+
+        const deletedJobs = terminalIds.length > 0
+            ? run(`DELETE FROM translation_jobs WHERE status IN ('done','partial','aborted','error')`).changes
+            : 0
+
+        res.json({ success: true, deletedLogs, deletedJobs })
     } catch (e) {
         res.status(500).json({ error: e.message })
     }

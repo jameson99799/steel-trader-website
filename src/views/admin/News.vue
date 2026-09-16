@@ -1365,7 +1365,7 @@ async function openEdit(item) {
   editId.value = item.id
   let fullItem = item
   try {
-    fullItem = await api.getNewsItem(item.id)
+    fullItem = await api.getAdminNewsItem(item.id)
   } catch(e) {
     console.error('Failed to fetch full article', e)
   }

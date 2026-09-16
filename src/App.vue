@@ -69,7 +69,10 @@ onMounted(async () => {
 
 
       // ── LocalBusiness JSON-LD ──────────────────────────────
-      if (geo_lat && geo_lng && company) {
+      // The SSR already emits the organization entity (with the same geo data)
+      // for every page it renders. Only inject one here for SPA-only loads —
+      // otherwise the page carries two competing Organization entities.
+      if (geo_lat && geo_lng && company && !window.__INITIAL_STATE__) {
         const bizType = ['Organization', 'Corporation', 'LocalBusiness', 'Store', 'WholesaleStore'].includes(local_business_type) ? local_business_type : 'Corporation'
         const bizName = company.name_en || company.name || ''
         const bizEmail = company.email || ''

@@ -100,6 +100,25 @@
                 </div>
               </div>
 
+              <!-- FAQ — visible counterpart of the FAQPage JSON-LD (skipped when
+                   the detail HTML already contains its own FAQ section). -->
+              <div class="section faq-section" v-if="faqs.length && !detailHasFaq">
+                <div class="section-header">
+                  <svg class="section-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
+                  </svg>
+                  <h3>{{ lang === 'zh' ? '常见问题' : 'Frequently Asked Questions' }}</h3>
+                </div>
+                <div class="section-content">
+                  <div class="faq-list">
+                    <details v-for="(faq, index) in faqs" :key="index" class="faq-item">
+                      <summary class="faq-question">{{ faq.question }}</summary>
+                      <p class="faq-answer">{{ faq.answer }}</p>
+                    </details>
+                  </div>
+                </div>
+              </div>
+
               <div class="section action-section">
                 <div class="action-buttons">
                   <button class="btn btn-primary btn-lg inquiry-btn" @click="showInquiry = true">
@@ -354,6 +373,23 @@ const specs = computed(() => {
     return []
   }
 })
+
+// Localized FAQ pairs — the visible counterpart of the FAQPage JSON-LD.
+const faqs = computed(() => {
+  if (!product.value) return []
+  const raw = localizedValue(product.value, 'faq_items') || product.value?.faq_items
+  if (!raw) return []
+  try {
+    const list = JSON.parse(raw)
+    return Array.isArray(list) ? list.filter(f => f?.question && f?.answer) : []
+  } catch {
+    return []
+  }
+})
+
+// The detail HTML often embeds its own FAQ section (SSR skips appending the
+// separate one in that case) — mirror that here to avoid a duplicate block.
+const detailHasFaq = computed(() => /frequently asked|<h[23][^>]*>\s*faq/i.test(sanitizedDetailContent.value || ''))
 
 // Build iframe srcdoc — isolates all product HTML styles from main page
 const sanitizedDetailContent = computed(() => {
@@ -1121,6 +1157,33 @@ watch([() => route.params.slug, lang], () => loadProductPage())
   table-layout: fixed;
   border-collapse: collapse;
   border: 1px solid var(--border);
+}
+
+/* FAQ — visible counterpart of the FAQPage structured data */
+.faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm, 8px);
+}
+
+.faq-item {
+  background: var(--white, #fff);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--spacing-sm, 10px) var(--spacing, 12px);
+}
+
+.faq-question {
+  font-weight: 700;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.faq-answer {
+  margin-top: var(--spacing-sm, 8px);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed, 1.7);
+  white-space: pre-wrap;
 }
 
 .spec-row {

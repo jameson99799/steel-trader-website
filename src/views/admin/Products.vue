@@ -1255,10 +1255,13 @@ const handleSubmit = async () => {
 }
 
 const handleDelete = async (product) => {
-  if (!confirm(`确定删除商品"${product.name}"吗？`)) return
+  if (!confirm(`确定删除产品"${product.name}"？`)) return
   try {
     await api.deleteProduct(product.id)
     await loadProducts()
+    // Deleting the last rows of the current page would otherwise leave an
+    // empty table with the pager hidden.
+    if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
   } catch (e) {
     alert(e.message)
   }
@@ -1280,11 +1283,15 @@ async function duplicateProduct(product) {
     form.is_featured = original.is_featured || 0
     form.status = original.status !== undefined ? original.status : 1
     form.sort_order = original.sort_order || 0
+    form.price_usd = original.price_usd ?? null
     form.seo_title = original.seo_title || ''
     form.seo_description = original.seo_description || ''
     form.seo_keywords = original.seo_keywords || ''
     existingImages.value = original.images ? original.images.split(',').filter(Boolean) : []
     specs.value = original.specs ? JSON.parse(original.specs) : []
+    faqItems.value = original.faq_items
+      ? (typeof original.faq_items === 'string' ? JSON.parse(original.faq_items) : original.faq_items)
+      : []
     await nextTick()
     syncToVisual()
   } catch(e) { alert('复制失败: ' + e.message) }
@@ -1742,6 +1749,7 @@ async function generateWithAI() {
     form.is_featured = 0
     form.status = 1
     form.sort_order = 0
+    form.price_usd = null
     form.seo_title = data.seo_title || ''
     form.seo_description = data.seo_description || ''
     form.seo_keywords = data.seo_keywords || ''

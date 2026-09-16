@@ -83,15 +83,25 @@ router.get('/', (req, res) => {
     res.json({ data: news, total, page: parseInt(page), limit: parseInt(limit) })
 })
 
-// GET single news by id or slug
+// GET single news by id for the ADMIN editor (drafts included).
+router.get('/admin/:id', authMiddleware, (req, res) => {
+    const item = getOne('SELECT * FROM news WHERE id = ?', [req.params.id])
+    if (!item) return res.status(404).json({ error: '文章不存在' })
+    res.json(item)
+})
+
+// GET single news by id or slug (PUBLIC: published articles only)
 router.get('/:slug', (req, res) => {
     const { slug } = req.params
     const isId = /^\d+$/.test(slug)
   let news
   if (isId) {
-    news = getOne('SELECT * FROM news WHERE id = ?', [slug])
+    news = getOne('SELECT * FROM news WHERE id = ? AND status = 1', [slug])
   } else {
     news = findFuzzyBySlug('news', slug)
+    // The fuzzy resolver's exact/ID matches do not filter status — a draft
+    // article must not be readable (or indexable) through the public API.
+    if (news && Number(news.status) !== 1) news = null
   }
 
   if (!news) return res.status(404).json({ error: '文章不存在' })

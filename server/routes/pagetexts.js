@@ -2,8 +2,20 @@ import { Router } from 'express'
 import { getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { loadTranslationsForLang, translatePageTexts } from '../helpers/translate.js'
+import { resolveHomeFaqs } from '../services/homeFaq.js'
 
 const router = Router()
+
+// Public: homepage FAQ pairs for the current language (same list the SSR page
+// renders and the FAQPage schema declares).
+router.get('/home-faq', (req, res) => {
+  const lang = String(req.query.lang || 'en')
+  try {
+    res.json({ faqs: resolveHomeFaqs(getOne, lang) })
+  } catch (e) {
+    res.json({ faqs: resolveHomeFaqs(getOne, 'en') })
+  }
+})
 
 router.get('/', (req, res) => {
   const texts = getOne('SELECT * FROM page_texts WHERE id = 1')

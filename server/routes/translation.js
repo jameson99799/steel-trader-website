@@ -213,9 +213,11 @@ function httpRequest(urlStr, options = {}, body = null, timeoutMs = 120000) {
                 catch (e) { resolve({ status: res.statusCode, body: data }) }
             })
         })
-        req.on('timeout', () => { req.destroy(); reject(new Error('请求超时（120秒）')) })
+        req.on('timeout', () => { req.destroy(); reject(new Error(`请求超时（${Math.round(timeoutMs / 1000)}秒）`)) })
         req.on('error', reject)
-        req.setTimeout(300000, () => { req.destroy(new Error('Request timeout 300s')) })
+        // NOTE: do NOT call req.setTimeout() here — the request-level `timeout`
+        // option above already arms the socket; overriding it with a hardcoded
+        // 300s made the real timeout 5x the constant and held a global AI slot.
         if (body) req.write(typeof body === 'string' ? body : JSON.stringify(body))
         req.end()
     })

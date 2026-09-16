@@ -51,6 +51,17 @@
           <!-- direct mode: v-html (better SEO, strips only <style>/<script> tags) -->
           <div class="article-body article-body-direct" v-else-if="article.content" v-html="sanitizedContent" @click="handleBodyClick"></div>
 
+          <!-- FAQ — visible counterpart of the FAQPage JSON-LD -->
+          <section class="article-faq" v-if="faqs.length">
+            <h2>{{ lang === 'zh' ? '常见问题' : 'Frequently Asked Questions' }}</h2>
+            <div class="faq-list">
+              <details v-for="(faq, index) in faqs" :key="index" class="faq-item">
+                <summary class="faq-question">{{ faq.question }}</summary>
+                <p class="faq-answer">{{ faq.answer }}</p>
+              </details>
+            </div>
+          </section>
+
           <div class="article-footer">
             <router-link :to="langPath('/news')" class="back-link">
               {{ t('backToNews') }}
@@ -305,6 +316,20 @@ const sanitizedContent = computed(() => {
     return sanitizeRichHtml(html)
   })
 
+// Localized FAQ pairs — the visible counterpart of the FAQPage JSON-LD.
+const faqs = computed(() => {
+  const a = article.value
+  if (!a) return []
+  const raw = localizedValue(a, 'faq_items') || a.faq_items
+  if (!raw) return []
+  try {
+    const list = JSON.parse(raw)
+    return Array.isArray(list) ? list.filter(f => f?.question && f?.answer) : []
+  } catch {
+    return []
+  }
+})
+
 function handleMailtoClick(href, event) {
   if (event) event.preventDefault()
 
@@ -549,14 +574,18 @@ async function loadArticle(slug) {
     company.value = comp
     seoSettings.value = seoRes
     if (article.value) {
-      document.title = article.value.seo_title || localizedValue(article.value, 'title')
+      document.title = localizedValue(article.value, 'seo_title') || article.value.seo_title || localizedValue(article.value, 'title')
 
       // ── GEO: Inject Article JSON-LD ──────────────────────────
       const a = article.value
       const siteUrl = window.location.origin
       const articleUrl = new URL(window.location.pathname, siteUrl).href
-      const articleTitle = a.seo_title || a.title_en || a.title || ''
-      const articleDesc = a.seo_description || a.summary_en || a.summary || ''
+      // Same localization as the SSR schema: the client must NOT replace the
+      // localized headline/description with the English source on hydration.
+      const articleTitle = localizedValue(a, 'seo_title') || a.seo_title
+        || localizedValue(a, 'title') || a.title_en || a.title || ''
+      const articleDesc = localizedValue(a, 'seo_description') || a.seo_description
+        || localizedValue(a, 'summary') || a.summary_en || a.summary || ''
       const companyName = comp?.name_en || comp?.name || 'SunSea Steel'
       const articleAuthor = seoRes?.default_news_author
         ? { '@type': 'Person', 'name': seoRes.default_news_author }
@@ -572,8 +601,8 @@ async function loadArticle(slug) {
         'headline': articleTitle,
         'description': articleDesc,
         'url': articleUrl,
-        'datePublished': a.created_at,
-        ...(a.updated_at && { 'dateModified': a.updated_at }),
+        'datePublished': String(a.created_at || '').replace(' ', 'T'),
+        ...(a.updated_at && { 'dateModified': String(a.updated_at).replace(' ', 'T') }),
         ...(a.cover_image && { 'image': a.cover_image.startsWith('http') ? a.cover_image : siteUrl + a.cover_image }),
         'author': articleAuthor,
         'publisher': {
@@ -756,6 +785,14 @@ watch(lang, () => { const slug = route.params.slug; if (slug) loadArticle(slug) 
 }
 .article-body-direct td, .article-body-direct th { border: 1px solid var(--border); padding: 8px 12px; }
 .article-body-direct th, .article-body-direct table th { background: var(--gray-50) !important; font-weight: 600 !important; color: var(--text-primary) !important; text-align: left; }
+
+/* FAQ — visible counterpart of the FAQPage structured data */
+.article-faq { margin-top: 28px; }
+.article-faq h2 { margin: 0 0 14px; font-weight: 700; color: var(--text-primary); }
+.article-faq .faq-list { display: flex; flex-direction: column; gap: 8px; }
+.article-faq .faq-item { background: var(--white, #fff); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+.article-faq .faq-question { font-weight: 700; color: var(--text-primary); cursor: pointer; }
+.article-faq .faq-answer { margin-top: 8px; color: var(--text-secondary); line-height: 1.7; white-space: pre-wrap; }
 
 /* Force safe backgrounds on common AI generated content blocks (like TOC) to prevent them from becoming unexpectedly dark */
 .article-body-direct .table-of-contents,

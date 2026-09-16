@@ -31,10 +31,15 @@ test('homepage FAQ is selectable from the admin UI and counted in audit summarie
 
 test('SSR homepage FAQ schema reads AI translations when present, falling back to English defaults', () => {
   const idx = read('server/index.js')
-  assert.match(idx, /content_type=\? AND content_id=1 AND content_field=\? AND language_code=\?/)
-  assert.match(idx, /`faq_q_\$\{i\}`/)
-  assert.match(idx, /`faq_a_\$\{i\}`/)
-  assert.match(idx, /homeFaqs\.some|translatedFaqs\.some/)
+  const faq = read('server/services/homeFaq.js')
+  // SSR uses the shared resolver and still declares the FAQPage schema.
+  assert.match(idx, /resolveHomeFaqs\(getOne, lang\)/)
+  assert.match(idx, /'home-faq-jsonld'/)
+  // The resolver reads AI translations from the translations table per field.
+  assert.match(faq, /content_type=\? AND content_id=1 AND content_field=\? AND language_code=\?/)
+  assert.match(faq, /`faq_q_\$\{i\}`/)
+  assert.match(faq, /`faq_a_\$\{i\}`/)
+  assert.match(faq, /translatedFaqs\.some/)
 })
 
 test('queued retries only re-translate missing fields, never overwrite successful ones', () => {

@@ -555,6 +555,7 @@ async function saveToProduct() {
     fd.append('seo_description', p.seo_description || '')
     fd.append('seo_keywords', p.seo_keywords || '')
     fd.append('faq_items', p.faq_items || '[]')
+    fd.append('price_usd', p.price_usd ?? '')
     fd.append('existing_images', p.images || '')
     await api.updateProduct(productId, fd)
     alert('✅ 产品详情已保存！')

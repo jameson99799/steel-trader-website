@@ -31,7 +31,24 @@ const { lang, setRouter } = useLang()
 // Connect router to useLang for URL sync
 setRouter(router)
 
-// Inject hreflang tags for all active languages
+// The SSR response already contains the correct hreflang set (filtered per
+// page translation coverage). On SPA navigation we only move those links to the
+// new path; regenerating the full active-language set would advertise
+// noindex/untranslated variants.
+const ssrProvidedMeta = typeof window !== 'undefined' && !!window.__INITIAL_STATE__
+
+function updateHreflangHrefs() {
+  const currentPath = route.path.replace(/^\/[a-z]{2}(\/|$)/, '/')
+  const origin = window.location.origin
+  document.querySelectorAll('link[rel="alternate"][hreflang]').forEach(el => {
+    try {
+      const langSegment = new URL(el.href, origin).pathname.split('/')[1] || 'en'
+      el.href = origin + '/' + langSegment + (currentPath === '/' ? '' : currentPath)
+    } catch (e) { /* keep the previous href */ }
+  })
+}
+
+// Inject hreflang tags for all active languages (no-SSR / dev fallback)
 async function updateHreflang() {
   // Remove old hreflang tags
   document.querySelectorAll('link[rel="alternate"][hreflang]').forEach(el => el.remove())
@@ -175,10 +192,14 @@ onMounted(() => {
   }
 })
 watch(() => route.path, () => {
-  updateHreflang()
+  if (ssrProvidedMeta) updateHreflangHrefs()
+  else updateHreflang()
   updateCanonical()
 })
-watch(lang, updateHreflang)
+watch(lang, () => {
+  if (ssrProvidedMeta) updateHreflangHrefs()
+  else updateHreflang()
+})
 </script>
 
 <style scoped>

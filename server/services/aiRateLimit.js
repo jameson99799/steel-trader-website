@@ -113,7 +113,12 @@ export async function acquireAiConcurrencySlot(limit) {
     }
     _aiActive++
     if (_aiActive > _aiPeak) _aiPeak = _aiActive
+    let released = false
     return () => {
+        // Idempotent: a double release would decrement twice and wake two
+        // waiters, letting the active count exceed the cap.
+        if (released) return
+        released = true
         _aiActive = Math.max(0, _aiActive - 1)
         const next = _aiWaiters.shift()
         if (next) next()

@@ -50,7 +50,7 @@ test('resumed jobs continue the saved queue EXACTLY, never skipping pre-translat
   assert.doesNotMatch(source, /filterToUntranslated/)
   assert.doesNotMatch(source, /resumeFromPauseFlags/)
   // The resume log tells the user the exact continuation position.
-  assert.match(source, /将从第 \$\{startPos\} 项开始/)
+  assert.match(source, /将从第 \$\{resumedDone \+ 1\} 项开始/)
   assert.match(source, /恢复后将从第 \$\{doneTotal \+ 1\} 项继续/)
 })
 
