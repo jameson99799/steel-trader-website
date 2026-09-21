@@ -32,7 +32,7 @@
           </header>
 
           <div class="article-cover" v-if="article.cover_image">
-            <video v-if="article.cover_image && (article.cover_image.toLowerCase().endsWith('.mp4') || article.cover_image.toLowerCase().endsWith('.webm'))" :src="article.cover_image" autoplay loop muted playsinline style="width:100%;height:auto;object-fit:cover;"></video>
+            <LazyVideo v-if="article.cover_image && (article.cover_image.toLowerCase().endsWith('.mp4') || article.cover_image.toLowerCase().endsWith('.webm'))" :src="article.cover_image" autoplay style="height:auto;object-fit:cover;" />
             <img v-else :src="article.cover_image" :alt="localizedValue(article, 'title')" />
           </div>
 
@@ -86,7 +86,7 @@
             class="rn-card"
           >
             <div class="rn-image">
-              <video v-if="rn.cover_image && (rn.cover_image.toLowerCase().endsWith('.mp4') || rn.cover_image.toLowerCase().endsWith('.webm'))" :src="rn.cover_image" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>
+              <LazyVideo v-if="rn.cover_image && (rn.cover_image.toLowerCase().endsWith('.mp4') || rn.cover_image.toLowerCase().endsWith('.webm'))" :src="rn.cover_image" autoplay style="object-fit:cover;" />
                 <img v-else-if="rn.cover_image" :src="rn.cover_image" :alt="localizedValue(rn, 'title')" />
               <div class="rn-placeholder" v-else>
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4.86 8.86l-3 3.87L9 13.14 6 17h12l-3.86-5.14z"/></svg>
@@ -185,6 +185,7 @@ import { useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 import { sanitizeRichHtml } from '../utils/sanitizeHtml.js'
+import LazyVideo from '../components/LazyVideo.vue'
 
 const route = useRoute()
 const { t, localizedValue, localizedHtml, lang, langPath } = useLang()

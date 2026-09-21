@@ -245,6 +245,25 @@ else
   warn "未找到本站点现有的 client_max_body_size；为避免误改面板配置，本次未自动插入。"
 fi
 
+# ── 10b. 检查 /uploads/ 是否由 Nginx 直接读取（大视频超时防护）──
+UPLOADS_STATIC_OK=0
+for NGINX_CONF in \
+  /etc/nginx/sites-available/led-trade \
+  /etc/nginx/sites-available/steel-trader \
+  /www/server/panel/vhost/nginx/sunseasteel.com.conf \
+  /www/server/panel/vhost/nginx/www.sunseasteel.com.conf; do
+  if [ -f "$NGINX_CONF" ] && grep -Eq 'location[[:space:]]+=?[[:space:]]*/uploads/' "$NGINX_CONF"; then
+    UPLOADS_STATIC_OK=1
+  fi
+done
+if [ "$UPLOADS_STATIC_OK" -eq 1 ]; then
+  ok "/uploads/ 已配置为独立 location（视频由 Nginx 直接发送）。"
+else
+  warn "/uploads/ 未配置独立 location：大视频会经 Node 代理，慢速客户端会报 net::ERR_TIMED_OUT。"
+  warn "请在站点 Nginx 配置中加入（参考 nginx.conf.example）："
+  warn "  location /uploads/ { alias /www/wwwroot/steel-trader/uploads/; expires 30d; send_timeout 300s; access_log off; }"
+fi
+
 # ── Public delivery gate: fail if Nginx/CDN still serves the generic SPA shell ──
 info "验证 Node 与公开域名的 SEO HTML 和子站点地图..."
 if ! PUBLIC_SITE_URL="${PUBLIC_SITE_URL:-https://www.sunseasteel.com}" \

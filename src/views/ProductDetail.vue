@@ -25,7 +25,7 @@
           <div class="product-images">
             <div class="main-image-container">
               <div class="main-image">
-                <video v-if="currentImage && (currentImage.toLowerCase().endsWith('.mp4') || currentImage.toLowerCase().endsWith('.webm'))" :src="currentImage" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:contain;"></video>
+                <LazyVideo v-if="currentImage && (currentImage.toLowerCase().endsWith('.mp4') || currentImage.toLowerCase().endsWith('.webm'))" :src="currentImage" autoplay />
                 <img v-else :src="currentImage" :alt="localizedValue(product, 'name')" />
                 <div class="image-zoom-hint">
                   <svg viewBox="0 0 20 20" fill="currentColor">
@@ -54,7 +54,7 @@
                   :aria-current="currentImage === img ? 'true' : undefined"
                   :aria-label="`${localizedValue(product, 'name')} - ${index + 1}`"
                   @click="currentImage = img">
-                  <video v-if="img && (img.toLowerCase().endsWith('.mp4') || img.toLowerCase().endsWith('.webm'))" :src="img" style="width:100%;height:100%;object-fit:cover;" preload="metadata"></video>
+                  <LazyVideo v-if="img && (img.toLowerCase().endsWith('.mp4') || img.toLowerCase().endsWith('.webm'))" :src="img" style="object-fit:cover;" />
                   <img v-else :src="img" :alt="`Product image ${index + 1}`" />
                 </button>
             </div>
@@ -224,7 +224,7 @@
                 class="related-product-card"
               >
                 <div class="rp-image">
-                  <video v-if="rp.images && (rp.images.split(',')[0].toLowerCase().endsWith('.mp4') || rp.images.split(',')[0].toLowerCase().endsWith('.webm'))" :src="rp.images.split(',')[0]" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>
+                  <LazyVideo v-if="rp.images && (rp.images.split(',')[0].toLowerCase().endsWith('.mp4') || rp.images.split(',')[0].toLowerCase().endsWith('.webm'))" :src="rp.images.split(',')[0]" autoplay style="object-fit:cover;" />
                     <img v-else-if="rp.images" :src="rp.images.split(',')[0]" :alt="localizedValue(rp, 'name') || 'Related product image'" loading="lazy" />
                   <div class="rp-placeholder" v-else>
                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
@@ -294,6 +294,7 @@ import { getCenteredThumbnailScrollLeft } from '../utils/thumbnailScroll.js'
 import { sanitizeRichHtml } from '../utils/sanitizeHtml.js'
 import InquiryModal from '../components/InquiryModal.vue'
 import ProductReviews from '../components/ProductReviews.vue'
+import LazyVideo from '../components/LazyVideo.vue'
 import {
   buildReviewSchemaParts,
   isMatchingProductReviewContext

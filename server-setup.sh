@@ -204,11 +204,15 @@ server {
         proxy_read_timeout 300s;
     }
 
-    # Uploads
+    # Uploads — served directly by Nginx, never proxied through Node.
+    # Large videos must not be bounded by the 60s default send_timeout when a
+    # mobile/Lighthouse client reads slowly.
     location /uploads/ {
         alias ${DIR}/uploads/;
         expires 30d;
+        add_header Cache-Control "public";
         access_log off;
+        send_timeout 300s;
     }
 
     # Dynamic sitemap

@@ -19,7 +19,9 @@ test('product detail renders selectable thumbnails from the existing images sour
 test('product detail keeps image and video thumbnail rendering', () => {
   assert.match(source, /img\.toLowerCase\(\)\.endsWith\('\.mp4'\)/)
   assert.match(source, /img\.toLowerCase\(\)\.endsWith\('\.webm'\)/)
-  assert.match(source, /<video v-if="img &&/)
+  // Video thumbnails render through the lazy-loading component so a gallery
+  // page does not fetch every video at page load.
+  assert.match(source, /<LazyVideo v-if="img &&/)
   assert.match(source, /<img v-else :src="img"/)
 })
 
