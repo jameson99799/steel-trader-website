@@ -1,7 +1,7 @@
 import express from 'express'
 import { authMiddleware } from '../middleware/auth.js'
 import { getAll, getOne, run } from '../db.js'
-import { getLocalizedCoverage, indexableLangs } from '../services/indexingPolicy.js'
+import { getLocalizedCoverage, getRouteIndexableLangs, indexableLangs } from '../services/indexingPolicy.js'
 import { getVisibleCategoryIds, visibleProductWhere } from '../services/catalogVisibility.js'
 
 const router = express.Router()
@@ -74,13 +74,30 @@ function getAllSiteUrls() {
     const newsCategories = getAll('SELECT id, slug FROM news_categories')
 
     const urls = []
-    // Static pages are only indexed in the primary locales; use canonical paths
-    // (no /products?category= query URLs, no untranslated variants, include /factory).
-    const staticPaths = ['', '/products', '/news', '/about', '/contact', '/factory', '/news/ral-colors', '/news/roofing-profiles', '/news/futures-price']
-    for (const l of indexableLangs(langs)) {
-        for (const p of staticPaths) urls.push(`${BASE_URL}/${l.code}${p}`)
+    // Static pages share the SSR route policy: listing routes (including the
+    // localized static pages) also cover translated secondary locales.
+    // Canonical paths only (no query URLs).
+    const staticPaths = [
+        { path: '', routeType: 'home' },
+        { path: '/products', routeType: 'productsList' },
+        { path: '/news', routeType: 'newsList' },
+        { path: '/about', routeType: 'about' },
+        { path: '/contact', routeType: 'contact' },
+        { path: '/factory', routeType: 'factory' },
+        { path: '/news/ral-colors', routeType: 'staticNews' },
+        { path: '/news/roofing-profiles', routeType: 'staticNews' },
+        { path: '/news/futures-price', routeType: 'staticNews' }
+    ]
+    for (const p of staticPaths) {
+        for (const l of indexableLangs(langs, getRouteIndexableLangs(p.routeType))) {
+            urls.push(`${BASE_URL}/${l.code}${p.path}`)
+        }
+    }
 
+    for (const l of indexableLangs(langs, getRouteIndexableLangs('productCategory'))) {
         for (const c of categories) urls.push(`${BASE_URL}/${l.code}/products/category/${c.slug || c.id}`)
+    }
+    for (const l of indexableLangs(langs, getRouteIndexableLangs('newsCategory'))) {
         for (const c of newsCategories) urls.push(`${BASE_URL}/${l.code}/news/category/${c.slug || c.id}`)
     }
 

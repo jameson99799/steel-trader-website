@@ -6,7 +6,7 @@ import {
     PRODUCT_CATEGORY_SITEMAP_QUERY,
     NEWS_CATEGORY_SITEMAP_QUERY
 } from '../services/sitemapCategoryQueries.js'
-import { getLocalizedCoverage, indexableLangs } from '../services/indexingPolicy.js'
+import { getLocalizedCoverage, getRouteIndexableLangs, indexableLangs } from '../services/indexingPolicy.js'
 
 const router = Router()
 
@@ -143,31 +143,34 @@ router.get('/static', (req, res) => {
         const todayStr = new Date().toISOString().split('T')[0]
 
         const staticPages = [
-            { loc: '/', priority: '1.0', changefreq: 'weekly', lastmod: todayStr },
-            { loc: '/products', priority: '0.9', changefreq: 'weekly', lastmod: todayStr },
-            { loc: '/news', priority: '0.8', changefreq: 'weekly', lastmod: todayStr },
-            { loc: '/factory', priority: '0.8', changefreq: 'weekly', lastmod: todayStr },
-            { loc: '/about', priority: '0.7', changefreq: 'monthly', lastmod: todayStr },
-            { loc: '/contact', priority: '0.7', changefreq: 'monthly', lastmod: todayStr },
-            { loc: '/news/ral-colors', priority: '0.5', changefreq: 'yearly', lastmod: todayStr },
-            { loc: '/news/roofing-profiles', priority: '0.7', changefreq: 'weekly', lastmod: todayStr },
-            { loc: '/news/futures-price', priority: '0.8', changefreq: 'daily', lastmod: todayStr }, // Only futures price changes daily truly
+            { loc: '/', priority: '1.0', changefreq: 'weekly', lastmod: todayStr, routeType: 'home' },
+            { loc: '/products', priority: '0.9', changefreq: 'weekly', lastmod: todayStr, routeType: 'productsList' },
+            { loc: '/news', priority: '0.8', changefreq: 'weekly', lastmod: todayStr, routeType: 'newsList' },
+            { loc: '/factory', priority: '0.8', changefreq: 'weekly', lastmod: todayStr, routeType: 'factory' },
+            { loc: '/about', priority: '0.7', changefreq: 'monthly', lastmod: todayStr, routeType: 'about' },
+            { loc: '/contact', priority: '0.7', changefreq: 'monthly', lastmod: todayStr, routeType: 'contact' },
+            { loc: '/news/ral-colors', priority: '0.5', changefreq: 'yearly', lastmod: todayStr, routeType: 'staticNews' },
+            { loc: '/news/roofing-profiles', priority: '0.7', changefreq: 'weekly', lastmod: todayStr, routeType: 'staticNews' },
+            { loc: '/news/futures-price', priority: '0.8', changefreq: 'daily', lastmod: todayStr, routeType: 'staticNews' }, // Only futures price changes daily truly
         ]
 
         const seoSettings = getSeoSettings()
-        // Static pages only have indexed variants in the primary authoring
-        // locales; other languages currently serve untranslated English content.
-        const staticLangs = indexableLangs(activeLangs)
         const urls = []
         for (const p of staticPages) {
-            for (const l of staticLangs) {
+            // Listing and informational pages follow the SSR route policy:
+            // primary locales plus translated secondary locales for route
+            // types that are indexable in them.
+            const pageLangs = p.routeType
+                ? indexableLangs(activeLangs, getRouteIndexableLangs(p.routeType))
+                : indexableLangs(activeLangs)
+            for (const l of pageLangs) {
                 const langPath = `/${l.code}${p.loc === '/' ? '' : p.loc}`
                 urls.push(urlEntry({
                     loc: BASE_URL + langPath,
                     lastmod: p.lastmod,
                     changefreq: p.changefreq,
                     priority: p.priority,
-                    hreflang: hreflangLinks(p.loc, staticLangs, seoSettings)
+                    hreflang: hreflangLinks(p.loc, pageLangs, seoSettings)
                 }))
             }
         }
@@ -186,8 +189,10 @@ router.get('/categories', (req, res) => {
         const fallbackDate = '2024-03-01'
         const activeLangs = getActiveLangs()
         const seoSettings = getSeoSettings()
-        // Category pages render English-only content outside the primary locales.
-        const catLangs = indexableLangs(activeLangs)
+        // Category listing pages share the SSR route policy (primary locales
+        // plus translated secondary locales).
+        const catLangs = indexableLangs(activeLangs, getRouteIndexableLangs('productCategory'))
+        const newsCatLangs = indexableLangs(activeLangs, getRouteIndexableLangs('newsCategory'))
         const urls = []
 
         // Product categories
@@ -215,13 +220,13 @@ router.get('/categories', (req, res) => {
             if (!nc.slug) continue
             const locPath = `/news/category/${nc.slug}`
             const lastmod = toDateStr(nc.lastmod_date, fallbackDate)
-            for (const l of catLangs) {
+            for (const l of newsCatLangs) {
                 urls.push(urlEntry({
                     loc: BASE_URL + '/' + l.code + locPath,
                     lastmod,
                     changefreq: 'weekly',
                     priority: '0.8',
-                    hreflang: hreflangLinks(locPath, catLangs, seoSettings)
+                    hreflang: hreflangLinks(locPath, newsCatLangs, seoSettings)
                 }))
             }
         }

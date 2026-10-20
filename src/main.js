@@ -7,7 +7,7 @@ import './style.css'
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
-app.mount('#app')
+router.isReady().then(() => app.mount('#app'))
 
 // 全局拦截图片右键菜单
 document.addEventListener('contextmenu', function(e) {

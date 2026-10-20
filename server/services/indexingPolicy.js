@@ -77,3 +77,21 @@ export function indexableLangs(activeLangs, extraLangs = null) {
   }
   return result
 }
+
+export const SECONDARY_INDEX_LANGS = Object.freeze(['ru'])
+
+const LISTING_ROUTE_TYPES = new Set([
+  'home', 'productsList', 'newsList', 'productCategory', 'newsCategory'
+])
+
+const STATIC_ROUTE_TYPES = new Set([
+  'about', 'contact', 'factory', 'staticNews'
+])
+
+export function getRouteIndexableLangs(routeType) {
+  const langs = new Set(PRIMARY_CONTENT_LANGS)
+  if (LISTING_ROUTE_TYPES.has(routeType) || STATIC_ROUTE_TYPES.has(routeType)) {
+    for (const code of SECONDARY_INDEX_LANGS) langs.add(code)
+  }
+  return langs
+}

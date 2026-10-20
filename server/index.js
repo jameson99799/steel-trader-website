@@ -11,7 +11,8 @@ import { sanitizeRichHtml } from '../src/utils/sanitizeHtml.js'
 import sharp from 'sharp'
 
 import { initDb, getAll, getOne, run, findFuzzyBySlug } from './db.js'
-import { loadTranslationsForLang, translateProduct, translateNews, translateCompany } from './helpers/translate.js'
+import { loadTranslationsForLang, translateProduct, translateNews, translateCategory, translateCompany } from './helpers/translate.js'
+import { getSeoCopy, getStaticPageCopy, fillTemplate } from './services/seoContent.js'
 import { getVisibleCategoryIds, visibleProductWhere } from './services/catalogVisibility.js'
 import {
   getSeoResponsePolicy,
@@ -45,7 +46,7 @@ import emailRoutes from './routes/email.js'
 import { checkAndSendSslWarning } from './emailService.js'
 import { stripSeoSecrets } from './services/seoSanitizer.js'
 import { sanitizeOrganizationType } from './services/seoSettingsSchema.js'
-import { PRIMARY_CONTENT_LANGS, getLocalizedLangsFor } from './services/indexingPolicy.js'
+import { PRIMARY_CONTENT_LANGS, getLocalizedLangsFor, getRouteIndexableLangs } from './services/indexingPolicy.js'
 import indexingRoutes, { startIndexingScheduler } from './routes/indexing.js'
 import aiRoutes from './routes/ai.js'
 import aiAutoPostRoutes from './routes/ai-auto-post.js'
@@ -691,6 +692,8 @@ ${contactLines.join('\n')}
         if (company && tMap) {
           translateCompany(company, tMap, lang)
         }
+        const seoCopy = getSeoCopy(lang)
+        const staticCopy = getStaticPageCopy(lang)
         
         function formatSsrMailtoLinks(html, defaultEmail) {
           if (!html) return html
@@ -720,6 +723,14 @@ ${contactLines.join('\n')}
             }
           } catch(e) {}
           return {}
+        }
+        function pickLocalized(obj, field) {
+          if (!obj) return ''
+          const localized = obj[`${field}_${lang}`]
+          if (localized) return localized
+          if (lang === 'en') return obj[`${field}_en`] || obj[field] || ''
+          if (lang === 'zh') return obj[field] || obj[`${field}_en`] || ''
+          return obj[`${field}_en`] || obj[field] || ''
         }
         const companyNameTranslated = company.name || companyName
         const companyDescTranslated = company[`description_${lang}`] || company.description_en || company.description || ''
@@ -1051,33 +1062,38 @@ ${contactLines.join('\n')}
           const catPageMatch = subPath.match(/^\/news\/category\/([^/]+)$/)
           if (catPageMatch) {
             matchedRoute = true
+            routeIndexableLangs = getRouteIndexableLangs('newsCategory')
             const catSlug = catPageMatch[1]
             const cat = getOne('SELECT * FROM news_categories WHERE slug = ?', [catSlug])
             if (cat) {
-              const catName = cat.name_en || cat.name
-              const catNameLocal = cat.name || cat.name_en
-              pageTitle = `${catName} - Steel Industry Articles | ${companyName}`
-              pageDesc = `Browse all ${catName} articles from ${companyName}. Expert knowledge on galvanized steel, PPGI, GL, CRC coils and international steel market.`
+              if (tMap) {
+                const catTrans = tMap[`news_category_${cat.id}`]
+                if (catTrans?.name) cat[`name_${lang}`] = catTrans.name
+              }
+              const catName = pickLocalized(cat, 'name')
+              pageTitle = fillTemplate(seoCopy.newsCategory.title, { category: catName, company: companyName })
+              pageDesc = fillTemplate(seoCopy.newsCategory.desc, { category: catName, company: companyName })
               // BreadcrumbList schema
               extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
-                { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
-                { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
+                { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
+                { '@type': 'ListItem', position: 2, name: seoCopy.breadcrumbNews, item: `${siteUrl}/${lang}/news` },
                 { '@type': 'ListItem', position: 3, name: catName, item: pageCanonical }
               ] })
               // ItemList schema: list of articles in this category
               const catArticles = getAll('SELECT id, title_en, title, slug, summary_en, summary FROM news WHERE category_id = ? AND status = 1 ORDER BY sort_order, id DESC LIMIT 20', [cat.id])
+              if (tMap) catArticles.forEach(a => translateNews(a, tMap, lang))
               if (catArticles.length) {
                 extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'ItemList',
                   name: catName,
                   itemListElement: catArticles.map((a, i) => ({
                     '@type': 'ListItem', position: i + 1,
                     url: `${siteUrl}/${lang}/news/${a.slug || a.id}`,
-                    name: a.title_en || a.title
+                    name: pickLocalized(a, 'title')
                   }))
                 })
                 // SSR content for category listing (GEO readable)
                 const articleLinks = catArticles.map(a =>
-                  `<li><a href="${siteUrl}/${lang}/news/${a.slug || a.id}">${esc(a.title_en || a.title)}</a><p>${esc(a.summary_en || a.summary || '')}</p></li>`
+                  `<li><a href="${siteUrl}/${lang}/news/${a.slug || a.id}">${esc(pickLocalized(a, 'title'))}</a><p>${esc(pickLocalized(a, 'summary'))}</p></li>`
                 ).join('')
                 ssrContent = `<section id="ssr-category"><h1>${esc(catName)}</h1><ul>${articleLinks}</ul></section>`
               }
@@ -1092,30 +1108,33 @@ ${contactLines.join('\n')}
           const prodCatMatch = subPath.match(/^\/products\/category\/([^/]+)$/)
           if (prodCatMatch) {
             matchedRoute = true
+            routeIndexableLangs = getRouteIndexableLangs('productCategory')
             const catSlug = prodCatMatch[1]
             const cat = getOne('SELECT * FROM categories WHERE slug = ?', [catSlug]) ||
                          getOne('SELECT * FROM categories WHERE lower(name_en) = ?', [catSlug.replace(/-/g, ' ')])
             if (cat && publicCategoryIds().has(cat.id)) {
-              const catName = cat.name_en || cat.name
-              pageTitle = `${catName} Steel Coil Products - Manufacturer & Exporter | ${companyName}`
-              pageDesc = `Browse all ${catName} products from ${companyName}. Factory-direct steel coil manufacturer in Shandong, China. ASTM / JIS / EN certified. Competitive FOB pricing and fast global shipping.`
+              if (tMap) translateCategory(cat, tMap, lang)
+              const catName = pickLocalized(cat, 'name')
+              pageTitle = fillTemplate(seoCopy.productCategory.title, { category: catName, company: companyName })
+              pageDesc = fillTemplate(seoCopy.productCategory.desc, { category: catName, company: companyName })
               extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
-                { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
-                { '@type': 'ListItem', position: 2, name: 'Products', item: `${siteUrl}/${lang}/products` },
+                { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
+                { '@type': 'ListItem', position: 2, name: seoCopy.breadcrumbProducts, item: `${siteUrl}/${lang}/products` },
                 { '@type': 'ListItem', position: 3, name: catName, item: pageCanonical }
               ] })
               const categoryVisibility = publicProductVisibility('products')
               const catProducts = getAll(`SELECT id, slug, name_en, name, description_en, description FROM products WHERE category_id = ? AND status = 1${categoryVisibility.clause} ORDER BY sort_order DESC, id DESC LIMIT 30`, [cat.id, ...categoryVisibility.params])
+              if (tMap) catProducts.forEach(p => translateProduct(p, tMap, lang))
               if (catProducts.length) {
                 const catProdItems = catProducts.map(p =>
-                  `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a><p>${esc((p.description_en || p.description || '').substring(0, 150).replace(/\s+\S*$/, '...'))}</p></li>`
+                  `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(pickLocalized(p, 'name'))}</a><p>${esc(pickLocalized(p, 'description').substring(0, 150).replace(/\s+\S*$/, '...'))}</p></li>`
                 ).join('')
                 ssrContent = `<section id="ssr-cat-products"><h1>${esc(catName)}</h1><ul>${catProdItems}</ul></section>`
                 extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'ItemList',
                   name: catName,
                   itemListElement: catProducts.map((p, i) => ({
                     '@type': 'ListItem', position: i + 1,
-                    name: p.name_en || p.name,
+                    name: pickLocalized(p, 'name'),
                     url: `${siteUrl}/${lang}/products/${p.slug || p.id}`
                   }))
                 })
@@ -1130,46 +1149,52 @@ ${contactLines.join('\n')}
           // ── Static pages with SSR content injection ──
           if (subPath === '/products' || subPath === '/products/') {
             matchedRoute = true
-            pageTitle = `Steel Products - GI, GL, PPGI, PPGL, CRC Coils & Sheets | ${companyName}`
-            pageDesc = `Manufacturer & Exporter of Galvanized Steel (GI), Galvalume (GL), PPGI, PPGL & CRC Coils. ASTM A653/JIS G3302/EN 10346 compliant. Factory direct pricing from Shandong, China.`
+            routeIndexableLangs = getRouteIndexableLangs('productsList')
+            pageTitle = fillTemplate(seoCopy.products.title, { company: companyName })
+            pageDesc = fillTemplate(seoCopy.products.desc, { company: companyName })
             // SSR product list for GEO crawlers
             const productListVisibility = publicProductVisibility('products')
             const productList = getAll(`SELECT id, slug, name_en, name, description_en, description FROM products WHERE status=1${productListVisibility.clause} ORDER BY sort_order, id DESC LIMIT 20`, productListVisibility.params)
+            if (tMap) productList.forEach(p => translateProduct(p, tMap, lang))
             if (productList.length) {
-              const prodItems = productList.map(p => `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(p.name_en || p.name)}</a><p>${esc((p.description_en || p.description || '').substring(0, 150).replace(/\s+\S*$/, '...'))}</p></li>`).join('')
-              ssrContent = `<section id="ssr-products"><h1>Steel Products</h1><ul>${prodItems}</ul></section>`
+              const prodItems = productList.map(p => `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(pickLocalized(p, 'name'))}</a><p>${esc(pickLocalized(p, 'description').substring(0, 150).replace(/\s+\S*$/, '...'))}</p></li>`).join('')
+              ssrContent = `<section id="ssr-products"><h1>${esc(seoCopy.products.h1)}</h1><ul>${prodItems}</ul></section>`
             }
             // ItemList Schema for product listing
             const allProductsVisibility = publicProductVisibility('products')
             const allProducts = getAll(`SELECT id, slug, name_en, name FROM products WHERE status=1${allProductsVisibility.clause} ORDER BY sort_order, id DESC LIMIT 30`, allProductsVisibility.params)
+            if (tMap) allProducts.forEach(p => translateProduct(p, tMap, lang))
             if (allProducts.length) {
               extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'ItemList',
-                name: 'Steel Products', url: pageCanonical,
-                itemListElement: allProducts.map((p, i) => ({ '@type': 'ListItem', position: i+1, name: p.name_en || p.name, url: `${siteUrl}/${lang}/products/${p.slug || p.id}` }))
+                name: seoCopy.products.h1, url: pageCanonical,
+                itemListElement: allProducts.map((p, i) => ({ '@type': 'ListItem', position: i+1, name: pickLocalized(p, 'name'), url: `${siteUrl}/${lang}/products/${p.slug || p.id}` }))
               })
             }
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
-              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
-              { '@type': 'ListItem', position: 2, name: 'Products', item: pageCanonical }
+              { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: seoCopy.breadcrumbProducts, item: pageCanonical }
             ] })
           } else if (subPath === '/news' || subPath === '/news/') {
             matchedRoute = true
-            pageTitle = `Steel Industry News & Technical Guides | ${companyName}`
-            pageDesc = `Latest galvanized steel news, PPGI/PPGL technical guides, coil specifications, and market analysis from ${companyName}. Expert insights for steel buyers.`
+            routeIndexableLangs = getRouteIndexableLangs('newsList')
+            pageTitle = fillTemplate(seoCopy.news.title, { company: companyName })
+            pageDesc = fillTemplate(seoCopy.news.desc, { company: companyName })
             // SSR recent article list for GEO crawlers
             const recentArticles = getAll('SELECT id, slug, title_en, title, summary_en, summary FROM news WHERE status=1 ORDER BY sort_order, id DESC LIMIT 12')
+            if (tMap) recentArticles.forEach(a => translateNews(a, tMap, lang))
             if (recentArticles.length) {
-              const artItems = recentArticles.map(a => `<li><a href="${siteUrl}/${lang}/news/${a.slug || a.id}">${esc(a.title_en || a.title)}</a><p>${esc(a.summary_en || a.summary || '')}</p></li>`).join('')
-              ssrContent = `<section id="ssr-news-list"><h1>Steel Industry News</h1><ul>${artItems}</ul></section>`
+              const artItems = recentArticles.map(a => `<li><a href="${siteUrl}/${lang}/news/${a.slug || a.id}">${esc(pickLocalized(a, 'title'))}</a><p>${esc(pickLocalized(a, 'summary'))}</p></li>`).join('')
+              ssrContent = `<section id="ssr-news-list"><h1>${esc(seoCopy.news.h1)}</h1><ul>${artItems}</ul></section>`
             }
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
-              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
-              { '@type': 'ListItem', position: 2, name: 'News', item: pageCanonical }
+              { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: seoCopy.breadcrumbNews, item: pageCanonical }
             ] })
           } else if (subPath === '/about' || subPath === '/about/') {
             matchedRoute = true
-            pageTitle = `About Us | ${companyName}`
-            pageDesc = company.description_en || `Learn about ${companyName} — a professional steel coil manufacturer and exporter based in Shandong, China.`
+            pageTitle = fillTemplate(staticCopy.about.title, { company: companyNameTranslated })
+            pageDesc = fillTemplate(staticCopy.about.desc, { company: companyNameTranslated })
+            routeIndexableLangs = getRouteIndexableLangs('about')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: 'About Us', item: pageCanonical }
@@ -1183,11 +1208,12 @@ ${contactLines.join('\n')}
               description: (company.description_en || '').substring(0, 300)
             })
             // Fully render About page content for GEO AI crawlers
-            ssrContent = `<article id="ssr-about"><h1>About ${esc(companyNameTranslated)}</h1><p>${esc(company.description_en || company.description || '')}</p><h2>Company Information</h2><ul><li><strong>Company Name:</strong> ${esc(company.name_en || company.name)}</li><li><strong>Headquarters:</strong> ${esc(company.address_en || company.address)}</li><li><strong>Email:</strong> ${esc(company.email)}</li><li><strong>Phone:</strong> ${esc(company.phone)}</li></ul><h2>Global Export Manufacturer</h2><p>As a leading supplier in China, we specialize in manufacturing galvanized (GI), galvalume (GL), prepainted galvanized (PPGI), prepainted galvalume (PPGL), and cold rolled (CRC) steel coils. Our advanced production lines ensure strict quality control and international certifications.</p></article>`
+            ssrContent = `<article id="ssr-about"><h1>${esc(fillTemplate(staticCopy.about.h1, { company: companyNameTranslated }))}</h1><p>${esc(fillTemplate(staticCopy.about.intro, { company: companyNameTranslated }))}</p><h2>${esc(staticCopy.about.infoHeading)}</h2><ul><li><strong>${esc(staticCopy.about.labelName)}:</strong> ${esc(company.name_en || company.name)}</li><li><strong>${esc(staticCopy.about.labelHeadquarters)}:</strong> ${esc(company.address_en || company.address)}</li><li><strong>${esc(staticCopy.about.labelEmail)}:</strong> ${esc(company.email)}</li><li><strong>${esc(staticCopy.about.labelPhone)}:</strong> ${esc(company.phone)}</li></ul><h2>${esc(staticCopy.about.exportHeading)}</h2><p>${esc(staticCopy.about.exportBody)}</p></article>`
           } else if (subPath === '/contact' || subPath === '/contact/') {
             matchedRoute = true
-            pageTitle = `Contact Us | ${companyName}`
-            pageDesc = `Get in touch with ${companyName}. Request a quote, ask product questions, or schedule a factory visit.`
+            pageTitle = fillTemplate(staticCopy.contact.title, { company: companyNameTranslated })
+            pageDesc = fillTemplate(staticCopy.contact.desc, { company: companyNameTranslated })
+            routeIndexableLangs = getRouteIndexableLangs('contact')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: 'Contact', item: pageCanonical }
@@ -1202,41 +1228,47 @@ ${contactLines.join('\n')}
               }
             })
             // Add dense Contact info into SSR Dom
-            ssrContent = `<article id="ssr-contact"><h1>Contact Us</h1><p>Contact ${esc(companyNameTranslated)} for custom steel coil requirements, competitive FOB pricing, and rapid export shipping quotes.</p><h2>Contact Details</h2><ul><li><strong>Email:</strong> <a href="mailto:${esc(company.email)}">${esc(company.email)}</a></li><li><strong>Telephone:</strong> <a href="tel:${esc(company.phone)}">${esc(company.phone)}</a></li><li><strong>WhatsApp:</strong> <a href="https://wa.me/${(company.whatsapp || '').replace(/[^0-9]/g, '')}">${esc(company.whatsapp)}</a></li><li><strong>Factory Address:</strong> ${esc(company.address_en || company.address)}</li></ul><h2>Online Inquiry Form</h2><p>Please send us your specific specifications including coating mass, thickness, width, color code, and target quantity for an accurate quote.</p><form><input type="text" name="name" aria-label="Name" /><input type="email" name="email" aria-label="Email" /><input type="tel" name="phone" aria-label="Phone" /><textarea name="message" aria-label="Message"></textarea><button type="submit">Submit Inquiry</button></form></article>`
+            ssrContent = `<article id="ssr-contact"><h1>${esc(staticCopy.contact.h1)}</h1><p>${esc(fillTemplate(staticCopy.contact.intro, { company: companyNameTranslated }))}</p><h2>${esc(staticCopy.contact.detailsHeading)}</h2><ul><li><strong>${esc(staticCopy.contact.labelEmail)}:</strong> <a href="mailto:${esc(company.email)}">${esc(company.email)}</a></li><li><strong>${esc(staticCopy.contact.labelTelephone)}:</strong> <a href="tel:${esc(company.phone)}">${esc(company.phone)}</a></li><li><strong>${esc(staticCopy.contact.labelWhatsapp)}:</strong> <a href="https://wa.me/${(company.whatsapp || '').replace(/[^0-9]/g, '')}">${esc(company.whatsapp)}</a></li><li><strong>${esc(staticCopy.contact.labelAddress)}:</strong> ${esc(company.address_en || company.address)}</li></ul><h2>${esc(staticCopy.contact.formHeading)}</h2><p>${esc(staticCopy.contact.formBody)}</p><form><input type="text" name="name" aria-label="${esc(staticCopy.contact.fieldName)}" /><input type="email" name="email" aria-label="${esc(staticCopy.contact.fieldEmail)}" /><input type="tel" name="phone" aria-label="${esc(staticCopy.contact.fieldPhone)}" /><textarea name="message" aria-label="${esc(staticCopy.contact.fieldMessage)}"></textarea><button type="submit">${esc(staticCopy.contact.submit)}</button></form></article>`
           } else if (subPath === '/factory' || subPath === '/factory/') {
             matchedRoute = true
-            pageTitle = `Factory Tour & Production Lines | ${companyName}`
-            pageDesc = `Take a virtual tour of ${companyName}'s manufacturing facility. See our advanced production lines, quality control processes, and extensive inventory of steel coils.`
+            pageTitle = fillTemplate(staticCopy.factory.title, { company: companyNameTranslated })
+            pageDesc = fillTemplate(staticCopy.factory.desc, { company: companyNameTranslated })
+            routeIndexableLangs = getRouteIndexableLangs('factory')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: 'Factory', item: pageCanonical }
             ] })
-            ssrContent = `<article id="ssr-factory"><h1>Factory & Production Facility</h1><p>Our expansive factory encompasses multiple advanced production lines dedicated to the comprehensive processing of steel coils. From precision cold rolling to continuous galvanizing and extensive color coating operations, we maintain stringent internal quality control metrics across all stations. Our facility boasts high-capacity inventory management to ensure rapid global deployment and fulfillment of bulk steel requirements.</p></article>`
+            ssrContent = `<article id="ssr-factory"><h1>${esc(staticCopy.factory.h1)}</h1><p>${esc(staticCopy.factory.body)}</p></article>`
           } else if (subPath === '/news/ral-colors' || subPath === '/news/ral-colors/') {
             matchedRoute = true
             isNotFound = false
-            pageTitle = `RAL Color Chart for PPGI & PPGL | ${companyNameTranslated}`
-            pageDesc = `Explore the full RAL color chart for our prepainted galvanized (PPGI) and galvalume (PPGL) steel coils. Custom colors available upon request.`
+            pageTitle = fillTemplate(staticCopy.ralColors.title, { company: companyNameTranslated })
+            pageDesc = fillTemplate(staticCopy.ralColors.desc, { company: companyNameTranslated })
+            routeIndexableLangs = getRouteIndexableLangs('staticNews')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
               { '@type': 'ListItem', position: 3, name: 'RAL Colors', item: pageCanonical }
             ] })
+            ssrContent = `<article id="ssr-ral-colors"><h1>${esc(staticCopy.ralColors.h1)}</h1><p>${esc(staticCopy.ralColors.intro)}</p></article>`
           } else if (subPath === '/news/roofing-profiles' || subPath === '/news/roofing-profiles/') {
             matchedRoute = true
             isNotFound = false
-            pageTitle = `Roofing Sheet Profiles & Corrugated Steel | ${companyNameTranslated}`
-            pageDesc = `View our catalog of steel roofing sheet profiles. We manufacture corrugated, trapezoidal, and glazed tile roofing sheets in various dimensions and colors.`
+            pageTitle = fillTemplate(staticCopy.roofingProfiles.title, { company: companyNameTranslated })
+            pageDesc = fillTemplate(staticCopy.roofingProfiles.desc, { company: companyNameTranslated })
+            routeIndexableLangs = getRouteIndexableLangs('staticNews')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
               { '@type': 'ListItem', position: 3, name: 'Roofing Profiles', item: pageCanonical }
             ] })
+            ssrContent = `<article id="ssr-roofing-profiles"><h1>${esc(staticCopy.roofingProfiles.h1)}</h1><p>${esc(staticCopy.roofingProfiles.intro)}</p></article>`
           } else if (subPath === '/news/futures-price' || subPath === '/news/futures-price/') {
             matchedRoute = true
             isNotFound = false
-            pageTitle = `Real-time Steel Futures Prices | ${companyNameTranslated}`
-            pageDesc = `Track real-time and historical futures prices for Hot Rolled Coil, Iron Ore, Rebar, and more. Essential market data for steel buyers and traders from ${companyNameTranslated}.`
+            pageTitle = fillTemplate(staticCopy.futuresPrice.title, { company: companyNameTranslated })
+            pageDesc = fillTemplate(staticCopy.futuresPrice.desc, { company: companyNameTranslated })
+            routeIndexableLangs = getRouteIndexableLangs('staticNews')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
@@ -1245,6 +1277,7 @@ ${contactLines.join('\n')}
             
             // Render basic table for GEO crawlers
             const watchlist = getAll('SELECT id, symbol, name, name_en FROM futures_watchlist ORDER BY sort_order ASC')
+            let tableHtml = ''
             if (watchlist && watchlist.length) {
               const tableRows = watchlist.map(w => {
                 let name = w.name_en || w.name
@@ -1254,13 +1287,15 @@ ${contactLines.join('\n')}
                 }
                 return `<tr><td>${esc(name)}</td><td>${esc(w.symbol)}</td></tr>`
               }).join('')
-              ssrContent = `<section id="ssr-futures"><h1>Real-time Steel Futures Prices</h1><table><thead><tr><th>Product Name</th><th>Symbol</th></tr></thead><tbody>${tableRows}</tbody></table></section>`
+              tableHtml = `<table><thead><tr><th>${esc(staticCopy.futuresPrice.productName)}</th><th>${esc(staticCopy.futuresPrice.symbol)}</th></tr></thead><tbody>${tableRows}</tbody></table>`
             }
+            ssrContent = `<section id="ssr-futures"><h1>${esc(staticCopy.futuresPrice.h1)}</h1><p>${esc(staticCopy.futuresPrice.intro)}</p>${tableHtml}</section>`
           }
 
           // ── Homepage BreadcrumbList + WebSite schema + SSR content ──
           if (!subPath || subPath === '/') {
             matchedRoute = true
+            routeIndexableLangs = getRouteIndexableLangs('home')
             // Homepage SEO text per language, sourced from the translations table when a
             // translation has been generated (content left to the AI translation system).
             const homeSeoT = getSeoTrans('home_seo', 1, lang)
