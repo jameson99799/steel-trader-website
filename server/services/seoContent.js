@@ -234,17 +234,42 @@ const LISTING_I18N = {
   }
 }
 
-export function getSeoCopy(lang) {
+export const SEO_PAGE_KEYS = Object.freeze([
+  'home',
+  'about',
+  'contact',
+  'factory',
+  'ralColors',
+  'roofingProfiles',
+  'futuresPrice',
+  'products',
+  'news',
+  'productCategory',
+  'newsCategory'
+])
+
+export const SUPPORTED_SEO_LANGS = Object.freeze([
+  'en', 'zh', 'ru', 'fr', 'es', 'ar', 'hi', 'th', 'tr', 'pt'
+])
+
+const LISTING_COPY_KEYS = ['products', 'news', 'productCategory', 'newsCategory']
+const STATIC_COPY_KEYS = ['about', 'contact', 'factory', 'ralColors', 'roofingProfiles', 'futuresPrice']
+
+export function getSeoCopy(lang, overrides = null) {
   const base = LISTING_I18N.en
   const copy = LISTING_I18N[lang]
-  if (!copy) return { ...base }
-  const merged = { ...base }
-  for (const key of Object.keys(copy)) {
-    const baseValue = base[key]
-    const copyValue = copy[key]
-    merged[key] = baseValue && typeof baseValue === 'object' && copyValue && typeof copyValue === 'object'
-      ? { ...baseValue, ...copyValue }
-      : copyValue
+  const merged = {}
+  for (const key of Object.keys(base)) {
+    merged[key] = { ...base[key], ...(copy?.[key] || {}) }
+  }
+  if (overrides) {
+    for (const key of LISTING_COPY_KEYS) {
+      const override = overrides[key]
+      if (!override) continue
+      if (override.title) merged[key].title = override.title
+      const desc = override.desc || override.description
+      if (desc) merged[key].desc = desc
+    }
   }
   return merged
 }
@@ -617,7 +642,7 @@ const STATIC_PAGE_SEO_I18N = {
   }
 }
 
-export function getStaticPageCopy(lang) {
+export function getStaticPageCopy(lang, overrides = null) {
   const base = STATIC_PAGE_I18N.en
   const copy = STATIC_PAGE_I18N[lang]
   const seo = STATIC_PAGE_SEO_I18N[lang]
@@ -625,7 +650,33 @@ export function getStaticPageCopy(lang) {
   for (const key of Object.keys(base)) {
     merged[key] = { ...base[key], ...(copy?.[key] || {}), ...(seo?.[key] || {}) }
   }
+  if (overrides) {
+    for (const key of STATIC_COPY_KEYS) {
+      const override = overrides[key]
+      if (!override) continue
+      if (override.title) merged[key].title = override.title
+      const desc = override.desc || override.description
+      if (desc) merged[key].desc = desc
+    }
+  }
   return merged
+}
+
+export function getBuiltInSeoCopyRows(lang) {
+  const staticCopy = getStaticPageCopy(lang)
+  const listingCopy = getSeoCopy(lang)
+  return [
+    ...STATIC_COPY_KEYS.map(pageKey => ({
+      page_key: pageKey,
+      title: staticCopy[pageKey].title,
+      description: staticCopy[pageKey].desc
+    })),
+    ...LISTING_COPY_KEYS.map(pageKey => ({
+      page_key: pageKey,
+      title: listingCopy[pageKey].title,
+      description: listingCopy[pageKey].desc
+    }))
+  ]
 }
 
 const HOME_LABELS = {
@@ -641,8 +692,20 @@ const HOME_LABELS = {
   tr: { categories: 'Ana Kategoriler', products: 'Ana Ürünler', quickLinks: 'Hızlı Bağlantılar', faq: 'Sıkça Sorulan Sorular', allProducts: 'Tüm Ürünler', news: 'Haberler ve Blog', contact: 'Bize Ulaşın', about: 'Hakkımızda' }
 }
 
-export function getHomeLabels(lang) {
-  return { ...HOME_LABELS.en, ...(HOME_LABELS[lang] || {}) }
+export function getHomeLabels(lang, uiTexts = null) {
+  if (HOME_LABELS[lang]) return { ...HOME_LABELS.en, ...HOME_LABELS[lang] }
+  const labels = { ...HOME_LABELS.en }
+  if (uiTexts) {
+    labels.categories = uiTexts.homeCategories || uiTexts.productCategories || labels.categories
+    labels.products = uiTexts.homeProducts || uiTexts.featuredProducts || labels.products
+    labels.quickLinks = uiTexts.homeQuickLinks || labels.quickLinks
+    labels.faq = uiTexts.homeFaq || labels.faq
+    labels.allProducts = uiTexts.allProducts || labels.allProducts
+    labels.news = uiTexts.news || labels.news
+    labels.contact = uiTexts.contactUs || labels.contact
+    labels.about = uiTexts.about || labels.about
+  }
+  return labels
 }
 
 export function fillTemplate(template, values) {

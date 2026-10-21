@@ -600,6 +600,10 @@ function collectHero() {
 // ── Collect static UI text for translation ──
 const UI_TEXTS_EN = {
     "home": "Home",
+    "homeCategories": "Main Categories",
+    "homeProducts": "Main Products",
+    "homeQuickLinks": "Quick Links",
+    "homeFaq": "Frequently Asked Questions",
     "products": "Products",
     "about": "About Us",
     "contact": "Contact",

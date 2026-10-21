@@ -309,6 +309,11 @@ export const api = {
     invalidateCachesByPrefix('/translation/multilingual-status')
     return request(`/languages/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) })
   },
+  getLanguageSeoCopy: (code) => request(`/languages/${code}/seo-copy`),
+  updateLanguageSeoCopy: (code, rows) => {
+    invalidateCachesByPrefix('/languages')
+    return request(`/languages/${code}/seo-copy`, { method: 'PUT', body: JSON.stringify({ rows }) })
+  },
   deleteLanguage: (id) => {
     invalidateCachesByPrefix('/languages')
     return request(`/languages/${id}`, { method: 'DELETE' })

@@ -7,8 +7,19 @@ import {
   getRouteIndexableLangs,
   indexableLangs
 } from '../server/services/indexingPolicy.js'
-import { getSeoCopy, getStaticPageCopy, getHomeLabels } from '../server/services/seoContent.js'
+import {
+  SEO_PAGE_KEYS,
+  SUPPORTED_SEO_LANGS,
+  getBuiltInSeoCopyRows,
+  getSeoCopy,
+  getStaticPageCopy,
+  getHomeLabels
+} from '../server/services/seoContent.js'
 import { resolveUiText } from '../server/services/uiText.js'
+import {
+  findMissingKeys,
+  findMissingSeoCopyRows
+} from '../server/services/languageSeoReadiness.js'
 
 const ALL_LANGS = ['en', 'zh', 'ru', 'fr', 'es', 'ar', 'hi', 'th', 'tr', 'pt']
 const ROUTE_TYPES = [
@@ -101,4 +112,67 @@ test('homepage section labels are localized for every supported language', () =>
       assert.notEqual(labels.categories, en.categories, `${code} categories label is not localized`)
     }
   }
+})
+
+test('database-backed ready languages drive route indexing', () => {
+  const ready = getRouteIndexableLangs('home', ['fr', 'de'])
+  for (const code of ['en', 'zh', 'fr', 'de']) assert.ok(ready.has(code))
+
+  const notReady = getRouteIndexableLangs('home', [])
+  assert.ok(notReady.has('en'))
+  assert.ok(notReady.has('zh'))
+  assert.ok(!notReady.has('fr'))
+
+  const filtered = indexableLangs(
+    [{ code: 'en' }, { code: 'fr' }, { code: 'de' }],
+    ready
+  )
+  assert.deepEqual(filtered.map(l => l.code), ['en', 'fr', 'de'])
+})
+
+test('database SEO copy overrides replace built-in titles and descriptions', () => {
+  const listing = getSeoCopy('fr', { products: { title: 'Custom title', desc: 'Custom desc' } })
+  assert.equal(listing.products.title, 'Custom title')
+  assert.equal(listing.products.desc, 'Custom desc')
+
+  const staticPage = getStaticPageCopy('fr', { about: { title: 'Custom about', description: 'Custom about desc' } })
+  assert.equal(staticPage.about.title, 'Custom about')
+  assert.equal(staticPage.about.desc, 'Custom about desc')
+})
+
+test('built-in SEO copy covers every managed page except home', () => {
+  const expectedKeys = SEO_PAGE_KEYS.filter(key => key !== 'home').sort()
+  for (const code of SUPPORTED_SEO_LANGS) {
+    const rows = getBuiltInSeoCopyRows(code)
+    assert.deepEqual(rows.map(row => row.page_key).sort(), expectedKeys)
+    for (const row of rows) {
+      assert.ok(row.title, `${code} ${row.page_key} title missing`)
+      assert.ok(row.description, `${code} ${row.page_key} description missing`)
+    }
+  }
+})
+
+test('readiness helpers report missing SEO pages and UI keys', () => {
+  assert.deepEqual(
+    findMissingSeoCopyRows([{ page_key: 'about', title: 'A', description: 'B' }], ['about', 'contact']),
+    ['contact']
+  )
+  assert.deepEqual(findMissingKeys([{ content_field: 'a' }], ['a', 'b']), ['b'])
+})
+
+test('new languages use UI translations for homepage labels', () => {
+  const labels = getHomeLabels('de', {
+    homeCategories: 'Hauptkategorien',
+    homeProducts: 'Hauptprodukte',
+    homeQuickLinks: 'Schnellzugriff',
+    homeFaq: 'Häufige Fragen',
+    allProducts: 'Alle Produkte',
+    news: 'Nachrichten',
+    contactUs: 'Kontakt',
+    about: 'Über uns'
+  })
+  assert.equal(labels.categories, 'Hauptkategorien')
+  assert.equal(labels.products, 'Hauptprodukte')
+  assert.equal(labels.quickLinks, 'Schnellzugriff')
+  assert.equal(labels.faq, 'Häufige Fragen')
 })

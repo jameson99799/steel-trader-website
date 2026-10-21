@@ -11,6 +11,7 @@ import {
   DEFAULT_LLMS_FULL_TXT,
   migrateLegacyLlmsDefaults
 } from './services/seoDefaults.js'
+import { getBuiltInSeoCopyRows, SUPPORTED_SEO_LANGS } from './services/seoContent.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const dataDir = join(__dirname, '..', 'data')
@@ -1242,14 +1243,16 @@ Requirements:
       sort_order INTEGER DEFAULT 5,
       status INTEGER DEFAULT 1,
       ai_translated INTEGER DEFAULT 0,
+      seo_index_ready INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  try { db.exec('ALTER TABLE languages ADD COLUMN seo_index_ready INTEGER DEFAULT 1') } catch (e) { }
 
   // Ensure default English language exists
   const enExists = db.prepare("SELECT id FROM languages WHERE code = 'en'").get()
   if (!enExists) {
-    db.prepare("INSERT INTO languages (name, code, flag, sort_order, status, ai_translated) VALUES (?, ?, ?, ?, ?, ?)").run('English', 'en', '🇺🇸', 1, 1, 0)
+    db.prepare("INSERT INTO languages (name, code, flag, sort_order, status, ai_translated, seo_index_ready) VALUES (?, ?, ?, ?, ?, ?, ?)").run('English', 'en', '🇺🇸', 1, 1, 0, 1)
   }
 
   // Translation settings (OpenAI-compatible API)
@@ -1290,6 +1293,43 @@ Requirements:
   // Unique index for translations
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_translations_unique ON translations(language_code, content_type, COALESCE(content_id,-1), content_field)') } catch (e) { }
   initializeTranslationTaskSchema(db)
+
+  // Per-language SEO copy used by the language indexing readiness gate.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS language_seo_copy (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      language_code TEXT NOT NULL,
+      page_key TEXT NOT NULL,
+      title TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(language_code, page_key)
+    )
+  `)
+  try {
+    const insertSeoCopy = db.prepare(
+      'INSERT OR IGNORE INTO language_seo_copy (language_code, page_key, title, description) VALUES (?, ?, ?, ?)'
+    )
+    for (const lang of SUPPORTED_SEO_LANGS) {
+      for (const row of getBuiltInSeoCopyRows(lang)) {
+        insertSeoCopy.run(lang, row.page_key, row.title || '', row.description || '')
+      }
+    }
+    const homeRows = db.prepare(`
+      SELECT language_code,
+        MAX(CASE WHEN content_field = 'seo_title' THEN translated_text END) AS title,
+        MAX(CASE WHEN content_field = 'seo_description' THEN translated_text END) AS description
+      FROM translations
+      WHERE content_type = 'home_seo' AND content_id = 1
+        AND translated_text IS NOT NULL AND length(translated_text) > 0
+      GROUP BY language_code
+    `).all()
+    for (const row of homeRows) {
+      insertSeoCopy.run(row.language_code, 'home', row.title || '', row.description || '')
+    }
+  } catch (e) {
+    console.warn('Language SEO copy seed skipped:', e.message)
+  }
 
   // ── Background Translation Jobs ──────────────────────────────────────────────
   // Stores each background translation job (survives browser close / server restart)

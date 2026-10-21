@@ -16,6 +16,7 @@
               <th>排序 (1-10)</th>
               <th>AI已翻译</th>
               <th>启用前台</th>
+              <th>SEO 收录</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -41,6 +42,15 @@
                 </label>
               </td>
               <td>
+                <label class="switch">
+                  <input type="checkbox" :checked="!!lang.seo_index_ready"
+                         :disabled="lang.code === 'en' || lang.code === 'zh'"
+                         @change="e => toggleSeoReady(lang, e.target.checked)" />
+                  <span class="slider"></span>
+                </label>
+              </td>
+              <td>
+                <button class="btn btn-sm btn-secondary" @click="openSeo(lang)">SEO 文案</button>
                 <button v-if="lang.code !== 'en'" class="btn btn-sm btn-danger" @click="deleteLang(lang)">删除</button>
                 <span v-else class="default-tag">默认</span>
               </td>
@@ -115,6 +125,33 @@
           <button class="btn btn-secondary" @click="showModal = false">取消</button>
           <button class="btn btn-primary" :disabled="loading" @click="addLang">
             {{ loading ? '添加中...' : '添加语言' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEO Copy Modal -->
+    <div v-if="showSeoModal" class="modal-overlay" @click.self="showSeoModal = false">
+      <div class="modal" style="max-width:900px">
+        <div class="modal-header">
+          <h3>SEO 文案 — {{ seoLang?.name }} ({{ seoLang?.code }})</h3>
+          <button class="modal-close" @click="showSeoModal = false">&times;</button>
+        </div>
+        <div class="modal-body seo-modal-body">
+          <p class="hint seo-hint">
+            新语言必须先完成 UI 译文、公司简介、联系页文案和产品/文章翻译，然后填写以下 11 组标题与描述，最后再开启“SEO 收录”。
+            开启后该语言会自动进入 sitemap、hreflang 和 Google 可索引页面。
+          </p>
+          <div v-for="row in seoRows" :key="row.page_key" class="seo-copy-row">
+            <label>{{ seoPageLabels[row.page_key] || row.page_key }}</label>
+            <input v-model="row.title" class="form-control" placeholder="SEO Title" />
+            <textarea v-model="row.description" class="form-control" rows="2" placeholder="Meta Description"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showSeoModal = false">取消</button>
+          <button class="btn btn-primary" :disabled="seoLoading" @click="saveSeo">
+            {{ seoLoading ? '保存中...' : '保存 SEO 文案' }}
           </button>
         </div>
       </div>
@@ -201,6 +238,23 @@ const COUNTRY_DB = [
 const languages = ref([])
 const showModal = ref(false)
 const loading = ref(false)
+const showSeoModal = ref(false)
+const seoLang = ref(null)
+const seoRows = ref([])
+const seoLoading = ref(false)
+const seoPageLabels = {
+  home: '首页',
+  about: 'About 关于我们',
+  contact: 'Contact 联系我们',
+  factory: 'Factory 工厂',
+  ralColors: 'RAL 色卡',
+  roofingProfiles: '屋面型材',
+  futuresPrice: '期货价格',
+  products: '产品列表',
+  news: '新闻列表',
+  productCategory: '产品分类',
+  newsCategory: '新闻分类'
+}
 const form = ref({ name: '', code: '', flag: '', sort_order: 5 })
 const searchText = ref('')
 const suggestions = ref([])
@@ -273,6 +327,41 @@ const toggleStatus = async (lang, checked) => {
   await saveLang(lang)
 }
 
+const toggleSeoReady = async (lang, checked) => {
+  try {
+    await api.updateLanguage(lang.id, { ...lang, seo_index_ready: checked ? 1 : 0 })
+    lang.seo_index_ready = checked ? 1 : 0
+  } catch (e) {
+    alert(e.message)
+    await load()
+  }
+}
+
+const openSeo = async (lang) => {
+  try {
+    const res = await api.getLanguageSeoCopy(lang.code)
+    seoLang.value = lang
+    seoRows.value = res.rows || []
+    showSeoModal.value = true
+  } catch (e) {
+    alert(e.message)
+  }
+}
+
+const saveSeo = async () => {
+  if (!seoLang.value) return
+  seoLoading.value = true
+  try {
+    await api.updateLanguageSeoCopy(seoLang.value.code, seoRows.value)
+    showSeoModal.value = false
+    await load()
+  } catch (e) {
+    alert(e.message)
+  } finally {
+    seoLoading.value = false
+  }
+}
+
 const deleteLang = async (lang) => {
   if (!confirm(`确定删除语言「${lang.name}」吗？\n该语言的所有翻译数据也将一并删除。`)) return
   try {
@@ -320,6 +409,14 @@ input:disabled + .slider { opacity: 0.5; cursor: not-allowed; }
 .form-control { width: 100%; padding: 9px 12px; border: 2px solid #e2e8f0; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
 .form-control:focus { outline: none; border-color: #3b82f6; }
 .hint { color: #94a3b8; font-size: 12px; font-weight: 400; }
+
+/* SEO copy modal */
+.seo-modal-body { max-height: 65vh; overflow-y: auto; }
+.seo-hint { margin: 0 0 14px; line-height: 1.6; }
+.seo-copy-row { border-top: 1px solid #f1f5f9; padding: 12px 0; display: grid; grid-template-columns: 160px 1fr; gap: 8px 12px; align-items: start; }
+.seo-copy-row label { font-weight: 700; font-size: 13px; color: #334155; padding-top: 9px; }
+.seo-copy-row input, .seo-copy-row textarea { grid-column: 2; }
+@media(max-width:700px){ .seo-copy-row { grid-template-columns: 1fr; } .seo-copy-row input, .seo-copy-row textarea { grid-column: 1; } }
 
 /* Autocomplete */
 .autocomplete-wrap { position: relative; }

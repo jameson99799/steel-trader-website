@@ -1,7 +1,7 @@
 import express from 'express'
 import { authMiddleware } from '../middleware/auth.js'
 import { getAll, getOne, run } from '../db.js'
-import { getLocalizedCoverage, getRouteIndexableLangs, indexableLangs } from '../services/indexingPolicy.js'
+import { PRIMARY_CONTENT_LANGS, getLocalizedCoverage, getRouteIndexableLangs, indexableLangs } from '../services/indexingPolicy.js'
 import { getVisibleCategoryIds, visibleProductWhere } from '../services/catalogVisibility.js'
 
 const router = express.Router()
@@ -58,8 +58,10 @@ function today() {
 
 function getAllSiteUrls() {
     let langs = []
-    try { langs = getAll('SELECT code FROM languages WHERE status = 1') } catch {}
-    if (!langs.length) langs = [{ code: 'en' }]
+    try { langs = getAll('SELECT code, seo_index_ready FROM languages WHERE status = 1') } catch {}
+    if (!langs.length) langs = [{ code: 'en', seo_index_ready: 1 }]
+    const readyLangs = langs.filter(l => l.seo_index_ready || PRIMARY_CONTENT_LANGS.includes(l.code))
+    const readyCodes = readyLangs.map(l => l.code)
 
     const coverage = getLocalizedCoverage()
     // Only submit URLs that actually render (SSR 404s on products in disabled
@@ -89,25 +91,25 @@ function getAllSiteUrls() {
         { path: '/news/futures-price', routeType: 'staticNews' }
     ]
     for (const p of staticPaths) {
-        for (const l of indexableLangs(langs, getRouteIndexableLangs(p.routeType))) {
+        for (const l of indexableLangs(langs, getRouteIndexableLangs(p.routeType, readyCodes))) {
             urls.push(`${BASE_URL}/${l.code}${p.path}`)
         }
     }
 
-    for (const l of indexableLangs(langs, getRouteIndexableLangs('productCategory'))) {
+    for (const l of indexableLangs(langs, getRouteIndexableLangs('productCategory', readyCodes))) {
         for (const c of categories) urls.push(`${BASE_URL}/${l.code}/products/category/${c.slug || c.id}`)
     }
-    for (const l of indexableLangs(langs, getRouteIndexableLangs('newsCategory'))) {
+    for (const l of indexableLangs(langs, getRouteIndexableLangs('newsCategory', readyCodes))) {
         for (const c of newsCategories) urls.push(`${BASE_URL}/${l.code}/news/category/${c.slug || c.id}`)
     }
 
     for (const p of products) {
         const localized = coverage.get(`product:${p.id}`) || null
-        for (const l of indexableLangs(langs, localized)) urls.push(`${BASE_URL}/${l.code}/products/${p.slug || p.id}`)
+        for (const l of indexableLangs(readyLangs, localized)) urls.push(`${BASE_URL}/${l.code}/products/${p.slug || p.id}`)
     }
     for (const n of news) {
         const localized = coverage.get(`news:${n.id}`) || null
-        for (const l of indexableLangs(langs, localized)) urls.push(`${BASE_URL}/${l.code}/news/${n.slug || n.id}`)
+        for (const l of indexableLangs(readyLangs, localized)) urls.push(`${BASE_URL}/${l.code}/news/${n.slug || n.id}`)
     }
     return urls
 }

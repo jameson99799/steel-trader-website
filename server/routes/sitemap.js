@@ -6,7 +6,7 @@ import {
     PRODUCT_CATEGORY_SITEMAP_QUERY,
     NEWS_CATEGORY_SITEMAP_QUERY
 } from '../services/sitemapCategoryQueries.js'
-import { getLocalizedCoverage, getRouteIndexableLangs, indexableLangs } from '../services/indexingPolicy.js'
+import { PRIMARY_CONTENT_LANGS, getLocalizedCoverage, getRouteIndexableLangs, indexableLangs } from '../services/indexingPolicy.js'
 
 const router = Router()
 
@@ -29,10 +29,16 @@ function escapeXml(str) {
 
 function getActiveLangs() {
     try {
-        const langs = getAll(`SELECT code FROM languages WHERE status = 1 ORDER BY code`)
+        const langs = getAll(`SELECT code, seo_index_ready FROM languages WHERE status = 1 ORDER BY code`)
         if (langs && langs.length) return langs
     } catch {}
-    return [{ code: 'en' }]
+    return [{ code: 'en', seo_index_ready: 1 }]
+}
+
+function readyLangCodes(activeLangs) {
+    return activeLangs
+        .filter(l => l.seo_index_ready || PRIMARY_CONTENT_LANGS.includes(l.code))
+        .map(l => l.code)
 }
 
 function getSeoSettings() {
@@ -156,13 +162,14 @@ router.get('/static', (req, res) => {
 
         const seoSettings = getSeoSettings()
         const urls = []
+        const indexableCodes = readyLangCodes(activeLangs)
         for (const p of staticPages) {
             // Listing and informational pages follow the SSR route policy:
-            // primary locales plus translated secondary locales for route
-            // types that are indexable in them.
+            // primary locales plus every enabled language whose SEO readiness
+            // switch is on.
             const pageLangs = p.routeType
-                ? indexableLangs(activeLangs, getRouteIndexableLangs(p.routeType))
-                : indexableLangs(activeLangs)
+                ? indexableLangs(activeLangs, getRouteIndexableLangs(p.routeType, indexableCodes))
+                : indexableLangs(activeLangs, new Set(indexableCodes))
             for (const l of pageLangs) {
                 const langPath = `/${l.code}${p.loc === '/' ? '' : p.loc}`
                 urls.push(urlEntry({
@@ -190,9 +197,10 @@ router.get('/categories', (req, res) => {
         const activeLangs = getActiveLangs()
         const seoSettings = getSeoSettings()
         // Category listing pages share the SSR route policy (primary locales
-        // plus translated secondary locales).
-        const catLangs = indexableLangs(activeLangs, getRouteIndexableLangs('productCategory'))
-        const newsCatLangs = indexableLangs(activeLangs, getRouteIndexableLangs('newsCategory'))
+        // plus every enabled language whose SEO readiness switch is on).
+        const indexableCodes = readyLangCodes(activeLangs)
+        const catLangs = indexableLangs(activeLangs, getRouteIndexableLangs('productCategory', indexableCodes))
+        const newsCatLangs = indexableLangs(activeLangs, getRouteIndexableLangs('newsCategory', indexableCodes))
         const urls = []
 
         // Product categories
@@ -244,6 +252,7 @@ router.get('/products', (req, res) => {
     try {
         const fallbackDate = '2024-03-01'
         const activeLangs = getActiveLangs()
+        const readyLangs = activeLangs.filter(l => l.seo_index_ready || PRIMARY_CONTENT_LANGS.includes(l.code))
 
         const visibility = visibleProductWhere('p', visibleCategories())
         // Primary: status=1 (active). Fallback: all products (handles non-standard status values)
@@ -272,7 +281,7 @@ router.get('/products', (req, res) => {
             const prodPath = `/products/${prodSlug}`
             const lastmod = toDateStr(p.lastmod_date, fallbackDate)
             const localized = coverage.get(`product:${p.id}`) || null
-            const langs = indexableLangs(activeLangs, localized)
+            const langs = indexableLangs(readyLangs, localized)
 
             for (const l of langs) {
                 let imagesHTML = ''
@@ -309,6 +318,7 @@ router.get('/news', (req, res) => {
     try {
         const fallbackDate = '2024-03-01'
         const activeLangs = getActiveLangs()
+        const readyLangs = activeLangs.filter(l => l.seo_index_ready || PRIMARY_CONTENT_LANGS.includes(l.code))
         const news = getAll(`SELECT slug, id, title_en, title, cover_image, COALESCE(updated_at, created_at) as lastmod_date FROM news WHERE status = 1 ORDER BY id DESC`)
 
         // For non-English/non-Chinese languages only include the variant when a
@@ -323,7 +333,7 @@ router.get('/news', (req, res) => {
             const newsPath = `/news/${slug}`
             const lastmod = toDateStr(n.lastmod_date, fallbackDate)
             const localized = coverage.get(`news:${n.id}`) || null
-            const langs = indexableLangs(activeLangs, localized)
+            const langs = indexableLangs(readyLangs, localized)
 
             for (const l of langs) {
                 let imagesHTML = ''

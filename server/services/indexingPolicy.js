@@ -78,10 +78,9 @@ export function indexableLangs(activeLangs, extraLangs = null) {
   return result
 }
 
-// Every enabled secondary locale is safe to index for routes that have
-// localized SEO copy (listing/static/category pages) and fully localized
-// detail pages. indexableLangs() still filters this list by the languages
-// that are actually enabled in the database.
+// Fallback allowlist for callers that do not pass the database-backed
+// seo_index_ready list. Runtime callers should pass ready language codes so
+// newly added languages become indexable through the admin switch.
 export const SECONDARY_INDEX_LANGS = Object.freeze([
   'ru',
   'fr',
@@ -101,8 +100,15 @@ const STATIC_ROUTE_TYPES = new Set([
   'about', 'contact', 'factory', 'staticNews'
 ])
 
-export function getRouteIndexableLangs(routeType) {
+export function getRouteIndexableLangs(routeType, readyLangCodes = null) {
   const langs = new Set(PRIMARY_CONTENT_LANGS)
+  if (readyLangCodes != null) {
+    for (const entry of readyLangCodes) {
+      const code = typeof entry === 'string' ? entry : entry?.code
+      if (code) langs.add(code)
+    }
+    return langs
+  }
   if (LISTING_ROUTE_TYPES.has(routeType) || STATIC_ROUTE_TYPES.has(routeType)) {
     for (const code of SECONDARY_INDEX_LANGS) langs.add(code)
   }

@@ -95,8 +95,9 @@ AI 在翻译时会“自作聪敏”，例如：
 
 ## 多语言 Google 收录规则
 
-- `server/services/indexingPolicy.js` 的 `SECONDARY_INDEX_LANGS` 当前包含全部 8 个二级语言（ru / fr / es / ar / hi / th / tr / pt）。
-- 首页、产品列表、新闻列表、产品分类、新闻分类、About、Contact、Factory、RAL、Roofing、Futures 这些路由页，会为该列表中的每个启用语言输出 `index, follow`、canonical 和全语言 hreflang，并进入 `sitemap-static.xml` / `sitemap-categories.xml`。
-- 产品详情和文章详情仍按单条内容判断：产品必须同时有 `name` + `description` 译文，文章必须同时有 `title` + `content` 译文，才会 index 并进入 sitemap；缺少完整译文时保持 `noindex`。
+- 每个语言在 `languages` 表中都有 `seo_index_ready` 开关。只有 `status=1 AND seo_index_ready=1` 的语言才会全站 index、进入 sitemap 和 hreflang；`en` / `zh` 始终视为就绪。
+- 首页、产品列表、新闻列表、产品分类、新闻分类、About、Contact、Factory、RAL、Roofing、Futures 这些路由页，会为每个已就绪语言输出 `index, follow`、canonical 和全语言 hreflang，并进入 `sitemap-static.xml` / `sitemap-categories.xml`。
+- 产品详情和文章详情仍按单条内容判断：产品必须同时有 `name` + `description` 译文，文章必须同时有 `title` + `content` 译文，并且该语言已就绪，才会 index 并进入 sitemap；否则保持 `noindex`。
+- 静态页和列表页的 SEO title/description 存在 `language_seo_copy` 表。后台「语言管理 → SEO 文案」可编辑 11 组文案；已有 10 种语言会在启动时自动写入内置文案。
+- 新增语言流程：后台添加语言（默认 `seo_index_ready=0`）→ 完成 UI 译文、公司简介、联系页文案、产品/文章翻译 → 填写 11 组 SEO 文案 → 打开「SEO 收录」开关。开关打开时后端会校验文案和关键译文，缺少任何一项都会拒绝开启并列出缺失项。
 - 静态页正文优先读取数据库里的 `company.description_<lang>`、`advantages_<lang>`、`page_texts` 和 UI 译文，避免硬编码译文与后台内容不一致。
-- 新增语言时，必须确认该语言的 UI 译文、静态页 SEO title/description、分类名称和列表页文案齐全后再加入 `SECONDARY_INDEX_LANGS`；否则会出现英文内容挂在本地语言 URL 下的重复内容问题。

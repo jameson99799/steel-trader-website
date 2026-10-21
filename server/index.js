@@ -667,9 +667,17 @@ ${contactLines.join('\n')}
         // ── Verify Language Prefix Validity ──
         // To prevent Soft 404s and SEO duplicate content issues, we must ensure
         // that if a two-letter prefix is detected, it actually exists in our supported languages.
-        const dbLangs = getAll('SELECT code FROM languages WHERE status=1') || []
+        const dbLangs = getAll('SELECT code, seo_index_ready FROM languages WHERE status=1') || []
         const validLangCodes = new Set(dbLangs.map(l => l.code))
         validLangCodes.add('en') // English is always valid as default
+        const readyLangCodes = [...new Set([
+          ...PRIMARY_CONTENT_LANGS,
+          ...dbLangs
+            .filter(l => l.seo_index_ready || PRIMARY_CONTENT_LANGS.includes(l.code))
+            .map(l => l.code)
+        ])]
+        const readyLangSet = new Set(readyLangCodes)
+        const routeLangs = (routeType) => getRouteIndexableLangs(routeType, readyLangCodes)
         
         // If a 2-letter language prefix was matched but it's NOT in our database, it's a dead link!
         // Immediately trigger 404 to block Google from indexing garbage URLs like /xx/products
@@ -701,8 +709,15 @@ ${contactLines.join('\n')}
         if (company && tMap) {
           translateCompany(company, tMap, lang)
         }
-        const seoCopy = getSeoCopy(lang)
-        const staticCopy = getStaticPageCopy(lang)
+        const pageSeoRows = getAll(
+          'SELECT page_key, title, description FROM language_seo_copy WHERE language_code = ?',
+          [lang]
+        )
+        const pageSeo = Object.fromEntries(
+          pageSeoRows.map(row => [row.page_key, { title: row.title, desc: row.description }])
+        )
+        const seoCopy = getSeoCopy(lang, pageSeo)
+        const staticCopy = getStaticPageCopy(lang, pageSeo)
         const pageTexts = getOne('SELECT * FROM page_texts WHERE id = 1') || {}
         if (tMap) translatePageTexts(pageTexts, tMap, lang)
 
@@ -790,7 +805,7 @@ ${contactLines.join('\n')}
                 if (!hasRealTranslation) forceNoindex = true
               }
               // hreflang/canonical variants may only point at fully-localized locales.
-              routeIndexableLangs = new Set([...PRIMARY_CONTENT_LANGS, ...getLocalizedLangsFor('product', product.id)])
+              routeIndexableLangs = new Set([...PRIMARY_CONTENT_LANGS, ...getLocalizedLangsFor('product', product.id)].filter(code => readyLangSet.has(code)))
               const seoT = getSeoTrans('product', product.id, lang)
               const localizedPName = product[`name_${lang}`]
               const pName = localizedPName
@@ -1026,7 +1041,7 @@ ${contactLines.join('\n')}
                 if (!hasRealTranslation) forceNoindex = true
               }
               // hreflang/canonical variants may only point at fully-localized locales.
-              routeIndexableLangs = new Set([...PRIMARY_CONTENT_LANGS, ...getLocalizedLangsFor('news', article.id)])
+              routeIndexableLangs = new Set([...PRIMARY_CONTENT_LANGS, ...getLocalizedLangsFor('news', article.id)].filter(code => readyLangSet.has(code)))
               let articleBody = rawContent
                 .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
                 .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -1077,7 +1092,7 @@ ${contactLines.join('\n')}
           const catPageMatch = subPath.match(/^\/news\/category\/([^/]+)$/)
           if (catPageMatch) {
             matchedRoute = true
-            routeIndexableLangs = getRouteIndexableLangs('newsCategory')
+            routeIndexableLangs = routeLangs('newsCategory')
             const catSlug = catPageMatch[1]
             const cat = getOne('SELECT * FROM news_categories WHERE slug = ?', [catSlug])
             if (cat) {
@@ -1123,7 +1138,7 @@ ${contactLines.join('\n')}
           const prodCatMatch = subPath.match(/^\/products\/category\/([^/]+)$/)
           if (prodCatMatch) {
             matchedRoute = true
-            routeIndexableLangs = getRouteIndexableLangs('productCategory')
+            routeIndexableLangs = routeLangs('productCategory')
             const catSlug = prodCatMatch[1]
             const cat = getOne('SELECT * FROM categories WHERE slug = ?', [catSlug]) ||
                          getOne('SELECT * FROM categories WHERE lower(name_en) = ?', [catSlug.replace(/-/g, ' ')])
@@ -1164,7 +1179,7 @@ ${contactLines.join('\n')}
           // ── Static pages with SSR content injection ──
           if (subPath === '/products' || subPath === '/products/') {
             matchedRoute = true
-            routeIndexableLangs = getRouteIndexableLangs('productsList')
+            routeIndexableLangs = routeLangs('productsList')
             pageTitle = fillTemplate(seoCopy.products.title, { company: companyName })
             pageDesc = fillTemplate(seoCopy.products.desc, { company: companyName })
             // SSR product list for GEO crawlers
@@ -1189,7 +1204,7 @@ ${contactLines.join('\n')}
             ] })
           } else if (subPath === '/news' || subPath === '/news/') {
             matchedRoute = true
-            routeIndexableLangs = getRouteIndexableLangs('newsList')
+            routeIndexableLangs = routeLangs('newsList')
             pageTitle = fillTemplate(seoCopy.news.title, { company: companyName })
             pageDesc = fillTemplate(seoCopy.news.desc, { company: companyName })
             // SSR recent article list for GEO crawlers
@@ -1206,7 +1221,7 @@ ${contactLines.join('\n')}
             const aboutLabel = ui('about', lang === 'zh' ? '关于我们' : 'About Us')
             pageTitle = fillTemplate(staticCopy.about.title, { company: companyNameTranslated })
             pageDesc = fillTemplate(staticCopy.about.desc, { company: companyNameTranslated })
-            routeIndexableLangs = getRouteIndexableLangs('about')
+            routeIndexableLangs = routeLangs('about')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: aboutLabel, item: pageCanonical }
@@ -1236,7 +1251,7 @@ ${contactLines.join('\n')}
             const contactLabel = ui('contactUs', staticCopy.contact.h1)
             pageTitle = fillTemplate(staticCopy.contact.title, { company: companyNameTranslated })
             pageDesc = fillTemplate(staticCopy.contact.desc, { company: companyNameTranslated })
-            routeIndexableLangs = getRouteIndexableLangs('contact')
+            routeIndexableLangs = routeLangs('contact')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: contactLabel, item: pageCanonical }
@@ -1261,7 +1276,7 @@ ${contactLines.join('\n')}
             const factoryLabel = ui('factory', staticCopy.factory.h1)
             pageTitle = fillTemplate(staticCopy.factory.title, { company: companyNameTranslated })
             pageDesc = fillTemplate(staticCopy.factory.desc, { company: companyNameTranslated })
-            routeIndexableLangs = getRouteIndexableLangs('factory')
+            routeIndexableLangs = routeLangs('factory')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: factoryLabel, item: pageCanonical }
@@ -1275,7 +1290,7 @@ ${contactLines.join('\n')}
             const ralLabel = ui('ralColors', staticCopy.ralColors.h1)
             pageTitle = fillTemplate(staticCopy.ralColors.title, { company: companyNameTranslated })
             pageDesc = fillTemplate(staticCopy.ralColors.desc, { company: companyNameTranslated })
-            routeIndexableLangs = getRouteIndexableLangs('staticNews')
+            routeIndexableLangs = routeLangs('staticNews')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: seoCopy.breadcrumbNews, item: `${siteUrl}/${lang}/news` },
@@ -1297,7 +1312,7 @@ ${contactLines.join('\n')}
             const roofingLabel = ui('roofingProfiles', staticCopy.roofingProfiles.h1)
             pageTitle = fillTemplate(staticCopy.roofingProfiles.title, { company: companyNameTranslated })
             pageDesc = fillTemplate(staticCopy.roofingProfiles.desc, { company: companyNameTranslated })
-            routeIndexableLangs = getRouteIndexableLangs('staticNews')
+            routeIndexableLangs = routeLangs('staticNews')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: seoCopy.breadcrumbNews, item: `${siteUrl}/${lang}/news` },
@@ -1316,7 +1331,7 @@ ${contactLines.join('\n')}
             isNotFound = false
             pageTitle = fillTemplate(staticCopy.futuresPrice.title, { company: companyNameTranslated })
             pageDesc = fillTemplate(staticCopy.futuresPrice.desc, { company: companyNameTranslated })
-            routeIndexableLangs = getRouteIndexableLangs('staticNews')
+            routeIndexableLangs = routeLangs('staticNews')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: seoCopy.breadcrumbNews, item: `${siteUrl}/${lang}/news` },
@@ -1343,7 +1358,7 @@ ${contactLines.join('\n')}
           // ── Homepage BreadcrumbList + WebSite schema + SSR content ──
           if (!subPath || subPath === '/') {
             matchedRoute = true
-            routeIndexableLangs = getRouteIndexableLangs('home')
+            routeIndexableLangs = routeLangs('home')
             // Homepage SEO text per language, sourced from the translations table when a
             // translation has been generated (content left to the AI translation system).
             const homeSeoT = getSeoTrans('home_seo', 1, lang)
@@ -1368,6 +1383,14 @@ ${contactLines.join('\n')}
               } else {
                 pageDesc = companyDescTranslated || `Shandong Sunsea Steel Co., Ltd — Professional manufacturer and exporter of Galvanized (GI), Galvalume (GL), Prepainted (PPGI/PPGL) and Cold Rolled (CRC) steel coils. ASTM A653 / JIS G3302 / EN 10346 certified. Factory direct pricing, global shipping from Shandong, China.`
               }
+            }
+            // Database-backed homepage SEO copy wins when the language is managed
+            // through the admin SEO readiness editor.
+            if (pageSeo.home?.title) {
+              pageTitle = fillTemplate(pageSeo.home.title, { company: companyNameTranslated })
+            }
+            if (pageSeo.home?.desc) {
+              pageDesc = fillTemplate(pageSeo.home.desc, { company: companyNameTranslated })
             }
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` }
@@ -1409,7 +1432,7 @@ ${contactLines.join('\n')}
                return `<li><a href="${siteUrl}/${lang}/products/category/${catSlug}">${esc(trName)}</a></li>`
             }).join('')
             
-            const homeLabels = getHomeLabels(lang)
+            const homeLabels = getHomeLabels(lang, tMap?.ui_text_static)
             const labCat = esc(homeLabels.categories)
             const labProd = esc(homeLabels.products)
             const labLink = esc(homeLabels.quickLinks)
