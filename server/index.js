@@ -11,8 +11,16 @@ import { sanitizeRichHtml } from '../src/utils/sanitizeHtml.js'
 import sharp from 'sharp'
 
 import { initDb, getAll, getOne, run, findFuzzyBySlug } from './db.js'
-import { loadTranslationsForLang, translateProduct, translateNews, translateCategory, translateCompany } from './helpers/translate.js'
-import { getSeoCopy, getStaticPageCopy, fillTemplate } from './services/seoContent.js'
+import {
+  loadTranslationsForLang,
+  translateProduct,
+  translateNews,
+  translateCategory,
+  translateCompany,
+  translatePageTexts,
+  translateRoofingProfile
+} from './helpers/translate.js'
+import { getSeoCopy, getStaticPageCopy, getHomeLabels, fillTemplate } from './services/seoContent.js'
 import { getVisibleCategoryIds, visibleProductWhere } from './services/catalogVisibility.js'
 import {
   getSeoResponsePolicy,
@@ -694,6 +702,12 @@ ${contactLines.join('\n')}
         }
         const seoCopy = getSeoCopy(lang)
         const staticCopy = getStaticPageCopy(lang)
+        const pageTexts = getOne('SELECT * FROM page_texts WHERE id = 1') || {}
+        if (tMap) translatePageTexts(pageTexts, tMap, lang)
+
+        // Static-page labels come from the same UI translation table the Vue
+        // pages use, so crawler HTML and visible content stay in sync.
+        const ui = (key, fallback = '') => tMap?.ui_text_static?.[key] || fallback || ''
         
         function formatSsrMailtoLinks(html, defaultEmail) {
           if (!html) return html
@@ -1156,10 +1170,8 @@ ${contactLines.join('\n')}
             const productListVisibility = publicProductVisibility('products')
             const productList = getAll(`SELECT id, slug, name_en, name, description_en, description FROM products WHERE status=1${productListVisibility.clause} ORDER BY sort_order, id DESC LIMIT 20`, productListVisibility.params)
             if (tMap) productList.forEach(p => translateProduct(p, tMap, lang))
-            if (productList.length) {
-              const prodItems = productList.map(p => `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(pickLocalized(p, 'name'))}</a><p>${esc(pickLocalized(p, 'description').substring(0, 150).replace(/\s+\S*$/, '...'))}</p></li>`).join('')
-              ssrContent = `<section id="ssr-products"><h1>${esc(seoCopy.products.h1)}</h1><ul>${prodItems}</ul></section>`
-            }
+            const prodItems = productList.map(p => `<li><a href="${siteUrl}/${lang}/products/${p.slug || p.id}">${esc(pickLocalized(p, 'name'))}</a><p>${esc(pickLocalized(p, 'description').substring(0, 150).replace(/\s+\S*$/, '...'))}</p></li>`).join('')
+            ssrContent = `<section id="ssr-products"><h1>${esc(seoCopy.products.h1)}</h1><ul>${prodItems}</ul></section>`
             // ItemList Schema for product listing
             const allProductsVisibility = publicProductVisibility('products')
             const allProducts = getAll(`SELECT id, slug, name_en, name FROM products WHERE status=1${allProductsVisibility.clause} ORDER BY sort_order, id DESC LIMIT 30`, allProductsVisibility.params)
@@ -1182,22 +1194,21 @@ ${contactLines.join('\n')}
             // SSR recent article list for GEO crawlers
             const recentArticles = getAll('SELECT id, slug, title_en, title, summary_en, summary FROM news WHERE status=1 ORDER BY sort_order, id DESC LIMIT 12')
             if (tMap) recentArticles.forEach(a => translateNews(a, tMap, lang))
-            if (recentArticles.length) {
-              const artItems = recentArticles.map(a => `<li><a href="${siteUrl}/${lang}/news/${a.slug || a.id}">${esc(pickLocalized(a, 'title'))}</a><p>${esc(pickLocalized(a, 'summary'))}</p></li>`).join('')
-              ssrContent = `<section id="ssr-news-list"><h1>${esc(seoCopy.news.h1)}</h1><ul>${artItems}</ul></section>`
-            }
+            const artItems = recentArticles.map(a => `<li><a href="${siteUrl}/${lang}/news/${a.slug || a.id}">${esc(pickLocalized(a, 'title'))}</a><p>${esc(pickLocalized(a, 'summary'))}</p></li>`).join('')
+            ssrContent = `<section id="ssr-news-list"><h1>${esc(seoCopy.news.h1)}</h1><ul>${artItems}</ul></section>`
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: seoCopy.breadcrumbNews, item: pageCanonical }
             ] })
           } else if (subPath === '/about' || subPath === '/about/') {
             matchedRoute = true
+            const aboutLabel = ui('about', lang === 'zh' ? '关于我们' : 'About Us')
             pageTitle = fillTemplate(staticCopy.about.title, { company: companyNameTranslated })
             pageDesc = fillTemplate(staticCopy.about.desc, { company: companyNameTranslated })
             routeIndexableLangs = getRouteIndexableLangs('about')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
-              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
-              { '@type': 'ListItem', position: 2, name: 'About Us', item: pageCanonical }
+              { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: aboutLabel, item: pageCanonical }
             ] })
             extraSchemas += jsonLd({
               '@context': 'https://schema.org', '@type': 'LocalBusiness',
@@ -1205,64 +1216,100 @@ ${contactLines.join('\n')}
               address: { '@type': 'PostalAddress', addressCountry: 'CN', addressRegion: 'Shandong', addressLocality: 'Liaocheng' },
               ...(company.email && { email: company.email }),
               ...(company.phone && { telephone: company.phone }),
-              description: (company.description_en || '').substring(0, 300)
+              description: (pickLocalized(company, 'description') || '').substring(0, 300)
             })
-            // Fully render About page content for GEO AI crawlers
-            ssrContent = `<article id="ssr-about"><h1>${esc(fillTemplate(staticCopy.about.h1, { company: companyNameTranslated }))}</h1><p>${esc(fillTemplate(staticCopy.about.intro, { company: companyNameTranslated }))}</p><h2>${esc(staticCopy.about.infoHeading)}</h2><ul><li><strong>${esc(staticCopy.about.labelName)}:</strong> ${esc(company.name_en || company.name)}</li><li><strong>${esc(staticCopy.about.labelHeadquarters)}:</strong> ${esc(company.address_en || company.address)}</li><li><strong>${esc(staticCopy.about.labelEmail)}:</strong> ${esc(company.email)}</li><li><strong>${esc(staticCopy.about.labelPhone)}:</strong> ${esc(company.phone)}</li></ul><h2>${esc(staticCopy.about.exportHeading)}</h2><p>${esc(staticCopy.about.exportBody)}</p></article>`
+            // Fully render About page content for GEO AI crawlers, using the same
+            // CMS and UI translations that the Vue page displays.
+            const aboutH1 = ui('about', fillTemplate(staticCopy.about.h1, { company: companyNameTranslated }))
+            const aboutIntro = pickLocalized(company, 'description') || fillTemplate(staticCopy.about.intro, { company: companyNameTranslated })
+            const aboutAdvantages = String(pickLocalized(company, 'advantages') || '')
+              .split(/\r?\n/)
+              .map(line => line.trim())
+              .filter(Boolean)
+            const aboutAdvantagesHtml = aboutAdvantages.length
+              ? `<h2>${esc(ui('ourAdvantages', staticCopy.about.exportHeading))}</h2><ul>${aboutAdvantages.map(item => `<li>${esc(item)}</li>`).join('')}</ul>`
+              : ''
+            ssrContent = `<article id="ssr-about"><h1>${esc(aboutH1)}</h1><p>${esc(aboutIntro)}</p>${aboutAdvantagesHtml}<h2>${esc(ui('contactInfo', staticCopy.about.infoHeading))}</h2><ul><li><strong>${esc(ui('companyLabel', staticCopy.about.labelName))}:</strong> ${esc(company.name_en || company.name)}</li><li><strong>${esc(ui('address', staticCopy.about.labelHeadquarters))}:</strong> ${esc(company.address_en || company.address)}</li><li><strong>${esc(ui('email', staticCopy.about.labelEmail))}:</strong> ${esc(company.email)}</li><li><strong>${esc(ui('phone', staticCopy.about.labelPhone))}:</strong> ${esc(company.phone)}</li></ul></article>`
           } else if (subPath === '/contact' || subPath === '/contact/') {
             matchedRoute = true
+            const contactLabel = ui('contactUs', staticCopy.contact.h1)
             pageTitle = fillTemplate(staticCopy.contact.title, { company: companyNameTranslated })
             pageDesc = fillTemplate(staticCopy.contact.desc, { company: companyNameTranslated })
             routeIndexableLangs = getRouteIndexableLangs('contact')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
-              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
-              { '@type': 'ListItem', position: 2, name: 'Contact', item: pageCanonical }
+              { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: contactLabel, item: pageCanonical }
             ] })
             extraSchemas += jsonLd({
               '@context': 'https://schema.org', '@type': 'ContactPage',
-              name: `Contact ${companyName}`,
+              name: `${contactLabel} ${companyName}`,
               url: pageCanonical,
               mainEntity: { '@type': orgType, name: companyName,
                 ...(company.email && { email: company.email }),
                 ...(company.phone && { telephone: company.phone })
               }
             })
-            // Add dense Contact info into SSR Dom
-            ssrContent = `<article id="ssr-contact"><h1>${esc(staticCopy.contact.h1)}</h1><p>${esc(fillTemplate(staticCopy.contact.intro, { company: companyNameTranslated }))}</p><h2>${esc(staticCopy.contact.detailsHeading)}</h2><ul><li><strong>${esc(staticCopy.contact.labelEmail)}:</strong> <a href="mailto:${esc(company.email)}">${esc(company.email)}</a></li><li><strong>${esc(staticCopy.contact.labelTelephone)}:</strong> <a href="tel:${esc(company.phone)}">${esc(company.phone)}</a></li><li><strong>${esc(staticCopy.contact.labelWhatsapp)}:</strong> <a href="https://wa.me/${(company.whatsapp || '').replace(/[^0-9]/g, '')}">${esc(company.whatsapp)}</a></li><li><strong>${esc(staticCopy.contact.labelAddress)}:</strong> ${esc(company.address_en || company.address)}</li></ul><h2>${esc(staticCopy.contact.formHeading)}</h2><p>${esc(staticCopy.contact.formBody)}</p><form><input type="text" name="name" aria-label="${esc(staticCopy.contact.fieldName)}" /><input type="email" name="email" aria-label="${esc(staticCopy.contact.fieldEmail)}" /><input type="tel" name="phone" aria-label="${esc(staticCopy.contact.fieldPhone)}" /><textarea name="message" aria-label="${esc(staticCopy.contact.fieldMessage)}"></textarea><button type="submit">${esc(staticCopy.contact.submit)}</button></form></article>`
+            const contactIntro = pickLocalized(pageTexts, 'contact_page_subtitle')
+              || ui('getInTouch', fillTemplate(staticCopy.contact.intro, { company: companyNameTranslated }))
+            const contactFormBody = pickLocalized(pageTexts, 'contact_form_desc')
+              || ui('formIntro', staticCopy.contact.formBody)
+            // Add dense Contact info into SSR Dom, localized from page texts/UI.
+            ssrContent = `<article id="ssr-contact"><h1>${esc(contactLabel)}</h1><p>${esc(contactIntro)}</p><h2>${esc(ui('contactInfo', staticCopy.contact.detailsHeading))}</h2><ul><li><strong>${esc(ui('email', staticCopy.contact.labelEmail))}:</strong> <a href="mailto:${esc(company.email)}">${esc(company.email)}</a></li><li><strong>${esc(ui('phone', staticCopy.contact.labelTelephone))}:</strong> <a href="tel:${esc(company.phone)}">${esc(company.phone)}</a></li><li><strong>WhatsApp:</strong> <a href="https://wa.me/${(company.whatsapp || '').replace(/[^0-9]/g, '')}">${esc(company.whatsapp)}</a></li><li><strong>${esc(ui('address', staticCopy.contact.labelAddress))}:</strong> ${esc(company.address_en || company.address)}</li></ul><h2>${esc(ui('sendInquiry', staticCopy.contact.formHeading))}</h2><p>${esc(contactFormBody)}</p><form><input type="text" name="name" aria-label="${esc(ui('name', staticCopy.contact.fieldName))}" /><input type="email" name="email" aria-label="${esc(ui('email', staticCopy.contact.fieldEmail))}" /><input type="tel" name="phone" aria-label="${esc(ui('phone', staticCopy.contact.fieldPhone))}" /><textarea name="message" aria-label="${esc(ui('message', staticCopy.contact.fieldMessage))}"></textarea><button type="submit">${esc(ui('submit', staticCopy.contact.submit))}</button></form></article>`
           } else if (subPath === '/factory' || subPath === '/factory/') {
             matchedRoute = true
+            const factoryLabel = ui('factory', staticCopy.factory.h1)
             pageTitle = fillTemplate(staticCopy.factory.title, { company: companyNameTranslated })
             pageDesc = fillTemplate(staticCopy.factory.desc, { company: companyNameTranslated })
             routeIndexableLangs = getRouteIndexableLangs('factory')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
-              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
-              { '@type': 'ListItem', position: 2, name: 'Factory', item: pageCanonical }
+              { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: factoryLabel, item: pageCanonical }
             ] })
-            ssrContent = `<article id="ssr-factory"><h1>${esc(staticCopy.factory.h1)}</h1><p>${esc(staticCopy.factory.body)}</p></article>`
+            const factoryIntro = ui('factoryDesc', staticCopy.factory.body)
+            const factoryBody = pickLocalized(company, 'description') || staticCopy.factory.body
+            ssrContent = `<article id="ssr-factory"><h1>${esc(ui('factoryTour', staticCopy.factory.h1))}</h1><p>${esc(factoryIntro)}</p><p>${esc(factoryBody)}</p></article>`
           } else if (subPath === '/news/ral-colors' || subPath === '/news/ral-colors/') {
             matchedRoute = true
             isNotFound = false
+            const ralLabel = ui('ralColors', staticCopy.ralColors.h1)
             pageTitle = fillTemplate(staticCopy.ralColors.title, { company: companyNameTranslated })
             pageDesc = fillTemplate(staticCopy.ralColors.desc, { company: companyNameTranslated })
             routeIndexableLangs = getRouteIndexableLangs('staticNews')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
-              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
-              { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
-              { '@type': 'ListItem', position: 3, name: 'RAL Colors', item: pageCanonical }
+              { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: seoCopy.breadcrumbNews, item: `${siteUrl}/${lang}/news` },
+              { '@type': 'ListItem', position: 3, name: ralLabel, item: pageCanonical }
             ] })
-            ssrContent = `<article id="ssr-ral-colors"><h1>${esc(staticCopy.ralColors.h1)}</h1><p>${esc(staticCopy.ralColors.intro)}</p></article>`
+            const ralRows = getAll('SELECT id, code, name_en, name_zh FROM ral_colors ORDER BY code ASC LIMIT 40')
+            const ralItems = ralRows.map(color => {
+              let name = lang === 'zh' ? color.name_zh : color.name_en
+              if (lang !== 'en' && lang !== 'zh') {
+                const translated = tMap?.[`ral_color_${color.id}`]?.name
+                if (translated) name = translated
+              }
+              return `<li>RAL ${esc(color.code)} — ${esc(name)}</li>`
+            }).join('')
+            ssrContent = `<article id="ssr-ral-colors"><h1>${esc(ui('ralColorChart', staticCopy.ralColors.h1))}</h1><p>${esc(ui('ralDesc', staticCopy.ralColors.intro))}</p><ul>${ralItems}</ul></article>`
           } else if (subPath === '/news/roofing-profiles' || subPath === '/news/roofing-profiles/') {
             matchedRoute = true
             isNotFound = false
+            const roofingLabel = ui('roofingProfiles', staticCopy.roofingProfiles.h1)
             pageTitle = fillTemplate(staticCopy.roofingProfiles.title, { company: companyNameTranslated })
             pageDesc = fillTemplate(staticCopy.roofingProfiles.desc, { company: companyNameTranslated })
             routeIndexableLangs = getRouteIndexableLangs('staticNews')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
-              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
-              { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
-              { '@type': 'ListItem', position: 3, name: 'Roofing Profiles', item: pageCanonical }
+              { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: seoCopy.breadcrumbNews, item: `${siteUrl}/${lang}/news` },
+              { '@type': 'ListItem', position: 3, name: roofingLabel, item: pageCanonical }
             ] })
-            ssrContent = `<article id="ssr-roofing-profiles"><h1>${esc(staticCopy.roofingProfiles.h1)}</h1><p>${esc(staticCopy.roofingProfiles.intro)}</p></article>`
+            const roofingRows = getAll('SELECT * FROM roofing_profiles ORDER BY sort_order DESC, id DESC LIMIT 30')
+            if (tMap) roofingRows.forEach(profile => translateRoofingProfile(profile, tMap, lang))
+            const roofingItems = roofingRows.map(profile => {
+              const model = profile.model || profile.name || ''
+              const applications = profile.applications || ''
+              return `<li><strong>${esc(model)}</strong>${applications ? ` — ${esc(applications)}` : ''}</li>`
+            }).join('')
+            ssrContent = `<article id="ssr-roofing-profiles"><h1>${esc(ui('roofingProfiles', staticCopy.roofingProfiles.h1))}</h1><p>${esc(ui('roofingProfilesDesc', staticCopy.roofingProfiles.intro))}</p><ul>${roofingItems}</ul></article>`
           } else if (subPath === '/news/futures-price' || subPath === '/news/futures-price/') {
             matchedRoute = true
             isNotFound = false
@@ -1270,9 +1317,9 @@ ${contactLines.join('\n')}
             pageDesc = fillTemplate(staticCopy.futuresPrice.desc, { company: companyNameTranslated })
             routeIndexableLangs = getRouteIndexableLangs('staticNews')
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
-              { '@type': 'ListItem', position: 1, name: 'Home', item: `${siteUrl}/${lang}` },
-              { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/${lang}/news` },
-              { '@type': 'ListItem', position: 3, name: 'Futures Price', item: pageCanonical }
+              { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: seoCopy.breadcrumbNews, item: `${siteUrl}/${lang}/news` },
+              { '@type': 'ListItem', position: 3, name: ui('futuresPriceBtn', staticCopy.futuresPrice.h1), item: pageCanonical }
             ] })
             
             // Render basic table for GEO crawlers
@@ -1287,9 +1334,9 @@ ${contactLines.join('\n')}
                 }
                 return `<tr><td>${esc(name)}</td><td>${esc(w.symbol)}</td></tr>`
               }).join('')
-              tableHtml = `<table><thead><tr><th>${esc(staticCopy.futuresPrice.productName)}</th><th>${esc(staticCopy.futuresPrice.symbol)}</th></tr></thead><tbody>${tableRows}</tbody></table>`
+              tableHtml = `<table><thead><tr><th>${esc(ui('futuresName', staticCopy.futuresPrice.productName))}</th><th>${esc(staticCopy.futuresPrice.symbol)}</th></tr></thead><tbody>${tableRows}</tbody></table>`
             }
-            ssrContent = `<section id="ssr-futures"><h1>${esc(staticCopy.futuresPrice.h1)}</h1><p>${esc(staticCopy.futuresPrice.intro)}</p>${tableHtml}</section>`
+            ssrContent = `<section id="ssr-futures"><h1>${esc(ui('futuresTitle', staticCopy.futuresPrice.h1))}</h1><p>${esc(ui('futuresDesc', staticCopy.futuresPrice.intro))}</p>${tableHtml}</section>`
           }
 
           // ── Homepage BreadcrumbList + WebSite schema + SSR content ──
@@ -1361,18 +1408,14 @@ ${contactLines.join('\n')}
                return `<li><a href="${siteUrl}/${lang}/products/category/${catSlug}">${esc(trName)}</a></li>`
             }).join('')
             
-            const labCat = lang === 'zh' ? '主要分类' : 'Main Categories'
-            const labProd = lang === 'zh' ? '主要产品' : 'Main Products'
-            const labLink = lang === 'zh' ? '快捷链接' : 'Quick Links'
-            const labAllProd = lang === 'zh' ? '所有产品' : 'All Products'
-            const labNews = lang === 'zh' ? '新闻与博客' : 'News & Blog'
-            const labContact = lang === 'zh' ? '联系我们' : 'Contact Us'
-            const labAbout = lang === 'zh' ? '关于我们' : 'About Us'
-            
-            const quickLinks = `<li><a href="${siteUrl}/${lang}/products">${labAllProd}</a></li><li><a href="${siteUrl}/${lang}/news">${labNews}</a></li><li><a href="${siteUrl}/${lang}/contact">${labContact}</a></li><li><a href="${siteUrl}/${lang}/about">${labAbout}</a></li>`
-            
-            const labFaq = lang === 'zh' ? '常见问题' : 'Frequently Asked Questions'
-            const homeFaqHtml = `<h2>${labFaq}</h2>${homeFaqs.map(([q, a]) => `<h3>${esc(q)}</h3><p>${esc(a)}</p>`).join('')}`
+            const homeLabels = getHomeLabels(lang)
+            const labCat = esc(homeLabels.categories)
+            const labProd = esc(homeLabels.products)
+            const labLink = esc(homeLabels.quickLinks)
+
+            const quickLinks = `<li><a href="${siteUrl}/${lang}/products">${esc(homeLabels.allProducts)}</a></li><li><a href="${siteUrl}/${lang}/news">${esc(homeLabels.news)}</a></li><li><a href="${siteUrl}/${lang}/contact">${esc(homeLabels.contact)}</a></li><li><a href="${siteUrl}/${lang}/about">${esc(homeLabels.about)}</a></li>`
+
+            const homeFaqHtml = `<h2>${esc(homeLabels.faq)}</h2>${homeFaqs.map(([q, a]) => `<h3>${esc(q)}</h3><p>${esc(a)}</p>`).join('')}`
             ssrContent = `<section id="ssr-home"><h1>${esc(pageTitle)}</h1><p>${companyDesc}</p><h2>${labCat}</h2><ul>${homeCatList}</ul><h2>${labProd}</h2><ul>${homeProductList}</ul>${homeFaqHtml}<h2>${labLink}</h2><ul>${quickLinks}</ul></section>`
           }
 

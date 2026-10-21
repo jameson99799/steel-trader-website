@@ -1,5 +1,5 @@
-// Machine-translated drafts for listing pages — review before enabling
-// indexing for each language (see PR2 SECONDARY_INDEX_LANGS rollout).
+// Localized copy for listing pages. Product/news detail pages still require
+// per-item translations before they are indexable (see indexingPolicy.js).
 
 const LISTING_I18N = {
   en: {
@@ -208,6 +208,29 @@ const LISTING_I18N = {
       title: '{category} - บทความอุตสาหกรรมเหล็ก | {company}',
       desc: 'เรียกดูบทความ {category} ทั้งหมดจาก {company} ความรู้เชิงลึกเกี่ยวกับเหล็กชุบสังกะสี PPGI GL คอยล์ CRC และตลาดเหล็กระดับโลก'
     }
+  },
+  tr: {
+    breadcrumbHome: 'Ana Sayfa',
+    breadcrumbProducts: 'Ürünler',
+    breadcrumbNews: 'Haberler',
+    products: {
+      title: 'Çelik Ürünleri - GI, GL, PPGI, PPGL, CRC Bobin ve Saclar | {company}',
+      desc: 'Galvanizli çelik (GI), Galvalume (GL), PPGI, PPGL ve soğuk haddelenmiş (CRC) bobin üreticisi ve ihracatçısı. ASTM A653 / JIS G3302 / EN 10346 uyumlu. Çin, Shandong\'dan fabrika fiyatı.',
+      h1: 'Çelik Ürünleri'
+    },
+    news: {
+      title: 'Çelik Sektörü Haberleri ve Teknik Kılavuzlar | {company}',
+      desc: 'Galvanizli çelik haberleri, PPGI/PPGL teknik kılavuzları, bobin özellikleri ve {company} pazar analizleri. Çelik alıcıları için uzman bilgiler.',
+      h1: 'Çelik Sektörü Haberleri'
+    },
+    productCategory: {
+      title: '{category} - Üretici ve İhracatçı | {company}',
+      desc: '{company} tarafından sunulan tüm {category} ürünlerini inceleyin. Çin, Shandong merkezli fabrikadan doğrudan çelik bobin üreticisi. ASTM / JIS / EN sertifikalı. Rekabetçi FOB fiyatları ve hızlı küresel sevkiyat.'
+    },
+    newsCategory: {
+      title: '{category} - Çelik Sektörü Makaleleri | {company}',
+      desc: '{company} tarafından yayınlanan tüm {category} makalelerini inceleyin. Galvanizli çelik, PPGI, GL, CRC bobinler ve uluslararası çelik pazarı hakkında uzman bilgiler.'
+    }
   }
 }
 
@@ -406,17 +429,220 @@ const STATIC_PAGE_I18N = {
   }
 }
 
+// Localized SEO title/description for static pages. Body copy is sourced from
+// the CMS (company description, page texts) and UI translations at render time,
+// so it stays in sync with what visitors actually see.
+const STATIC_PAGE_SEO_I18N = {
+  es: {
+    about: {
+      title: 'Sobre {company} | Fabricante y exportador de bobinas de acero',
+      desc: 'Conozca {company}, fabricante y exportador de bobinas de acero en Shandong, China. Bobinas GI, GL, PPGI, PPGL y CRC para compradores de todo el mundo.'
+    },
+    contact: {
+      title: 'Contacto | {company}',
+      desc: 'Póngase en contacto con {company} para solicitar una cotización, consultar productos o programar una visita a la fábrica.'
+    },
+    factory: {
+      title: 'Visita a la fábrica y líneas de producción | {company}',
+      desc: 'Recorra las instalaciones de {company}: líneas de producción avanzadas, control de calidad e inventario de bobinas de acero.'
+    },
+    ralColors: {
+      title: 'Carta de colores RAL para PPGI y PPGL | {company}',
+      desc: 'Consulte la carta de colores RAL para bobinas de acero prepintado (PPGI) y Galvalume (PPGL). Colores personalizados disponibles.'
+    },
+    roofingProfiles: {
+      title: 'Perfiles de chapa para techos y acero corrugado | {company}',
+      desc: 'Catálogo de perfiles de chapa de acero para techos: corrugados, trapezoidales y tipo teja, en varias dimensiones y colores.'
+    },
+    futuresPrice: {
+      title: 'Precios de futuros de acero en tiempo real | {company}',
+      desc: 'Siga los precios de futuros en tiempo real e históricos de bobina laminada en caliente, mineral de hierro, barras corrugadas y más.'
+    }
+  },
+  fr: {
+    about: {
+      title: 'À propos de {company} | Fabricant et exportateur de bobines d\'acier',
+      desc: 'Découvrez {company}, fabricant et exportateur de bobines d\'acier basé au Shandong, en Chine. Bobines GI, GL, PPGI, PPGL et CRC pour les acheteurs du monde entier.'
+    },
+    contact: {
+      title: 'Contact | {company}',
+      desc: 'Contactez {company} pour demander un devis, poser une question sur nos produits ou organiser une visite d\'usine.'
+    },
+    factory: {
+      title: 'Visite de l\'usine et lignes de production | {company}',
+      desc: 'Découvrez les installations de {company} : lignes de production avancées, contrôle qualité et stocks de bobines d\'acier.'
+    },
+    ralColors: {
+      title: 'Nuancier RAL pour PPGI et PPGL | {company}',
+      desc: 'Consultez le nuancier RAL complet pour nos bobines d\'acier prélaqué (PPGI) et Galvalume (PPGL). Couleurs personnalisées sur demande.'
+    },
+    roofingProfiles: {
+      title: 'Profils de tôles de toiture et acier ondulé | {company}',
+      desc: 'Catalogue de profils de tôles d\'acier pour toiture : ondulés, trapézoïdaux et tuiles, disponibles en plusieurs dimensions et couleurs.'
+    },
+    futuresPrice: {
+      title: 'Prix des futures acier en temps réel | {company}',
+      desc: 'Suivez les prix des futures en temps réel et historiques pour la bobine laminée à chaud, le minerai de fer, les barres d\'armature et plus encore.'
+    }
+  },
+  pt: {
+    about: {
+      title: 'Sobre a {company} | Fabricante e exportador de bobinas de aço',
+      desc: 'Conheça a {company}, fabricante e exportadora de bobinas de aço em Shandong, China. Bobinas GI, GL, PPGI, PPGL e CRC para compradores globais.'
+    },
+    contact: {
+      title: 'Fale conosco | {company}',
+      desc: 'Entre em contato com a {company} para solicitar orçamento, tirar dúvidas sobre produtos ou agendar uma visita à fábrica.'
+    },
+    factory: {
+      title: 'Tour pela fábrica e linhas de produção | {company}',
+      desc: 'Conheça as instalações da {company}: linhas de produção avançadas, controle de qualidade e estoque de bobinas de aço.'
+    },
+    ralColors: {
+      title: 'Carta de cores RAL para PPGI e PPGL | {company}',
+      desc: 'Consulte a carta de cores RAL para bobinas de aço pré-pintado (PPGI) e Galvalume (PPGL). Cores personalizadas sob consulta.'
+    },
+    roofingProfiles: {
+      title: 'Perfis de chapas para telhados e aço ondulado | {company}',
+      desc: 'Catálogo de perfis de chapas de aço para telhados: ondulados, trapezoidais e tipo telha, em diversas dimensões e cores.'
+    },
+    futuresPrice: {
+      title: 'Preços de futuros de aço em tempo real | {company}',
+      desc: 'Acompanhe preços de futuros em tempo real e históricos de bobina laminada a quente, minério de ferro, vergalhões e mais.'
+    }
+  },
+  ar: {
+    about: {
+      title: 'حول {company} | مصنّع ومصدّر لفائف الصلب',
+      desc: 'تعرّف على {company}، مصنّع ومصدّر لفائف الصلب في شاندونغ، الصين. لفائف GI وGL وPPGI وPPGL وCRC للمشترين حول العالم.'
+    },
+    contact: {
+      title: 'اتصل بنا | {company}',
+      desc: 'تواصل مع {company} لطلب عرض سعر أو الاستفسار عن المنتجات أو ترتيب زيارة للمصنع.'
+    },
+    factory: {
+      title: 'جولة في المصنع وخطوط الإنتاج | {company}',
+      desc: 'شاهد مرافق {company}: خطوط إنتاج متقدمة ورقابة جودة ومخزون كبير من لفائف الصلب.'
+    },
+    ralColors: {
+      title: 'مخطط ألوان RAL لـ PPGI وPPGL | {company}',
+      desc: 'استعرض مخطط ألوان RAL الكامل لفائف الصلب المطلي مسبقاً (PPGI) وGalvalume (PPGL). ألوان مخصصة عند الطلب.'
+    },
+    roofingProfiles: {
+      title: 'ملفات صفائح التسقيف والصلب المموج | {company}',
+      desc: 'كتالوج ملفات صفائح التسقيف: مموجة ومربعة ومن نوع القرميد، بمقاسات وألوان متعددة.'
+    },
+    futuresPrice: {
+      title: 'أسعار عقود الصلب الآجلة في الوقت الفعلي | {company}',
+      desc: 'تابع أسعار العقود الآجلة الفورية والتاريخية للفائف المدرفلة على الساخن وخام الحديد وحديد التسليح وغيرها.'
+    }
+  },
+  hi: {
+    about: {
+      title: '{company} के बारे में | स्टील कॉइल निर्माता और निर्यातक',
+      desc: '{company} के बारे में जानें, जो शेडोंग, चीन में स्टील कॉइल का निर्माता और निर्यातक है। दुनिया भर के खरीदारों के लिए GI, GL, PPGI, PPGL और CRC कॉइल।'
+    },
+    contact: {
+      title: 'संपर्क करें | {company}',
+      desc: 'कोटेशन मांगने, उत्पाद संबंधी प्रश्न पूछने या फैक्ट्री विज़िट तय करने के लिए {company} से संपर्क करें।'
+    },
+    factory: {
+      title: 'फैक्ट्री टूर और उत्पादन लाइनें | {company}',
+      desc: '{company} की निर्माण सुविधा का दौरा करें: आधुनिक उत्पादन लाइनें, गुणवत्ता नियंत्रण और स्टील कॉइल का भंडार।'
+    },
+    ralColors: {
+      title: 'PPGI और PPGL के लिए RAL रंग चार्ट | {company}',
+      desc: 'प्रीपेंटेड गैल्वेनाइज्ड (PPGI) और गैल्वाल्यूम (PPGL) स्टील कॉइल के लिए पूरा RAL रंग चार्ट देखें। मांग पर कस्टम रंग उपलब्ध।'
+    },
+    roofingProfiles: {
+      title: 'रूफिंग शीट प्रोफाइल और कॉरगेटेड स्टील | {company}',
+      desc: 'स्टील रूफिंग शीट प्रोफाइल की सूची: कॉरगेटेड, ट्रैपेज़ॉइडल और टाइल प्रकार, विभिन्न आकार और रंगों में।'
+    },
+    futuresPrice: {
+      title: 'रीयल-टाइम स्टील फ्यूचर कीमतें | {company}',
+      desc: 'हॉट रोल्ड कॉइल, आयरन ओर, रेबार और अन्य के रीयल-टाइम और ऐतिहासिक फ्यूचर कीमतों को ट्रैक करें।'
+    }
+  },
+  th: {
+    about: {
+      title: 'เกี่ยวกับ {company} | ผู้ผลิตและผู้ส่งออกคอยล์เหล็ก',
+      desc: 'รู้จัก {company} ผู้ผลิตและผู้ส่งออกคอยล์เหล็กในมณฑลซานตง ประเทศจีน คอยล์ GI, GL, PPGI, PPGL และ CRC สำหรับผู้ซื้อทั่วโลก'
+    },
+    contact: {
+      title: 'ติดต่อเรา | {company}',
+      desc: 'ติดต่อ {company} เพื่อขอใบเสนอราคา สอบถามสินค้า หรือนัดหมายเยี่ยมชมโรงงาน'
+    },
+    factory: {
+      title: 'ชมโรงงานและสายการผลิต | {company}',
+      desc: 'เยี่ยมชมโรงงานของ {company}: สายการผลิตที่ทันสมัย การควบคุมคุณภาพ และสต็อกคอยล์เหล็กจำนวนมาก'
+    },
+    ralColors: {
+      title: 'แผนภูมิสี RAL สำหรับ PPGI และ PPGL | {company}',
+      desc: 'ดูแผนภูมิสี RAL ทั้งหมดสำหรับคอยล์เหล็กเคลือบสี (PPGI) และ Galvalume (PPGL) พร้อมบริการจับคู่สีตามสั่ง'
+    },
+    roofingProfiles: {
+      title: 'โปรไฟล์แผ่นหลังคาและเหล็กลอนลูกฟูก | {company}',
+      desc: 'แคตตาล็อกโปรไฟล์แผ่นหลังคาเหล็ก: ลอนลูกฟูก ลอนสี่เหลี่ยมคางหมู และแบบกระเบื้อง ในขนาดและสีต่างๆ'
+    },
+    futuresPrice: {
+      title: 'ราคาฟิวเจอร์สเหล็กแบบเรียลไทม์ | {company}',
+      desc: 'ติดตามราคาฟิวเจอร์สแบบเรียลไทม์และย้อนหลังสำหรับคอยล์รีดร้อน แร่เหล็ก เหล็กเส้น และอื่นๆ'
+    }
+  },
+  tr: {
+    about: {
+      title: 'Hakkımızda | {company} - Çelik Bobin Üreticisi ve İhracatçısı',
+      desc: '{company} hakkında bilgi edinin: Çin, Shandong merkezli çelik bobin üreticisi ve ihracatçısı. Dünya genelindeki alıcılar için GI, GL, PPGI, PPGL ve CRC bobinler.'
+    },
+    contact: {
+      title: 'İletişim | {company}',
+      desc: 'Teklif almak, ürünler hakkında soru sormak veya fabrika ziyareti planlamak için {company} ile iletişime geçin.'
+    },
+    factory: {
+      title: 'Fabrika Turu ve Üretim Hatları | {company}',
+      desc: '{company} üretim tesisini keşfedin: modern üretim hatları, kalite kontrol ve geniş çelik bobin stoku.'
+    },
+    ralColors: {
+      title: 'PPGI ve PPGL için RAL Renk Kartelası | {company}',
+      desc: 'Ön boyalı galvanizli (PPGI) ve Galvalume (PPGL) çelik bobinler için RAL renk kartelasını inceleyin. Talebe göre özel renkler.'
+    },
+    roofingProfiles: {
+      title: 'Çatı Sacı Profilleri ve Oluklu Çelik | {company}',
+      desc: 'Çelik çatı sacı profilleri kataloğu: oluklu, trapez ve kiremit tipi, farklı ölçü ve renklerde.'
+    },
+    futuresPrice: {
+      title: 'Gerçek Zamanlı Çelik Vadeli İşlem Fiyatları | {company}',
+      desc: 'Sıcak haddelenmiş bobin, demir cevheri, inşaat demiri ve daha fazlası için gerçek zamanlı ve geçmiş vadeli işlem fiyatlarını takip edin.'
+    }
+  }
+}
+
 export function getStaticPageCopy(lang) {
   const base = STATIC_PAGE_I18N.en
   const copy = STATIC_PAGE_I18N[lang]
-  if (!copy) {
-    return Object.fromEntries(Object.entries(base).map(([key, value]) => [key, { ...value }]))
-  }
+  const seo = STATIC_PAGE_SEO_I18N[lang]
   const merged = {}
   for (const key of Object.keys(base)) {
-    merged[key] = { ...base[key], ...(copy[key] || {}) }
+    merged[key] = { ...base[key], ...(copy?.[key] || {}), ...(seo?.[key] || {}) }
   }
   return merged
+}
+
+const HOME_LABELS = {
+  en: { categories: 'Main Categories', products: 'Main Products', quickLinks: 'Quick Links', faq: 'Frequently Asked Questions', allProducts: 'All Products', news: 'News & Blog', contact: 'Contact Us', about: 'About Us' },
+  zh: { categories: '主要分类', products: '主要产品', quickLinks: '快捷链接', faq: '常见问题', allProducts: '所有产品', news: '新闻与博客', contact: '联系我们', about: '关于我们' },
+  es: { categories: 'Categorías principales', products: 'Productos principales', quickLinks: 'Enlaces rápidos', faq: 'Preguntas frecuentes', allProducts: 'Todos los productos', news: 'Noticias y blog', contact: 'Contacto', about: 'Sobre nosotros' },
+  fr: { categories: 'Catégories principales', products: 'Produits principaux', quickLinks: 'Liens rapides', faq: 'Questions fréquentes', allProducts: 'Tous les produits', news: 'Actualités et blog', contact: 'Contact', about: 'À propos' },
+  pt: { categories: 'Categorias principais', products: 'Produtos principais', quickLinks: 'Links rápidos', faq: 'Perguntas frequentes', allProducts: 'Todos os produtos', news: 'Notícias e blog', contact: 'Fale conosco', about: 'Sobre nós' },
+  ru: { categories: 'Основные категории', products: 'Основная продукция', quickLinks: 'Быстрые ссылки', faq: 'Часто задаваемые вопросы', allProducts: 'Вся продукция', news: 'Новости и блог', contact: 'Связаться с нами', about: 'О компании' },
+  ar: { categories: 'الفئات الرئيسية', products: 'المنتجات الرئيسية', quickLinks: 'روابط سريعة', faq: 'الأسئلة الشائعة', allProducts: 'جميع المنتجات', news: 'الأخبار والمدونة', contact: 'اتصل بنا', about: 'من نحن' },
+  hi: { categories: 'मुख्य श्रेणियाँ', products: 'मुख्य उत्पाद', quickLinks: 'त्वरित लिंक', faq: 'अक्सर पूछे जाने वाले प्रश्न', allProducts: 'सभी उत्पाद', news: 'समाचार और ब्लॉग', contact: 'संपर्क करें', about: 'हमारे बारे में' },
+  th: { categories: 'หมวดหมู่หลัก', products: 'สินค้าหลัก', quickLinks: 'ลิงก์ด่วน', faq: 'คำถามที่พบบ่อย', allProducts: 'สินค้าทั้งหมด', news: 'ข่าวและบล็อก', contact: 'ติดต่อเรา', about: 'เกี่ยวกับเรา' },
+  tr: { categories: 'Ana Kategoriler', products: 'Ana Ürünler', quickLinks: 'Hızlı Bağlantılar', faq: 'Sıkça Sorulan Sorular', allProducts: 'Tüm Ürünler', news: 'Haberler ve Blog', contact: 'Bize Ulaşın', about: 'Hakkımızda' }
+}
+
+export function getHomeLabels(lang) {
+  return { ...HOME_LABELS.en, ...(HOME_LABELS[lang] || {}) }
 }
 
 export function fillTemplate(template, values) {

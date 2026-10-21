@@ -92,3 +92,11 @@ AI 在翻译时会“自作聪敏”，例如：
 - 翻译成功写入或移除过期公开译文后，只清理该产品目标语言的 SEO 渲染缓存。缓存清理失败会记录警告，但不会回滚已经保存的译文。
 
 推荐流程：先由管理员审核并发布评价，再选择目标语言和“产品评价”分组执行 AI 翻译，最后切换到对应语言产品详情确认正文与评价 JSON-LD 一致。
+
+## 多语言 Google 收录规则
+
+- `server/services/indexingPolicy.js` 的 `SECONDARY_INDEX_LANGS` 当前包含全部 8 个二级语言（ru / fr / es / ar / hi / th / tr / pt）。
+- 首页、产品列表、新闻列表、产品分类、新闻分类、About、Contact、Factory、RAL、Roofing、Futures 这些路由页，会为该列表中的每个启用语言输出 `index, follow`、canonical 和全语言 hreflang，并进入 `sitemap-static.xml` / `sitemap-categories.xml`。
+- 产品详情和文章详情仍按单条内容判断：产品必须同时有 `name` + `description` 译文，文章必须同时有 `title` + `content` 译文，才会 index 并进入 sitemap；缺少完整译文时保持 `noindex`。
+- 静态页正文优先读取数据库里的 `company.description_<lang>`、`advantages_<lang>`、`page_texts` 和 UI 译文，避免硬编码译文与后台内容不一致。
+- 新增语言时，必须确认该语言的 UI 译文、静态页 SEO title/description、分类名称和列表页文案齐全后再加入 `SECONDARY_INDEX_LANGS`；否则会出现英文内容挂在本地语言 URL 下的重复内容问题。

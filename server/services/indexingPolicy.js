@@ -78,7 +78,20 @@ export function indexableLangs(activeLangs, extraLangs = null) {
   return result
 }
 
-export const SECONDARY_INDEX_LANGS = Object.freeze(['ru'])
+// Every enabled secondary locale is safe to index for routes that have
+// localized SEO copy (listing/static/category pages) and fully localized
+// detail pages. indexableLangs() still filters this list by the languages
+// that are actually enabled in the database.
+export const SECONDARY_INDEX_LANGS = Object.freeze([
+  'ru',
+  'fr',
+  'es',
+  'ar',
+  'hi',
+  'th',
+  'tr',
+  'pt'
+])
 
 const LISTING_ROUTE_TYPES = new Set([
   'home', 'productsList', 'newsList', 'productCategory', 'newsCategory'
