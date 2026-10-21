@@ -8,6 +8,7 @@ import {
   indexableLangs
 } from '../server/services/indexingPolicy.js'
 import { getSeoCopy, getStaticPageCopy, getHomeLabels } from '../server/services/seoContent.js'
+import { resolveUiText } from '../server/services/uiText.js'
 
 const ALL_LANGS = ['en', 'zh', 'ru', 'fr', 'es', 'ar', 'hi', 'th', 'tr', 'pt']
 const ROUTE_TYPES = [
@@ -75,6 +76,17 @@ test('static page SEO title and description are localized for every supported la
       }
     }
   }
+})
+
+test('UI text lookup resolves the futures translation group as well as ui_text', () => {
+  const map = {
+    ui_text_static: { about: 'À propos de nous' },
+    futures_static: { futuresTitle: 'Prix des futures en temps réel' }
+  }
+  assert.equal(resolveUiText(map, 'futuresTitle', 'Live Futures Prices'), 'Prix des futures en temps réel')
+  assert.equal(resolveUiText(map, 'about', 'About Us'), 'À propos de nous')
+  assert.equal(resolveUiText(map, 'missing', 'Fallback'), 'Fallback')
+  assert.equal(resolveUiText(null, 'futuresTitle', 'Fallback'), 'Fallback')
 })
 
 test('homepage section labels are localized for every supported language', () => {

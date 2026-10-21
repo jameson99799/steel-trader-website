@@ -21,6 +21,7 @@ import {
   translateRoofingProfile
 } from './helpers/translate.js'
 import { getSeoCopy, getStaticPageCopy, getHomeLabels, fillTemplate } from './services/seoContent.js'
+import { resolveUiText } from './services/uiText.js'
 import { getVisibleCategoryIds, visibleProductWhere } from './services/catalogVisibility.js'
 import {
   getSeoResponsePolicy,
@@ -707,7 +708,7 @@ ${contactLines.join('\n')}
 
         // Static-page labels come from the same UI translation table the Vue
         // pages use, so crawler HTML and visible content stay in sync.
-        const ui = (key, fallback = '') => tMap?.ui_text_static?.[key] || fallback || ''
+        const ui = (key, fallback = '') => resolveUiText(tMap, key, fallback)
         
         function formatSsrMailtoLinks(html, defaultEmail) {
           if (!html) return html
