@@ -53,10 +53,9 @@ server {
     # 大视频走 proxy_pass 会受 60s 超时限制，慢速客户端会报 net::ERR_TIMED_OUT。
     # 注意：不要把 mp4/webm 加进上面的静态文件正则——正则 location 优先级
     # 高于前缀 location，会绕过这里的 alias。
-    location /uploads/ {
+    location ^~ /uploads/ {
         alias /www/wwwroot/steel-trader/uploads/;
-        expires 30d;
-        add_header Cache-Control "public";
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
         access_log off;
         send_timeout 300s;
     }

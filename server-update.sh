@@ -261,7 +261,7 @@ if [ "$UPLOADS_STATIC_OK" -eq 1 ]; then
 else
   warn "/uploads/ 未配置独立 location：大视频会经 Node 代理，慢速客户端会报 net::ERR_TIMED_OUT。"
   warn "请在站点 Nginx 配置中加入（参考 nginx.conf.example）："
-  warn "  location /uploads/ { alias /www/wwwroot/steel-trader/uploads/; expires 30d; send_timeout 300s; access_log off; }"
+  warn "  location ^~ /uploads/ { alias /www/wwwroot/steel-trader/uploads/; add_header Cache-Control \"public, max-age=31536000, immutable\" always; send_timeout 300s; access_log off; }"
 fi
 
 # ── Public delivery gate: fail if Nginx/CDN still serves the generic SPA shell ──

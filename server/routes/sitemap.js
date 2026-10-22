@@ -77,10 +77,10 @@ function emptyUrlset() {
 }
 
 function urlEntry({ loc, lastmod, changefreq, priority, hreflang, imagesHTML = '' }) {
+    const lastmodTag = lastmod ? `    <lastmod>${lastmod}</lastmod>\n` : ''
     return `  <url>
     <loc>${escapeXml(loc)}</loc>
-    <lastmod>${lastmod}</lastmod>
-    <changefreq>${changefreq}</changefreq>
+${lastmodTag}    <changefreq>${changefreq}</changefreq>
     <priority>${priority}</priority>
 ${hreflang}
 ${imagesHTML}
@@ -91,6 +91,19 @@ ${imagesHTML}
 function toDateStr(val, fallback) {
     if (!val) return fallback
     return String(val).split(/[T ]/)[0] || fallback
+}
+
+function latestDate(sql, fallback = '2024-03-01') {
+    try {
+        const row = getOne(sql)
+        return toDateStr(row?.d, fallback)
+    } catch {
+        return fallback
+    }
+}
+
+function maxDate(...dates) {
+    return dates.filter(Boolean).sort().pop() || '2024-03-01'
 }
 
 // ── Sitemap Index (/sitemap.xml) ─────────────────────────────
@@ -144,20 +157,33 @@ router.get('/static', (req, res) => {
     res.setHeader('Content-Type', 'application/xml; charset=utf-8')
     try {
         const activeLangs = getActiveLangs()
-        // Static pages are rendered dynamically per request — emit today's date
-        // instead of stale hardcoded 2024 values so crawlers re-crawl them.
         const todayStr = new Date().toISOString().split('T')[0]
+        const productDate = latestDate('SELECT COALESCE(updated_at, created_at) AS d FROM products WHERE status=1 ORDER BY d DESC LIMIT 1')
+        const newsDate = latestDate('SELECT COALESCE(updated_at, created_at) AS d FROM news WHERE status=1 ORDER BY d DESC LIMIT 1')
+        const companyDate = latestDate('SELECT updated_at AS d FROM company WHERE id=1')
+        const pageTextsDate = latestDate('SELECT updated_at AS d FROM page_texts WHERE id=1')
+        const heroDate = latestDate('SELECT updated_at AS d FROM hero_content WHERE id=1')
+        const seoDate = latestDate('SELECT updated_at AS d FROM seo_settings WHERE id=1')
+        const factoryDate = maxDate(
+            latestDate('SELECT created_at AS d FROM factory_groups ORDER BY d DESC LIMIT 1'),
+            latestDate('SELECT created_at AS d FROM factory_media ORDER BY d DESC LIMIT 1')
+        )
+        const roofingDate = latestDate('SELECT created_at AS d FROM roofing_profiles ORDER BY d DESC LIMIT 1')
 
+        // Use the real content timestamp for each static page instead of
+        // stamping every URL with today's date on every request.
         const staticPages = [
-            { loc: '/', priority: '1.0', changefreq: 'weekly', lastmod: todayStr, routeType: 'home' },
-            { loc: '/products', priority: '0.9', changefreq: 'weekly', lastmod: todayStr, routeType: 'productsList' },
-            { loc: '/news', priority: '0.8', changefreq: 'weekly', lastmod: todayStr, routeType: 'newsList' },
-            { loc: '/factory', priority: '0.8', changefreq: 'weekly', lastmod: todayStr, routeType: 'factory' },
-            { loc: '/about', priority: '0.7', changefreq: 'monthly', lastmod: todayStr, routeType: 'about' },
-            { loc: '/contact', priority: '0.7', changefreq: 'monthly', lastmod: todayStr, routeType: 'contact' },
-            { loc: '/news/ral-colors', priority: '0.5', changefreq: 'yearly', lastmod: todayStr, routeType: 'staticNews' },
-            { loc: '/news/roofing-profiles', priority: '0.7', changefreq: 'weekly', lastmod: todayStr, routeType: 'staticNews' },
-            { loc: '/news/futures-price', priority: '0.8', changefreq: 'daily', lastmod: todayStr, routeType: 'staticNews' }, // Only futures price changes daily truly
+            { loc: '/', priority: '1.0', changefreq: 'weekly', lastmod: maxDate(productDate, companyDate, pageTextsDate, heroDate, seoDate), routeType: 'home' },
+            { loc: '/products', priority: '0.9', changefreq: 'weekly', lastmod: productDate, routeType: 'productsList' },
+            { loc: '/news', priority: '0.8', changefreq: 'weekly', lastmod: newsDate, routeType: 'newsList' },
+            { loc: '/factory', priority: '0.8', changefreq: 'weekly', lastmod: maxDate(factoryDate, companyDate), routeType: 'factory' },
+            { loc: '/about', priority: '0.7', changefreq: 'monthly', lastmod: maxDate(companyDate, pageTextsDate, seoDate), routeType: 'about' },
+            { loc: '/contact', priority: '0.7', changefreq: 'monthly', lastmod: maxDate(companyDate, pageTextsDate, seoDate), routeType: 'contact' },
+            // RAL colors have no trustworthy timestamp; omit lastmod rather than
+            // inventing one.
+            { loc: '/news/ral-colors', priority: '0.5', changefreq: 'yearly', lastmod: null, routeType: 'staticNews' },
+            { loc: '/news/roofing-profiles', priority: '0.7', changefreq: 'weekly', lastmod: roofingDate, routeType: 'staticNews' },
+            { loc: '/news/futures-price', priority: '0.8', changefreq: 'daily', lastmod: todayStr, routeType: 'staticNews' },
         ]
 
         const seoSettings = getSeoSettings()
