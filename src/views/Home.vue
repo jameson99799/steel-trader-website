@@ -143,10 +143,10 @@
         <div class="home-video-wrapper" v-if="company?.company_video_embed && company?.home_show_video">
           <template v-if="company.company_video_embed.toLowerCase().endsWith('.mp4') || company.company_video_embed.toLowerCase().endsWith('.webm')">
             <div class="yt-video-active" v-if="company.about_video_autoplay === 1" @click="openVideoLightbox(company.company_video_embed)" style="cursor: pointer; margin-bottom: var(--spacing-2xl);">
-              <LazyVideo :src="company.company_video_embed" :poster="company.about_image" autoplay />
+              <LazyVideo :src="company.company_video_embed" autoplay />
             </div>
             <div v-else class="yt-video-cover" @click="openVideoLightbox(company.company_video_embed)" style="margin-bottom: var(--spacing-2xl);">
-              <LazyVideo :src="company.company_video_embed" :poster="company.about_image" />
+              <LazyVideo :src="company.company_video_embed" />
               <div class="yt-play-button"><svg viewBox="0 0 68 48"><path class="yt-play-bg" d="M66.52,7.74c-0.78-2.93-2.49-5.41-5.42-6.19C55.79,.13,34,0,34,0S12.21,.13,6.9,1.55 C3.97,2.33,2.27,4.81,1.48,7.74C0.06,13.05,0,24,0,24s0.06,10.95,1.48,16.26c0.78,2.93,2.49,5.41,5.42,6.19 C12.21,47.87,34,48,34,48s21.79-0.13,27.1-1.55c2.93-0.78,4.64-3.26,5.42-6.19C67.94,34.95,68,24,68,24S67.94,13.05,66.52,7.74z" fill="#f00"></path><path d="M 45,24 27,14 27,34" fill="#fff"></path></svg></div>
             </div>
           </template>
@@ -240,22 +240,53 @@
       </div>
     </section>
 
-    <!-- CTA Section -->
-    <section class="section cta-section">
+    <!-- RFQ Section -->
+    <section class="section rfq-section" id="rfq">
       <div class="container">
-        <div class="cta-content">
-          <div class="cta-text">
-            <h2 class="cta-title">{{ localizedValue(pageTexts, 'cta_title') || t('readyToStart') }}</h2>
-            <p class="cta-subtitle">{{ localizedValue(pageTexts, 'cta_subtitle') || t('getQuote') }}</p>
+        <div class="rfq-layout">
+          <div class="rfq-copy">
+            <span class="rfq-badge">RFQ</span>
+            <h2 class="rfq-title">{{ localizedValue(pageTexts, 'cta_title') || t('readyToStart') }}</h2>
+            <p class="rfq-subtitle">{{ localizedValue(pageTexts, 'cta_subtitle') || t('getQuote') }}</p>
+            <ul class="rfq-benefits">
+              <li><span class="rfq-check">✓</span>{{ t('benefit24h') }}</li>
+              <li><span class="rfq-check">✓</span>{{ t('benefitPricing') }}</li>
+              <li><span class="rfq-check">✓</span>{{ t('benefitQuality') }}</li>
+            </ul>
           </div>
-          <div class="cta-actions">
-            <router-link :to="langPath('/contact')" class="btn btn-primary btn-lg">
-              {{ t('contactUs') }}
-            </router-link>
-            <router-link :to="langPath('/products')" class="btn btn-ghost btn-lg">
-              {{ t('viewMore') }}
-            </router-link>
-          </div>
+
+          <form class="rfq-form" @submit.prevent="submitRfq">
+            <div class="rfq-form-grid">
+              <label>
+                <span>{{ t('name') }} *</span>
+                <input v-model="rfqForm.name" required :placeholder="t('placeholderName')" />
+              </label>
+              <label>
+                <span>{{ t('email') }} *</span>
+                <input v-model="rfqForm.email" type="email" required :placeholder="t('email')" />
+              </label>
+              <label>
+                <span>{{ t('phone') }}</span>
+                <input v-model="rfqForm.phone" :placeholder="t('placeholderPhone')" />
+              </label>
+              <label>
+                <span>{{ t('company') }}</span>
+                <input v-model="rfqForm.company" :placeholder="t('placeholderCompany')" />
+              </label>
+              <label>
+                <span>{{ t('country') }}</span>
+                <input v-model="rfqForm.country" :placeholder="t('placeholderCountry')" />
+              </label>
+            </div>
+            <label class="rfq-message">
+              <span>{{ t('message') }}</span>
+              <textarea v-model="rfqForm.message" rows="4" :placeholder="t('placeholderMessage')"></textarea>
+            </label>
+            <button type="submit" class="btn btn-primary btn-lg rfq-submit" :disabled="rfqLoading">
+              {{ rfqLoading ? t('sending') : t('sendInquiry') }}
+            </button>
+            <p v-if="rfqSuccess" class="rfq-success">{{ t('inquirySuccess') }}</p>
+          </form>
         </div>
       </div>
     </section>
@@ -312,6 +343,36 @@ const company = ref(reuseInitialState ? initialState.company || {} : {})
 // Visible FAQ — must match the FAQPage structured data declared by the SSR.
 const homeFaqs = ref(reuseInitialState && Array.isArray(initialState.homeFaqs) ? initialState.homeFaqs : [])
 const refreshCommit = createLatestOnlyCommit()
+
+const rfqForm = ref({
+  name: '',
+  email: '',
+  phone: '',
+  company: '',
+  country: '',
+  message: ''
+})
+const rfqLoading = ref(false)
+const rfqSuccess = ref(false)
+
+const submitRfq = async () => {
+  if (!rfqForm.value.name.trim() || !rfqForm.value.email.trim()) {
+    alert(t('required'))
+    return
+  }
+  rfqLoading.value = true
+  rfqSuccess.value = false
+  try {
+    await api.submitInquiry({ ...rfqForm.value })
+    rfqSuccess.value = true
+    rfqForm.value = { name: '', email: '', phone: '', company: '', country: '', message: '' }
+    setTimeout(() => { rfqSuccess.value = false }, 6000)
+  } catch (e) {
+    alert(e.message)
+  } finally {
+    rfqLoading.value = false
+  }
+}
 
 const videoLightboxActive = ref(false)
 const videoLightboxUrl = ref('')
@@ -1007,49 +1068,154 @@ watch(lang, refreshLocalizedPageData)
   line-height: var(--leading-relaxed);
 }
 
-/* CTA Section */
-.cta-section {
+/* RFQ Section */
+.rfq-section {
   background: var(--primary-gradient);
   color: var(--white);
 }
 
-.cta-content {
-  display: flex;
+.rfq-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 48px;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-2xl);
-  max-width: 1000px;
+  max-width: 1120px;
   margin: 0 auto;
 }
 
-.cta-title {
+.rfq-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 14px;
+  margin-bottom: 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.rfq-title {
   font-size: var(--text-3xl);
   font-weight: 800;
-  margin-bottom: var(--spacing);
+  margin: 0 0 var(--spacing);
   line-height: var(--leading-tight);
 }
 
-.cta-subtitle {
+.rfq-subtitle {
   font-size: var(--text-lg);
   opacity: 0.9;
   line-height: var(--leading-relaxed);
+  margin: 0;
 }
 
-.cta-actions {
+.rfq-benefits {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0;
   display: flex;
-  gap: var(--spacing);
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rfq-benefits li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  opacity: .95;
+}
+
+.rfq-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .18);
+  font-size: 12px;
   flex-shrink: 0;
 }
 
-.btn-ghost {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--white);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+.rfq-form {
+  background: #fff;
+  color: #0f172a;
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, .18);
 }
 
-.btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.5);
+.rfq-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.rfq-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.rfq-form input,
+.rfq-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #0f172a;
+  background: #f8fafc;
+  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+
+.rfq-form input:focus,
+.rfq-form textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .12);
+}
+
+.rfq-form textarea {
+  resize: vertical;
+  min-height: 110px;
+}
+
+.rfq-message { margin-top: 14px; }
+
+.rfq-submit {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.rfq-success {
+  margin: 12px 0 0;
+  color: #15803d;
+  font-weight: 700;
+  font-size: 14px;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .rfq-layout { grid-template-columns: 1fr; gap: 28px; }
+  .rfq-copy { text-align: center; }
+  .rfq-benefits { align-items: center; }
+}
+
+@media (max-width: 600px) {
+  .rfq-form { padding: 20px; }
+  .rfq-form-grid { grid-template-columns: 1fr; }
+  .rfq-title { font-size: var(--text-2xl); }
 }
 
 .icon {
