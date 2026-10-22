@@ -1,5 +1,5 @@
 import { getAll, getOne } from '../db.js'
-import { SEO_PAGE_KEYS } from './seoContent.js'
+import { SEO_PAGE_KEYS, SUPPORTED_SEO_LANGS } from './seoContent.js'
 
 export const REQUIRED_UI_TEXT_KEYS = Object.freeze([
   'about',
@@ -37,6 +37,22 @@ export const REQUIRED_UI_TEXT_KEYS = Object.freeze([
   'allProducts',
   'featuredProducts'
 ])
+
+// These labels are built into the code for the known 10 languages; only a
+// newly added language needs its own UI translation for them.
+export const BUILT_IN_HOME_UI_KEYS = Object.freeze([
+  'homeCategories',
+  'homeProducts',
+  'homeQuickLinks',
+  'homeFaq'
+])
+
+export function getRequiredUiTextKeys(langCode) {
+  const hasBuiltInHomeLabels = SUPPORTED_SEO_LANGS.includes(langCode)
+  return hasBuiltInHomeLabels
+    ? REQUIRED_UI_TEXT_KEYS.filter(key => !BUILT_IN_HOME_UI_KEYS.includes(key))
+    : [...REQUIRED_UI_TEXT_KEYS]
+}
 
 export const REQUIRED_PAGE_TEXT_KEYS = Object.freeze([
   'contact_page_subtitle',
@@ -83,7 +99,7 @@ export function getMissingUiTranslations(langCode) {
       [langCode]
     )
   } catch {}
-  return findMissingKeys(rows, REQUIRED_UI_TEXT_KEYS)
+  return findMissingKeys(rows, getRequiredUiTextKeys(langCode))
 }
 
 export function getMissingCompanyFields(langCode) {

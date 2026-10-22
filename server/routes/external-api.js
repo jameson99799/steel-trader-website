@@ -10,6 +10,17 @@ import {
     productReviewStore,
     registerExternalProductReviewRoutes
 } from './product-reviews.js'
+import { auditMultilingualSeo } from '../services/multilingualSeoAudit.js'
+import { generateLanguageSeoCopy } from '../services/languageSeoCopyGenerator.js'
+import { SEO_PAGE_KEYS } from '../services/seoContent.js'
+import {
+    PRIMARY_ALWAYS_READY,
+    getReadinessError,
+    getSeoCopyRows,
+    saveSeoCopyRows
+} from './languages.js'
+import { createTranslationJob } from './translation-jobs.js'
+import { PAGES } from './translation.js'
 
 // ─── Product type detection from article context ─────────────────────────────
 const PRODUCT_TYPE_MAP = [
@@ -887,6 +898,96 @@ router.post('/send-email', apiKeyMiddleware, async (req, res) => {
     }
 })
 
+// ════════════════════════════════════════════════════════════════════════════
+// LANGUAGES, SEO COPY, READINESS, MULTILINGUAL AUDIT, TRANSLATION JOBS
+// ════════════════════════════════════════════════════════════════════════════
+
+router.get('/languages', apiKeyMiddleware, (req, res) => {
+    const languages = getAll(
+        `SELECT id, name, code, flag, sort_order, status, ai_translated, seo_index_ready
+           FROM languages ORDER BY sort_order ASC, id ASC`
+    )
+    res.json({ languages })
+})
+
+router.get('/languages/:code/seo-copy', apiKeyMiddleware, (req, res) => {
+    const language = getOne('SELECT * FROM languages WHERE code = ?', [req.params.code])
+    if (!language) return res.status(404).json({ error: 'not found' })
+    res.json({ language_code: language.code, rows: getSeoCopyRows(language.code) })
+})
+
+router.put('/languages/:code/seo-copy', apiKeyMiddleware, (req, res) => {
+    const result = saveSeoCopyRows(req.params.code, req.body?.rows)
+    res.status(result.status).json(result.body)
+})
+
+router.post('/languages/:code/seo-copy/generate', apiKeyMiddleware, async (req, res) => {
+    try {
+        const result = await generateLanguageSeoCopy(req.params.code)
+        res.json({ message: 'SEO文案生成完成', ...result })
+    } catch (e) {
+        res.status(e.statusCode || 500).json({ error: e.message })
+    }
+})
+
+router.put('/languages/:code/seo-ready', apiKeyMiddleware, (req, res) => {
+    const language = getOne('SELECT * FROM languages WHERE code = ?', [req.params.code])
+    if (!language) return res.status(404).json({ error: 'not found' })
+
+    const isPrimary = PRIMARY_ALWAYS_READY.has(language.code)
+    const nextReady = isPrimary ? 1 : (req.body?.seo_index_ready ? 1 : 0)
+    if (nextReady === 1 && !language.seo_index_ready) {
+        const readinessError = getReadinessError(language)
+        if (readinessError) {
+            return res.status(400).json({
+                error: `SEO收录未就绪: ${readinessError.error}`,
+                missingSeoCopy: readinessError.missingSeoCopy,
+                missingUiTexts: readinessError.missingUiTexts,
+                missingCompanyFields: readinessError.missingCompanyFields,
+                missingPageTexts: readinessError.missingPageTexts
+            })
+        }
+    }
+
+    run('UPDATE languages SET seo_index_ready = ? WHERE id = ?', [nextReady, language.id])
+    res.json({ message: '更新成功', code: language.code, seo_index_ready: nextReady })
+})
+
+router.get('/seo/audit', apiKeyMiddleware, (req, res) => {
+    try {
+        res.json(auditMultilingualSeo({ lang: req.query.lang || null }))
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
+
+router.get('/translations/scopes', apiKeyMiddleware, (req, res) => {
+    res.json({ scopes: Object.keys(PAGES) })
+})
+
+router.post('/translations', apiKeyMiddleware, (req, res) => {
+    try {
+        const result = createTranslationJob(req.body)
+        res.json({ ...result, message: '后台翻译任务已启动' })
+    } catch (e) {
+        res.status(e.statusCode || 500).json({
+            error: e.message,
+            ...(e.activeJobId ? { activeJobId: e.activeJobId } : {})
+        })
+    }
+})
+
+router.get('/translations/:id', apiKeyMiddleware, (req, res) => {
+    const job = getOne(
+        `SELECT id, status, target_lang, pages, total_items, done_items, ok_items,
+                error_items, failed_items, created_at, updated_at, finished_at
+           FROM translation_jobs WHERE id = ?`,
+        [req.params.id]
+    )
+    if (!job) return res.status(404).json({ error: 'not found' })
+    res.json(job)
+})
+
 router.get('/docs', (req, res) => {
     // Dynamically load data from DB
     const cats = getAll('SELECT id, name, name_en, slug FROM categories ORDER BY sort_order')
@@ -1141,6 +1242,52 @@ router.get('/docs', (req, res) => {
                 'Use schema-friendly structure (tables for specs, Q&A for FAQ)',
                 'Include CTA with {{email}} and {{whatsapp_link}} template variables'
             ]
+        },
+
+        languages_seo: {
+            description: 'Per-language SEO copy, indexing readiness, multilingual audit, and translation job control. New languages start with seo_index_ready=0 and must be completed before they can be indexed.',
+            seo_copy_pages: SEO_PAGE_KEYS,
+            endpoints: {
+                list_languages: { method: 'GET', path: '/api/external/languages' },
+                get_seo_copy: { method: 'GET', path: '/api/external/languages/:code/seo-copy' },
+                update_seo_copy: {
+                    method: 'PUT',
+                    path: '/api/external/languages/:code/seo-copy',
+                    body: { rows: '[{ page_key, title, description }]' },
+                    note: 'Manual edits are marked is_manual=1 and are never overwritten by later AI runs.'
+                },
+                generate_seo_copy: {
+                    method: 'POST',
+                    path: '/api/external/languages/:code/seo-copy/generate',
+                    note: 'Uses the configured AI channel to generate all missing SEO titles/descriptions. Manual rows are preserved.'
+                },
+                set_seo_ready: {
+                    method: 'PUT',
+                    path: '/api/external/languages/:code/seo-ready',
+                    body: { seo_index_ready: '0 or 1' },
+                    note: 'Enabling readiness validates all 11 SEO copy rows plus UI, company and contact-page translations. Missing items are returned and the request fails with 400.'
+                },
+                multilingual_audit: {
+                    method: 'GET',
+                    path: '/api/external/seo/audit',
+                    query_params: { lang: 'optional language code; omit for every language' },
+                    note: 'Returns per-language completeness, missing SEO copy/translations, mixed-language risk, indexability and indexable page counts.'
+                },
+                translation_scopes: { method: 'GET', path: '/api/external/translations/scopes' },
+                start_translation: {
+                    method: 'POST',
+                    path: '/api/external/translations',
+                    body: {
+                        lang: 'target language code, or "all"',
+                        pages: 'array of scopes from /translations/scopes; include language_seo_copy to generate SEO copy',
+                        explicitItems: 'optional precise item list',
+                        concurrency: 'optional 1-10',
+                        promptId: 'optional translation prompt id',
+                        skipTranslated: 'optional boolean'
+                    }
+                },
+                translation_status: { method: 'GET', path: '/api/external/translations/:id' }
+            }
         },
 
         // ═══ API Endpoints ═══

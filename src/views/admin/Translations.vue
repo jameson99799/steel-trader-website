@@ -898,8 +898,8 @@ const selectedPromptId = ref(localStorage.getItem('last_selected_prompt_id') || 
 watch(selectedPromptId, (newVal) => {
   localStorage.setItem('last_selected_prompt_id', newVal || '')
 })
-const allPages = ['products', 'reviews', 'news', 'news_categories', 'company', 'page_texts', 'home_seo', 'home_faq', 'categories', 'hero', 'ui_texts_static', 'ral_colors', 'roofing_categories', 'factory', 'futures', 'chat']
-const pageLabels = { products: '产品', reviews: '⭐ 产品评价', news: '新闻', news_categories: '📰 新闻分类', company: '公司信息', page_texts: '页面文字', home_seo: '🏠 首页SEO', home_faq: '📋 首页FAQ', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字', ral_colors: '🎨 RAL颜色', roofing_categories: '🏠 瓦型分组', factory: '🏭 工厂展示', futures: '📈 期货行情', chat: '💬 在线客服' }
+const allPages = ['products', 'reviews', 'news', 'news_categories', 'company', 'page_texts', 'home_seo', 'home_faq', 'categories', 'hero', 'ui_texts_static', 'ral_colors', 'roofing_categories', 'factory', 'futures', 'language_seo_copy', 'chat']
+const pageLabels = { products: '产品', reviews: '⭐ 产品评价', news: '新闻', news_categories: '📰 新闻分类', company: '公司信息', page_texts: '页面文字', home_seo: '🏠 首页SEO', home_faq: '📋 首页FAQ', categories: '产品分类', hero: 'Hero区域', ui_texts_static: 'UI静态文字', ral_colors: '🎨 RAL颜色', roofing_categories: '🏠 瓦型分组', factory: '🏭 工厂展示', futures: '📈 期货行情', language_seo_copy: 'SEO 文案（11组）', chat: '💬 在线客服' }
 const selectedPages = ref([...allPages])
 const concurrency = ref(3)
 const skipTranslated = ref(false)

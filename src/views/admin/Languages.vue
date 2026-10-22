@@ -150,7 +150,10 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showSeoModal = false">取消</button>
-          <button class="btn btn-primary" :disabled="seoLoading" @click="saveSeo">
+          <button class="btn btn-secondary" :disabled="seoGenerating || seoLoading" @click="generateSeo">
+            {{ seoGenerating ? 'AI 生成中...' : 'AI 生成' }}
+          </button>
+          <button class="btn btn-primary" :disabled="seoLoading || seoGenerating" @click="saveSeo">
             {{ seoLoading ? '保存中...' : '保存 SEO 文案' }}
           </button>
         </div>
@@ -242,6 +245,7 @@ const showSeoModal = ref(false)
 const seoLang = ref(null)
 const seoRows = ref([])
 const seoLoading = ref(false)
+const seoGenerating = ref(false)
 const seoPageLabels = {
   home: '首页',
   about: 'About 关于我们',
@@ -359,6 +363,23 @@ const saveSeo = async () => {
     alert(e.message)
   } finally {
     seoLoading.value = false
+  }
+}
+
+const generateSeo = async () => {
+  if (!seoLang.value) return
+  seoGenerating.value = true
+  try {
+    const result = await api.generateLanguageSeoCopy(seoLang.value.code)
+    const read = await api.getLanguageSeoCopy(seoLang.value.code)
+    seoRows.value = read.rows || []
+    if (result.errors?.length) {
+      alert(`AI 生成完成，但有 ${result.errors.length} 项失败，请重试或手工修改。`)
+    }
+  } catch (e) {
+    alert(e.message)
+  } finally {
+    seoGenerating.value = false
   }
 }
 

@@ -101,3 +101,5 @@ AI 在翻译时会“自作聪敏”，例如：
 - 静态页和列表页的 SEO title/description 存在 `language_seo_copy` 表。后台「语言管理 → SEO 文案」可编辑 11 组文案；已有 10 种语言会在启动时自动写入内置文案。
 - 新增语言流程：后台添加语言（默认 `seo_index_ready=0`）→ 完成 UI 译文、公司简介、联系页文案、产品/文章翻译 → 填写 11 组 SEO 文案 → 打开「SEO 收录」开关。开关打开时后端会校验文案和关键译文，缺少任何一项都会拒绝开启并列出缺失项。
 - 静态页正文优先读取数据库里的 `company.description_<lang>`、`advantages_<lang>`、`page_texts` 和 UI 译文，避免硬编码译文与后台内容不一致。
+- AI 翻译新增 `language_seo_copy` 范围：翻译任务勾选该范围时，会为 11 类页面生成/翻译 SEO title 与 description。后台「语言管理 → SEO 文案 → AI 生成」或 `POST /api/languages/:code/seo-copy/generate` 使用专门的 SEO 提示词生成。人工保存的文案会标记 `is_manual=1`，后续 AI 任务不会覆盖。
+- 外部 API 文档见 `docs/MULTILINGUAL_SEO_API.md`，包含语言列表、SEO 文案读写、AI 生成、收录开关、多语言审计和翻译任务控制。

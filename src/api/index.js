@@ -314,6 +314,10 @@ export const api = {
     invalidateCachesByPrefix('/languages')
     return request(`/languages/${code}/seo-copy`, { method: 'PUT', body: JSON.stringify({ rows }) })
   },
+  generateLanguageSeoCopy: (code) => {
+    invalidateCachesByPrefix('/languages')
+    return request(`/languages/${code}/seo-copy/generate`, { method: 'POST' })
+  },
   deleteLanguage: (id) => {
     invalidateCachesByPrefix('/languages')
     return request(`/languages/${id}`, { method: 'DELETE' })

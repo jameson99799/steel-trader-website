@@ -37,7 +37,8 @@ const TYPE_TO_PAGE = {
     hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors',
     roofing_profile: 'roofing_profiles', roofing_category: 'roofing_categories',
     factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures',
-    chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq'
+    chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq',
+    language_seo_copy: 'language_seo_copy'
 }
 
 // ─── Field-level "already translated" filter ─────────────────────────────────
@@ -657,49 +658,66 @@ router.get('/:id/logs-since/:logId', authMiddleware, (req, res) => {
 })
 
 // POST /translation-jobs — create & start a new background job
+export function createTranslationJob({ lang, pages, explicitItems, concurrency, promptId, skipTranslated } = {}) {
+    if (!lang) {
+        const error = new Error('lang is required')
+        error.statusCode = 400
+        throw error
+    }
+    if ((!pages || !pages.length) && (!explicitItems || !explicitItems.length)) {
+        const error = new Error('pages or explicitItems is required')
+        error.statusCode = 400
+        throw error
+    }
+    // Reject a target language that does not exist (or is disabled) up
+    // front — otherwise every item silently fell through the worker's
+    // unknown-language branch and the job "finished" with 0 translations.
+    if (lang !== 'all' && !getOne('SELECT 1 FROM languages WHERE code = ? AND status = 1', [lang])) {
+        const error = new Error(`目标语言不存在或未启用：${lang}`)
+        error.statusCode = 400
+        throw error
+    }
+
+    // Only allow one running job at a time
+    const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('pending', 'running', 'pausing', 'aborting')")
+    if (running) {
+        const error = new Error(`当前已有正在运行的翻译任务（ID: ${running.id}），请等待完成或中止后再创建新任务`)
+        error.statusCode = 409
+        error.activeJobId = running.id
+        throw error
+    }
+
+    // Resolve effective concurrency: an explicit valid value wins; null/''/NaN/<=0
+    // falls back to the saved admin setting — never silently single-threaded.
+    const level = resolveJobConcurrency(concurrency)
+
+    const result = run(
+        `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items, concurrency, prompt_id, skip_translated) VALUES ('pending', ?, ?, ?, ?, ?, ?)`,
+        [lang, JSON.stringify(pages || []), JSON.stringify(explicitItems || []), level, promptId || null, skipTranslated ? 1 : 0]
+    )
+    const jobId = result.lastInsertRowid
+
+    // Fire-and-forget
+    setImmediate(() => runJobInBackground(jobId).catch(e => {
+        console.error(`[translation-jobs] Job ${jobId} fatal error:`, e)
+        try {
+            updateJobProgress(jobId, { status: 'error', finished_at: new Date().toISOString() })
+            jobLog(jobId, 'error', `💥 任务异常终止: ${e.message}`)
+        } catch (err2) { /* non-fatal */ }
+    }))
+
+    return { jobId }
+}
+
 router.post('/', authMiddleware, async (req, res) => {
     try {
-        const { lang, pages, concurrency, explicitItems, promptId, skipTranslated } = req.body
-        if (!lang) return res.status(400).json({ error: 'lang is required' })
-        if ((!pages || !pages.length) && (!explicitItems || !explicitItems.length)) return res.status(400).json({ error: 'pages or explicitItems is required' })
-        // Reject a target language that does not exist (or is disabled) up
-        // front — otherwise every item silently fell through the worker's
-        // unknown-language branch and the job "finished" with 0 translations.
-        if (lang !== 'all' && !getOne('SELECT 1 FROM languages WHERE code = ? AND status = 1', [lang])) {
-            return res.status(400).json({ error: `目标语言不存在或未启用：${lang}` })
-        }
-
-        // Only allow one running job at a time
-        const running = getOne("SELECT id FROM translation_jobs WHERE status IN ('pending', 'running', 'pausing', 'aborting')")
-        if (running) {
-            return res.status(409).json({
-                error: `当前已有正在运行的翻译任务（ID: ${running.id}），请等待完成或中止后再创建新任务`,
-                activeJobId: running.id
-            })
-        }
-
-        // Resolve effective concurrency: an explicit valid value wins; null/''/NaN/<=0
-        // falls back to the saved admin setting — never silently single-threaded.
-        const level = resolveJobConcurrency(concurrency)
-
-        const result = run(
-            `INSERT INTO translation_jobs (status, target_lang, pages, explicit_items, concurrency, prompt_id, skip_translated) VALUES ('pending', ?, ?, ?, ?, ?, ?)`,
-            [lang, JSON.stringify(pages || []), JSON.stringify(explicitItems || []), level, promptId || null, skipTranslated ? 1 : 0]
-        )
-        const jobId = result.lastInsertRowid
-
-        // Fire-and-forget
-        setImmediate(() => runJobInBackground(jobId).catch(e => {
-            console.error(`[translation-jobs] Job ${jobId} fatal error:`, e)
-            try {
-                updateJobProgress(jobId, { status: 'error', finished_at: new Date().toISOString() })
-                jobLog(jobId, 'error', `💥 任务异常终止: ${e.message}`)
-            } catch (err2) { /* non-fatal */ }
-        }))
-
-        res.json({ jobId, message: '后台翻译任务已启动' })
+        const result = createTranslationJob(req.body)
+        res.json({ ...result, message: '后台翻译任务已启动' })
     } catch (e) {
-        res.status(500).json({ error: e.message })
+        res.status(e.statusCode || 500).json({
+            error: e.message,
+            ...(e.activeJobId ? { activeJobId: e.activeJobId } : {})
+        })
     }
 })
 

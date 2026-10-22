@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 
 import {
   PRIMARY_CONTENT_LANGS,
@@ -18,7 +19,8 @@ import {
 import { resolveUiText } from '../server/services/uiText.js'
 import {
   findMissingKeys,
-  findMissingSeoCopyRows
+  findMissingSeoCopyRows,
+  getRequiredUiTextKeys
 } from '../server/services/languageSeoReadiness.js'
 
 const ALL_LANGS = ['en', 'zh', 'ru', 'fr', 'es', 'ar', 'hi', 'th', 'tr', 'pt']
@@ -175,4 +177,38 @@ test('new languages use UI translations for homepage labels', () => {
   assert.equal(labels.products, 'Hauptprodukte')
   assert.equal(labels.quickLinks, 'Schnellzugriff')
   assert.equal(labels.faq, 'Häufige Fragen')
+})
+
+test('built-in languages do not require the new home UI keys, new languages do', () => {
+  assert.ok(!getRequiredUiTextKeys('fr').includes('homeCategories'))
+  assert.ok(getRequiredUiTextKeys('de').includes('homeCategories'))
+  assert.ok(getRequiredUiTextKeys('de').includes('homeFaq'))
+})
+
+test('translation pipeline registers the SEO copy scope and persistence path', () => {
+  const source = fs.readFileSync(
+    new URL('../server/routes/translation.js', import.meta.url),
+    'utf8'
+  )
+  assert.match(source, /language_seo_copy: \(\) => collectLanguageSeoCopy\(\)/)
+  assert.match(source, /type === 'language_seo_copy'/)
+  assert.match(source, /INSERT INTO language_seo_copy/)
+})
+
+test('external API exposes language SEO, readiness, audit and translation endpoints', () => {
+  const source = fs.readFileSync(
+    new URL('../server/routes/external-api.js', import.meta.url),
+    'utf8'
+  )
+  for (const path of [
+    "'/languages'",
+    "'/languages/:code/seo-copy'",
+    "'/languages/:code/seo-copy/generate'",
+    "'/languages/:code/seo-ready'",
+    "'/seo/audit'",
+    "'/translations/scopes'",
+    "router.post('/translations'"
+  ]) {
+    assert.ok(source.includes(path), `${path} missing from external API`)
+  }
 })

@@ -1302,10 +1302,12 @@ Requirements:
       page_key TEXT NOT NULL,
       title TEXT DEFAULT '',
       description TEXT DEFAULT '',
+      is_manual INTEGER DEFAULT 0,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(language_code, page_key)
     )
   `)
+  try { db.exec('ALTER TABLE language_seo_copy ADD COLUMN is_manual INTEGER DEFAULT 0') } catch (e) { }
   try {
     const insertSeoCopy = db.prepare(
       'INSERT OR IGNORE INTO language_seo_copy (language_code, page_key, title, description) VALUES (?, ?, ?, ?)'

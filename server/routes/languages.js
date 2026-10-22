@@ -7,9 +7,10 @@ import {
     getBuiltInSeoCopyRows
 } from '../services/seoContent.js'
 import { getLanguageSeoReadiness } from '../services/languageSeoReadiness.js'
+import { generateLanguageSeoCopy } from '../services/languageSeoCopyGenerator.js'
 
 const router = Router()
-const PRIMARY_ALWAYS_READY = new Set(['en', 'zh'])
+export const PRIMARY_ALWAYS_READY = new Set(['en', 'zh'])
 const SEO_COPY_KEYS = new Set(SEO_PAGE_KEYS)
 
 function getHomeSeoDefaults(code) {
@@ -28,9 +29,9 @@ function getHomeSeoDefaults(code) {
     }
 }
 
-function getSeoCopyRows(code) {
+export function getSeoCopyRows(code) {
     const stored = getAll(
-        'SELECT page_key, title, description FROM language_seo_copy WHERE language_code = ?',
+        'SELECT page_key, title, description, is_manual FROM language_seo_copy WHERE language_code = ?',
         [code]
     )
     const storedByKey = new Map(stored.map(row => [row.page_key, row]))
@@ -44,12 +45,13 @@ function getSeoCopyRows(code) {
         return {
             page_key: pageKey,
             title: storedRow?.title || fallback?.title || '',
-            description: storedRow?.description || fallback?.description || ''
+            description: storedRow?.description || fallback?.description || '',
+            is_manual: storedRow?.is_manual ? 1 : 0
         }
     })
 }
 
-function getReadinessError(language) {
+export function getReadinessError(language) {
     if (PRIMARY_ALWAYS_READY.has(language.code)) return null
     const readiness = getLanguageSeoReadiness(language.code)
     if (readiness.ready) return null
@@ -60,6 +62,47 @@ function getReadinessError(language) {
     if (readiness.missingCompanyFields.length) parts.push(`公司简介缺少: ${readiness.missingCompanyFields.join(', ')}`)
     if (readiness.missingPageTexts.length) parts.push(`页面文案缺少: ${readiness.missingPageTexts.join(', ')}`)
     return { ...readiness, error: parts.join('；') }
+}
+
+export function saveSeoCopyRows(code, inputRows) {
+    const language = getOne('SELECT * FROM languages WHERE code = ?', [code])
+    if (!language) return { status: 404, body: { error: 'not found' } }
+
+    const incoming = new Map()
+    for (const row of Array.isArray(inputRows) ? inputRows : []) {
+        if (!row || !SEO_COPY_KEYS.has(row.page_key)) continue
+        incoming.set(row.page_key, {
+            title: String(row.title || '').trim(),
+            description: String(row.description || '').trim()
+        })
+    }
+
+    const merged = new Map(getSeoCopyRows(code).map(row => [row.page_key, row]))
+    for (const [pageKey, row] of incoming) merged.set(pageKey, { page_key: pageKey, ...row })
+    const missing = SEO_PAGE_KEYS.filter(pageKey => {
+        const row = merged.get(pageKey)
+        return !row || !String(row.title || '').trim() || !String(row.description || '').trim()
+    })
+    if (language.seo_index_ready && missing.length) {
+        return {
+            status: 400,
+            body: {
+                error: `SEO文案未完成，无法保存: ${missing.join(', ')}`,
+                missingSeoCopy: missing
+            }
+        }
+    }
+
+    const upsert = 'INSERT INTO language_seo_copy (language_code, page_key, title, description, is_manual) VALUES (?, ?, ?, ?, 1) ' +
+        'ON CONFLICT(language_code, page_key) DO UPDATE SET title = excluded.title, description = excluded.description, is_manual = 1, updated_at = CURRENT_TIMESTAMP'
+    for (const [pageKey, row] of incoming) {
+        run(upsert, [code, pageKey, row.title, row.description])
+    }
+
+    return {
+        status: 200,
+        body: { message: '保存成功', language_code: code, rows: getSeoCopyRows(code) }
+    }
 }
 
 // GET all languages
@@ -104,43 +147,20 @@ router.post('/', authMiddleware, (req, res) => {
     }
 })
 
+// POST generate SEO copy for one language with the configured AI channel
+router.post('/:code/seo-copy/generate', authMiddleware, async (req, res) => {
+    try {
+        const result = await generateLanguageSeoCopy(req.params.code)
+        res.json({ message: 'SEO文案生成完成', ...result })
+    } catch (e) {
+        res.status(e.statusCode || 500).json({ error: e.message })
+    }
+})
+
 // PUT localized SEO copy for one language
 router.put('/:code/seo-copy', authMiddleware, (req, res) => {
-    const language = getOne('SELECT * FROM languages WHERE code = ?', [req.params.code])
-    if (!language) return res.status(404).json({ error: 'not found' })
-
-    const inputRows = Array.isArray(req.body?.rows) ? req.body.rows : []
-    const incoming = new Map()
-    for (const row of inputRows) {
-        if (!row || !SEO_COPY_KEYS.has(row.page_key)) continue
-        incoming.set(row.page_key, {
-            title: String(row.title || '').trim(),
-            description: String(row.description || '').trim()
-        })
-    }
-
-    // Validate the resulting complete copy before writing when the language is
-    // already indexable, so a save cannot silently de-index a live language.
-    const merged = new Map(getSeoCopyRows(language.code).map(row => [row.page_key, row]))
-    for (const [pageKey, row] of incoming) merged.set(pageKey, { page_key: pageKey, ...row })
-    const missing = SEO_PAGE_KEYS.filter(pageKey => {
-        const row = merged.get(pageKey)
-        return !row || !String(row.title || '').trim() || !String(row.description || '').trim()
-    })
-    if (language.seo_index_ready && missing.length) {
-        return res.status(400).json({
-            error: `SEO文案未完成，无法保存: ${missing.join(', ')}`,
-            missingSeoCopy: missing
-        })
-    }
-
-    const upsert = 'INSERT INTO language_seo_copy (language_code, page_key, title, description) VALUES (?, ?, ?, ?) ' +
-        'ON CONFLICT(language_code, page_key) DO UPDATE SET title = excluded.title, description = excluded.description, updated_at = CURRENT_TIMESTAMP'
-    for (const [pageKey, row] of incoming) {
-        run(upsert, [language.code, pageKey, row.title, row.description])
-    }
-
-    res.json({ message: '保存成功', language_code: language.code, rows: getSeoCopyRows(language.code) })
+    const result = saveSeoCopyRows(req.params.code, req.body?.rows)
+    res.status(result.status).json(result.body)
 })
 
 // PUT update language

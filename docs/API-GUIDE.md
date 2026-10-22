@@ -488,3 +488,24 @@ curl -X DELETE -H "X-API-Key: ext_xxx" "https://your-domain.com/api/external/tem
 - **避免组件层级遮挡**：不要生成绝对定位(`position: absolute`)的自定义按钮、图库左右切换等控件，否则可能会和底部联系方式或侧边悬浮 UI 产生重叠，导致自适应冲突。
 - **严格的纯英文 Anchor 锚点结构**：如果是生成 "Table of Contents (TOC)" 带页面内跳转的目录区块，所有标题的 `id="..."` 以及链接跳转 `href="#..."` 必须且只能是基础的连续纯英文数字组合（例如 `id="what-is-galvanized-coil"`）。不要加入任何疑问句符号、特殊字符、空格。一旦含有复杂字符，经过多语言 API 翻译后极易导致 `id` 和 `href` 指针断裂，致使其他语种页面点击目标失效。
 - **结构化且层级分明**：尽量复用原生的语义化标签 (`<h2>`, `<h3>`, `<ul>`, `<li>`, `<table class="styled-table">` 等)，避免创建过多的嵌套 `<div>`，能大幅度提高翻译 API 识别兼容度和前端页面自适应效果。
+
+
+---
+
+## 十一、多语言 SEO 与收录 API
+
+完整说明见 [docs/MULTILINGUAL_SEO_API.md](./MULTILINGUAL_SEO_API.md)。
+
+核心端点：
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | /api/external/languages | 语言列表与 SEO 收录状态 |
+| GET | /api/external/languages/:code/seo-copy | 读取 11 组 SEO 文案 |
+| PUT | /api/external/languages/:code/seo-copy | 修改 SEO 文案（标记人工修改） |
+| POST | /api/external/languages/:code/seo-copy/generate | 用 AI 生成 SEO 文案 |
+| PUT | /api/external/languages/:code/seo-ready | 开启/关闭该语言收录 |
+| GET | /api/external/seo/audit | 全面检查所有语言 SEO 状态、缺失翻译、中英混杂风险 |
+| GET | /api/external/translations/scopes | 可用翻译范围（含 language_seo_copy） |
+| POST | /api/external/translations | 按语言启动翻译任务 |
+| GET | /api/external/translations/:id | 查询翻译任务状态 |

@@ -7,6 +7,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { stripSeoSecrets } from '../services/seoSanitizer.js'
 import { sanitizeOrganizationType } from '../services/seoSettingsSchema.js'
+import { auditMultilingualSeo } from '../services/multilingualSeoAudit.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -120,6 +121,16 @@ router.post('/refresh', authMiddleware, (req, res) => {
     }
 })
 
+
+// ── Multilingual SEO Audit ──────────────────────────────────
+router.get('/audit/multilingual', authMiddleware, (req, res) => {
+    try {
+        const lang = req.query.lang || null
+        res.json(auditMultilingualSeo({ lang }))
+    } catch (e) {
+        res.status(500).json({ error: e.message })
+    }
+})
 
 // ── SEO Audit Endpoint ───────────────────────────────────────
 router.get('/audit', authMiddleware, (req, res) => {

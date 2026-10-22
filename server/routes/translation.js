@@ -10,6 +10,7 @@ import {
     saveManualTranslation,
     syncProductReviewTranslation
 } from '../services/productReviewTranslation.js'
+import { SEO_PAGE_KEYS, getBuiltInSeoCopyRows } from '../services/seoContent.js'
 import {
     acquireRpmSlot,
     acquireAiConcurrencySlot,
@@ -813,6 +814,45 @@ function collectUITexts() {
     return items
 }
 
+function collectLanguageSeoCopy() {
+    const company = getOne('SELECT name_en, name FROM company WHERE id = 1') || {}
+    const seoSettings = getOne('SELECT site_title, site_description FROM seo_settings WHERE id = 1') || {}
+    const brand = company.name_en || company.name || 'SUNSEA STEEL'
+    const home = {
+        page_key: 'home',
+        title: (seoSettings.site_title && /gi|steel|coil/i.test(seoSettings.site_title))
+            ? seoSettings.site_title
+            : `${brand} | GI GL PPGI PPGL CRC Steel Coil Manufacturer & Exporter`,
+        description: (seoSettings.site_description && seoSettings.site_description.length > 60)
+            ? seoSettings.site_description
+            : `${brand} is a professional manufacturer and exporter of GI, GL, PPGI, PPGL and CRC steel coils. Factory-direct pricing, ASTM/JIS/EN certified, global shipping.`
+    }
+    const rows = [home, ...getBuiltInSeoCopyRows('en')]
+    const items = []
+    for (const row of rows) {
+        if (!SEO_PAGE_KEYS.includes(row.page_key)) continue
+        if (row.title) {
+            items.push({
+                type: 'language_seo_copy',
+                id: row.page_key,
+                field: 'title',
+                text: row.title,
+                itemName: `SEO Title - ${row.page_key}`
+            })
+        }
+        if (row.description) {
+            items.push({
+                type: 'language_seo_copy',
+                id: row.page_key,
+                field: 'description',
+                text: row.description,
+                itemName: `SEO Description - ${row.page_key}`
+            })
+        }
+    }
+    return items
+}
+
 function collectFuturesTexts() {
     const entries = Object.entries(FUTURES_TEXTS_EN)
     const CHUNK_SIZE = 15
@@ -1000,6 +1040,7 @@ const PAGES = {
     roofing_profiles: collectRoofingProfiles,
     factory: collectFactory,
     futures: () => collectFuturesTexts(),
+    language_seo_copy: () => collectLanguageSeoCopy(),
     chat: collectChatSupport
 };
 
@@ -1348,6 +1389,30 @@ function upsertTranslation(lang, type, id, field, original, translated) {
     if (translated && typeof translated === 'string') {
         translated = translated.replace(/\uFFFD/g, '').trim()
     }
+    if (type === 'language_seo_copy') {
+        const pageKey = String(id || '')
+        if (!SEO_PAGE_KEYS.includes(pageKey) || !translated) return
+        const column = field === 'description' ? 'description' : 'title'
+        const existing = getOne(
+            'SELECT title, description, is_manual FROM language_seo_copy WHERE language_code = ? AND page_key = ?',
+            [lang, pageKey]
+        )
+        // Manual edits in the admin editor win over future AI runs.
+        if (existing?.is_manual) return
+        const title = column === 'title' ? translated : (existing?.title || '')
+        const description = column === 'description' ? translated : (existing?.description || '')
+        run(
+            `INSERT INTO language_seo_copy (language_code, page_key, title, description, is_manual)
+             VALUES (?, ?, ?, ?, 0)
+             ON CONFLICT(language_code, page_key) DO UPDATE SET
+               title = excluded.title,
+               description = excluded.description,
+               is_manual = 0,
+               updated_at = CURRENT_TIMESTAMP`,
+            [lang, pageKey, title, description]
+        )
+        return
+    }
     // For news_category names: also write directly to news_categories table
     // so localizedValue(cat, 'name') can find name_es / name_fr etc.
     if (type === 'news_category' && field === 'name' && id && lang) {
@@ -1436,7 +1501,7 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'AI API key not configured' })
     }
 
-    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq', language_seo_copy: 'language_seo_copy' }
     const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
     let overrideNote = manualOverrides.length > 0
         ? '\n\nUse these approved translations as reference:\n' +
@@ -1634,7 +1699,7 @@ router.post('/run-one', authMiddleware, async (req, res) => {
     if (!s?.api_key && !getOne('SELECT api_key FROM ai_channels WHERE is_default = 1')?.api_key) return res.status(400).json({ error: 'AI API key not configured. Please add an AI channel in AI Translation settings.' })
 
     // Map singular type names to PAGES keys (product -> products, category -> categories, etc.)
-    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq', language_seo_copy: 'language_seo_copy' }
     const pageKey = TYPE_TO_PAGE[content_type] || content_type
     if (!PAGES[pageKey]) return res.status(400).json({ error: `Unknown content type: ${content_type}` })
     const allItems = PAGES[pageKey]()
@@ -2324,7 +2389,7 @@ router.post('/run-selective', authMiddleware, async (req, res) => {
     if (!langs.length) return res.status(400).json({ error: 'No valid languages found' })
 
     const enhanced = enhanceWithDefaultChannel(s)
-    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq', language_seo_copy: 'language_seo_copy' }
     const pageKey = TYPE_TO_PAGE[type]
     if (!PAGES[pageKey]) return res.status(400).json({ error: 'Invalid type' })
 
@@ -2781,7 +2846,7 @@ async function executeTranslationTask(targetLang, contentType, contentId, isRetr
         throw new Error('AI API key not configured.')
     }
 
-    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq', language_seo_copy: 'language_seo_copy' }
     const pageKey = TYPE_TO_PAGE[contentType] || contentType
     if (!PAGES[pageKey]) throw new Error(`Unknown content type: ${contentType}`)
     
@@ -2992,5 +3057,5 @@ router.post('/batch-action', authMiddleware, (req, res) => {
 export default router
 
 // ── Named exports for background job system ──
-export { PAGES, translateBatch, enhanceWithDefaultChannel, upsertTranslation, processTranslationQueue }
+export { PAGES, translateBatch, enhanceWithDefaultChannel, upsertTranslation, processTranslationQueue, collectLanguageSeoCopy }
 
