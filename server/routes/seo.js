@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url'
 import { stripSeoSecrets } from '../services/seoSanitizer.js'
 import { sanitizeOrganizationType } from '../services/seoSettingsSchema.js'
 import { auditMultilingualSeo } from '../services/multilingualSeoAudit.js'
+import { auditLiveHtml } from '../services/liveSeoAudit.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -121,6 +122,23 @@ router.post('/refresh', authMiddleware, (req, res) => {
     }
 })
 
+
+// ── Live HTML SEO Audit ─────────────────────────────────────
+router.get('/audit/live', authMiddleware, async (req, res) => {
+    try {
+        const result = await auditLiveHtml({
+            lang: req.query.lang || null,
+            type: req.query.type || null,
+            offset: req.query.offset,
+            limit: req.query.limit,
+            concurrency: req.query.concurrency,
+            compareEnglish: req.query.compare_english === '1' || req.query.compare_english === 'true'
+        })
+        res.json(result)
+    } catch (e) {
+        res.status(e.statusCode || 500).json({ error: e.message })
+    }
+})
 
 // ── Multilingual SEO Audit ──────────────────────────────────
 router.get('/audit/multilingual', authMiddleware, (req, res) => {

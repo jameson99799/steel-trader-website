@@ -355,7 +355,104 @@ X-API-Key: ext_xxx
 
 ---
 
-## 八、认证与安全
+## 八、线上 HTML 逐页检查
+
+前面 `/seo/audit` 检查数据库层面的文案和翻译完整性；这个接口会真正抓取线上 sitemap 中的页面 HTML（使用 Googlebot UA），逐页检查：
+
+- HTTP 状态
+- 是否被 `noindex`
+- `<title>` 是否存在、长度是否合理
+- `<meta name="description">` 是否存在、长度是否合理
+- canonical 是否自引用
+- hreflang 是否存在、是否包含当前语言、是否包含 `x-default`
+- 静态页 hreflang 数量是否覆盖所有已就绪语言
+- `<html lang>` 是否正确
+- 阿拉伯语是否 `dir="rtl"`
+- H1 是否存在
+- JSON-LD 是否可解析
+- 可见正文是否过短
+- 可选：非英语页面 title/H1 是否与英文版完全相同（疑似英文回退）
+
+### 8.1 外部 API
+
+```http
+GET /api/external/seo/audit/live
+X-API-Key: ext_xxx
+```
+
+查询参数：
+
+| 参数 | 说明 |
+|---|---|
+| `lang` | 可选，两位语言代码，如 `fr` |
+| `type` | 可选，页面类型：`home`、`products`、`productDetail`、`productCategory`、`news`、`newsDetail`、`newsCategory`、`about`、`contact`、`factory`、`ralColors`、`roofingProfiles`、`futuresPrice` |
+| `offset` | 默认 0 |
+| `limit` | 1–100，默认 30 |
+| `concurrency` | 1–8，默认 4 |
+| `compare_english` | `1` 时额外对比英文版 title/H1，检测英文回退 |
+
+示例：
+
+```http
+GET /api/external/seo/audit/live?lang=fr&type=about&limit=10&compare_english=1
+```
+
+响应：
+
+```json
+{
+  "base_url": "https://www.sunseasteel.com",
+  "total": 9,
+  "offset": 0,
+  "limit": 10,
+  "checked": 9,
+  "next_offset": 9,
+  "has_more": false,
+  "partial": false,
+  "summary": {
+    "passed": 8,
+    "with_warnings": 1,
+    "with_errors": 0,
+    "errors": 0,
+    "warnings": 1,
+    "issue_counts": { "meta-description-length": 1 }
+  },
+  "pages": [
+    {
+      "url": "https://www.sunseasteel.com/fr/about",
+      "status": 200,
+      "lang": "fr",
+      "type": "about",
+      "title": "...",
+      "descriptionLength": 141,
+      "canonical": "https://www.sunseasteel.com/fr/about",
+      "hreflangCount": 11,
+      "htmlLang": "fr",
+      "h1": "...",
+      "visibleChars": 461,
+      "issues": []
+    }
+  ]
+}
+```
+
+管理端：
+
+```http
+GET /api/seo/audit/live?lang=fr&limit=10
+Authorization: Bearer <admin-token>
+```
+
+说明：
+
+- 默认每次只检查 30 页，避免请求过慢；用 `offset` 翻页。
+- 单次最多 100 页，超过 45 秒会返回已完成部分，`partial=true`。
+- `next_offset` 可直接作为下一次请求的 `offset`。
+- `compare_english=1` 会额外请求英文版页面，耗时约翻倍。
+
+---
+
+## 九、认证与安全
 
 - 管理端：`Authorization: Bearer <admin-token>`
 - 外部 API：`X-API-Key: ext_xxx`

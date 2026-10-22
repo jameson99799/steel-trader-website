@@ -506,6 +506,7 @@ curl -X DELETE -H "X-API-Key: ext_xxx" "https://your-domain.com/api/external/tem
 | POST | /api/external/languages/:code/seo-copy/generate | 用 AI 生成 SEO 文案 |
 | PUT | /api/external/languages/:code/seo-ready | 开启/关闭该语言收录 |
 | GET | /api/external/seo/audit | 全面检查所有语言 SEO 状态、缺失翻译、中英混杂风险 |
+| GET | /api/external/seo/audit/live | 线上 HTML 逐页检查（title、canonical、hreflang、H1、JSON-LD、noindex、英文回退） |
 | GET | /api/external/translations/scopes | 可用翻译范围（含 language_seo_copy） |
 | POST | /api/external/translations | 按语言启动翻译任务 |
 | GET | /api/external/translations/:id | 查询翻译任务状态 |

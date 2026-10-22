@@ -206,6 +206,7 @@ test('external API exposes language SEO, readiness, audit and translation endpoi
     "'/languages/:code/seo-copy/generate'",
     "'/languages/:code/seo-ready'",
     "'/seo/audit'",
+    "'/seo/audit/live'",
     "'/translations/scopes'",
     "router.post('/translations'"
   ]) {

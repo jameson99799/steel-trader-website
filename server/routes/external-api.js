@@ -11,6 +11,7 @@ import {
     registerExternalProductReviewRoutes
 } from './product-reviews.js'
 import { auditMultilingualSeo } from '../services/multilingualSeoAudit.js'
+import { auditLiveHtml } from '../services/liveSeoAudit.js'
 import { generateLanguageSeoCopy } from '../services/languageSeoCopyGenerator.js'
 import { SEO_PAGE_KEYS } from '../services/seoContent.js'
 import {
@@ -953,6 +954,22 @@ router.put('/languages/:code/seo-ready', apiKeyMiddleware, (req, res) => {
     res.json({ message: '更新成功', code: language.code, seo_index_ready: nextReady })
 })
 
+router.get('/seo/audit/live', apiKeyMiddleware, async (req, res) => {
+    try {
+        const result = await auditLiveHtml({
+            lang: req.query.lang || null,
+            type: req.query.type || null,
+            offset: req.query.offset,
+            limit: req.query.limit,
+            concurrency: req.query.concurrency,
+            compareEnglish: req.query.compare_english === '1' || req.query.compare_english === 'true'
+        })
+        res.json(result)
+    } catch (e) {
+        res.status(e.statusCode || 500).json({ error: e.message })
+    }
+})
+
 router.get('/seo/audit', apiKeyMiddleware, (req, res) => {
     try {
         res.json(auditMultilingualSeo({ lang: req.query.lang || null }))
@@ -1272,6 +1289,19 @@ router.get('/docs', (req, res) => {
                     path: '/api/external/seo/audit',
                     query_params: { lang: 'optional language code; omit for every language' },
                     note: 'Returns per-language completeness, missing SEO copy/translations, mixed-language risk, indexability and indexable page counts.'
+                },
+                live_html_audit: {
+                    method: 'GET',
+                    path: '/api/external/seo/audit/live',
+                    query_params: {
+                        lang: 'optional two-letter language code',
+                        type: 'optional page type: home, products, productDetail, productCategory, news, newsDetail, newsCategory, about, contact, factory, ralColors, roofingProfiles, futuresPrice',
+                        offset: 'start offset in the filtered sitemap URL list (default 0)',
+                        limit: 'pages per request, 1-100 (default 30)',
+                        concurrency: 'parallel requests, 1-8 (default 4)',
+                        compare_english: '1 to compare non-English title/H1 with the English counterpart'
+                    },
+                    note: 'Fetches live sitemap URLs with Googlebot UA and checks HTTP status, noindex, title, meta description, canonical, hreflang, html lang/dir, H1, JSON-LD and visible body text. Returns per-page issues and pagination fields.'
                 },
                 translation_scopes: { method: 'GET', path: '/api/external/translations/scopes' },
                 start_translation: {
