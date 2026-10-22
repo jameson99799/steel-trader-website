@@ -9,7 +9,11 @@ const requiredColumns = [
   'geo_lng', 'hreflang_en', 'hreflang_zh', 'local_business_type',
   'local_business_address', 'service_account_json', 'oauth_client_id',
   'oauth_client_secret', 'oauth_refresh_token', 'article_refresh_days',
-  'product_refresh_days', 'llms_txt', 'llms_full_txt', 'updated_at'
+  'product_refresh_days', 'llms_txt', 'llms_full_txt',
+  'shipping_rate_usd', 'shipping_countries', 'shipping_handling_min',
+  'shipping_handling_max', 'shipping_transit_min', 'shipping_transit_max',
+  'return_policy_category', 'return_policy_days', 'return_policy_fees',
+  'return_policy_countries', 'updated_at'
 ]
 
 test('creates a complete SEO settings schema before fresh-database seeding', () => {

@@ -39,6 +39,16 @@ const ADDITIVE_COLUMNS = [
   ['product_refresh_days', 'INTEGER DEFAULT 0'],
   ['llms_txt', 'TEXT'],
   ['llms_full_txt', 'TEXT'],
+  ['shipping_rate_usd', "TEXT DEFAULT '0'"],
+  ['shipping_countries', "TEXT DEFAULT 'US,DE,FR,GB,ES,IT,NL,PL,AE,SA,AU,CA,MX,BR,IN,TH,VN,TR,RU,ZA,DZ'"],
+  ['shipping_handling_min', 'INTEGER DEFAULT 1'],
+  ['shipping_handling_max', 'INTEGER DEFAULT 3'],
+  ['shipping_transit_min', 'INTEGER DEFAULT 15'],
+  ['shipping_transit_max', 'INTEGER DEFAULT 35'],
+  ['return_policy_category', "TEXT DEFAULT 'MerchantReturnNotPermitted'"],
+  ['return_policy_days', 'INTEGER DEFAULT 30'],
+  ['return_policy_fees', "TEXT DEFAULT 'ReturnFeesCustomerResponsibility'"],
+  ['return_policy_countries', "TEXT DEFAULT ''"],
   // SQLite cannot add CURRENT_TIMESTAMP as a non-constant default to a populated table.
   ['updated_at', 'DATETIME']
 ]
@@ -73,6 +83,16 @@ export function initializeSeoSettingsSchema(db) {
       product_refresh_days INTEGER DEFAULT 0,
       llms_txt TEXT,
       llms_full_txt TEXT,
+      shipping_rate_usd TEXT DEFAULT '0',
+      shipping_countries TEXT DEFAULT 'US,DE,FR,GB,ES,IT,NL,PL,AE,SA,AU,CA,MX,BR,IN,TH,VN,TR,RU,ZA,DZ',
+      shipping_handling_min INTEGER DEFAULT 1,
+      shipping_handling_max INTEGER DEFAULT 3,
+      shipping_transit_min INTEGER DEFAULT 15,
+      shipping_transit_max INTEGER DEFAULT 35,
+      return_policy_category TEXT DEFAULT 'MerchantReturnNotPermitted',
+      return_policy_days INTEGER DEFAULT 30,
+      return_policy_fees TEXT DEFAULT 'ReturnFeesCustomerResponsibility',
+      return_policy_countries TEXT DEFAULT '',
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)

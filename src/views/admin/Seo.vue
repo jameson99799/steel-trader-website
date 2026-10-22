@@ -191,6 +191,72 @@
       </div>
     </div>
 
+    <!-- Product shipping & return policy -->
+    <div class="seo-card" style="grid-column: 1 / -1;">
+      <h3>🚚 产品配送与退货政策（Google 商品结构化数据）</h3>
+      <p style="color:#64748b;font-size:13px;margin-bottom:16px;">
+        用于产品 Product JSON-LD 的 <code>shippingDetails</code> 和 <code>hasMerchantReturnPolicy</code>，解决 Google Search Console 的“缺少 shippingDetails / hasMerchantReturnPolicy”提示。
+        <strong style="color:#dc2626;">运费默认 0 表示免运费/已含运费；如果实际运费另计，请填写真实运费</strong>，否则 Google 可能按免运费展示。
+      </p>
+      <div class="grid grid-3">
+        <div class="form-group">
+          <label>运费（USD / 吨）</label>
+          <input type="number" v-model="form.shipping_rate_usd" class="form-control" min="0" step="0.01" placeholder="0" />
+          <small>必须与产品报价币种一致（当前产品价格为 USD/吨）</small>
+        </div>
+        <div class="form-group">
+          <label>配送国家（ISO 两位代码）</label>
+          <input v-model="form.shipping_countries" class="form-control" placeholder="US,DE,FR,GB,AE,SA,DZ" />
+          <small>逗号分隔，最多 50 个，如 US,DE,FR,GB,AE,SA,DZ</small>
+        </div>
+        <div class="form-group">
+          <label>退货政策</label>
+          <select v-model="form.return_policy_category" class="form-control">
+            <option value="MerchantReturnNotPermitted">不允许退货（B2B 推荐）</option>
+            <option value="MerchantReturnFiniteReturnWindow">有限退货窗口</option>
+            <option value="MerchantReturnUnlimitedWindow">无限期退货</option>
+          </select>
+          <small>必须与公司真实政策一致</small>
+        </div>
+      </div>
+      <div class="grid grid-3">
+        <div class="form-group">
+          <label>处理时间最小（工作日）</label>
+          <input type="number" v-model.number="form.shipping_handling_min" class="form-control" min="1" max="30" placeholder="1" />
+        </div>
+        <div class="form-group">
+          <label>处理时间最大（工作日）</label>
+          <input type="number" v-model.number="form.shipping_handling_max" class="form-control" min="1" max="60" placeholder="3" />
+        </div>
+        <div class="form-group">
+          <label>运输时间最小（工作日）</label>
+          <input type="number" v-model.number="form.shipping_transit_min" class="form-control" min="1" max="180" placeholder="15" />
+        </div>
+      </div>
+      <div class="grid grid-3">
+        <div class="form-group">
+          <label>运输时间最大（工作日）</label>
+          <input type="number" v-model.number="form.shipping_transit_max" class="form-control" min="1" max="180" placeholder="35" />
+        </div>
+        <div class="form-group" v-if="form.return_policy_category === 'MerchantReturnFiniteReturnWindow'">
+          <label>退货天数</label>
+          <input type="number" v-model.number="form.return_policy_days" class="form-control" min="1" max="365" placeholder="30" />
+        </div>
+        <div class="form-group" v-if="form.return_policy_category === 'MerchantReturnFiniteReturnWindow'">
+          <label>退货费用</label>
+          <select v-model="form.return_policy_fees" class="form-control">
+            <option value="ReturnFeesCustomerResponsibility">买家承担退货运费</option>
+            <option value="FreeReturn">免费退货</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>退货适用国家（留空 = 使用配送国家）</label>
+        <input v-model="form.return_policy_countries" class="form-control" placeholder="留空则使用配送国家" />
+        <small>ISO 两位代码，逗号分隔，最多 50 个</small>
+      </div>
+    </div>
+
     <!-- Auto Freshness Refresh Card -->
     <div class="seo-card refresh-card" style="grid-column: 1 / -1;">
       <h3>⏰ 内容自动刷新日期（SEO 鲜度信号）</h3>
@@ -354,7 +420,17 @@ const form = ref({
   article_refresh_days: 0,
   product_refresh_days: 0,
   llms_txt: '',
-  llms_full_txt: ''
+  llms_full_txt: '',
+  shipping_rate_usd: '0',
+  shipping_countries: 'US,DE,FR,GB,ES,IT,NL,PL,AE,SA,AU,CA,MX,BR,IN,TH,VN,TR,RU,ZA,DZ',
+  shipping_handling_min: 1,
+  shipping_handling_max: 3,
+  shipping_transit_min: 15,
+  shipping_transit_max: 35,
+  return_policy_category: 'MerchantReturnNotPermitted',
+  return_policy_days: 30,
+  return_policy_fees: 'ReturnFeesCustomerResponsibility',
+  return_policy_countries: ''
 })
 
 const scoreClass = computed(() => {
@@ -404,7 +480,17 @@ async function load() {
         article_refresh_days: data.article_refresh_days || 0,
         product_refresh_days: data.product_refresh_days || 0,
         llms_txt: data.llms_txt || '',
-        llms_full_txt: data.llms_full_txt || ''
+        llms_full_txt: data.llms_full_txt || '',
+        shipping_rate_usd: data.shipping_rate_usd ?? '0',
+        shipping_countries: data.shipping_countries || 'US,DE,FR,GB,ES,IT,NL,PL,AE,SA,AU,CA,MX,BR,IN,TH,VN,TR,RU,ZA,DZ',
+        shipping_handling_min: data.shipping_handling_min || 1,
+        shipping_handling_max: data.shipping_handling_max || 3,
+        shipping_transit_min: data.shipping_transit_min || 15,
+        shipping_transit_max: data.shipping_transit_max || 35,
+        return_policy_category: data.return_policy_category || 'MerchantReturnNotPermitted',
+        return_policy_days: data.return_policy_days || 30,
+        return_policy_fees: data.return_policy_fees || 'ReturnFeesCustomerResponsibility',
+        return_policy_countries: data.return_policy_countries || ''
       }
       if (data.og_image) ogPreview.value = data.og_image
     }

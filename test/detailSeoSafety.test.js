@@ -48,9 +48,11 @@ test('server and client product schemas emit offers only with a real price and n
     assert.match(block, /'@type': 'Offer'/)
     assert.match(block, /priceCurrency:\s*'USD'/)
     // The offer is gated on a real positive per-product price; no fabricated
-    // price/valid-until/shipping/return constants are emitted.
+    // price/valid-until constants are emitted. Shipping and return policies are
+    // built from the admin SEO settings, not hardcoded in the page template.
     assert.doesNotMatch(block, /price:\s*(?:'0'|0\b)/)
-    assert.doesNotMatch(block, /priceValidUntil|shippingDetails|hasMerchantReturnPolicy/)
+    assert.doesNotMatch(block, /priceValidUntil/)
+    assert.match(block, /buildProductOfferPolicy\(seoSettings(?:\.value)?\)/)
   }
 
   assert.match(serverProductBlock, /const productPrice = Number\(product\.price_usd\)/)

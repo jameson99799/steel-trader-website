@@ -291,6 +291,7 @@ import { useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 import { getCenteredThumbnailScrollLeft } from '../utils/thumbnailScroll.js'
+import { buildProductOfferPolicy } from '../../shared/productOfferPolicy.js'
 import { sanitizeRichHtml } from '../utils/sanitizeHtml.js'
 import InquiryModal from '../components/InquiryModal.vue'
 import ProductReviews from '../components/ProductReviews.vue'
@@ -307,6 +308,7 @@ const product = ref(null)
 const currentImage = ref('')
 const showInquiry = ref(false)
 const company = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.company || null : null)
+const seoSettings = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.seoSettings || {} : {})
 const pageTexts = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.pageTexts || null : null)
 const lightboxImg = ref(null)
 const allCategories = ref([])
@@ -644,7 +646,8 @@ function updateProductSeo(comp) {
       availability: 'https://schema.org/InStock',
       itemCondition: 'https://schema.org/NewCondition',
       url: productUrl,
-      seller: { '@type': 'Organization', name: comp?.name_en || comp?.name || 'Shandong Sunsea Steel Co., Ltd' }
+      seller: { '@type': 'Organization', name: comp?.name_en || comp?.name || 'Shandong Sunsea Steel Co., Ltd' },
+      ...buildProductOfferPolicy(seoSettings.value)
     }
   }
 

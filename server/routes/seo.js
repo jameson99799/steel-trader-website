@@ -40,7 +40,17 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
         article_refresh_days = existing.article_refresh_days,
         product_refresh_days = existing.product_refresh_days,
         llms_txt = existing.llms_txt,
-        llms_full_txt = existing.llms_full_txt
+        llms_full_txt = existing.llms_full_txt,
+        shipping_rate_usd = existing.shipping_rate_usd,
+        shipping_countries = existing.shipping_countries,
+        shipping_handling_min = existing.shipping_handling_min,
+        shipping_handling_max = existing.shipping_handling_max,
+        shipping_transit_min = existing.shipping_transit_min,
+        shipping_transit_max = existing.shipping_transit_max,
+        return_policy_category = existing.return_policy_category,
+        return_policy_days = existing.return_policy_days,
+        return_policy_fees = existing.return_policy_fees,
+        return_policy_countries = existing.return_policy_countries
     } = req.body
     const og_image = req.file ? `/uploads/${req.file.filename}` : (req.body.og_image !== undefined ? req.body.og_image : existing?.og_image)
     const safeBusinessType = sanitizeOrganizationType(local_business_type)
@@ -54,6 +64,10 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
             default_news_author=?,
             article_refresh_days=?, product_refresh_days=?,
             llms_txt=?, llms_full_txt=?,
+            shipping_rate_usd=?, shipping_countries=?,
+            shipping_handling_min=?, shipping_handling_max=?,
+            shipping_transit_min=?, shipping_transit_max=?,
+            return_policy_category=?, return_policy_days=?, return_policy_fees=?, return_policy_countries=?,
             updated_at=CURRENT_TIMESTAMP WHERE id=1`,
             [site_title, site_description, site_keywords, og_image,
                 google_analytics, google_search_console, robots_txt,
@@ -61,7 +75,11 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
                 hreflang_en, hreflang_zh, safeBusinessType, local_business_address,
                 default_news_author,
                 parseInt(article_refresh_days) || 0, parseInt(product_refresh_days) || 0,
-                llms_txt, llms_full_txt]
+                llms_txt, llms_full_txt,
+                shipping_rate_usd, shipping_countries,
+                parseInt(shipping_handling_min) || 1, parseInt(shipping_handling_max) || 3,
+                parseInt(shipping_transit_min) || 15, parseInt(shipping_transit_max) || 35,
+                return_policy_category, parseInt(return_policy_days) || 30, return_policy_fees, return_policy_countries]
         )
     } else {
         run(
@@ -69,15 +87,23 @@ router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
             (id, site_title, site_description, site_keywords, og_image, google_analytics, google_search_console, robots_txt,
              geo_region, geo_placename, geo_lat, geo_lng, hreflang_en, hreflang_zh, local_business_type, local_business_address,
              default_news_author,
-             article_refresh_days, product_refresh_days, llms_txt, llms_full_txt)
-            VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+             article_refresh_days, product_refresh_days, llms_txt, llms_full_txt,
+             shipping_rate_usd, shipping_countries,
+             shipping_handling_min, shipping_handling_max,
+             shipping_transit_min, shipping_transit_max,
+             return_policy_category, return_policy_days, return_policy_fees, return_policy_countries)
+            VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [site_title, site_description, site_keywords, og_image,
                 google_analytics, google_search_console, robots_txt,
                 geo_region, geo_placename, geo_lat, geo_lng,
                 hreflang_en, hreflang_zh, safeBusinessType, local_business_address,
                 default_news_author,
                 parseInt(article_refresh_days) || 0, parseInt(product_refresh_days) || 0,
-                llms_txt, llms_full_txt]
+                llms_txt, llms_full_txt,
+                shipping_rate_usd, shipping_countries,
+                parseInt(shipping_handling_min) || 1, parseInt(shipping_handling_max) || 3,
+                parseInt(shipping_transit_min) || 15, parseInt(shipping_transit_max) || 35,
+                return_policy_category, parseInt(return_policy_days) || 30, return_policy_fees, return_policy_countries]
         )
     }
     // Sync robots.txt to static file so it takes effect immediately

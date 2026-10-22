@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { readFileSync, existsSync, unlinkSync } from 'fs'
 import { sanitizeRichHtml } from '../src/utils/sanitizeHtml.js'
+import { buildProductOfferPolicy } from '../shared/productOfferPolicy.js'
 import sharp from 'sharp'
 
 import { initDb, getAll, getOne, run, findFuzzyBySlug } from './db.js'
@@ -863,7 +864,8 @@ ${contactLines.join('\n')}
                   availability: 'https://schema.org/InStock',
                   itemCondition: 'https://schema.org/NewCondition',
                   url: pageCanonical,
-                  seller: { '@type': orgType, name: companyNameTranslated }
+                  seller: { '@type': orgType, name: companyNameTranslated },
+                  ...buildProductOfferPolicy(seoSettings)
                 }
               }
               if (productImages.length) productSchema.image = productImages
