@@ -19,6 +19,7 @@ test('LazyVideo attaches the source only near the viewport and never retries in 
 test('public pages render videos through LazyVideo, not eager <video :src>', () => {
   const expectations = [
     ['src/views/Home.vue', /<LazyVideo[^>]*:src="company\.company_video_embed"/, /<video[^>]*:src="company\.company_video_embed"/],
+    ['src/views/About.vue', /<LazyVideo[^>]*:src="company\.company_video_embed"/, /<video[^>]*:src="company\.company_video_embed"/],
     ['src/views/Factory.vue', /<LazyVideo[^>]*:src="video\.media_url"/, /<video[^>]*:src="video\.media_url"/],
     ['src/views/NewsDetail.vue', /<LazyVideo[^>]*:src="(?:article\.cover_image|rn\.cover_image)"/, /<video[^>]*:src="(?:article\.cover_image|rn\.cover_image)"/],
     ['src/views/ProductDetail.vue', /<LazyVideo[^>]*:src="currentImage"/, /<video[^>]*:src="(?:currentImage|img)"/]

@@ -143,10 +143,10 @@
         <div class="home-video-wrapper" v-if="company?.company_video_embed && company?.home_show_video">
           <template v-if="company.company_video_embed.toLowerCase().endsWith('.mp4') || company.company_video_embed.toLowerCase().endsWith('.webm')">
             <div class="yt-video-active" v-if="company.about_video_autoplay === 1" @click="openVideoLightbox(company.company_video_embed)" style="cursor: pointer; margin-bottom: var(--spacing-2xl);">
-              <LazyVideo :src="company.company_video_embed" autoplay />
+              <LazyVideo :src="company.company_video_embed" :poster="company.about_image" autoplay />
             </div>
             <div v-else class="yt-video-cover" @click="openVideoLightbox(company.company_video_embed)" style="margin-bottom: var(--spacing-2xl);">
-              <LazyVideo :src="company.company_video_embed" />
+              <LazyVideo :src="company.company_video_embed" :poster="company.about_image" />
               <div class="yt-play-button"><svg viewBox="0 0 68 48"><path class="yt-play-bg" d="M66.52,7.74c-0.78-2.93-2.49-5.41-5.42-6.19C55.79,.13,34,0,34,0S12.21,.13,6.9,1.55 C3.97,2.33,2.27,4.81,1.48,7.74C0.06,13.05,0,24,0,24s0.06,10.95,1.48,16.26c0.78,2.93,2.49,5.41,5.42,6.19 C12.21,47.87,34,48,34,48s21.79-0.13,27.1-1.55c2.93-0.78,4.64-3.26,5.42-6.19C67.94,34.95,68,24,68,24S67.94,13.05,66.52,7.74z" fill="#f00"></path><path d="M 45,24 27,14 27,34" fill="#fff"></path></svg></div>
             </div>
           </template>
@@ -221,11 +221,20 @@
     <!-- FAQ Section — same Q&A as the FAQPage structured data -->
     <section class="section faq-section" v-if="homeFaqs.length">
       <div class="container">
-        <h2 class="section-title">{{ lang === 'zh' ? '常见问题' : 'Frequently Asked Questions' }}</h2>
+        <div class="faq-header">
+          <span class="faq-badge">FAQ</span>
+          <h2 class="section-title">{{ lang === 'zh' ? '常见问题' : 'Frequently Asked Questions' }}</h2>
+          <p class="faq-subtitle">{{ faqSubtitle }}</p>
+        </div>
         <div class="faq-list">
           <details v-for="(pair, index) in homeFaqs" :key="index" class="faq-item">
-            <summary class="faq-question">{{ pair[0] }}</summary>
-            <p class="faq-answer">{{ pair[1] }}</p>
+            <summary class="faq-question">
+              <span class="faq-question-text">{{ pair[0] }}</span>
+              <span class="faq-toggle" aria-hidden="true"></span>
+            </summary>
+            <div class="faq-answer">
+              <p>{{ pair[1] }}</p>
+            </div>
           </details>
         </div>
       </div>
@@ -267,7 +276,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 import LazyVideo from '../components/LazyVideo.vue'
@@ -284,6 +293,21 @@ const hero = ref(reuseInitialState ? initialState.hero || {} : {})
 const featuredProducts = ref(reuseInitialState ? initialState.featuredProducts || [] : [])
 const categories = ref(reuseInitialState ? initialState.categories || [] : [])
 const pageTexts = ref(reuseInitialState ? initialState.pageTexts || {} : {})
+const faqSubtitle = computed(() => {
+  const copy = {
+    en: 'Common questions about products, pricing, delivery and customization',
+    zh: '关于产品、价格、交付与定制的常见问题',
+    fr: 'Questions fréquentes sur les produits, les prix, la livraison et la personnalisation',
+    es: 'Preguntas frecuentes sobre productos, precios, entrega y personalización',
+    pt: 'Perguntas frequentes sobre produtos, preços, entrega e personalização',
+    ru: 'Частые вопросы о продукции, ценах, доставке и индивидуальных решениях',
+    ar: 'أسئلة شائعة حول المنتجات والأسعار والتوصيل والتخصيص',
+    hi: 'उत्पादों, कीमतों, डिलीवरी और अनुकूलन के बारे में सामान्य प्रश्न',
+    th: 'คำถามที่พบบ่อยเกี่ยวกับสินค้า ราคา การจัดส่ง และการปรับแต่ง',
+    tr: 'Ürünler, fiyatlandırma, teslimat ve özelleştirme hakkında sık sorulan sorular'
+  }
+  return copy[lang.value] || copy.en
+})
 const company = ref(reuseInitialState ? initialState.company || {} : {})
 // Visible FAQ — must match the FAQPage structured data declared by the SSR.
 const homeFaqs = ref(reuseInitialState && Array.isArray(initialState.homeFaqs) ? initialState.homeFaqs : [])
@@ -582,36 +606,149 @@ watch(lang, refreshLocalizedPageData)
 
 /* FAQ (visible counterpart of the FAQPage structured data) */
 .faq-section {
-  background: var(--gray-50);
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
   content-visibility: auto;
   contain-intrinsic-size: 0 600px;
+}
+
+.faq-header {
+  max-width: 900px;
+  margin: 0 auto 28px;
+  text-align: center;
+}
+
+.faq-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 14px;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.faq-subtitle {
+  margin: 10px auto 0;
+  max-width: 620px;
+  color: #64748b;
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 .faq-list {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing);
+  gap: 12px;
   max-width: 900px;
   margin: 0 auto;
 }
 
 .faq-item {
   background: #fff;
-  border: 1px solid var(--gray-200, #e5e7eb);
-  border-radius: var(--radius, 8px);
-  padding: var(--spacing);
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+.faq-item:hover {
+  border-color: #bfdbfe;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, .06);
+}
+
+.faq-item[open] {
+  border-color: #93c5fd;
+  box-shadow: 0 10px 26px rgba(37, 99, 235, .10);
 }
 
 .faq-question {
-  font-weight: 700;
-  color: var(--text-primary);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px;
   cursor: pointer;
+  list-style: none;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #0f172a;
+}
+
+.faq-question::-webkit-details-marker { display: none; }
+.faq-question::marker { content: ''; }
+
+.faq-question-text { flex: 1; min-width: 0; }
+
+.faq-toggle {
+  position: relative;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: #eff6ff;
+  transition: background .2s ease, transform .2s ease;
+}
+
+.faq-toggle::before,
+.faq-toggle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: #2563eb;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+  transition: transform .2s ease, opacity .2s ease, background .2s ease;
+}
+
+.faq-toggle::before { width: 12px; height: 2px; }
+.faq-toggle::after { width: 2px; height: 12px; }
+
+.faq-item[open] .faq-toggle {
+  background: #2563eb;
+  transform: rotate(180deg);
+}
+
+.faq-item[open] .faq-toggle::before,
+.faq-item[open] .faq-toggle::after {
+  background: #fff;
+}
+
+.faq-item[open] .faq-toggle::after {
+  opacity: 0;
+  transform: translate(-50%, -50%) scaleY(0);
 }
 
 .faq-answer {
-  margin-top: var(--spacing-sm, 8px);
-  color: var(--text-secondary);
-  line-height: var(--leading-relaxed, 1.7);
+  padding: 0 22px 20px;
+  color: #475569;
+  font-size: 15px;
+  line-height: 1.8;
+  animation: faqFade .2s ease;
+}
+
+.faq-answer p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+@keyframes faqFade {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 640px) {
+  .faq-header { margin-bottom: 20px; }
+  .faq-question { padding: 16px; font-size: 15px; gap: 12px; }
+  .faq-toggle { flex-basis: 24px; width: 24px; height: 24px; }
+  .faq-answer { padding: 0 16px 16px; font-size: 14px; }
 }
 
 /* Featured Products */
