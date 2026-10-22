@@ -44,7 +44,7 @@
                 <div v-for="video in getVideos(group)" :key="video.id" class="video-item">
                   <template v-if="video.media_url && (video.media_url.toLowerCase().endsWith('.mp4') || video.media_url.toLowerCase().endsWith('.webm'))">
                     <div class="yt-video-active" v-if="video.autoplay === 1" @click="openVideoLightbox(video)" style="cursor: pointer;">
-                      <LazyVideo :src="video.media_url" autoplay />
+                      <LazyVideo :src="video.media_url" autoplay show-play-button @open="openVideoLightbox(video)" />
                     </div>
                     <div v-else class="yt-video-cover" @click="openVideoLightbox(video)">
                       <LazyVideo :src="video.media_url" />

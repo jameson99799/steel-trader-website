@@ -143,7 +143,7 @@
         <div class="home-video-wrapper" v-if="company?.company_video_embed && company?.home_show_video">
           <template v-if="company.company_video_embed.toLowerCase().endsWith('.mp4') || company.company_video_embed.toLowerCase().endsWith('.webm')">
             <div class="yt-video-active" v-if="company.about_video_autoplay === 1" @click="openVideoLightbox(company.company_video_embed)" style="cursor: pointer; margin-bottom: var(--spacing-2xl);">
-              <LazyVideo :src="company.company_video_embed" autoplay />
+              <LazyVideo :src="company.company_video_embed" autoplay show-play-button @open="openVideoLightbox(company.company_video_embed)" />
             </div>
             <div v-else class="yt-video-cover" @click="openVideoLightbox(company.company_video_embed)" style="margin-bottom: var(--spacing-2xl);">
               <LazyVideo :src="company.company_video_embed" />
