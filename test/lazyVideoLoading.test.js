@@ -4,12 +4,14 @@ import fs from 'node:fs'
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 
-test('LazyVideo attaches the source only near the viewport and never retries in a loop', () => {
+test('LazyVideo keeps off-screen videos from downloading full media and never retries in a loop', () => {
   const component = read('src/components/LazyVideo.vue')
   assert.match(component, /IntersectionObserver/)
-  // No src until activated → browsers download nothing for off-screen videos.
+  // No src until activated; eager covers still fetch metadata only until the
+  // element is in view, so several large videos never download at once.
   assert.match(component, /:src="activeSrc"/)
-  assert.match(component, /:preload="activeSrc \? \(autoplay \? 'auto' : 'metadata'\) : 'none'"/)
+  assert.match(component, /:preload="activeSrc \? \(autoplay && wantsPlayback \? 'auto' : 'metadata'\) : 'none'"/)
+  assert.match(component, /wantsPlayback/)
   assert.match(component, /rootMargin/)
   // A failed (e.g. timed-out) media request must not hammer the server again.
   assert.match(component, /failed = true/)

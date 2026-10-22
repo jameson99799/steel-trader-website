@@ -25,7 +25,7 @@
           <div class="product-images">
             <div class="main-image-container">
               <div class="main-image">
-                <LazyVideo v-if="currentImage && (currentImage.toLowerCase().endsWith('.mp4') || currentImage.toLowerCase().endsWith('.webm'))" :src="currentImage" autoplay />
+                <LazyVideo v-if="currentImage && (currentImage.toLowerCase().endsWith('.mp4') || currentImage.toLowerCase().endsWith('.webm'))" :src="currentImage" autoplay eager />
                 <img v-else :src="currentImage" :alt="localizedValue(product, 'name')" />
                 <div class="image-zoom-hint">
                   <svg viewBox="0 0 20 20" fill="currentColor">

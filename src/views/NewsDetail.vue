@@ -32,7 +32,7 @@
           </header>
 
           <div class="article-cover" v-if="article.cover_image">
-            <LazyVideo v-if="article.cover_image && (article.cover_image.toLowerCase().endsWith('.mp4') || article.cover_image.toLowerCase().endsWith('.webm'))" :src="article.cover_image" autoplay style="height:auto;object-fit:cover;" />
+            <LazyVideo v-if="article.cover_image && (article.cover_image.toLowerCase().endsWith('.mp4') || article.cover_image.toLowerCase().endsWith('.webm'))" :src="article.cover_image" autoplay eager style="height:auto;object-fit:cover;" />
             <img v-else :src="article.cover_image" :alt="localizedValue(article, 'title')" />
           </div>
 
