@@ -530,16 +530,12 @@ router.post('/batch-rename', authMiddleware, async (req, res) => {
   res.json({ message: '重命名完成', successCount, errorCount, errors })
 })
 
-// ─── Batch Optimize All Media (in place, no filename changes) ───────────────
-router.post('/optimize-all', authMiddleware, async (req, res) => {
-  let files = []
-  try {
-    files = fs.readdirSync(uploadDir)
-  } catch {
-    return res.status(500).json({ error: '无法读取上传目录' })
-  }
+// ─── Batch Optimize All Media (background job, in-place replacement) ────────
+let optimizeJob = null
+let optimizeJobSeq = 0
 
-  const candidates = files.filter(filename => {
+function collectOptimizeCandidates(files) {
+  return files.filter(filename => {
     // Never optimize Sharp's derived thumbnail cache files.
     if (/_w\d+\.webp$/i.test(filename) || /\.(?:jpe?g|png)\.webp$/i.test(filename)) return false
     if (filename.includes('.optimize.tmp')) return false
@@ -556,80 +552,150 @@ router.post('/optimize-all', authMiddleware, async (req, res) => {
       return false
     }
   })
+}
 
-  if (candidates.length === 0) {
-    return res.json({
-      message: '没有需要优化的图片或视频',
-      total: 0, imageCount: 0, videoCount: 0,
-      successCount: 0, skippedCount: 0, errorCount: 0, errors: []
-    })
+function publicOptimizeJob(job) {
+  if (!job) return null
+  return {
+    id: job.id,
+    status: job.status,
+    total: job.total,
+    processed: job.processed,
+    imageCount: job.imageCount,
+    videoCount: job.videoCount,
+    successCount: job.successCount,
+    skippedCount: job.skippedCount,
+    errorCount: job.errorCount,
+    errors: job.errors,
+    currentFile: job.currentFile || null,
+    message: job.message || '',
+    startedAt: job.startedAt,
+    finishedAt: job.finishedAt || null
   }
+}
 
-  let imageCount = 0
-  let videoCount = 0
-  let successCount = 0
-  let skippedCount = 0
-  let errorCount = 0
-  const errors = []
+async function runOptimizeJob(job, files, candidates) {
+  job.status = 'running'
+  job.startedAt = new Date().toISOString()
 
   for (const filename of candidates) {
+    job.currentFile = filename
     const filePath = join(uploadDir, filename)
     const isVideo = isVideoPath(filename)
-    if (isVideo) videoCount++
-    else imageCount++
 
     try {
+      if (isOptimized(filePath)) {
+        job.skippedCount++
+        job.processed++
+        continue
+      }
+
       const result = isVideo
         ? await compressVideoInPlace(filePath)
         : await compressImageInPlace(filePath)
 
       if (!result?.optimized) {
-        skippedCount++
-        continue
-      }
+        job.skippedCount++
+      } else {
+        job.successCount++
 
-      successCount++
+        // Same filename/path. Only metadata changes, so an A image can never
+        // become a B image and no rich-text URL replacement is needed.
+        run(
+          `UPDATE media SET filesize=?, width=?, height=?, mimetype=?, updated_at=datetime('now') WHERE filepath=?`,
+          [result.size, result.width || 0, result.height || 0, mimeTypeFor(filename), `/uploads/${filename}`]
+        )
 
-      // Same filename/path. Only metadata changes, so an A image can never
-      // become a B image and no rich-text URL replacement is needed.
-      run(
-        `UPDATE media SET filesize=?, width=?, height=?, mimetype=?, updated_at=datetime('now') WHERE filepath=?`,
-        [result.size, result.width || 0, result.height || 0, mimeTypeFor(filename), `/uploads/${filename}`]
-      )
-
-      // Drop Sharp's cached resized variants so the next ?w= request is
-      // generated from the newly optimized original.
-      if (!isVideo) {
-        for (const cached of files) {
-          if (cached === filename) continue
-          if (cached.startsWith(`${filename}_w`) && cached.toLowerCase().endsWith('.webp')) {
-            try { fs.unlinkSync(join(uploadDir, cached)) } catch {}
+        // Drop Sharp's cached resized variants so the next ?w= request is
+        // generated from the newly optimized original.
+        if (!isVideo) {
+          for (const cached of files) {
+            if (cached === filename) continue
+            if (cached.startsWith(`${filename}_w`) && cached.toLowerCase().endsWith('.webp')) {
+              try { fs.unlinkSync(join(uploadDir, cached)) } catch {}
+            }
           }
-        }
-        if (!filename.toLowerCase().endsWith('.webp')) {
-          const webpVariant = `${filename}.webp`
-          if (files.includes(webpVariant)) {
-            try { fs.unlinkSync(join(uploadDir, webpVariant)) } catch {}
+          if (!filename.toLowerCase().endsWith('.webp')) {
+            const webpVariant = `${filename}.webp`
+            if (files.includes(webpVariant)) {
+              try { fs.unlinkSync(join(uploadDir, webpVariant)) } catch {}
+            }
           }
         }
       }
     } catch (error) {
       console.error(`Failed to optimize ${filename}:`, error)
-      errorCount++
-      errors.push({ filename, reason: error.message })
+      job.errorCount++
+      job.errors.push({ filename, reason: error.message })
     }
+
+    job.processed++
   }
 
-  res.json({
-    message: '优化完成',
+  job.currentFile = null
+  job.status = 'done'
+  job.message = '优化完成'
+  job.finishedAt = new Date().toISOString()
+}
+
+router.post('/optimize-all', authMiddleware, (req, res) => {
+  if (optimizeJob?.status === 'running') {
+    return res.status(409).json({ error: '已有优化任务正在运行', jobId: optimizeJob.id })
+  }
+
+  let files = []
+  try {
+    files = fs.readdirSync(uploadDir)
+  } catch {
+    return res.status(500).json({ error: '无法读取上传目录' })
+  }
+
+  const candidates = collectOptimizeCandidates(files)
+  const imageCount = candidates.filter(filename => !isVideoPath(filename)).length
+  const videoCount = candidates.length - imageCount
+
+  const job = {
+    id: `optimize_${Date.now()}_${++optimizeJobSeq}`,
+    status: 'queued',
     total: candidates.length,
+    processed: 0,
     imageCount,
     videoCount,
-    successCount,
-    skippedCount,
-    errorCount,
-    errors
+    successCount: 0,
+    skippedCount: 0,
+    errorCount: 0,
+    errors: [],
+    currentFile: null,
+    message: candidates.length ? '正在优化' : '没有需要优化的图片或视频',
+    startedAt: null,
+    finishedAt: null
+  }
+  optimizeJob = job
+
+  if (candidates.length === 0) {
+    job.status = 'done'
+    job.finishedAt = new Date().toISOString()
+    return res.json(publicOptimizeJob(job))
+  }
+
+  setImmediate(() => {
+    runOptimizeJob(job, files, candidates).catch(error => {
+      console.error('Optimize job failed:', error)
+      job.currentFile = null
+      job.status = 'error'
+      job.message = error.message
+      job.finishedAt = new Date().toISOString()
+    })
   })
+
+  return res.status(202).json({ jobId: job.id })
+})
+
+router.get('/optimize-all/status/:id', authMiddleware, (req, res) => {
+  if (!optimizeJob || optimizeJob.id !== req.params.id) {
+    return res.status(404).json({ error: '优化任务不存在或服务已重启' })
+  }
+  res.json(publicOptimizeJob(optimizeJob))
 })
 
 export default router

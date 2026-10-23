@@ -16,10 +16,14 @@
     <div v-if="optimizing || optimizeResult" class="modal-overlay">
       <div class="modal" style="max-width:400px; padding: 24px; text-align: center;">
         <h3 style="margin-top:0;">{{ optimizeResult ? '✅ 优化完成' : '🚀 正在批量优化图片和视频...' }}</h3>
-        <p v-if="optimizing" style="color:#64748b;font-size:14px;">
-          系统会原地压缩已上传的图片和视频，文件名和地址保持不变。<br/>
-          这需要消耗一定的时间，请勿关闭此页面。
-        </p>
+        <div v-if="optimizing" style="color:#64748b;font-size:14px;">
+          <p style="margin:0 0 12px;">系统会原地压缩已上传的图片和视频，文件名和地址保持不变。<br/>这需要消耗一定的时间，请勿关闭此页面。</p>
+          <p style="margin:0 0 8px;color:#334155;font-weight:600;">{{ optimizeStatusText }}</p>
+          <div v-if="optimizeProgress" class="prog-bar-wrap" style="margin-bottom:8px;">
+            <div class="prog-bar" :style="{ width: optimizePercent + '%' }"></div>
+          </div>
+          <span v-if="optimizeProgress">{{ optimizePercent }}%</span>
+        </div>
         <div v-if="optimizeResult" style="text-align:left; background:#f0fdf4; padding:12px; border-radius:8px; margin:16px 0; font-size:14px; color:#166534;">
           <p style="margin:4px 0">扫描到文件: <b>{{ optimizeResult.total }}</b>（图片 {{ optimizeResult.imageCount || 0 }}，视频 {{ optimizeResult.videoCount || 0 }}）</p>
           <p style="margin:4px 0">成功压缩: <b>{{ optimizeResult.successCount }}</b></p>
@@ -296,6 +300,13 @@ const isBatchMoving = ref(false)
 
 const optimizing = ref(false)
 const optimizeResult = ref(null)
+const optimizeProgress = ref(null)
+const optimizeStatusText = ref('')
+const optimizePercent = computed(() => {
+  const job = optimizeProgress.value
+  if (!job || !job.total) return 0
+  return Math.max(0, Math.min(100, Math.round((job.processed / job.total) * 100)))
+})
 
 const loadingMore = ref(false)
 
@@ -738,32 +749,86 @@ async function saveRename(item) {
   renamingId.value = null
 }
 
+async function readJsonResponse(res) {
+  const text = await res.text()
+  try {
+    return JSON.parse(text)
+  } catch {
+    if (res.status === 504 || res.status === 502 || text.trimStart().startsWith('<')) {
+      return { error: `服务器返回了 HTML 错误页（HTTP ${res.status}），通常是请求超时。请稍后重试，已完成压缩的文件会自动跳过。` }
+    }
+    return { error: text || `HTTP ${res.status}` }
+  }
+}
+
+async function pollOptimizeJob(jobId) {
+  while (true) {
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    const res = await fetch(`/api/media/optimize-all/status/${jobId}`, { headers: headers() })
+    const data = await readJsonResponse(res)
+    if (!res.ok) throw new Error(data.error || '查询优化进度失败')
+
+    optimizeProgress.value = data
+    if (data.currentFile) {
+      optimizeStatusText.value = `正在处理：${data.currentFile}（${data.processed}/${data.total}）`
+    } else {
+      optimizeStatusText.value = `已处理 ${data.processed}/${data.total}`
+    }
+
+    if (data.status === 'done') {
+      optimizeResult.value = data
+      optimizeProgress.value = null
+      optimizing.value = false
+      return
+    }
+    if (data.status === 'error') {
+      throw new Error(data.message || '优化失败')
+    }
+  }
+}
+
 async function optimizeAllImages() {
   if (!confirm('此操作会原地压缩所有已上传的图片和视频，文件名和地址保持不变，不会把 A 图片替换成 B 图片。\n\n视频压缩可能需要几分钟，确定开始吗？')) return
-  
+
   optimizing.value = true
   optimizeResult.value = null
+  optimizeProgress.value = null
+  optimizeStatusText.value = '正在扫描上传目录...'
+
   try {
     const res = await fetch('/api/media/optimize-all', {
       method: 'POST',
       headers: headers()
     })
-    const data = await res.json()
-    if (res.ok) {
-      optimizeResult.value = data
-    } else {
-      alert('优化失败: ' + data.error)
-      optimizing.value = false
+    const data = await readJsonResponse(res)
+
+    if (res.status === 202 && data.jobId) {
+      await pollOptimizeJob(data.jobId)
+      return
     }
+    if (res.status === 409 && data.jobId) {
+      await pollOptimizeJob(data.jobId)
+      return
+    }
+    if (res.ok && data.successCount !== undefined) {
+      optimizeResult.value = data
+      optimizing.value = false
+      return
+    }
+    throw new Error(data.error || '优化失败')
   } catch (e) {
     alert('优化异常: ' + e.message)
     optimizing.value = false
+    optimizeProgress.value = null
+    optimizeStatusText.value = ''
   }
 }
 
 function closeOptimizeResult() {
   optimizeResult.value = null
   optimizing.value = false
+  optimizeProgress.value = null
+  optimizeStatusText.value = ''
   loadMedia()
 }
 

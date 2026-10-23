@@ -17,13 +17,14 @@ test('media compression recognizes uploads and their mime types', () => {
 
 test('optimize-all replaces media in place and includes videos', () => {
   const source = read('server/routes/media.js')
-  const start = source.indexOf("router.post('/optimize-all'")
+  const start = source.indexOf('// ─── Batch Optimize All Media')
   const block = source.slice(start, source.indexOf('export default router', start))
 
   assert.ok(start >= 0)
   assert.match(block, /compressImageInPlace/)
   assert.match(block, /compressVideoInPlace/)
   assert.match(block, /WHERE filepath=\?/)
+  assert.match(block, /optimize-all\/status/)
   assert.doesNotMatch(block, /REPLACE\(/)
 })
 
