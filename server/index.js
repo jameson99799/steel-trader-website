@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { readFileSync, existsSync, unlinkSync } from 'fs'
 import { sanitizeRichHtml } from '../src/utils/sanitizeHtml.js'
+import { sizeContentImages } from '../src/utils/sizeContentImages.js'
 import { buildProductOfferPolicy } from '../shared/productOfferPolicy.js'
 import sharp from 'sharp'
 
@@ -926,7 +927,7 @@ ${contactLines.join('\n')}
                 .replace(/(%7B%7B|\{\{)whatsapp_link(%7D%7D|\}\})/gi, waLink)
                 .replace(/(%7B%7B|\{\{)company_name(%7D%7D|\}\})/gi, companyNameTranslated)
               detailHtml = formatSsrMailtoLinks(detailHtml, company.email || '')
-              detailHtml = sanitizeRichHtml(detailHtml)
+              detailHtml = sizeContentImages(sanitizeRichHtml(detailHtml), 1200)
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
               const hasFaqInDetail = /frequently asked|<h[23][^>]*>\s*faq/i.test(detailHtml)
               const ssrFeaturedImage = productImages.length ? `<img src="${esc(productImages[0])}" alt="${escPName}" style="display:none;" />` : ''
@@ -1057,7 +1058,7 @@ ${contactLines.join('\n')}
                 .replace(/(%7B%7B|\{\{)company_name(%7D%7D|\}\})/gi, companyNameTranslated)
               
               articleBody = formatSsrMailtoLinks(articleBody, company.email || '')
-              articleBody = sanitizeRichHtml(articleBody)
+              articleBody = sizeContentImages(sanitizeRichHtml(articleBody), 1000)
 
               // ── FAQPage schema for news articles (GEO: used by Google SGE, ChatGPT, Perplexity) ──
               let newsFaqHtml = ''

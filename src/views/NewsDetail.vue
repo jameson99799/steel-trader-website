@@ -185,6 +185,7 @@ import { useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 import { imageUrl } from '../utils/imageUrl'
+import { sizeContentImages } from '../utils/sizeContentImages.js'
 import { sanitizeRichHtml } from '../utils/sanitizeHtml.js'
 import LazyVideo from '../components/LazyVideo.vue'
 
@@ -261,6 +262,7 @@ const iframeContent = computed(() => {
   let html = resolveTemplateVars(raw)
   html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
   html = formatMailtoLinks(html)
+  html = sizeContentImages(html, 1000)
   
   // CSS fix for full-HTML documents: prevent image overflow + consistent table styling
   const fixCss = `<style>
@@ -315,7 +317,7 @@ const sanitizedContent = computed(() => {
     html = html.replace(/<meta[^>]*>/gi, '')
     html = html.replace(/<title[^>]*>[\s\S]*?<\/title>/gi, '')
 
-    return sanitizeRichHtml(html)
+    return sizeContentImages(sanitizeRichHtml(html), 1000)
   })
 
 // Localized FAQ pairs — the visible counterpart of the FAQPage JSON-LD.
