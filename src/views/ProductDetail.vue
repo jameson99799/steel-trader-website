@@ -26,7 +26,7 @@
             <div class="main-image-container">
               <div class="main-image">
                 <LazyVideo v-if="currentImage && (currentImage.toLowerCase().endsWith('.mp4') || currentImage.toLowerCase().endsWith('.webm'))" :src="currentImage" autoplay eager />
-                <img v-else :src="currentImage" :alt="localizedValue(product, 'name')" />
+                <img v-else :src="imageUrl(currentImage, 1000)" :alt="localizedValue(product, 'name')" />
                 <div class="image-zoom-hint">
                   <svg viewBox="0 0 20 20" fill="currentColor">
                     <path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z" />
@@ -55,7 +55,7 @@
                   :aria-label="`${localizedValue(product, 'name')} - ${index + 1}`"
                   @click="currentImage = img">
                   <LazyVideo v-if="img && (img.toLowerCase().endsWith('.mp4') || img.toLowerCase().endsWith('.webm'))" :src="img" style="object-fit:cover;" />
-                  <img v-else :src="img" :alt="`Product image ${index + 1}`" />
+                  <img v-else :src="imageUrl(img, 180)" :alt="`Product image ${index + 1}`" />
                 </button>
             </div>
           </div>
@@ -225,7 +225,7 @@
               >
                 <div class="rp-image">
                   <LazyVideo v-if="rp.images && (rp.images.split(',')[0].toLowerCase().endsWith('.mp4') || rp.images.split(',')[0].toLowerCase().endsWith('.webm'))" :src="rp.images.split(',')[0]" autoplay style="object-fit:cover;" />
-                    <img v-else-if="rp.images" :src="rp.images.split(',')[0]" :alt="localizedValue(rp, 'name') || 'Related product image'" loading="lazy" />
+                    <img v-else-if="rp.images" :src="imageUrl(rp.images.split(',')[0], 400)" :alt="localizedValue(rp, 'name') || 'Related product image'" loading="lazy" />
                   <div class="rp-placeholder" v-else>
                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
                   </div>
@@ -253,7 +253,7 @@
               class="cat-card"
             >
               <div class="cat-image" v-if="cat.image">
-                <img :src="cat.image" :alt="localizedValue(cat, 'name') || 'Category image'" loading="lazy" />
+                <img :src="imageUrl(cat.image, 200)" :alt="localizedValue(cat, 'name') || 'Category image'" loading="lazy" />
               </div>
               <div class="cat-image cat-image-placeholder" v-else>
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
@@ -290,6 +290,7 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
+import { imageUrl } from '../utils/imageUrl'
 import { getCenteredThumbnailScrollLeft } from '../utils/thumbnailScroll.js'
 import { buildProductOfferPolicy } from '../../shared/productOfferPolicy.js'
 import { sanitizeRichHtml } from '../utils/sanitizeHtml.js'

@@ -22,7 +22,7 @@ test('product detail keeps image and video thumbnail rendering', () => {
   // Video thumbnails render through the lazy-loading component so a gallery
   // page does not fetch every video at page load.
   assert.match(source, /<LazyVideo v-if="img &&/)
-  assert.match(source, /<img v-else :src="img"/)
+  assert.match(source, /<img v-else :src="imageUrl\(img, 180\)"/)
 })
 
 test('active thumbnail follows main image navigation', () => {

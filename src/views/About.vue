@@ -53,7 +53,7 @@
               </template>
             </div>
             <div class="intro-image about-clickable-image" v-else-if="company?.about_image" @click="openImageLightbox">
-              <img :src="company.about_image" :alt="localizedValue(company, 'name')" />
+              <img :src="imageUrl(company.about_image, 900)" :alt="localizedValue(company, 'name')" />
               <div class="image-overlay">
                 <div class="overlay-content">
                   <h3>{{ localizedValue(company, 'name') }}</h3>
@@ -231,6 +231,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
+import { imageUrl } from '../utils/imageUrl'
 import LazyVideo from '../components/LazyVideo.vue'
 
 const { t, localizedValue, lang, langPath } = useLang()

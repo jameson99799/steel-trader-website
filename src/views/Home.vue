@@ -65,7 +65,7 @@
           >
             <div class="product-image">
               <img
-                :src="(product.images?.split(',')[0] || '/placeholder.svg') + (product.images?.split(',')[0] ? '?w=400' : '')"
+                :src="product.images?.split(',')[0] ? imageUrl(product.images.split(',')[0], 400) : '/placeholder.svg'"
                 :alt="localizedValue(product, 'name')"
                 :loading="index < 3 ? 'eager' : 'lazy'"
                 :fetchpriority="index < 3 ? 'high' : 'auto'"
@@ -112,7 +112,7 @@
             class="category-card"
           >
             <div class="category-image">
-              <img :src="(cat.image || '/placeholder.svg') + (cat.image ? '?w=400' : '')" :alt="localizedValue(cat, 'name')" loading="lazy" decoding="async" width="400" height="300" />
+              <img :src="cat.image ? imageUrl(cat.image, 400) : '/placeholder.svg'" :alt="localizedValue(cat, 'name')" loading="lazy" decoding="async" width="400" height="300" />
               <div class="category-overlay">
                 <div class="category-icon">
                   <svg viewBox="0 0 20 20" fill="currentColor">
@@ -310,6 +310,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
+import { imageUrl } from '../utils/imageUrl'
 import LazyVideo from '../components/LazyVideo.vue'
 import {
   canReuseHomeInitialState,

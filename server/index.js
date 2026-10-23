@@ -19,7 +19,9 @@ import {
   translateCategory,
   translateCompany,
   translatePageTexts,
-  translateRoofingProfile
+  translateRoofingProfile,
+  translateFactoryGroup,
+  translateFactoryMedia
 } from './helpers/translate.js'
 import { getSeoCopy, getStaticPageCopy, getHomeLabels, fillTemplate } from './services/seoContent.js'
 import { resolveUiText } from './services/uiText.js'
@@ -1286,6 +1288,20 @@ ${contactLines.join('\n')}
             const factoryIntro = ui('factoryDesc', staticCopy.factory.body)
             const factoryBody = pickLocalized(company, 'description') || staticCopy.factory.body
             ssrContent = `<article id="ssr-factory"><h1>${esc(ui('factoryTour', staticCopy.factory.h1))}</h1><p>${esc(factoryIntro)}</p><p>${esc(factoryBody)}</p></article>`
+
+            // Ship the factory gallery with the HTML so the client does not
+            // show a spinner while waiting for /api/factory/public on first load.
+            const factoryGroups = getAll('SELECT * FROM factory_groups ORDER BY sort_order DESC, id ASC')
+            const factoryMedia = getAll('SELECT * FROM factory_media ORDER BY sort_order DESC, id ASC')
+            if (tMap) {
+              factoryGroups.forEach(group => translateFactoryGroup(group, tMap, lang))
+              factoryMedia.forEach(item => translateFactoryMedia(item, tMap, lang))
+            }
+            req.ssrFactory = factoryGroups.map(group => ({
+              ...group,
+              type: 'factory_group',
+              items: factoryMedia.filter(item => item.group_id === group.id)
+            }))
           } else if (subPath === '/news/ral-colors' || subPath === '/news/ral-colors/') {
             matchedRoute = true
             isNotFound = false
@@ -1599,6 +1615,7 @@ ${contactLines.join('\n')}
           ssrProductReviews: req.ssrProductReviews || null,
           ssrProductReviewsProductId: req.ssrProductReviewsProductId || null,
           ssrProductReviewsLang: req.ssrProductReviewsLang || null,
+          ssrFactory: req.ssrFactory || null,
           seoSettings: stripSeoSecrets(seoSettings),
           languages: getAll('SELECT * FROM languages WHERE status=1 ORDER BY sort_order, code') || [],
           translationSettings: getPublicTranslationSettings(getOne),

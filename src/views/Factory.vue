@@ -83,7 +83,7 @@
                   <div class="carousel-container" :ref="el => { if (el) startCarousel(el, group.id, group.carousel_speed) }">
                     <div class="carousel-track" :id="'carousel-' + group.id">
                       <div v-for="(img, idx) in getImages(group)" :key="img.id" class="carousel-slide" :id="'factory-img-' + img.id">
-                        <img :src="img.media_url" @click="openLightbox(group, idx)" loading="lazy" />
+                        <img :src="imageUrl(img.media_url, 900)" @click="openLightbox(group, idx)" loading="lazy" />
                       </div>
                     </div>
                   </div>
@@ -95,7 +95,7 @@
                 <div v-else class="images-grid">
                   <div v-for="(img, idx) in getImages(group)" :key="img.id" class="image-item" :id="'factory-img-' + img.id" @click="openLightbox(group, idx)">
                     <div class="image-inner">
-                      <img :src="img.media_url" loading="lazy" />
+                      <img :src="imageUrl(img.media_url, 700)" loading="lazy" />
                       <div class="image-overlay-hover">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                           <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
@@ -151,11 +151,13 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useLang } from '../composables/useLang'
 import api from '../api'
+import { imageUrl } from '../utils/imageUrl'
 import LazyVideo from '../components/LazyVideo.vue'
 
 const { t, localizedValue, langPath, lang } = useLang()
-const loading = ref(true)
-const groups = ref([])
+const ssrFactory = typeof window !== 'undefined' ? window.__INITIAL_STATE__?.ssrFactory : null
+const loading = ref(!Array.isArray(ssrFactory) || ssrFactory.length === 0)
+const groups = ref(Array.isArray(ssrFactory) ? ssrFactory : [])
 const lightboxActive = ref(false)
 const lightboxImages = ref([])
 const lightboxIndex = ref(0)
@@ -191,6 +193,7 @@ const closeVideoLightbox = () => {
 }
 
 const loadData = async () => {
+  loading.value = true
   try {
     const res = await fetch(`/api/factory/public${lang.value !== 'en' ? '?lang=' + lang.value : ''}`)
     const data = await res.json()
@@ -359,7 +362,7 @@ const scrollCarousel = (id, direction) => {
 }
 
 onMounted(() => {
-  loadData()
+  if (!groups.value.length) loadData()
   window.addEventListener('keydown', handleKeydown)
 })
 

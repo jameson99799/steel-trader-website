@@ -99,7 +99,7 @@
                 class="product-card"
               >
                 <div class="product-image">
-                  <img :src="product.images?.split(',')[0] || '/placeholder.svg'" :alt="localizedValue(product, 'name')" :loading="index < 4 ? 'eager' : 'lazy'" :fetchpriority="index < 4 ? 'high' : 'auto'" />
+                  <img :src="imageUrl(product.images?.split(',')[0], 500) || '/placeholder.svg'" :alt="localizedValue(product, 'name')" :loading="index < 4 ? 'eager' : 'lazy'" :fetchpriority="index < 4 ? 'high' : 'auto'" />
                   <div class="product-overlay">
                     <div class="product-actions">
                       <button class="action-btn" title="Quick View">
@@ -155,6 +155,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
+import { imageUrl } from '../utils/imageUrl'
 
 const route = useRoute()
 const router = useRouter()

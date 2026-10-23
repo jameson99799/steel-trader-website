@@ -33,7 +33,7 @@
 
           <div class="article-cover" v-if="article.cover_image">
             <LazyVideo v-if="article.cover_image && (article.cover_image.toLowerCase().endsWith('.mp4') || article.cover_image.toLowerCase().endsWith('.webm'))" :src="article.cover_image" autoplay eager style="height:auto;object-fit:cover;" />
-            <img v-else :src="article.cover_image" :alt="localizedValue(article, 'title')" />
+            <img v-else :src="imageUrl(article.cover_image, 1000)" :alt="localizedValue(article, 'title')" />
           </div>
 
           <!-- iframe mode: full HTML isolation (supports <style> tags) -->
@@ -87,7 +87,7 @@
           >
             <div class="rn-image">
               <LazyVideo v-if="rn.cover_image && (rn.cover_image.toLowerCase().endsWith('.mp4') || rn.cover_image.toLowerCase().endsWith('.webm'))" :src="rn.cover_image" autoplay style="object-fit:cover;" />
-                <img v-else-if="rn.cover_image" :src="rn.cover_image" :alt="localizedValue(rn, 'title')" />
+                <img v-else-if="rn.cover_image" :src="imageUrl(rn.cover_image, 400)" :alt="localizedValue(rn, 'title')" />
               <div class="rn-placeholder" v-else>
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4.86 8.86l-3 3.87L9 13.14 6 17h12l-3.86-5.14z"/></svg>
               </div>
@@ -116,7 +116,7 @@
             class="cat-card"
           >
             <div class="cat-image" v-if="cat.image">
-              <img :src="cat.image" :alt="localizedValue(cat, 'name')" />
+              <img :src="imageUrl(cat.image, 200)" :alt="localizedValue(cat, 'name')" />
             </div>
             <div class="cat-image cat-image-placeholder" v-else>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
@@ -184,6 +184,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
+import { imageUrl } from '../utils/imageUrl'
 import { sanitizeRichHtml } from '../utils/sanitizeHtml.js'
 import LazyVideo from '../components/LazyVideo.vue'
 
