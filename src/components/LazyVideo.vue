@@ -73,9 +73,18 @@ const videoStyle = {
 let observer = null
 let failed = false
 
+// A stable version query busts old immutable video responses after a deploy
+// or after one-click media optimization.
+function withVersion(url) {
+  if (!url || !/\.(mp4|webm)(?:[?#]|$)/i.test(url)) return url
+  if (/[?&]v=/.test(url)) return url
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}v=3`
+}
+
 function activate() {
   if (!props.src || activeSrc.value || failed) return
-  activeSrc.value = props.src
+  activeSrc.value = withVersion(props.src)
 }
 
 // The src attribute is applied by Vue on the next tick — play() before that
@@ -121,7 +130,7 @@ watch(() => props.src, next => {
     return
   }
   if (activeSrc.value) {
-    activeSrc.value = next
+    activeSrc.value = withVersion(next)
     startPlayback()
   }
 })

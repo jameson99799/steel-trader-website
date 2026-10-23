@@ -1,4 +1,4 @@
-const IMAGE_VERSION = '2'
+const IMAGE_VERSION = '3'
 
 export function imageUrl(url, width) {
   if (!url || !width) return url || ''

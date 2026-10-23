@@ -14,7 +14,7 @@ export function sizeContentImages(html, width = 1000) {
     if (!isUpload || /[?&]w=\d+/.test(src)) return tag
 
     const separator = src.includes('?') ? '&' : '?'
-    const sized = `${src}${separator}w=${width}&v=2`
+    const sized = `${src}${separator}w=${width}&v=3`
     return tag.replace(match[0], `src=${quote}${sized}${quote}`)
   })
 }

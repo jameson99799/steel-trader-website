@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
-import { upload } from '../middleware/upload.js'
+import { upload, compressUploads } from '../middleware/upload.js'
 import { writeFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
@@ -19,7 +19,7 @@ router.get('/', (req, res) => {
     res.json(stripSeoSecrets(settings || {}))
 })
 
-router.put('/', authMiddleware, upload.single('og_image'), (req, res) => {
+router.put('/', authMiddleware, upload.single('og_image'), compressUploads, (req, res) => {
     const existing = getOne('SELECT * FROM seo_settings WHERE id = 1') || {}
     const {
         site_title = existing.site_title,

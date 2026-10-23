@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { getAll, getOne, run, findFuzzyBySlug } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { upload, compressImage } from '../middleware/upload.js'
+import { compressVideoInPlace, isVideoPath } from '../utils/mediaCompression.js'
 import { loadTranslationsForLang, translateProduct } from '../helpers/translate.js'
 import { getVisibleCategoryIds, visibleProductWhere } from '../services/catalogVisibility.js'
 
@@ -171,7 +172,11 @@ router.post('/', authMiddleware, upload.array('images', 10), async (req, res) =>
   // Compress each uploaded image (use separate fileRef to avoid req.file race condition)
   const imageUrls = []
   for (const f of (req.files || [])) {
-    const fileRef = { file: f }
+    if (isVideoPath(f.path)) {
+      try { await compressVideoInPlace(f.path) } catch (error) { console.warn('Product video compression failed:', error.message) }
+      imageUrls.push(`/uploads/${f.filename}`)
+      continue
+    }
     const mockReq = { ...req, file: f }
     await new Promise(r => compressImage(mockReq, res, r))
     imageUrls.push(`/uploads/${mockReq.file.filename}`)
@@ -221,6 +226,11 @@ router.put('/:id', authMiddleware, upload.array('images', 10), async (req, res) 
   // Compress each uploaded image (use mockReq to avoid req.file race condition)
   const imageUrls = []
   for (const f of (req.files || [])) {
+    if (isVideoPath(f.path)) {
+      try { await compressVideoInPlace(f.path) } catch (error) { console.warn('Product video compression failed:', error.message) }
+      imageUrls.push(`/uploads/${f.filename}`)
+      continue
+    }
     const mockReq = { ...req, file: f }
     await new Promise(r => compressImage(mockReq, res, r))
     imageUrls.push(`/uploads/${mockReq.file.filename}`)

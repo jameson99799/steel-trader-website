@@ -2,6 +2,7 @@ import multer from 'multer'
 import { fileURLToPath } from 'url'
 import { dirname, join, extname } from 'path'
 import fs from 'fs'
+import { compressUpload, isVideoPath } from '../utils/mediaCompression.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const uploadDir = join(__dirname, '..', '..', 'uploads')
@@ -95,6 +96,53 @@ export async function compressImage(req, res, next) {
     console.warn('sharp compress failed, using original:', err.message)
   }
 
+  next()
+}
+
+// Compress every uploaded image/video in place (same filename), for routes
+// that do not already perform their own post-processing.
+export async function compressUploads(req, res, next) {
+  const files = []
+  if (Array.isArray(req.files)) files.push(...req.files)
+  else if (req.files && typeof req.files === 'object') {
+    for (const group of Object.values(req.files)) {
+      if (Array.isArray(group)) files.push(...group)
+    }
+  }
+  if (req.file) files.push(req.file)
+
+  for (const file of files) {
+    if (!file?.path) continue
+    try {
+      const result = await compressUpload(file.path)
+      if (result) {
+        file.size = result.size
+        file.width = result.width
+        file.height = result.height
+      }
+    } catch (error) {
+      console.warn(`media compression failed for ${file.filename}:`, error.message)
+    }
+  }
+
+  next()
+}
+
+// Used after compressImage on the generic upload endpoints: images keep the
+// existing WebP pipeline, videos get in-place H.264 compression.
+export async function compressVideoUpload(req, res, next) {
+  if (req.file?.path && isVideoPath(req.file.path)) {
+    try {
+      const result = await compressUpload(req.file.path)
+      if (result) {
+        req.file.size = result.size
+        req.file.width = result.width
+        req.file.height = result.height
+      }
+    } catch (error) {
+      console.warn(`video compression failed for ${req.file.filename}:`, error.message)
+    }
+  }
   next()
 }
 

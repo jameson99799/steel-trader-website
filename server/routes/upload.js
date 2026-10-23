@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
-import { upload, compressImage, attachmentUpload } from '../middleware/upload.js'
+import { upload, compressImage, compressVideoUpload, attachmentUpload } from '../middleware/upload.js'
 import { JWT_SECRET, CRM_SECRET } from '../config/secrets.js'
 
 const router = Router()
@@ -19,12 +19,12 @@ function dualAuthUpload(req, res, next) {
 }
 
 // Image upload with compression (images only)
-router.post('/', dualAuthUpload, upload.single('file'), compressImage, (req, res) => {
+router.post('/', dualAuthUpload, upload.single('file'), compressImage, compressVideoUpload, (req, res) => {
   if (!req.file) return res.status(400).json({ error: '请选择文件' })
   res.json({ url: `/uploads/${req.file.filename}` })
 })
 
-router.post('/image', dualAuthUpload, upload.single('image'), compressImage, (req, res) => {
+router.post('/image', dualAuthUpload, upload.single('image'), compressImage, compressVideoUpload, (req, res) => {
   if (!req.file) return res.status(400).json({ error: '请选择文件' })
   res.json({ url: `/uploads/${req.file.filename}` })
 })

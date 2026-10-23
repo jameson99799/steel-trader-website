@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { getAll, getOne, run, findFuzzyBySlug } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
-import { upload } from '../middleware/upload.js'
+import { upload, compressUploads } from '../middleware/upload.js'
 import { loadTranslationsForLang, translateNews } from '../helpers/translate.js'
 
 const router = Router()
@@ -117,7 +117,7 @@ router.get('/:slug', (req, res) => {
 })
 
 // POST create news (admin only)
-router.post('/', authMiddleware, upload.single('cover_image'), (req, res) => {
+router.post('/', authMiddleware, upload.single('cover_image'), compressUploads, (req, res) => {
     try {
         const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status = 1, sort_order = 0, render_mode = 'direct', category_id, category_name } = req.body
         if (!title) return res.status(400).json({ error: '标题不能为空' })
@@ -152,7 +152,7 @@ router.post('/', authMiddleware, upload.single('cover_image'), (req, res) => {
 })
 
 // PUT update news (admin only)
-router.put('/:id', authMiddleware, upload.single('cover_image'), (req, res) => {
+router.put('/:id', authMiddleware, upload.single('cover_image'), compressUploads, (req, res) => {
     try {
         const { id } = req.params
         const existing = getOne('SELECT * FROM news WHERE id = ?', [id])

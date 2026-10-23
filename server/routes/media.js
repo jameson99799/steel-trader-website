@@ -1,7 +1,14 @@
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 import { getAll, getOne, run } from '../db.js'
-import { upload, compressImage } from '../middleware/upload.js'
+import { upload } from '../middleware/upload.js'
+import {
+  compressImageInPlace,
+  compressVideoInPlace,
+  isOptimized,
+  isVideoPath,
+  mimeTypeFor
+} from '../utils/mediaCompression.js'
 import { applyWatermark } from '../utils/watermark.js'
 import fs from 'fs'
 import { join, dirname } from 'path'
@@ -197,8 +204,19 @@ router.post('/upload', authMiddleware, upload.array('files', 50), async (req, re
     const skipExts = ['.svg', '.gif', '.ico']
     const ext = (file.originalname.match(/\.[^.]+$/) || ['.jpg'])[0].toLowerCase()
 
-    // Compress to WebP if sharp available
-    if (sharp && !skipExts.includes(ext)) {
+    // Videos are compressed in place; images keep the existing WebP pipeline.
+    if (isVideoPath(file.path)) {
+      try {
+        const result = await compressVideoInPlace(file.path)
+        if (result) {
+          filesize = result.size
+          width = result.width || 0
+          height = result.height || 0
+        }
+      } catch (error) {
+        console.warn('Media video compression failed:', error.message)
+      }
+    } else if (sharp && !skipExts.includes(ext)) {
       try {
         const isWebp = filename.toLowerCase().endsWith('.webp')
         const newFilename = filename.replace(/\.[^.]+$/, '.webp')
@@ -235,9 +253,10 @@ router.post('/upload', authMiddleware, upload.array('files', 50), async (req, re
       } catch {}
     }
 
+    const mimetype = filepath.toLowerCase().endsWith('.webp') ? 'image/webp' : mimeTypeFor(filepath)
     const r = run(`INSERT INTO media (original_filename, filename, filepath, mimetype, filesize, width, height, group_id, folder_id)
       VALUES (?,?,?,?,?,?,?,?,?)`,
-      [file.originalname, filename, filepath, 'image/webp', filesize, width, height, groupId, folderId])
+      [file.originalname, filename, filepath, mimetype, filesize, width, height, groupId, folderId])
     results.push({ id: r.lastInsertRowid, filepath, filename, width, height, filesize })
   }
   res.json({ items: results, count: results.length })
@@ -332,7 +351,18 @@ router.post('/:id/replace', authMiddleware, upload.single('file'), async (req, r
     let width = 0, height = 0, filesize = req.file.size
     const ext = (req.file.originalname.match(/\.[^.]+$/) || ['.jpg'])[0].toLowerCase()
 
-    if (sharp && !['.svg', '.gif', '.ico'].includes(ext)) {
+    if (isVideoPath(req.file.path)) {
+      try {
+        const result = await compressVideoInPlace(req.file.path)
+        if (result) {
+          filesize = result.size
+          width = result.width || 0
+          height = result.height || 0
+        }
+      } catch (error) {
+        console.warn('Replacement video compression failed:', error.message)
+      }
+    } else if (sharp && !['.svg', '.gif', '.ico'].includes(ext)) {
       try {
         const isWebp = filename.toLowerCase().endsWith('.webp')
         const newFilename = filename.replace(/\.[^.]+$/, '.webp')
@@ -356,9 +386,9 @@ router.post('/:id/replace', authMiddleware, upload.single('file'), async (req, r
     }
 
     // Update media record
-    run(`UPDATE media SET filename=?, filepath=?, filesize=?, width=?, height=?,
+    run(`UPDATE media SET filename=?, filepath=?, mimetype=?, filesize=?, width=?, height=?,
       original_filename=?, updated_at=datetime('now') WHERE id=?`,
-      [filename, filepath, filesize, width, height, req.file.originalname, req.params.id])
+      [filename, filepath, mimeTypeFor(filepath), filesize, width, height, req.file.originalname, req.params.id])
 
     // Update all product_images references that used the old URL
     run('UPDATE product_images SET image_url=? WHERE media_id=?', [filepath, req.params.id])
@@ -500,99 +530,106 @@ router.post('/batch-rename', authMiddleware, async (req, res) => {
   res.json({ message: '重命名完成', successCount, errorCount, errors })
 })
 
-// ─── Batch Optimize All Historical Images (Disk-based) ──────────────────────────
+// ─── Batch Optimize All Media (in place, no filename changes) ───────────────
 router.post('/optimize-all', authMiddleware, async (req, res) => {
-  let sharp = null
-  try { const m = await import('sharp'); sharp = m.default } catch {}
-  if (!sharp) return res.status(500).json({ error: '服务器未安装 sharp 图像处理库，无法压缩' })
-
   let files = []
   try {
     files = fs.readdirSync(uploadDir)
-  } catch (e) {
+  } catch {
     return res.status(500).json({ error: '无法读取上传目录' })
   }
 
-  // Target legacy image formats AND oversized webp files
-  const targetExts = ['.jpg', '.jpeg', '.png', '.bmp']
-  const imagesToOptimize = files.filter(f => {
-    const ext = f.match(/\.[^.]+$/)?.[0].toLowerCase()
-    if (!ext) return false
-    if (targetExts.includes(ext)) return true
-    if (ext === '.webp') {
-      try { return fs.statSync(join(uploadDir, f)).size > 250 * 1024 } catch(e) { return false }
+  const candidates = files.filter(filename => {
+    // Never optimize Sharp's derived thumbnail cache files.
+    if (/_w\d+\.webp$/i.test(filename) || /\.(?:jpe?g|png)\.webp$/i.test(filename)) return false
+    if (filename.includes('.optimize.tmp')) return false
+
+    const filePath = join(uploadDir, filename)
+    try {
+      if (isOptimized(filePath)) return false
+      const stat = fs.statSync(filePath)
+      if (!stat.isFile()) return false
+      if (isVideoPath(filename)) return stat.size > 1024 * 1024
+      if (isImagePath(filename)) return stat.size > 200 * 1024
+      return false
+    } catch {
+      return false
     }
-    return false
   })
 
-  if (imagesToOptimize.length === 0) {
-    return res.json({ message: '没有需要优化的图片', total: 0, successCount: 0, errorCount: 0, errors: [] })
+  if (candidates.length === 0) {
+    return res.json({
+      message: '没有需要优化的图片或视频',
+      total: 0, imageCount: 0, videoCount: 0,
+      successCount: 0, skippedCount: 0, errorCount: 0, errors: []
+    })
   }
 
+  let imageCount = 0
+  let videoCount = 0
   let successCount = 0
+  let skippedCount = 0
   let errorCount = 0
-  let errors = []
+  const errors = []
 
-  for (const filename of imagesToOptimize) {
-    const oldPath = join(uploadDir, filename)
-    const isWebp = filename.toLowerCase().endsWith('.webp')
-    const newFilename = filename.replace(/\.[^.]+$/, '.webp')
-    const newPath = isWebp ? `${oldPath}.tmp` : join(uploadDir, newFilename)
+  for (const filename of candidates) {
+    const filePath = join(uploadDir, filename)
+    const isVideo = isVideoPath(filename)
+    if (isVideo) videoCount++
+    else imageCount++
 
     try {
-      const meta = await sharp(oldPath)
-        .rotate()
-        .webp({ quality: 75, effort: 4 })
-        .toFile(newPath)
+      const result = isVideo
+        ? await compressVideoInPlace(filePath)
+        : await compressImageInPlace(filePath)
 
-      const oldFilepath = `/uploads/${filename}`
+      if (!result?.optimized) {
+        skippedCount++
+        continue
+      }
 
-      if (isWebp) {
-        fs.renameSync(newPath, oldPath) // Overwrite inplace
-        run(`UPDATE media SET filesize=?, width=?, height=?, updated_at=datetime('now') WHERE filepath=?`,
-          [meta.size, meta.width, meta.height, oldFilepath])
-      } else {
-        const newFilepath = `/uploads/${newFilename}`
+      successCount++
 
-        // 1. Update media table
-        run(`UPDATE media SET filename=?, filepath=?, mimetype=?, filesize=?, width=?, height=?, updated_at=datetime('now') WHERE filepath=?`,
-          [newFilename, newFilepath, 'image/webp', meta.size, meta.width, meta.height, oldFilepath])
+      // Same filename/path. Only metadata changes, so an A image can never
+      // become a B image and no rich-text URL replacement is needed.
+      run(
+        `UPDATE media SET filesize=?, width=?, height=?, mimetype=?, updated_at=datetime('now') WHERE filepath=?`,
+        [result.size, result.width || 0, result.height || 0, mimeTypeFor(filename), `/uploads/${filename}`]
+      )
 
-        // 2. Update product_images table
-        run('UPDATE product_images SET image_url=? WHERE image_url=?', [newFilepath, oldFilepath])
-
-        // 3. Update rich text globally
-        const tablesToUpdate = [
-          { table: 'products', columns: ['detail_content', 'images'] },
-          { table: 'news', columns: ['content', 'cover_image'] },
-          { table: 'categories', columns: ['image'] },
-          { table: 'hero_slides', columns: ['image_url'] },
-          { table: 'company', columns: ['about_image', 'logo', 'favicon', 'whatsapp_qr', 'wechat_qr'] },
-          { table: 'banners', columns: ['image'] },
-          { table: 'seo_settings', columns: ['og_image'] }
-        ]
-
-        for (const t of tablesToUpdate) {
-          for (const col of t.columns) {
-            try {
-              run(`UPDATE ${t.table} SET ${col}=REPLACE(${col}, ?, ?) WHERE ${col} LIKE ?`,
-                [oldFilepath, newFilepath, `%${oldFilepath}%`])
-            } catch (e) {}
+      // Drop Sharp's cached resized variants so the next ?w= request is
+      // generated from the newly optimized original.
+      if (!isVideo) {
+        for (const cached of files) {
+          if (cached === filename) continue
+          if (cached.startsWith(`${filename}_w`) && cached.toLowerCase().endsWith('.webp')) {
+            try { fs.unlinkSync(join(uploadDir, cached)) } catch {}
           }
         }
-
-        // Delete original file
-        fs.unlinkSync(oldPath)
+        if (!filename.toLowerCase().endsWith('.webp')) {
+          const webpVariant = `${filename}.webp`
+          if (files.includes(webpVariant)) {
+            try { fs.unlinkSync(join(uploadDir, webpVariant)) } catch {}
+          }
+        }
       }
-      successCount++
-    } catch (err) {
-      console.error(`Failed to optimize ${filename}:`, err)
+    } catch (error) {
+      console.error(`Failed to optimize ${filename}:`, error)
       errorCount++
-      errors.push({ filename, reason: err.message })
+      errors.push({ filename, reason: error.message })
     }
   }
 
-  res.json({ message: '优化完成', successCount, errorCount, total: imagesToOptimize.length, errors })
+  res.json({
+    message: '优化完成',
+    total: candidates.length,
+    imageCount,
+    videoCount,
+    successCount,
+    skippedCount,
+    errorCount,
+    errors
+  })
 })
 
 export default router

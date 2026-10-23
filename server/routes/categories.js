@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
-import { upload } from '../middleware/upload.js'
+import { upload, compressUploads } from '../middleware/upload.js'
 import { loadTranslationsForLang, translateCategory } from '../helpers/translate.js'
 import { buildPublicCategoryTree, getVisibleCategoryIds } from '../services/catalogVisibility.js'
 
@@ -70,7 +70,7 @@ router.get('/tree', (req, res) => {
   res.json(tree)
 })
 
-router.post('/', authMiddleware, upload.single('image'), (req, res) => {
+router.post('/', authMiddleware, upload.single('image'), compressUploads, (req, res) => {
   try {
     const { name, name_en, parent_id = 0, sort_order = 0 } = req.body
     const image = req.file ? `/uploads/${req.file.filename}` : null
@@ -89,7 +89,7 @@ router.post('/', authMiddleware, upload.single('image'), (req, res) => {
   }
 })
 
-router.put('/:id', authMiddleware, upload.single('image'), (req, res) => {
+router.put('/:id', authMiddleware, upload.single('image'), compressUploads, (req, res) => {
   try {
     const { id } = req.params
     const { name, name_en, parent_id, sort_order, is_enabled } = req.body

@@ -5,9 +5,9 @@
         <h1>📷 图库管理</h1>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-outline" @click="optimizeAllImages" :disabled="optimizing" style="color:#d97706;border-color:#d97706;">
-            {{ optimizing ? '正在压缩优化中...' : '🚀 一键优化所有旧图片 (WebP)' }}
+            {{ optimizing ? '正在压缩优化...' : '🚀 一键优化所有图片和视频' }}
           </button>
-          <button class="btn btn-primary" @click="openUploadModal">📤 上传图片</button>
+          <button class="btn btn-primary" @click="openUploadModal">📤 上传图片/视频</button>
           <button class="btn btn-secondary" @click="showGroupMgr = !showGroupMgr">📁 分组管理</button>
         </div>
       </div>
@@ -15,15 +15,16 @@
     <!-- Optimization Progress Modal -->
     <div v-if="optimizing || optimizeResult" class="modal-overlay">
       <div class="modal" style="max-width:400px; padding: 24px; text-align: center;">
-        <h3 style="margin-top:0;">{{ optimizeResult ? '✅ 优化完成' : '🚀 正在批量优化图片...' }}</h3>
+        <h3 style="margin-top:0;">{{ optimizeResult ? '✅ 优化完成' : '🚀 正在批量优化图片和视频...' }}</h3>
         <p v-if="optimizing" style="color:#64748b;font-size:14px;">
-          系统正在将服务器中残留的 JPG/PNG 历史图片无损压缩为 WebP 格式。<br/>
+          系统会原地压缩已上传的图片和视频，文件名和地址保持不变。<br/>
           这需要消耗一定的时间，请勿关闭此页面。
         </p>
         <div v-if="optimizeResult" style="text-align:left; background:#f0fdf4; padding:12px; border-radius:8px; margin:16px 0; font-size:14px; color:#166534;">
-          <p style="margin:4px 0">扫描到旧图片: <b>{{ optimizeResult.total }}</b> 张</p>
-          <p style="margin:4px 0">成功压缩转码: <b>{{ optimizeResult.successCount }}</b> 张</p>
-          <p style="margin:4px 0" v-if="optimizeResult.errorCount">处理失败: <b style="color:red">{{ optimizeResult.errorCount }}</b> 张</p>
+          <p style="margin:4px 0">扫描到文件: <b>{{ optimizeResult.total }}</b>（图片 {{ optimizeResult.imageCount || 0 }}，视频 {{ optimizeResult.videoCount || 0 }}）</p>
+          <p style="margin:4px 0">成功压缩: <b>{{ optimizeResult.successCount }}</b></p>
+          <p style="margin:4px 0" v-if="optimizeResult.skippedCount">跳过/无需处理: <b>{{ optimizeResult.skippedCount }}</b></p>
+          <p style="margin:4px 0" v-if="optimizeResult.errorCount">处理失败: <b style="color:red">{{ optimizeResult.errorCount }}</b></p>
           <div v-if="optimizeResult.errors && optimizeResult.errors.length" style="margin-top:8px;font-size:12px;color:#b91c1c;">
             <strong>失败原因：</strong>
             <ul style="margin:4px 0;padding-left:16px;max-height:100px;overflow-y:auto;">
@@ -149,7 +150,7 @@
         </div>
       </div>
     </div>
-    <p v-else class="empty">暂无图片</p>
+    <p v-else class="empty">暂无图片/视频</p>
 
     <!-- Loading More Indicator -->
     <div v-if="loadingMore" style="text-align:center; padding: 20px; color:#64748b; font-size:14px;">
@@ -434,6 +435,10 @@ async function doUpload() {
           const overall = Math.round(((i + fileProgress / 100) / files.length) * 100)
           uploadProgress.value = overall
         }
+      }
+      xhr.upload.onload = () => {
+        uploadStatusText.value = `服务器正在压缩 ${file.name}，请稍候...`
+        uploadProgress.value = 100
       }
       xhr.onload = () => {
         if (xhr.status === 200) {
@@ -734,7 +739,7 @@ async function saveRename(item) {
 }
 
 async function optimizeAllImages() {
-  if (!confirm('此操作将扫描所有未优化的历史 JPG/PNG 图片，将其转换为体积更小的 WebP 格式，并自动替换关联的文章和产品中的旧地址。\n\n这可能需要几十秒到几分钟，确定开始吗？')) return
+  if (!confirm('此操作会原地压缩所有已上传的图片和视频，文件名和地址保持不变，不会把 A 图片替换成 B 图片。\n\n视频压缩可能需要几分钟，确定开始吗？')) return
   
   optimizing.value = true
   optimizeResult.value = null

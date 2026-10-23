@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
-import { upload } from '../middleware/upload.js'
+import { upload, compressUploads } from '../middleware/upload.js'
 import { loadTranslationsForLang, translateCompany } from '../helpers/translate.js'
 
 const router = Router()
@@ -42,7 +42,7 @@ router.put('/', authMiddleware, upload.fields([
   { name: 'about_image', maxCount: 1 },
   { name: 'whatsapp_qr', maxCount: 1 },
   { name: 'wechat_qr', maxCount: 1 }
-]), (req, res) => {
+]), compressUploads, (req, res) => {
   const company = getOne('SELECT * FROM company WHERE id = 1')
   const { name, name_en, description, description_en, phone, email, address, address_en, whatsapp, wechat,
     facebook, linkedin, instagram, tiktok, twitter, youtube, advantages, advantages_en, map_embed_url,

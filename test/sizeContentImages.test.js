@@ -12,8 +12,8 @@ test('sizeContentImages resizes uploaded article images only once', () => {
 
   const result = sizeContentImages(html, 1000)
 
-  assert.match(result, /src="\/uploads\/article-1\.webp\?w=1000&v=2"/)
-  assert.match(result, /src="\/uploads\/article-2\.webp\?t=1&w=1000&v=2"/)
+  assert.match(result, /src="\/uploads\/article-1\.webp\?w=1000&v=3"/)
+  assert.match(result, /src="\/uploads\/article-2\.webp\?t=1&w=1000&v=3"/)
   assert.match(result, /src="\/uploads\/article-3\.webp\?w=400"/)
   assert.match(result, /src="https:\/\/example\.com\/external\.webp"/)
 })
