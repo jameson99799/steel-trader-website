@@ -58,6 +58,7 @@ import sslRoutes from './routes/ssl.js'
 import emailRoutes from './routes/email.js'
 import { checkAndSendSslWarning } from './emailService.js'
 import { stripSeoSecrets } from './services/seoSanitizer.js'
+import { normalizeRobotsTxt } from './utils/robots.js'
 import { sanitizeOrganizationType } from './services/seoSettingsSchema.js'
 import { PRIMARY_CONTENT_LANGS, getLocalizedLangsFor, getRouteIndexableLangs } from './services/indexingPolicy.js'
 import indexingRoutes, { startIndexingScheduler } from './routes/indexing.js'
@@ -366,7 +367,9 @@ async function startServer() {
         const seo = getOne('SELECT robots_txt FROM seo_settings WHERE id = 1')
         res.setHeader('Content-Type', 'text/plain; charset=utf-8')
         res.setHeader('Cache-Control', 'public, max-age=3600')
-        let robotsTxt = (seo && seo.robots_txt) ? seo.robots_txt : 'User-agent: *\nAllow: /\n'
+        let robotsTxt = normalizeRobotsTxt(
+          (seo && seo.robots_txt) ? seo.robots_txt : 'User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /crm/\nDisallow: /api/\n'
+        )
         if (!robotsTxt.toLowerCase().includes('sitemap:')) {
           robotsTxt += '\nSitemap: https://www.sunseasteel.com/sitemap.xml\n'
         }
@@ -381,7 +384,7 @@ async function startServer() {
         return res.send(robotsTxt.trim() + '\n')
       } catch (e) {}
       res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-      res.send('User-agent: *\nAllow: /\nSitemap: https://www.sunseasteel.com/sitemap.xml\n\n# LLM agent guides:\n# llms.txt: https://www.sunseasteel.com/llms.txt\n# llms-full.txt: https://www.sunseasteel.com/llms-full.txt\n')
+      res.send('User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /crm/\nDisallow: /api/\nSitemap: https://www.sunseasteel.com/sitemap.xml\n\n# LLM agent guides:\n# llms.txt: https://www.sunseasteel.com/llms.txt\n# llms-full.txt: https://www.sunseasteel.com/llms-full.txt\n')
     })
 
     app.get('/llms.txt', (req, res) => {

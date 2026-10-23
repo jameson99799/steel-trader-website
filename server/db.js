@@ -12,6 +12,7 @@ import {
   migrateLegacyLlmsDefaults
 } from './services/seoDefaults.js'
 import { getBuiltInSeoCopyRows, SUPPORTED_SEO_LANGS } from './services/seoContent.js'
+import { normalizeRobotsTxt } from './utils/robots.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const dataDir = join(__dirname, '..', 'data')
@@ -1463,6 +1464,16 @@ Requirements:
   } else {
     migrateLegacyLlmsDefaults(db)
   }
+
+  try {
+    const seoRow = db.prepare('SELECT robots_txt FROM seo_settings WHERE id = 1').get()
+    if (seoRow && seoRow.robots_txt) {
+      const normalized = normalizeRobotsTxt(seoRow.robots_txt)
+      if (normalized !== seoRow.robots_txt) {
+        db.prepare('UPDATE seo_settings SET robots_txt = ? WHERE id = 1').run(normalized)
+      }
+    }
+  } catch (e) { }
 
   const pageTextsCount = db.prepare('SELECT COUNT(*) as count FROM page_texts').get().count
   if (pageTextsCount === 0) {

@@ -8,6 +8,24 @@ const CACHEABLE = ['/company', '/hero', '/pagetexts', '/categories', '/categorie
   '/languages/active', '/translation/multilingual-status', '/news-categories']
 const CACHE_TTL = 5 * 60 * 1000  // 5 minutes
 
+// Public GET responses may be cached by the browser/Cloudflare for the short
+// TTL set by the API. Never add a Date.now() cache-buster to these endpoints.
+const PUBLIC_GET_CACHE_PREFIXES = [
+  '/news', '/products', '/categories', '/company', '/hero', '/pagetexts',
+  '/seo', '/languages/active', '/news-categories', '/ral-colors',
+  '/factory/public', '/roofing-profiles/public',
+  '/roofing-profiles/categories/public', '/futures/public'
+]
+
+function isCacheablePublicGet(url, options = {}) {
+  const method = String(options.method || 'GET').toUpperCase()
+  if (method !== 'GET') return false
+  if (/\/admin(?:\/|$)/.test(url)) return false
+  return PUBLIC_GET_CACHE_PREFIXES.some(prefix =>
+    url === prefix || url.startsWith(`${prefix}?`) || url.startsWith(`${prefix}/`)
+  )
+}
+
 function cacheKey(url) { return `_api_cache_${url}` }
 
 function invalidateCachesByPrefix(urlPattern) {
@@ -71,16 +89,21 @@ const request = async (url, options = {}) => {
   }
 
   const sep = url.includes('?') ? '&' : '?'
-  const response = await fetch(`${BASE_URL}${url}${sep}t=${Date.now()}`, { 
-    ...options, 
-    headers: {
-      ...headers,
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0'
-    },
-    cache: 'no-store',
-    signal: options.signal 
+  const cacheable = isCacheablePublicGet(url, options)
+  const requestUrl = cacheable ? `${BASE_URL}${url}` : `${BASE_URL}${url}${sep}t=${Date.now()}`
+  const requestHeaders = { ...headers }
+
+  if (!cacheable) {
+    requestHeaders['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    requestHeaders['Pragma'] = 'no-cache'
+    requestHeaders['Expires'] = '0'
+  }
+
+  const response = await fetch(requestUrl, {
+    ...options,
+    headers: requestHeaders,
+    cache: cacheable ? 'default' : 'no-store',
+    signal: options.signal
   })
 
   // Auto-redirect to login on 401 (expired/invalid token)
