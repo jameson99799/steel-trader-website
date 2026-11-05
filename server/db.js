@@ -13,6 +13,11 @@ import {
 } from './services/seoDefaults.js'
 import { getBuiltInSeoCopyRows, SUPPORTED_SEO_LANGS } from './services/seoContent.js'
 import { normalizeRobotsTxt } from './utils/robots.js'
+import {
+  buildProductMetaDescription,
+  buildNewsMetaDescription,
+  isMetaDescriptionWithinRange
+} from './services/metaDescription.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const dataDir = join(__dirname, '..', 'data')
@@ -1473,6 +1478,36 @@ Requirements:
         db.prepare('UPDATE seo_settings SET robots_txt = ? WHERE id = 1').run(normalized)
       }
     }
+  } catch (e) { }
+
+  try {
+    const companyRow = db.prepare('SELECT name, name_en FROM company WHERE id = 1').get() || {}
+    const companyName = companyRow.name_en || companyRow.name || 'SUNSEA STEEL'
+    const products = db.prepare(`
+      SELECT p.id, p.name, p.name_en, p.description, p.description_en, p.seo_description, p.specs,
+             c.name AS category_name, c.name_en AS category_name_en
+      FROM products p LEFT JOIN categories c ON p.category_id = c.id
+      WHERE p.status = 1
+    `).all()
+    const news = db.prepare(`
+      SELECT id, title, title_en, summary, summary_en, seo_description
+      FROM news WHERE status = 1
+    `).all()
+    const updateProduct = db.prepare('UPDATE products SET seo_description = ? WHERE id = ?')
+    const updateNews = db.prepare('UPDATE news SET seo_description = ? WHERE id = ?')
+    const backfill = db.transaction(() => {
+      for (const product of products) {
+        if (isMetaDescriptionWithinRange(product.seo_description)) continue
+        const description = buildProductMetaDescription(product, product.seo_description)
+        if (isMetaDescriptionWithinRange(description)) updateProduct.run(description, product.id)
+      }
+      for (const article of news) {
+        if (isMetaDescriptionWithinRange(article.seo_description)) continue
+        const description = buildNewsMetaDescription(article, article.seo_description)
+        if (isMetaDescriptionWithinRange(description)) updateNews.run(description, article.id)
+      }
+    })
+    backfill()
   } catch (e) { }
 
   const pageTextsCount = db.prepare('SELECT COUNT(*) as count FROM page_texts').get().count

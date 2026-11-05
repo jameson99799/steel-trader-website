@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
+import { isMetaDescriptionWithinRange } from '../services/metaDescription.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { upload, compressUploads } from '../middleware/upload.js'
 import { writeFileSync } from 'fs'
@@ -268,7 +269,7 @@ router.get('/audit', authMiddleware, (req, res) => {
 
     if (totalProducts > 0) {
         const noTitle = products.filter(p => !p.seo_title)
-        const noDesc = products.filter(p => !p.seo_description)
+        const noDesc = products.filter(p => !isMetaDescriptionWithinRange(p.seo_description))
         const noImages = products.filter(p => !p.images).length
         const noNameEn = products.filter(p => !p.name_en).length
 
@@ -285,7 +286,7 @@ router.get('/audit', authMiddleware, (req, res) => {
             const examples = noDesc.slice(0, 3).map(p => `《${p.name_en || p.name}》`).join(', ')
             const more = noDesc.length > 3 ? ' 等' : ''
             check('产品SEO', '自定义 SEO 描述', false,
-                `⚠️ ${noDesc.length}/${totalProducts} 个产品未设置专属 SEO 描述（将导致 Google 抓取随机正文）。<br><b>定位排查:</b> 请检查 ${examples}${more}。`)
+                `⚠️ ${noDesc.length}/${totalProducts} 个产品 SEO 描述缺失或不在 120-160 字符范围内（Google 可能抓取随机正文）。<br><b>定位排查:</b> 请检查 ${examples}${more}。`)
         } else {
             check('产品SEO', '自定义 SEO 描述', true, '')
         }
@@ -322,6 +323,16 @@ router.get('/audit', authMiddleware, (req, res) => {
                 `⚠️ ${noSeoTitle.length}/${totalNews} 篇文章未设置专属的 SEO 标题（目前只能使用普通文章标题）。<br><b>定位排查:</b> 请检查 ${examples}${more}，前往 <a href="#/admin/news" style="color:#3b82f6;text-decoration:underline;">文章管理</a> 补充优化。`)
         } else {
             check('内容营销', '自定义 SEO 标题', true, '')
+        }
+
+        const weakNewsDesc = news.filter(n => !isMetaDescriptionWithinRange(n.seo_description))
+        if (weakNewsDesc.length > 0) {
+            const examples = weakNewsDesc.slice(0, 3).map(n => `《${n.title_en || n.title}》`).join(', ')
+            const more = weakNewsDesc.length > 3 ? ' 等' : ''
+            check('内容营销', '自定义 SEO 描述', false,
+                `⚠️ ${weakNewsDesc.length}/${totalNews} 篇文章 SEO 描述缺失或不在 120-160 字符范围内。请检查 ${examples}${more}。`)
+        } else {
+            check('内容营销', '自定义 SEO 描述', true, '')
         }
 
         const noSlug = news.filter(n => !n.slug).length

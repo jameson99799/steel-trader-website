@@ -59,6 +59,7 @@ import emailRoutes from './routes/email.js'
 import { checkAndSendSslWarning } from './emailService.js'
 import { stripSeoSecrets } from './services/seoSanitizer.js'
 import { normalizeRobotsTxt } from './utils/robots.js'
+import { finalizeMetaDescription } from './services/metaDescription.js'
 import { sanitizeOrganizationType } from './services/seoSettingsSchema.js'
 import { PRIMARY_CONTENT_LANGS, getLocalizedLangsFor, getRouteIndexableLangs } from './services/indexingPolicy.js'
 import indexingRoutes, { startIndexingScheduler } from './routes/indexing.js'
@@ -781,6 +782,9 @@ ${contactLines.join('\n')}
         let extraSchemas = ''
         const orgType = sanitizeOrganizationType(seoSettings.local_business_type)
         let ssrContent = ''    // Server-rendered content for SEO/GEO crawlers
+        let seoPageType = 'static'
+        let seoCategoryName = ''
+        let seoCategoryProducts = []
 
           // ── Product detail page ──
           const productMatch = subPath.match(/^\/products\/(?!category\/)(.+)$/)
@@ -796,6 +800,7 @@ ${contactLines.join('\n')}
               }
             }
             if (product) {
+              seoPageType = 'product'
               // Redirect mismatched slugs (Soft 404 / duplicate fix)
               if (product.slug !== slug) {
                 const correctPath = lang === 'en' ? `/products/${product.slug}` : `/${lang}/products/${product.slug}`
@@ -980,6 +985,7 @@ ${contactLines.join('\n')}
               }
             }
             if (article) {
+              seoPageType = 'news'
               // Redirect mismatched slugs (Soft 404 / duplicate fix)
               if (article.slug !== slug) {
                 const correctPath = lang === 'en' ? `/news/${article.slug}` : `/${lang}/news/${article.slug}`
@@ -1109,6 +1115,8 @@ ${contactLines.join('\n')}
                 if (catTrans?.name) cat[`name_${lang}`] = catTrans.name
               }
               const catName = pickLocalized(cat, 'name')
+              seoPageType = 'newsCategory'
+              seoCategoryName = catName
               pageTitle = fillTemplate(seoCopy.newsCategory.title, { category: catName, company: companyName })
               pageDesc = fillTemplate(seoCopy.newsCategory.desc, { category: catName, company: companyName })
               // BreadcrumbList schema
@@ -1153,6 +1161,8 @@ ${contactLines.join('\n')}
             if (cat && publicCategoryIds().has(cat.id)) {
               if (tMap) translateCategory(cat, tMap, lang)
               const catName = pickLocalized(cat, 'name')
+              seoPageType = 'productCategory'
+              seoCategoryName = catName
               pageTitle = fillTemplate(seoCopy.productCategory.title, { category: catName, company: companyName })
               pageDesc = fillTemplate(seoCopy.productCategory.desc, { category: catName, company: companyName })
               extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
@@ -1161,7 +1171,8 @@ ${contactLines.join('\n')}
                 { '@type': 'ListItem', position: 3, name: catName, item: pageCanonical }
               ] })
               const categoryVisibility = publicProductVisibility('products')
-              const catProducts = getAll(`SELECT id, slug, name_en, name, description_en, description FROM products WHERE category_id = ? AND status = 1${categoryVisibility.clause} ORDER BY sort_order DESC, id DESC LIMIT 30`, [cat.id, ...categoryVisibility.params])
+              const catProducts = getAll(`SELECT id, slug, name_en, name, description_en, description, specs FROM products WHERE category_id = ? AND status = 1${categoryVisibility.clause} ORDER BY sort_order DESC, id DESC LIMIT 30`, [cat.id, ...categoryVisibility.params])
+              seoCategoryProducts = catProducts
               if (tMap) catProducts.forEach(p => translateProduct(p, tMap, lang))
               if (catProducts.length) {
                 const catProdItems = catProducts.map(p =>
@@ -1380,6 +1391,7 @@ ${contactLines.join('\n')}
           // ── Homepage BreadcrumbList + WebSite schema + SSR content ──
           if (!subPath || subPath === '/') {
             matchedRoute = true
+            seoPageType = 'home'
             routeIndexableLangs = routeLangs('home')
             // Homepage SEO text per language, sourced from the translations table when a
             // translation has been generated (content left to the AI translation system).
@@ -1554,6 +1566,17 @@ ${contactLines.join('\n')}
           : configuredOgImage && ogImage === configuredOgImage
             ? '\n  <meta property="og:image:width" content="1200" />\n  <meta property="og:image:height" content="630" />'
             : ''
+        if (!isNotFound && !url.startsWith('/admin') && !url.startsWith('/crm')) {
+          pageDesc = finalizeMetaDescription(pageDesc, {
+            lang,
+            pageType: seoPageType,
+            product: req.ssrProduct,
+            article: req.ssrArticle,
+            categoryName: seoCategoryName,
+            categoryProducts: seoCategoryProducts,
+            companyName: companyNameTranslated
+          })
+        }
         const ogTitle = (pageTitle || '').substring(0, 110)
         const safeDesc = (pageDesc || '').substring(0, 160)
         // Google shows roughly 60 characters of the <title> in search results.
