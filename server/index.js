@@ -1621,9 +1621,11 @@ ${contactLines.join('\n')}
           // Previously this was bot-only, so non-JS fetches (audit tools, social scrapers,
           // Google's lazy renderer gaps) received an empty <div id="app"> — the cause of
           // "blank multilingual product pages" in crawl diagnostics and of search snippets
-          // being assembled from the repeated header contact template. Vue replaces this
-          // container content when the SPA mounts, so real users still get the full app.
-          html = html.replace('<div id="app">', `<div id="app">\n${ssrContent}\n`)
+          // being assembled from the repeated header contact template.
+          // The identical HTML ships to everyone (no cloaking): JS-capable browsers hide
+          // this block at first paint via the html.has-js class (inline head script) and
+          // get the full styled app once Vue mounts; JS-less crawlers still read it.
+          html = html.replace('<div id="app">', `<div id="app">\n<div id="ssr-content">\n${ssrContent}\n</div>`)
         }
         
         // Inject state for instant LCP rendering
