@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { getAll, getOne, run } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { sanitizeTranslationSettings } from '../config/secrets.js'
+import { cleanTranslationText } from '../utils/cleanTranslationText.js'
 import https from 'https'
 import http from 'http'
 import { parse as parseHTML } from 'node-html-parser'
@@ -1385,9 +1386,10 @@ ${strictRuleHtml}
 const _newsCatColCache = new Set()
 
 function upsertTranslation(lang, type, id, field, original, translated) {
-    // Clean garbled characters from translations
+    // Clean garbled characters and AI code-fence debris (```html, stray
+    // backticks) from translations before they ever reach the database.
     if (translated && typeof translated === 'string') {
-        translated = translated.replace(/\uFFFD/g, '').trim()
+        translated = cleanTranslationText(translated.replace(/\uFFFD/g, '').trim())
     }
     if (type === 'language_seo_copy') {
         const pageKey = String(id || '')
@@ -1973,7 +1975,8 @@ router.get('/ui-texts/:lang', (req, res) => {
         
         const result = {}
         for (const row of rows) {
-            result[row.content_field] = row.translated_text
+            // Strip AI code-fence debris before it reaches client UI labels
+            result[row.content_field] = cleanTranslationText(row.translated_text)
         }
         
         // If we have a combined ui_combined field, it might contain JSON

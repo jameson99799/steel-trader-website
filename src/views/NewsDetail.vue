@@ -54,7 +54,7 @@
           <!-- FAQ — visible counterpart of the FAQPage JSON-LD (skipped when
                the article body already contains its own FAQ section) -->
           <section class="article-faq" v-if="faqs.length && !detailHasFaq">
-            <h2>{{ lang === 'zh' ? '常见问题' : 'Frequently Asked Questions' }}</h2>
+            <h2>{{ t('homeFaq') }}</h2>
             <div class="faq-list">
               <details v-for="(faq, index) in faqs" :key="index" class="faq-item">
                 <summary class="faq-question">{{ faq.question }}</summary>

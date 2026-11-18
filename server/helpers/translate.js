@@ -1,4 +1,5 @@
 import { getAll } from '../db.js'
+import { cleanTranslationText } from '../utils/cleanTranslationText.js'
 
 const translationCache = new Map()
 const CACHE_TTL = 5000 // 5 seconds
@@ -26,9 +27,11 @@ export function loadTranslationsForLang(langCode) {
     for (const r of rows) {
         const key = `${r.content_type}_${r.content_id || 0}`
         if (!map[key]) map[key] = {}
-        map[key][r.content_field] = r.translated_text
+        // Strip AI code-fence debris (```html / stray backticks) — it leaks into
+        // the rendered footer/labels on the live site otherwise.
+        map[key][r.content_field] = cleanTranslationText(r.translated_text)
     }
-    
+
     translationCache.set(langCode, { map, ts: now })
     return map
 }

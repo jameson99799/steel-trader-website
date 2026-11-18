@@ -4,7 +4,7 @@
   <div class="product-detail product-unavailable" v-if="loadFailed">
     <div class="container">
       <h1>{{ t('productDetails') }}</h1>
-      <p>{{ lang === 'zh' ? '抱歉，该产品暂时无法加载。请稍后重试，或浏览我们的全部产品。' : 'Sorry, this product could not be loaded. Please try again later, or browse our full catalog.' }}</p>
+      <p>{{ t('productLoadError') }}</p>
       <router-link :to="langPath('/products')" class="btn btn-primary">{{ t('viewAllProducts') }}</router-link>
     </div>
   </div>
@@ -116,7 +116,7 @@
                   <svg class="section-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
                   </svg>
-                  <h3>{{ lang === 'zh' ? '常见问题' : 'Frequently Asked Questions' }}</h3>
+                  <h3>{{ t('homeFaq') }}</h3>
                 </div>
                 <div class="section-content">
                   <div class="faq-list">
