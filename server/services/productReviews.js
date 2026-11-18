@@ -638,7 +638,12 @@ export function createProductReviewStore({
   // review-spam policy). Returns the possibly-downgraded review plus a flag.
   function guardReviewStatus(review) {
     if (review.status !== 'published') return { review, quarantined: false }
-    const product = getOne('SELECT * FROM products WHERE id = ?', [review.product_id])
+    let product = null
+    try {
+      product = getOne('SELECT id, name, name_en, seo_title FROM products WHERE id = ?', [review.product_id])
+    } catch (error) {
+      product = getOne('SELECT * FROM products WHERE id = ?', [review.product_id])
+    }
     const flag = product ? findTemplatedReviewPattern(review, product) : null
     if (!flag) return { review, quarantined: false }
     logger?.warn?.(
@@ -880,7 +885,15 @@ export function createProductReviewStore({
     // Public surfaces (page + JSON-LD) must agree with Google's review-spam
     // policies: keyword-stuffed reviews are excluded here AND from the
     // aggregate summary, so schema always matches what visitors can see.
-    const product = getOne('SELECT * FROM products WHERE id = ?', [normalizedProductId])
+    // Only the columns the pattern check needs — a SELECT * would drag the
+    // potentially multi-megabyte detail_content into every reviews request.
+    let product = null
+    try {
+      product = getOne('SELECT id, name, name_en, seo_title FROM products WHERE id = ?', [normalizedProductId])
+    } catch (error) {
+      // Minimal fixtures (tests) may not carry all columns — fall back to *
+      product = getOne('SELECT * FROM products WHERE id = ?', [normalizedProductId])
+    }
     const isTemplated = review => !!product && !!findTemplatedReviewPattern(review, product)
 
     const summaryRow = getOne(`

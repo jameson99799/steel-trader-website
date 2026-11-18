@@ -837,10 +837,17 @@ ${contactLines.join('\n')}
               }
               pageKeywords = seoT.seo_keywords || product.seo_keywords || pageKeywords
               ogType = 'product'
+              const isVideoFile = path => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(path)
               const images = (product.images || '').split(',').filter(Boolean)
-              if (images.length) pageImage = images[0].startsWith('http') ? images[0] : `${siteUrl}${images[0]}`
+              // og:image must be a crawlable image, never a video file
+              const firstRealImage = images.find(img => !isVideoFile(img))
+              if (firstRealImage) pageImage = firstRealImage.startsWith('http') ? firstRealImage : `${siteUrl}${firstRealImage}`
               // ── Product Schema (merged: Google Shopping + AI entity recognition) ──
-              const productImages = (product.images || '').split(',').filter(Boolean).map(img => img.startsWith('http') ? img : `${siteUrl}${img}`)
+              // schema.org `image` must point at crawlable image files — filter
+              // out video covers (mp4/webm) which Google rejects
+              const productImages = (product.images || '').split(',').filter(Boolean)
+                .filter(img => !isVideoFile(img))
+                .map(img => img.startsWith('http') ? img : `${siteUrl}${img}`)
               let publicReviews = {
                 reviews: [],
                 summary: { ratingValue: 0, reviewCount: 0 },
@@ -939,7 +946,14 @@ ${contactLines.join('\n')}
               detailHtml = sizeContentImages(sanitizeRichHtml(detailHtml), 1200)
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
               const hasFaqInDetail = /frequently\s+asked|<h[23][^>]*>\s*faq|常见问题|常见问答|常見問題/i.test(detailHtml)
-              const ssrFeaturedImage = productImages.length ? `<img src="${esc(productImages[0])}" alt="${escPName}" style="display:none;" />` : ''
+              const ssrFeaturedImage = ''
+              // Hidden <img> placeholders removed: with SSR content shipping to
+              // every visitor, display:none does NOT stop the browser from
+              // downloading them — the raw original file (or an entire .mp4
+              // when the first image is a video) was fetched invisibly on
+              // every page view and competed with real assets. Images are
+              // declared properly via the Product JSON-LD `image` array and
+              // og:image instead.
               // The Offer price must be visible on the page too (Google policy).
               const ssrPriceHtml = (Number.isFinite(productPrice) && productPrice > 0)
                 ? `<p class="product-price">US$ ${esc(String(productPrice))} / ton</p>`
@@ -1094,8 +1108,11 @@ ${contactLines.join('\n')}
                   }
                 } catch (e) {}
               }
-              const ssrFeaturedImgNews = pageImage ? `<img src="${esc(pageImage)}" alt="${escATitle}" style="display:none;" />` : ''
-              ssrContent = `<article id="ssr-article">${ssrFeaturedImgNews}<h1>${escATitle}</h1><p class="summary">${escASummary}</p><div class="content">${articleBody}</div>${newsFaqHtml}</article>`
+              // Hidden <img> placeholder removed (same reason as the product
+              // page: display:none still downloads the raw file, and covers
+              // can be videos). The Article JSON-LD `image` + og:image cover it.
+              const ssrFeaturedImgNews = ''
+              ssrContent = `<article id="ssr-article"><h1>${escATitle}</h1><p class="summary">${escASummary}</p><div class="content">${articleBody}</div>${newsFaqHtml}</article>`
               
               // Expose ssrData for client-side Vue hydration
               req.ssrArticle = article

@@ -300,6 +300,7 @@ import { useRoute } from 'vue-router'
 import { useLang } from '../composables/useLang'
 import api from '../api'
 import { imageUrl } from '../utils/imageUrl'
+import { sizeContentImages } from '../utils/sizeContentImages.js'
 import { getCenteredThumbnailScrollLeft } from '../utils/thumbnailScroll.js'
 import { buildProductOfferPolicy } from '../../shared/productOfferPolicy.js'
 import { sanitizeRichHtml } from '../utils/sanitizeHtml.js'
@@ -480,7 +481,11 @@ const sanitizedDetailContent = computed(() => {
   html = html.replace(/<body[^>]*>/gi, '').replace(/<\/body>/gi, '')
   html = html.replace(/<meta[^>]*>/gi, '')
 
-  return sanitizeRichHtml(html)
+  // Same 1200px rewrite the SSR block uses — identical image URLs mean the
+  // browser reuses the cached SSR copies instead of downloading every detail
+  // image a second time (and visitors get the optimized WebP, not the raw
+  // multi-MB original).
+  return sizeContentImages(sanitizeRichHtml(html), 1200)
 })
 
 
