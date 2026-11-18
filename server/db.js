@@ -302,7 +302,10 @@ async function initDb() {
   // Migration: 'Manufacturer' is not a valid schema.org type — coerce stored values
   // to a valid organization type so emitted JSON-LD remains parseable.
   try { db.exec("UPDATE seo_settings SET local_business_type = 'Corporation' WHERE local_business_type = 'Manufacturer'") } catch (e) { }
-  // Migration: add faq_items for GEO (Generative Engine Optimization) FAQ schema
+  // Migration: add faq_items for GEO (Generative Engine Optimization) FAQ schema.
+  // Also re-applied after the products/news CREATE blocks below — on a fresh
+  // database this ALTER runs before those tables exist and silently no-ops,
+  // leaving news without faq_items (breaking the SSR FAQ renderer).
   try { db.exec("ALTER TABLE products ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }
   try { db.exec("ALTER TABLE news ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }
   // Migration: add updated_at to products for freshness tracking
@@ -1189,6 +1192,10 @@ Requirements:
 
   // Migration: add render_mode column to news (default 'direct' = v-html, 'iframe' = full isolation)
   try { db.exec("ALTER TABLE news ADD COLUMN render_mode TEXT DEFAULT 'direct'") } catch (e) { }
+  // Re-apply the faq_items migration here: the copy near the top of initDb runs
+  // before this CREATE TABLE on fresh installs, so news would otherwise be
+  // created without the column and the GEO FAQ renderer would break.
+  try { db.exec("ALTER TABLE news ADD COLUMN faq_items TEXT DEFAULT '[]'") } catch (e) { }
 
   // ── News Categories (article grouping) ──────────────────────────────────────
   db.exec(`

@@ -1,5 +1,14 @@
 <template>
-  <div class="product-detail" v-if="product">
+  <!-- Failed load: never leave the main body blank (audit P0: multilingual
+       product pages rendered only header/footer when a data request failed) -->
+  <div class="product-detail product-unavailable" v-if="loadFailed">
+    <div class="container">
+      <h1>{{ t('productDetails') }}</h1>
+      <p>{{ lang === 'zh' ? '抱歉，该产品暂时无法加载。请稍后重试，或浏览我们的全部产品。' : 'Sorry, this product could not be loaded. Please try again later, or browse our full catalog.' }}</p>
+      <router-link :to="langPath('/products')" class="btn btn-primary">{{ t('viewAllProducts') }}</router-link>
+    </div>
+  </div>
+  <div class="product-detail" v-else-if="product">
     <!-- Breadcrumb -->
     <div class="breadcrumb-section">
       <div class="container">
@@ -323,6 +332,7 @@ const emptyPublicReviews = () => ({
 })
 const publicReviews = ref(emptyPublicReviews())
 const reviewPageContext = ref({ generation: 0, slug: '', lang: '', productId: null })
+const loadFailed = ref(false)
 let reviewRequestToken = 0
 let pageRequestToken = 0
 
@@ -679,7 +689,9 @@ function updateProductSeo(comp) {
   script.textContent = JSON.stringify(productSchema, null, 2)
 
   const faqJson = localizedValue(p, 'faq_items') || p.faq_items
-  if (faqJson) {
+  // Skip FAQPage markup when the detail body already renders its own FAQ —
+  // schema must only describe FAQ content that is actually visible on the page.
+  if (faqJson && !detailHasFaq.value) {
     try {
       const faqs = JSON.parse(faqJson)
       if (faqs.length) {
@@ -736,6 +748,7 @@ async function loadProductPage({ hydrate = false } = {}) {
   const requestId = ++pageRequestToken
   const slug = route.params.slug
   const language = lang.value
+  loadFailed.value = false
   reviewPageContext.value = {
     generation: requestId,
     slug: String(slug || ''),
@@ -807,7 +820,12 @@ async function loadProductPage({ hydrate = false } = {}) {
     relatedProducts.value = nextRelated
     updateProductSeo(comp)
   } catch (error) {
-    if (isCurrentPage(requestId, slug, language)) console.error(error)
+    if (isCurrentPage(requestId, slug, language)) {
+      // No hydration and no fetched product → surface an error state instead
+      // of an empty main body (soft-404 style blank page).
+      if (!product.value) loadFailed.value = true
+      console.error(error)
+    }
   }
 }
 
@@ -821,6 +839,20 @@ watch([() => route.params.slug, lang], () => loadProductPage())
 .product-detail {
   min-height: 100vh;
   background: var(--gray-50);
+}
+
+.product-unavailable {
+  padding: var(--spacing-2xl) 0;
+  text-align: center;
+}
+
+.product-unavailable h1 {
+  margin-bottom: var(--spacing);
+}
+
+.product-unavailable .btn {
+  display: inline-block;
+  margin-top: var(--spacing-lg);
 }
 
 .breadcrumb-section {

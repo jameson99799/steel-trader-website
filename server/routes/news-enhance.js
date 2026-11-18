@@ -161,14 +161,22 @@ router.post('/batch-enhance', authMiddleware, async (req, res) => {
     if (ids && ids.length) articles = articles.filter(a => ids.includes(a.id))
 
     // Filter to only articles that need work (unless force=true)
+    // Articles whose body already contains an FAQ section are excluded from
+    // FAQ generation: their faq_items would duplicate visible content once
+    // rendered (Google spam-policy pattern) and would be skipped by the
+    // SSR/client FAQ dedup guard anyway.
+    const bodyHasFaqSection = a => /frequently\s+asked|<h[23][^>]*>\s*faq|常见问题|常见问答|常見問題/i.test(a.content || '')
     if (!force) {
         articles = articles.filter(a => {
             const hasFaq = (() => { try { return JSON.parse(a.faq_items || '[]').length > 0 } catch { return false } })()
             const hasSeo = !!(a.seo_title && a.seo_description)
-            if (mode === 'faq_only') return !hasFaq
+            if (mode === 'faq_only') return !hasFaq && !bodyHasFaqSection(a)
             if (mode === 'seo_only') return !hasSeo
-            return !hasFaq || !hasSeo
+            return (!hasFaq && !bodyHasFaqSection(a)) || !hasSeo
         })
+    } else if (mode !== 'seo_only') {
+        // Force runs still skip FAQ generation for articles whose body has an FAQ
+        articles = articles.map(a => ({ ...a, skipFaq: bodyHasFaqSection(a) }))
     }
 
     if (!articles.length) return res.json({ success: true, message: 'All articles already have FAQ and SEO — nothing to do!', processed: 0 })
@@ -203,7 +211,7 @@ router.post('/batch-enhance', authMiddleware, async (req, res) => {
         let updatedSeoKw = null
 
         // ── Generate FAQ ──
-        const needFaq = mode !== 'seo_only'
+        const needFaq = mode !== 'seo_only' && !article.skipFaq
         if (needFaq) {
             try {
                 const hasFaq = (() => { try { return JSON.parse(article.faq_items || '[]').length > 0 } catch { return false } })()
@@ -356,7 +364,10 @@ router.get('/seo-audit', authMiddleware, (req, res) => {
         // GEO checks
         let faqCount = 0
         try { faqCount = JSON.parse(a.faq_items || '[]').length } catch {}
-        if (!faqCount) issues.push({ type: 'error', msg: 'Missing faq_items — no FAQPage schema, AI engines cannot extract Q&A' })
+        const bodyHasFaq = /frequently\s+asked|<h[23][^>]*>\s*faq|常见问题|常见问答|常見問題/i.test(a.content || '')
+        if (!faqCount && !bodyHasFaq) issues.push({ type: 'error', msg: 'Missing faq_items — no FAQPage schema, AI engines cannot extract Q&A' })
+        else if (faqCount && bodyHasFaq) issues.push({ type: 'warning', msg: `Body already contains an FAQ section AND ${faqCount} faq_items — the separate block is hidden by the dedup guard; delete the duplicated FAQ group in the article body or the faq_items` })
+        else if (bodyHasFaq) passes.push('FAQ section in body ✓ (schema auto-derived)')
         else if (faqCount < 5) issues.push({ type: 'warning', msg: `Only ${faqCount} FAQ items — recommend 5-7 for better GEO coverage` })
         else passes.push(`faq_items ✓ (${faqCount} Q&A pairs)`)
 

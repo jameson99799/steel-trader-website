@@ -239,6 +239,38 @@ function placeholders(count) {
   return Array.from({ length: count }, () => '?').join(', ')
 }
 
+// ── Review authenticity guard (Google spam-policy compliance) ────────────────
+// Google's review spam policies flag reviews whose title or text is stuffed
+// with the full product name / SEO title, or that repeat the same text across
+// many accounts. Reviews matching these patterns must never be auto-published
+// or counted in public aggregate ratings; they go to the moderation queue.
+const MIN_KEYWORD_TITLE_LENGTH = 20
+
+export function findTemplatedReviewPattern(review, product) {
+  if (!review || !product) return null
+  const candidates = [
+    product.seo_title,
+    product.name_en,
+    product.name
+  ].map(value => String(value ?? '').trim()).filter(value => value.length >= MIN_KEYWORD_TITLE_LENGTH)
+
+  const haystacks = [
+    String(review.review_title ?? ''),
+    String(review.review_text ?? '')
+  ].map(value => value.toLowerCase())
+
+  for (const phrase of candidates) {
+    const needle = phrase.toLowerCase()
+    if (!needle) continue
+    for (const haystack of haystacks) {
+      if (haystack.includes(needle)) {
+        return { phrase, reason: 'review embeds the full product name / SEO title' }
+      }
+    }
+  }
+  return null
+}
+
 function cachePathSegments(cacheUrl) {
   try {
     const pathname = new URL(String(cacheUrl), 'https://seo-cache.invalid').pathname
@@ -602,17 +634,32 @@ export function createProductReviewStore({
     return review
   }
 
+  // Quarantine keyword-stuffed reviews instead of publishing them (Google
+  // review-spam policy). Returns the possibly-downgraded review plus a flag.
+  function guardReviewStatus(review) {
+    if (review.status !== 'published') return { review, quarantined: false }
+    const product = getOne('SELECT * FROM products WHERE id = ?', [review.product_id])
+    const flag = product ? findTemplatedReviewPattern(review, product) : null
+    if (!flag) return { review, quarantined: false }
+    logger?.warn?.(
+      `[product-reviews] Quarantined review for product ${review.product_id} (${flag.reason}: "${flag.phrase}") — set to pending`
+    )
+    return { review: { ...review, status: 'pending' }, quarantined: true }
+  }
+
   function create(input, { source = 'admin', forcedStatus = null } = {}) {
-    const review = normalizeReviewInput(input, { source, forcedStatus, requireProduct: true })
+    let review = normalizeReviewInput(input, { source, forcedStatus, requireProduct: true })
     if (!getOne('SELECT id FROM products WHERE id = ?', [review.product_id])) {
       throw new Error('product does not exist')
     }
     const existing = findExternal(review.source, review.external_id)
     if (existing) return { ...getById(existing.id), idempotent: true }
 
+    const guarded = guardReviewStatus(review)
+    review = guarded.review
     const created = insertNormalized(review)
     invalidateProductReviewSeoCache(review.product_id)
-    return { ...created, idempotent: false }
+    return { ...created, idempotent: false, quarantined: guarded.quarantined }
   }
 
   function bulkCreate(productId, rows, { source = 'admin_import', forcedStatus = 'published' } = {}) {
@@ -644,15 +691,18 @@ export function createProductReviewStore({
     const outcome = transaction(() => {
       const created = []
       const existing = []
+      let quarantined = 0
       for (const row of normalizedRows) {
         const duplicate = findExternal(row.source, row.external_id)
         if (duplicate) {
           existing.push(duplicate)
         } else {
-          created.push(insertNormalized(row))
+          const guarded = guardReviewStatus(row)
+          if (guarded.quarantined) quarantined++
+          created.push(insertNormalized(guarded.review))
         }
       }
-      return { created, existing }
+      return { created, existing, quarantined }
     })
 
     if (outcome.created.length) invalidateProductReviewSeoCache(normalizedProductId)
@@ -827,29 +877,52 @@ export function createProductReviewStore({
       label: 'limit', defaultValue: 10, minimum: 1, maximum: Number.MAX_SAFE_INTEGER
     })
     const language = String(lang || 'en').trim().toLowerCase()
+    // Public surfaces (page + JSON-LD) must agree with Google's review-spam
+    // policies: keyword-stuffed reviews are excluded here AND from the
+    // aggregate summary, so schema always matches what visitors can see.
+    const product = getOne('SELECT * FROM products WHERE id = ?', [normalizedProductId])
+    const isTemplated = review => !!product && !!findTemplatedReviewPattern(review, product)
+
     const summaryRow = getOne(`
       SELECT COUNT(*) AS review_count, AVG(rating) AS rating_value
       FROM product_reviews
       WHERE product_id = ? AND status = 'published'
     `, [normalizedProductId])
-    const reviewCount = Number(summaryRow?.review_count || 0)
-    const summary = {
-      ratingValue: reviewCount ? Math.round(Number(summaryRow.rating_value) * 10) / 10 : 0,
-      reviewCount
+    const summaryAll = {
+      ratingValue: Number(summaryRow?.review_count || 0)
+        ? Math.round(Number(summaryRow.rating_value) * 10) / 10
+        : 0,
+      reviewCount: Number(summaryRow?.review_count || 0)
+    }
+
+    const filterRows = rows => rows.filter(row => !isTemplated(row))
+    const summarise = rows => {
+      if (rows.length === summaryAll.reviewCount) return summaryAll
+      const ratings = rows.map(row => Number(row.rating)).filter(Number.isFinite)
+      const ratingValue = ratings.length
+        ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10
+        : 0
+      return { ratingValue, reviewCount: rows.length }
     }
 
     if (language === 'en') {
-      const reviews = getAll(`
+      const reviews = filterRows(getAll(`
         SELECT *
         FROM product_reviews
         WHERE product_id = ? AND status = 'published'
         ORDER BY review_date DESC, id DESC
         LIMIT ? OFFSET ?
-      `, [normalizedProductId, normalizedLimit, (normalizedPage - 1) * normalizedLimit])
+      `, [normalizedProductId, normalizedLimit, (normalizedPage - 1) * normalizedLimit]))
+      // Count the full (filtered) published set so pagination totals stay right
+      const allPublished = filterRows(getAll(`
+        SELECT id, rating, review_title, review_text
+        FROM product_reviews
+        WHERE product_id = ? AND status = 'published'
+      `, [normalizedProductId]))
       return {
         reviews,
-        summary,
-        pagination: { page: normalizedPage, limit: normalizedLimit, total: reviewCount }
+        summary: summarise(allPublished),
+        pagination: { page: normalizedPage, limit: normalizedLimit, total: allPublished.length }
       }
     }
 
@@ -864,37 +937,40 @@ export function createProductReviewStore({
         t.incentive_disclosure AS translated_incentive_disclosure,
         t.source_hash AS translation_source_hash
       FROM product_reviews AS r
-      INNER JOIN product_review_translations AS t
+      LEFT JOIN product_review_translations AS t
         ON t.review_id = r.id AND t.language_code = ?
       WHERE r.product_id = ? AND r.status = 'published'
       ORDER BY r.review_date DESC, r.id DESC
     `, [language, normalizedProductId])
-    const validRows = translatedRows
-      .filter(row => row.translation_source_hash === reviewSourceHash({
-        review_title: row.source_review_title,
-        review_text: row.source_review_text,
-        incentive_disclosure: row.source_incentive_disclosure
-      }))
-      .map(row => {
-        const {
-          source_review_title,
-          source_review_text,
-          source_incentive_disclosure,
-          translated_review_title,
-          translated_review_text,
-          translated_incentive_disclosure,
-          translation_source_hash,
-          ...publicReview
-        } = row
-        publicReview.review_title = translated_review_title
-        publicReview.review_text = translated_review_text
-        publicReview.incentive_disclosure = translated_incentive_disclosure
-        return publicReview
+    const validRows = filterRows(translatedRows.map(row => {
+      const {
+        source_review_title,
+        source_review_text,
+        source_incentive_disclosure,
+        translated_review_title,
+        translated_review_text,
+        translated_incentive_disclosure,
+        translation_source_hash,
+        ...publicReview
+      } = row
+      // Missing or stale translations fall back to the source review instead of
+      // dropping the review entirely — secondary-language pages previously
+      // rendered an empty review section while the schema still claimed the
+      // full aggregate, an inconsistency crawlers treat as thin content.
+      const hasTranslation = !!translation_source_hash && translation_source_hash === reviewSourceHash({
+        review_title: source_review_title,
+        review_text: source_review_text,
+        incentive_disclosure: source_incentive_disclosure
       })
+      publicReview.review_title = hasTranslation ? translated_review_title : publicReview.review_title
+      publicReview.review_text = hasTranslation ? translated_review_text : publicReview.review_text
+      publicReview.incentive_disclosure = hasTranslation ? translated_incentive_disclosure : publicReview.incentive_disclosure
+      return publicReview
+    }))
     const offset = (normalizedPage - 1) * normalizedLimit
     return {
       reviews: validRows.slice(offset, offset + normalizedLimit),
-      summary,
+      summary: summarise(validRows),
       pagination: { page: normalizedPage, limit: normalizedLimit, total: validRows.length }
     }
   }

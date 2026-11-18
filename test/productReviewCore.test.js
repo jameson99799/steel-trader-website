@@ -465,7 +465,7 @@ test('getById returns product context and translations', () => {
   assert.equal(store.getById(999), null)
 })
 
-test('listPublic exposes English or only current non-English valid translations with global summary', () => {
+test('listPublic exposes current translations with source fallback and a summary matching the visible set', () => {
   const { db, store } = createFixture()
   const first = store.create(reviewInput({ author_name: 'One', rating: 5, review_text: 'English one' }))
   const second = store.create(reviewInput({ author_name: 'Two', rating: 4, review_text: 'English two' }))
@@ -494,18 +494,29 @@ test('listPublic exposes English or only current non-English valid translations 
   assert.equal(english.reviews.length, 2)
   assert.equal(english.reviews[0].review_text, 'English three')
 
+  // Spanish: the current translation is used where valid; stale or missing
+  // translations fall back to the English source review so every language
+  // shows the same visible review set (and the summary stays consistent with
+  // what is rendered — an empty section + global aggregate is the thin-content
+  // inconsistency flagged by crawl audits).
   const spanish = store.listPublic({ productId: 1, lang: 'es' })
   assert.deepEqual(spanish.summary, { ratingValue: 4, reviewCount: 3 })
-  assert.deepEqual(spanish.pagination, { page: 1, limit: 10, total: 1 })
-  assert.equal(spanish.reviews.length, 1)
-  assert.equal(spanish.reviews[0].review_text, 'Español vigente')
-  assert.equal(spanish.reviews[0].review_title, 'Uno')
-  assert.ok(!Object.values(spanish.reviews[0]).includes('English one'))
+  assert.deepEqual(spanish.pagination, { page: 1, limit: 10, total: 3 })
+  assert.equal(spanish.reviews.length, 3)
+  const spanishTexts = spanish.reviews.map(r => r.review_text)
+  assert.ok(spanishTexts.includes('Español vigente'))
+  const translated = spanish.reviews.find(r => r.review_text === 'Español vigente')
+  assert.equal(translated.review_title, 'Uno')
+  // The stale translation must never leak — fallback is the English source text
+  assert.ok(!spanishTexts.includes('Español obsoleto'))
+  assert.ok(spanishTexts.includes('English two'))
 
+  // Chinese: no translations at all → all three reviews render from source
   const chinese = store.listPublic({ productId: 1, lang: 'zh' })
-  assert.equal(chinese.reviews.length, 0)
-  assert.equal(chinese.pagination.total, 0)
+  assert.equal(chinese.reviews.length, 3)
+  assert.equal(chinese.pagination.total, 3)
   assert.deepEqual(chinese.summary, { ratingValue: 4, reviewCount: 3 })
+  assert.ok(chinese.reviews.every(r => String(r.review_text).startsWith('English')))
 
   assert.doesNotThrow(() => store.listPublic({ productId: 1, lang: 'en', limit: 101 }))
 })

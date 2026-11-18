@@ -51,8 +51,9 @@
           <!-- direct mode: v-html (better SEO, strips only <style>/<script> tags) -->
           <div class="article-body article-body-direct" v-else-if="article.content" v-html="sanitizedContent" @click="handleBodyClick"></div>
 
-          <!-- FAQ — visible counterpart of the FAQPage JSON-LD -->
-          <section class="article-faq" v-if="faqs.length">
+          <!-- FAQ — visible counterpart of the FAQPage JSON-LD (skipped when
+               the article body already contains its own FAQ section) -->
+          <section class="article-faq" v-if="faqs.length && !detailHasFaq">
             <h2>{{ lang === 'zh' ? '常见问题' : 'Frequently Asked Questions' }}</h2>
             <div class="faq-list">
               <details v-for="(faq, index) in faqs" :key="index" class="faq-item">
@@ -333,6 +334,14 @@ const faqs = computed(() => {
     return []
   }
 })
+
+// Many technical articles embed their own FAQ section in the body. Rendering
+// the faq_items block on top of it produced duplicated FAQ content (a pattern
+// Google's spam policies flag), so the separate block — and its FAQPage
+// schema — are skipped when the body already has an FAQ section.
+const detailHasFaq = computed(() =>
+  /frequently\s+asked|<h[23][^>]*>\s*faq|常见问题|常见问答|常見問題/i.test(sanitizedContent.value || '')
+)
 
 function handleMailtoClick(href, event) {
   if (event) event.preventDefault()
@@ -629,9 +638,10 @@ async function loadArticle(slug) {
       }
       script.textContent = JSON.stringify(articleSchema, null, 2)
 
-      // FAQ schema (if article has faq_items)
-      const faqJson = localizedValue(a, 'faq_items') || a.faq_items
-      if (faqJson) {
+      // FAQ schema (if article has faq_items AND the body doesn't already
+      // contain its own FAQ section — hidden FAQ content must never be marked up)
+      const faqJson = (localizedValue(a, 'faq_items') || a.faq_items)
+      if (faqJson && !detailHasFaq.value) {
         try {
           const faqs = JSON.parse(faqJson)
           if (faqs.length) {

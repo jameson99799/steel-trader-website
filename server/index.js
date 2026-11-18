@@ -651,7 +651,8 @@ ${contactLines.join('\n')}
             .set('Content-Type', 'text/html; charset=utf-8')
             .send(renderSeoErrorPage())
         }
-        const isBot = /googlebot|bingbot|yandex|baiduspider|twitterbot|facebookexternalhit|rogerbot|linkedinbot|embedly|quora link preview|showyoubot|outbrain|pinterest\/0\.|pinterestbot|slackbot|vkShare|W3C_Validator|whatsapp|bot|spider|crawl|screaming frog|ahrefs|semrush|petalbot/i.test(req.get('user-agent') || '')
+        // Crawler detection is no longer needed for content injection: SSR content
+        // ships to every visitor so the initial HTML always contains the real body.
 
         try {
         const url = req.path
@@ -937,7 +938,7 @@ ${contactLines.join('\n')}
               detailHtml = formatSsrMailtoLinks(detailHtml, company.email || '')
               detailHtml = sizeContentImages(sanitizeRichHtml(detailHtml), 1200)
               // Avoid FAQ duplication: only append faqHtml if detail_content has no FAQ section
-              const hasFaqInDetail = /frequently asked|<h[23][^>]*>\s*faq/i.test(detailHtml)
+              const hasFaqInDetail = /frequently\s+asked|<h[23][^>]*>\s*faq|常见问题|常见问答|常見問題/i.test(detailHtml)
               const ssrFeaturedImage = productImages.length ? `<img src="${esc(productImages[0])}" alt="${escPName}" style="display:none;" />` : ''
               // The Offer price must be visible on the page too (Google policy).
               const ssrPriceHtml = (Number.isFinite(productPrice) && productPrice > 0)
@@ -1070,9 +1071,14 @@ ${contactLines.join('\n')}
               articleBody = sizeContentImages(sanitizeRichHtml(articleBody), 1000)
 
               // ── FAQPage schema for news articles (GEO: used by Google SGE, ChatGPT, Perplexity) ──
+              // Only when the article body does NOT already contain its own FAQ
+              // section — appending a second FAQ block (and marking hidden
+              // faq_items with FAQPage schema) is exactly the duplicated-FAQ
+              // spam pattern flagged by Google's helpful-content guidance.
+              const articleHasFaqSection = /frequently\s+asked|<h[23][^>]*>\s*faq|常见问题|常见问答|常見問題/i.test(articleBody)
               let newsFaqHtml = ''
               const faqJson = article[`faq_items_${lang}`] || article.faq_items
-              if (faqJson) {
+              if (faqJson && !articleHasFaqSection) {
                 try {
                   const faqList = JSON.parse(faqJson)
                   if (Array.isArray(faqList) && faqList.length > 0) {
@@ -1610,8 +1616,13 @@ ${contactLines.join('\n')}
         if (url.startsWith('/admin') || url.startsWith('/crm')) {
           const loadingHtml = `<style>body{margin:0;}.ssr-loader{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f1f5f9;font-family:-apple-system,sans-serif;color:#64748b;}.ssr-spinner{width:40px;height:40px;border:4px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:ssr-spin 1s linear infinite;margin-bottom:16px;}@keyframes ssr-spin{to{transform:rotate(360deg);}}</style><div class="ssr-loader"><div class="ssr-spinner"></div><div style="font-weight:600;letter-spacing:1px;">Loading System...</div></div>`
           html = html.replace('<div id="app">', `<div id="app">${loadingHtml}`)
-        } else if (ssrContent && isBot) {
-          // Dynamic Rendering for bots: Inject structural HTML directly into #app natively.
+        } else if (ssrContent) {
+          // Inject the structural HTML for EVERY visitor, not just crawler user-agents.
+          // Previously this was bot-only, so non-JS fetches (audit tools, social scrapers,
+          // Google's lazy renderer gaps) received an empty <div id="app"> — the cause of
+          // "blank multilingual product pages" in crawl diagnostics and of search snippets
+          // being assembled from the repeated header contact template. Vue replaces this
+          // container content when the SPA mounts, so real users still get the full app.
           html = html.replace('<div id="app">', `<div id="app">\n${ssrContent}\n`)
         }
         
