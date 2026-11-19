@@ -427,7 +427,15 @@ export const api = {
   reorderFutures: (items) => request('/futures/reorder', { method: 'PUT', body: JSON.stringify({ items }) }),
   deleteFutures: (id) => request(`/futures/${id}`, { method: 'DELETE' }),
   getFuturesSettings: () => request('/futures/settings'),
-  updateFuturesSettings: (data) => request('/futures/settings', { method: 'PUT', body: JSON.stringify(data) })
+  updateFuturesSettings: (data) => request('/futures/settings', { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Daily Price Board (GI / GL)
+  getDailyPriceLatest: () => request('/daily-price/latest'),
+  getDailyPriceDates: () => request('/daily-price/dates'),
+  getDailyPriceByDate: (date) => request(`/daily-price/date/${date}`),
+  getAdminDailyPrices: () => request('/daily-price/admin'),
+  saveDailyPrice: (data) => request('/daily-price/admin', { method: 'POST', body: JSON.stringify(data) }),
+  deleteDailyPrice: (date) => request(`/daily-price/admin/${date}`, { method: 'DELETE' })
 }
 
 export default api

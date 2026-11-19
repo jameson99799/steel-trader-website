@@ -169,6 +169,7 @@ router.get('/static', (req, res) => {
             latestDate('SELECT created_at AS d FROM factory_media ORDER BY d DESC LIMIT 1')
         )
         const roofingDate = latestDate('SELECT created_at AS d FROM roofing_profiles ORDER BY d DESC LIMIT 1')
+        const dailyPriceDate = latestDate('SELECT COALESCE(updated_at, created_at) AS d FROM daily_prices ORDER BY d DESC LIMIT 1')
 
         // Use the real content timestamp for each static page instead of
         // stamping every URL with today's date on every request.
@@ -184,6 +185,7 @@ router.get('/static', (req, res) => {
             { loc: '/news/ral-colors', priority: '0.5', changefreq: 'yearly', lastmod: null, routeType: 'staticNews' },
             { loc: '/news/roofing-profiles', priority: '0.7', changefreq: 'weekly', lastmod: roofingDate, routeType: 'staticNews' },
             { loc: '/news/futures-price', priority: '0.8', changefreq: 'daily', lastmod: todayStr, routeType: 'staticNews' },
+            { loc: '/news/daily-price', priority: '0.8', changefreq: 'daily', lastmod: dailyPriceDate, routeType: 'staticNews' },
         ]
 
         const seoSettings = getSeoSettings()

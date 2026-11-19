@@ -36,6 +36,7 @@ import { renderUrl } from './services/puppeteerRenderer.js'
 import { getPublicTranslationSettings } from './services/publicInitialState.js'
 import { buildHomeInitialState } from './services/homeInitialState.js'
 import { resolveHomeFaqs } from './services/homeFaq.js'
+import { createDailyPriceStore } from './services/dailyPrice.js'
 import { createFaviconHandler } from './services/favicon.js'
 import authRoutes from './routes/auth.js'
 import securityRoutes from './routes/security.js'
@@ -85,6 +86,7 @@ import ralColorsRoutes from './routes/ral-colors.js'
 import roofingProfilesRoutes from './routes/roofing-profiles.js'
 import factoryRoutes from './routes/factory.js'
 import futuresRoutes from './routes/futures.js'
+import dailyPriceRoutes from './routes/daily-price.js'
 import chatRoutes from './routes/chat.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -107,6 +109,14 @@ async function startServer() {
     await initDb()
     console.log('✓ Database initialized')
     resetStaleJobs() // Reset any translation jobs stuck in 'running' from previous crash
+    // Daily price board: seed today's entry with the spec defaults (GI/GL fields,
+    // empty price rows) so the admin editor opens ready to fill prices.
+    try {
+      const dailyPriceStore = createDailyPriceStore({ getAll, getOne, run })
+      if (dailyPriceStore.seedDefaultsIfEmpty()) console.log('✓ Daily price board seeded with defaults')
+    } catch (e) {
+      console.warn('Daily price seed skipped:', e.message)
+    }
     try {
       processTranslationQueue()
       console.log('✓ Background translation queue worker started')
@@ -539,6 +549,7 @@ ${contactLines.join('\n')}
     app.use('/api/roofing-profiles', roofingProfilesRoutes)
     app.use('/api/factory', factoryRoutes)
     app.use('/api/futures', futuresRoutes)
+    app.use('/api/daily-price', dailyPriceRoutes)
     app.use('/sitemap-news.xml', (req, res, next) => { req.url = '/news'; sitemapRoutes(req, res, next) })
     app.use('/api/languages', languagesRoutes)
     app.use('/api/translation', translationRoutes)
@@ -988,7 +999,7 @@ ${contactLines.join('\n')}
           }
 
           // ── News detail page (skip /news/category/ and static /news/ URLs) ──
-          const newsMatch = subPath.match(/^\/news\/(?!category\/|ral-colors\/?$|roofing-profiles\/?$|futures-price\/?$)(.+)$/)
+          const newsMatch = subPath.match(/^\/news\/(?!category\/|ral-colors\/?$|roofing-profiles\/?$|futures-price\/?$|daily-price\/?$)(.+)$/)
           if (newsMatch) {
             matchedRoute = true
             const slug = newsMatch[1]
@@ -1409,6 +1420,73 @@ ${contactLines.join('\n')}
               tableHtml = `<table><thead><tr><th>${esc(ui('futuresName', staticCopy.futuresPrice.productName))}</th><th>${esc(staticCopy.futuresPrice.symbol)}</th></tr></thead><tbody>${tableRows}</tbody></table>`
             }
             ssrContent = `<section id="ssr-futures"><h1>${esc(ui('futuresTitle', staticCopy.futuresPrice.h1))}</h1><p>${esc(ui('futuresDesc', staticCopy.futuresPrice.intro))}</p>${tableHtml}</section>`
+          } else if (subPath === '/news/daily-price' || subPath === '/news/daily-price/') {
+            // ── Daily price board (GI / GL) ──
+            matchedRoute = true
+            isNotFound = false
+            routeIndexableLangs = routeLangs('staticNews')
+            const dailyPriceStore = createDailyPriceStore({ getAll, getOne, run })
+            let priceEntry = null
+            try { priceEntry = dailyPriceStore.getLatest() } catch (e) { /* table may be missing on stale DBs */ }
+            const dailyTitle = lang === 'zh'
+              ? `热镀锌钢卷与镀铝锌钢卷每日FOB价格 | ${companyNameTranslated}`
+              : `Daily FOB Prices — Hot Dipped Galvanized & Galvalume Steel Coils | ${companyNameTranslated}`
+            pageTitle = dailyTitle
+            pageDesc = lang === 'zh'
+              ? `每日更新的热镀锌钢卷 (GI) 与热镀铝锌钢卷 (GL) FOB 天津港价格，含规格、数量与耐指纹报价，可查看历史发布记录。`
+              : `Daily updated FOB Tianjin Port prices for hot dipped galvanized (GI) and galvalume (GL) steel coils, with sizes, quantities and anti-fingerprint pricing. Full published price history available.`
+            extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+              { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
+              { '@type': 'ListItem', position: 2, name: seoCopy.breadcrumbNews, item: `${siteUrl}/${lang}/news` },
+              { '@type': 'ListItem', position: 3, name: ui('dailyPriceBtn', 'Daily Price'), item: pageCanonical }
+            ] })
+
+            const priceFieldLabels = {
+              productName: '',
+              grade: 'GRADE',
+              spangle: 'SPANGLE',
+              coating: 'COATING MASS',
+              coilId: 'COIL ID',
+              coilWeight: 'COIL WEIGHT'
+            }
+            const priceFieldColumns = {
+              productName: 'product_name',
+              grade: 'grade',
+              spangle: 'spangle',
+              coating: 'coating',
+              coilId: 'coil_id',
+              coilWeight: 'coil_weight'
+            }
+            const priceSpecRows = (items, withAfp) => {
+              const rows = (items || []).map(item => withAfp
+                ? `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(item.fob)}</td><td>${esc(item.afp)}</td></tr>`
+                : `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(item.fob)}</td></tr>`
+              )
+              if (!rows.length) {
+                const cols = withAfp ? 4 : 3
+                rows.push(`<tr><td colspan="${cols}">Prices for today are being updated — please check back soon.</td></tr>`)
+              }
+              return rows.join('')
+            }
+            const pricePanel = (side, entry) => {
+              if (!entry) return ''
+              const prefix = side === 'gi' ? 'gi' : 'gl'
+              const withAfp = side !== 'gi'
+              const order = entry[`${prefix}_field_order`] || []
+              const infoHtml = order
+                .filter(key => key !== 'productName')
+                .map(key => `<li><strong>${esc(priceFieldLabels[key])}:</strong> ${esc(entry[`${prefix}_${priceFieldColumns[key]}`] || '')}</li>`)
+                .join('')
+              const cols = withAfp
+                ? '<th>SIZE</th><th>QUANTITY (MT)</th><th>FOB PRICE (USD/MT)</th><th>FOB WITH ANTI-FINGER PRINT (USD/MT)</th>'
+                : '<th>SIZE</th><th>QUANTITY (MT)</th><th>FOB PRICE (USD/MT)</th>'
+              const rowsHtml = priceSpecRows(entry[`${prefix}_items`], withAfp)
+              return `<article class="daily-price-panel"><h2>${esc(entry[`${prefix}_product_name`] || '')}</h2><ul>${infoHtml}</ul><table><thead><tr>${cols}</tr></thead><tbody>${rowsHtml}</tbody></table></article>`
+            }
+            const panelsHtml = priceEntry ? pricePanel('gi', priceEntry) + pricePanel('gl', priceEntry) : ''
+            const dateHtml = priceEntry ? `<p class="daily-price-date">${esc(priceEntry.publish_date)}</p>` : ''
+            const termsHtml = priceEntry ? `<ul class="daily-price-terms"><li><strong>TRADE TERMS:</strong> ${esc(priceEntry.trade_terms)}</li><li><strong>PAYMENT TERM:</strong> ${esc(priceEntry.payment_term)}</li><li><strong>PRICE VALIDITY:</strong> ${esc(priceEntry.price_validity)}</li></ul>` : ''
+            ssrContent = `<section id="ssr-daily-price"><h1>${esc(pageTitle)}</h1>${dateHtml}${panelsHtml}${termsHtml}</section>`
           }
 
           // ── Homepage BreadcrumbList + WebSite schema + SSR content ──

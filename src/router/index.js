@@ -21,6 +21,7 @@ const publicRoutes = [
   { path: 'news/ral-colors', name: 'NewsRalColors', component: News },
   { path: 'news/roofing-profiles', name: 'NewsRoofingProfiles', component: News },
   { path: 'news/futures-price', name: 'NewsFuturesPrice', component: News },
+  { path: 'news/daily-price', name: 'NewsDailyPrice', component: News },
   { path: 'news/:slug', name: 'NewsDetail', component: NewsDetail },
   { path: 'about', name: 'About', component: About },
   { path: 'contact', name: 'Contact', component: Contact },
@@ -94,6 +95,7 @@ const routes = [
       { path: 'mailer', name: 'AdminMailer', component: () => import('../views/admin/Mailer.vue') },
       { path: 'chat', name: 'AdminChat', component: () => import('../views/admin/ChatSettings.vue') },
       { path: 'media', name: 'AdminMedia', component: () => import('../views/admin/MediaLibrary.vue') },
+      { path: 'daily-price', name: 'AdminDailyPrice', component: () => import('../views/admin/DailyPrice.vue') },
       { path: 'futures', name: 'AdminFutures', component: () => import('../views/admin/Futures.vue') }
     ]
   },
@@ -220,6 +222,7 @@ router.afterEach((to) => {
     'NewsRalColors': t('ralColorChart'),
     'NewsRoofingProfiles': t('roofingTitle'),
     'NewsFuturesPrice': t('futuresTitle'),
+    'NewsDailyPrice': t('dailyPriceTitle'),
     'About': t('aboutUs'),
     'Contact': t('contactUs'),
     'Factory': t('factoryTour'),

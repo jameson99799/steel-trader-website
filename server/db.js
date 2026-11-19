@@ -1409,6 +1409,37 @@ Requirements:
   // Data source tables for the ship tracker feature (removed). Left out of
   // schema creation; pre-existing tables in old databases are inert.
 
+  // ── Daily Price Board (news/daily-price) ─────────────────────────────────
+  // One row per publish date: GI (left panel) + GL (right panel) quote fields,
+  // per-side display field order and price-row arrays stored as JSON.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS daily_prices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      publish_date TEXT UNIQUE NOT NULL,
+      gi_product_name TEXT,
+      gi_grade TEXT,
+      gi_spangle TEXT,
+      gi_coating TEXT,
+      gi_coil_id TEXT,
+      gi_coil_weight TEXT,
+      gi_field_order TEXT,
+      gi_items TEXT DEFAULT '[]',
+      gl_product_name TEXT,
+      gl_grade TEXT,
+      gl_spangle TEXT,
+      gl_coating TEXT,
+      gl_coil_id TEXT,
+      gl_coil_weight TEXT,
+      gl_field_order TEXT,
+      gl_items TEXT DEFAULT '[]',
+      trade_terms TEXT,
+      payment_term TEXT,
+      price_validity TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
   // ── Performance Indexes ──────────────────────────────────────────────────
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)') } catch (e) { }
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_slug ON products(slug)') } catch (e) { }
