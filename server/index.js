@@ -1458,11 +1458,11 @@ ${contactLines.join('\n')}
               coilId: 'coil_id',
               coilWeight: 'coil_weight'
             }
-            const priceSpecRows = (entry, items, withAfp) => {
+            const priceSpecRows = (entry, items, side, withAfp) => {
               const rows = (items || []).map(item => {
-                const fob = computeUsdPrice({ entry, thicknessAdj: item.thickness_adj, withAfp: false })
+                const fob = computeUsdPrice({ entry, side, thicknessAdj: item.thickness_adj, withAfp: false })
                 return withAfp
-                  ? `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(String(fob))}</td><td>${esc(String(computeUsdPrice({ entry, thicknessAdj: item.thickness_adj, afpAdj: item.afp_adj, withAfp: true })))}</td></tr>`
+                  ? `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(String(fob))}</td><td>${esc(String(computeUsdPrice({ entry, side, thicknessAdj: item.thickness_adj, afpAdj: item.afp_adj, withAfp: true })))}</td></tr>`
                   : `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(String(fob))}</td></tr>`
               })
               if (!rows.length) {
@@ -1491,7 +1491,7 @@ ${contactLines.join('\n')}
                 ssrHeader('FOB PRICE (USD/MT)'),
                 ...(withAfp ? [ssrHeader('AFP PRICE (USD/MT)')] : [])
               ].map(h => `<th>${h}</th>`).join('')
-              const rowsHtml = priceSpecRows(entry, entry[`${prefix}_items`], withAfp)
+              const rowsHtml = priceSpecRows(entry, entry[`${prefix}_items`], side, withAfp)
               return `<article class="daily-price-panel"><h2>${esc(entry[`${prefix}_product_name`] || '')}</h2><ul>${infoHtml}</ul><table><thead><tr>${cols}</tr></thead><tbody>${rowsHtml}</tbody></table></article>`
             }
             const panelsHtml = priceEntry ? pricePanel('gi', priceEntry) + pricePanel('gl', priceEntry) : ''

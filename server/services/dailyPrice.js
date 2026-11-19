@@ -124,6 +124,8 @@ function normalizeItems(value, { withAfp }) {
 }
 
 // Numeric calc fields follow the shared formula; blanks parse to 0.
+// Compatibility: entries saved before the two-base split carry only the
+// shared base_price — it fills in for both sides until they are edited.
 function normalizeCalcFields(input) {
   const defaults = calcDefaults()
   const out = {}
@@ -134,6 +136,15 @@ function normalizeCalcFields(input) {
     } else {
       out[field] = parseCalcNumber(raw)
     }
+  }
+  const legacyBase = input.base_price
+  if ((input.gi_base_price === undefined || input.gi_base_price === null || String(input.gi_base_price).trim() === '') &&
+      legacyBase !== undefined && legacyBase !== null && String(legacyBase).trim() !== '') {
+    out.gi_base_price = parseCalcNumber(legacyBase)
+  }
+  if ((input.gl_base_price === undefined || input.gl_base_price === null || String(input.gl_base_price).trim() === '') &&
+      legacyBase !== undefined && legacyBase !== null && String(legacyBase).trim() !== '') {
+    out.gl_base_price = parseCalcNumber(legacyBase)
   }
   return out
 }
@@ -168,6 +179,8 @@ export function normalizeDailyPrice(input) {
 }
 
 // Shape handed to the public page / SSR: JSON strings parsed into arrays.
+// Legacy entries saved with the single shared base_price fill both sides
+// from it so they render correctly without a manual re-save.
 export function expandDailyPrice(row) {
   if (!row) return null
   const parse = (value, fallback) => {
@@ -176,13 +189,18 @@ export function expandDailyPrice(row) {
       return Array.isArray(parsed) ? parsed : fallback
     } catch { return fallback }
   }
-  return {
+  const expanded = {
     ...row,
     gi_field_order: normalizeFieldOrder(row.gi_field_order, 'GI field order'),
     gl_field_order: normalizeFieldOrder(row.gl_field_order, 'GL field order'),
     gi_items: parse(row.gi_items, []),
     gl_items: parse(row.gl_items, [])
   }
+  if (expanded.base_price != null && String(expanded.base_price).trim() !== '') {
+    if (expanded.gi_base_price == null) expanded.gi_base_price = expanded.base_price
+    if (expanded.gl_base_price == null) expanded.gl_base_price = expanded.base_price
+  }
+  return expanded
 }
 
 export function createDailyPriceStore({ getAll, getOne, run }) {
@@ -216,15 +234,16 @@ export function createDailyPriceStore({ getAll, getOne, run }) {
     run(`
       INSERT INTO daily_prices (
         publish_date,
-        base_price, exchange_rate, sea_freight,
+        gi_base_price, gl_base_price, exchange_rate, sea_freight,
         packaging_surcharge, head_tail_surcharge, land_transport_surcharge,
         port_charges_surcharge, extra_width_surcharge, spray_code_surcharge,
         gi_product_name, gi_grade, gi_spangle, gi_coating, gi_coil_id, gi_coil_weight, gi_field_order, gi_items,
         gl_product_name, gl_grade, gl_spangle, gl_coating, gl_coil_id, gl_coil_weight, gl_field_order, gl_items,
         trade_terms, payment_term, price_validity
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(publish_date) DO UPDATE SET
-        base_price = excluded.base_price,
+        gi_base_price = excluded.gi_base_price,
+        gl_base_price = excluded.gl_base_price,
         exchange_rate = excluded.exchange_rate,
         sea_freight = excluded.sea_freight,
         packaging_surcharge = excluded.packaging_surcharge,
@@ -255,7 +274,7 @@ export function createDailyPriceStore({ getAll, getOne, run }) {
         updated_at = CURRENT_TIMESTAMP
     `, [
       entry.publish_date,
-      entry.base_price, entry.exchange_rate, entry.sea_freight,
+      entry.gi_base_price, entry.gl_base_price, entry.exchange_rate, entry.sea_freight,
       entry.packaging_surcharge, entry.head_tail_surcharge, entry.land_transport_surcharge,
       entry.port_charges_surcharge, entry.extra_width_surcharge, entry.spray_code_surcharge,
       entry.gi_product_name, entry.gi_grade, entry.gi_spangle, entry.gi_coating, entry.gi_coil_id, entry.gi_coil_weight,

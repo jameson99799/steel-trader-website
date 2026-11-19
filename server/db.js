@@ -1418,6 +1418,8 @@ Requirements:
     CREATE TABLE IF NOT EXISTS daily_prices (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       publish_date TEXT UNIQUE NOT NULL,
+      gi_base_price REAL,
+      gl_base_price REAL,
       base_price REAL,
       exchange_rate REAL,
       sea_freight REAL,
@@ -1452,7 +1454,7 @@ Requirements:
     )
   `)
   // Additive columns for databases created before the base-price model.
-  for (const col of ['base_price', 'exchange_rate', 'sea_freight', 'packaging_surcharge', 'head_tail_surcharge', 'land_transport_surcharge', 'port_charges_surcharge', 'afp_surcharge', 'extra_width_surcharge', 'spray_code_surcharge']) {
+  for (const col of ['gi_base_price', 'gl_base_price', 'base_price', 'exchange_rate', 'sea_freight', 'packaging_surcharge', 'head_tail_surcharge', 'land_transport_surcharge', 'port_charges_surcharge', 'afp_surcharge', 'extra_width_surcharge', 'spray_code_surcharge']) {
     try { db.exec(`ALTER TABLE daily_prices ADD COLUMN ${col} REAL`) } catch (e) { }
   }
 

@@ -165,6 +165,7 @@ function toggleHighlight(sideKey, index) {
 const computedFob = (sideKey, row, withAfp = false) =>
   computeUsdPrice({
     entry: entry.value,
+    side: sideKey,
     thicknessAdj: row?.thickness_adj,
     afpAdj: row?.afp_adj,
     withAfp: sideKey === 'gl' && withAfp

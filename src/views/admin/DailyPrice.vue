@@ -2,7 +2,7 @@
   <div class="admin-daily-price">
     <div class="page-head">
       <h1>每日价格管理 (GI / GL)</h1>
-      <p>按日期保存即发布。表格价格 = （基价 + 厚度加价 + 包装 + 头尾 + 陆运 + 港杂 + 特宽 + 喷码）÷ 汇率 + 海运；GL 的 AFP 列再在分子中加上该行的耐指纹加价。新建日期自动带入当前内容，日常只需改基价/加价。</p>
+      <p>按日期保存即发布。镀锌价格 = （镀锌基价 + 厚度加价 + 包装 + 头尾 + 陆运 + 港杂 + 特宽 + 喷码）÷ 汇率 + 海运；镀铝锌价格用镀铝锌基价，AFP 列再在分子中加上该行的耐指纹加价。新建日期自动带入当前内容，日常只需改基价/加价。</p>
     </div>
 
     <div class="toolbar">
@@ -15,7 +15,8 @@
     <section class="calc-panel">
       <h2>计价参数</h2>
       <div class="field-grid">
-        <label class="field"><span>基价 (元/吨)</span><input v-model="form.base_price" placeholder="3500" /></label>
+        <label class="field"><span>镀锌基价 GI (元/吨)</span><input v-model="form.gi_base_price" placeholder="3500" /></label>
+        <label class="field"><span>镀铝锌基价 GL (元/吨)</span><input v-model="form.gl_base_price" placeholder="3600" /></label>
         <label class="field"><span>汇率 (RMB→USD)</span><input v-model="form.exchange_rate" placeholder="7.15" /></label>
         <label class="field"><span>海运 (USD/吨)</span><input v-model="form.sea_freight" placeholder="30" /></label>
       </div>
@@ -63,7 +64,7 @@
             <input v-model="row.quantity" placeholder="数量 如 500MT" />
             <input v-model="row.thickness_adj" placeholder="厚度加价 如 +300" />
             <span class="calc-preview">
-              <span class="calc-line">FOB ≈ {{ previewFob(row) }}</span>
+              <span class="calc-line">FOB ≈ {{ previewFob(row, 'gi') }}</span>
             </span>
             <span class="row-btns">
               <button :disabled="idx === 0" @click="moveRow('gi', idx, -1)">↑</button>
@@ -108,8 +109,8 @@
             <input v-model="row.thickness_adj" placeholder="厚度加价 如 +350" />
             <input v-model="row.afp_adj" placeholder="耐指纹加价 如 +20" />
             <span class="calc-preview">
-              <span class="calc-line">FOB ≈ {{ previewFob(row, false) }}</span>
-              <span class="calc-line afp">AFP ≈ {{ previewFob(row, true) }}</span>
+              <span class="calc-line">FOB ≈ {{ previewFob(row, 'gl', false) }}</span>
+              <span class="calc-line afp">AFP ≈ {{ previewFob(row, 'gl', true) }}</span>
             </span>
             <span class="row-btns">
               <button :disabled="idx === 0" @click="moveRow('gl', idx, -1)">↑</button>
@@ -192,10 +193,12 @@ const saveErr = ref(false)
 
 const fieldLabel = key => FIELD_LABELS[key] || key
 
-// 后台实时预览：输入厚度加价（及 GL 行的耐指纹加价）即看到最终 USD 价格
-function previewFob(row, withAfp = false) {
+// 后台实时预览：输入厚度加价（及 GL 行的耐指纹加价）即看到最终 USD 价格。
+// GI 用镀锌基价，GL 用镀铝锌基价。
+function previewFob(row, side, withAfp = false) {
   return computeUsdPrice({
     entry: form.value,
+    side,
     thicknessAdj: parseCalcNumber(row?.thickness_adj),
     afpAdj: parseCalcNumber(row?.afp_adj),
     withAfp
@@ -206,7 +209,8 @@ function applyEntry(entry) {
   if (!entry) return
   form.value = {
     publish_date: entry.publish_date,
-    base_price: entry.base_price ?? 0,
+    gi_base_price: entry.gi_base_price ?? 0,
+    gl_base_price: entry.gl_base_price ?? 0,
     exchange_rate: entry.exchange_rate ?? 0,
     sea_freight: entry.sea_freight ?? 0,
     packaging_surcharge: entry.packaging_surcharge ?? 0,

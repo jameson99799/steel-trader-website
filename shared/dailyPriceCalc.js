@@ -13,7 +13,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const NUMERIC_CALC_FIELDS = Object.freeze([
-  'base_price',
+  'gi_base_price',
+  'gl_base_price',
   'exchange_rate',
   'sea_freight',
   'packaging_surcharge',
@@ -36,7 +37,8 @@ export function parseCalcNumber(value) {
 
 export function calcDefaults() {
   return {
-    base_price: 3500,
+    gi_base_price: 3500,
+    gl_base_price: 3600,
     exchange_rate: 7.15,
     sea_freight: 30,
     packaging_surcharge: 50,
@@ -48,11 +50,17 @@ export function calcDefaults() {
   }
 }
 
+// Each side prices from its own base: GI from the galvanized base price,
+// GL from the galvalume base price. The rest of the formula is identical.
+function basePriceFor(entry, side) {
+  return parseCalcNumber(entry?.[side === 'gl' ? 'gl_base_price' : 'gi_base_price'])
+}
+
 // Raw RMB sum for a row (before exchange conversion)
-export function rmbSum({ entry, thicknessAdj = 0, afpAdj = 0, withAfp = false }) {
+export function rmbSum({ entry, side = 'gi', thicknessAdj = 0, afpAdj = 0, withAfp = false }) {
   const num = field => parseCalcNumber(entry?.[field])
   return (
-    num('base_price') +
+    basePriceFor(entry, side) +
     parseCalcNumber(thicknessAdj) +
     num('packaging_surcharge') +
     num('head_tail_surcharge') +
@@ -64,10 +72,10 @@ export function rmbSum({ entry, thicknessAdj = 0, afpAdj = 0, withAfp = false })
   )
 }
 
-export function computeUsdPrice({ entry, thicknessAdj = 0, afpAdj = 0, withAfp = false }) {
+export function computeUsdPrice({ entry, side = 'gi', thicknessAdj = 0, afpAdj = 0, withAfp = false }) {
   const rate = parseCalcNumber(entry?.exchange_rate)
   const freight = parseCalcNumber(entry?.sea_freight)
-  const usd = rmbSum({ entry, thicknessAdj, afpAdj, withAfp }) / (rate || 1) + freight
+  const usd = rmbSum({ entry, side, thicknessAdj, afpAdj, withAfp }) / (rate || 1) + freight
   return roundUsd(usd)
 }
 
