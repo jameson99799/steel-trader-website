@@ -58,8 +58,8 @@
                 >
                   <td>{{ row.spec }}</td>
                   <td>{{ row.quantity }}</td>
-                  <td>{{ row.fob }}</td>
-                  <td v-if="side.key === 'gl'" class="afp-col">{{ row.afp }}</td>
+                  <td>{{ computedFob(side.key, row) }}</td>
+                  <td v-if="side.key === 'gl'" class="afp-col">{{ computedFob(side.key, row, true) }}</td>
                 </tr>
                 <tr v-if="!(entry[sidePrefix(side.key) + '_items'] || []).length">
                   <td :colspan="side.key === 'gl' ? 4 : 3" class="table-empty">{{ t('priceNoRows') }}</td>
@@ -87,6 +87,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api'
 import { useLang } from '../composables/useLang'
+import { computeUsdPrice } from '../../shared/dailyPriceCalc.js'
 
 const route = useRoute()
 const { t } = useLang()
@@ -160,6 +161,9 @@ function escapeHtml(value) {
 function toggleHighlight(sideKey, index) {
   highlighted[sideKey] = highlighted[sideKey] === index ? -1 : index
 }
+
+const computedFob = (sideKey, row, withAfp = false) =>
+  computeUsdPrice({ entry: entry.value, thicknessAdj: row?.thickness_adj, withAfp: sideKey === 'gl' && withAfp })
 
 async function loadDate(date) {
   loading.value = true

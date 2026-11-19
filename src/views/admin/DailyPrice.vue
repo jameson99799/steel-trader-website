@@ -2,17 +2,33 @@
   <div class="admin-daily-price">
     <div class="page-head">
       <h1>每日价格管理 (GI / GL)</h1>
-      <p>按日期保存即发布：保存今天对前台立即生效；修改历史日期等于修订该期记录。</p>
+      <p>按日期保存即发布。表格价格 = （基价 + 厚度加价 + 包装 + 头尾 + 陆运 + 港杂 + 耐指纹(仅AFP列) + 特宽 + 喷码）÷ 汇率 + 海运。新建日期自动带入当前内容，日常只需改基价/加价。</p>
     </div>
 
     <div class="toolbar">
-      <label class="field">
-        <span>发布日期</span>
-        <input type="date" v-model="form.publish_date" @change="onDateChange" />
-      </label>
+      <label class="field"><span>发布日期</span><input type="date" v-model="form.publish_date" @change="onDateChange" /></label>
       <button class="btn" @click="saveAll" :disabled="saving">{{ saving ? '保存中…' : '保存并发布' }}</button>
       <span v-if="saveMsg" class="save-msg" :class="{ err: saveErr }">{{ saveMsg }}</span>
     </div>
+
+    <!-- 计价参数 -->
+    <section class="calc-panel">
+      <h2>计价参数</h2>
+      <div class="field-grid">
+        <label class="field"><span>基价 (元/吨)</span><input v-model="form.base_price" placeholder="3500" /></label>
+        <label class="field"><span>汇率 (RMB→USD)</span><input v-model="form.exchange_rate" placeholder="7.15" /></label>
+        <label class="field"><span>海运 (USD/吨)</span><input v-model="form.sea_freight" placeholder="30" /></label>
+      </div>
+      <div class="field-grid">
+        <label class="field"><span>包装 (元)</span><input v-model="form.packaging_surcharge" /></label>
+        <label class="field"><span>头尾 (元)</span><input v-model="form.head_tail_surcharge" /></label>
+        <label class="field"><span>陆运 (元)</span><input v-model="form.land_transport_surcharge" /></label>
+        <label class="field"><span>港杂 (元)</span><input v-model="form.port_charges_surcharge" /></label>
+        <label class="field"><span>耐指纹 (元，仅AFP列)</span><input v-model="form.afp_surcharge" /></label>
+        <label class="field"><span>特宽 (元)</span><input v-model="form.extra_width_surcharge" /></label>
+        <label class="field"><span>喷码 (元)</span><input v-model="form.spray_code_surcharge" /></label>
+      </div>
+    </section>
 
     <div class="panels">
       <!-- GI -->
@@ -40,13 +56,14 @@
         </div>
         <div class="rows-box">
           <div class="rows-head">
-            <span>价格行（尺寸 / 数量 / FOB 单价）</span>
+            <span>价格行：尺寸 / 数量 / 厚度加价 → 自动算 FOB</span>
             <button class="btn small" @click="addRow('gi')">＋ 新增行</button>
           </div>
-          <div class="row-line" v-for="(row, idx) in form.gi_items" :key="idx">
+          <div class="row-line gi" v-for="(row, idx) in form.gi_items" :key="idx">
             <input v-model="row.spec" placeholder="尺寸 如 0.14×1000" />
             <input v-model="row.quantity" placeholder="数量 如 500MT" />
-            <input v-model="row.fob" placeholder="FOB 如 512" />
+            <input v-model="row.thickness_adj" placeholder="厚度加价 如 +300" />
+            <span class="calc-preview">FOB ≈ {{ previewFob(row, false) }}</span>
             <span class="row-btns">
               <button :disabled="idx === 0" @click="moveRow('gi', idx, -1)">↑</button>
               <button :disabled="idx === form.gi_items.length - 1" @click="moveRow('gi', idx, 1)">↓</button>
@@ -81,14 +98,14 @@
         </div>
         <div class="rows-box">
           <div class="rows-head">
-            <span>价格行（尺寸 / 数量 / FOB / FOB 含耐指纹）</span>
+            <span>价格行：尺寸 / 数量 / 厚度加价 → 自动算 FOB 与 FOB(耐指纹)</span>
             <button class="btn small" @click="addRow('gl')">＋ 新增行</button>
           </div>
           <div class="row-line gl" v-for="(row, idx) in form.gl_items" :key="idx">
             <input v-model="row.spec" placeholder="尺寸 如 0.14×1000" />
             <input v-model="row.quantity" placeholder="数量 如 500MT" />
-            <input v-model="row.fob" placeholder="FOB 如 512" />
-            <input v-model="row.afp" placeholder="FOB 含耐指纹 如 520" />
+            <input v-model="row.thickness_adj" placeholder="厚度加价 如 +350" />
+            <span class="calc-preview">FOB ≈ {{ previewFob(row, false) }} / AFP ≈ {{ previewFob(row, true) }}</span>
             <span class="row-btns">
               <button :disabled="idx === 0" @click="moveRow('gl', idx, -1)">↑</button>
               <button :disabled="idx === form.gl_items.length - 1" @click="moveRow('gl', idx, 1)">↓</button>
@@ -124,6 +141,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '../../api'
+import { computeUsdPrice, calcDefaults, parseCalcNumber } from '../../../shared/dailyPriceCalc.js'
 
 const FIELD_LABELS = {
   productName: '产品名称',
@@ -136,8 +154,10 @@ const FIELD_LABELS = {
 
 const today = () => new Date().toISOString().slice(0, 10)
 
+// 空白表单 = 上期记忆的载体：默认取计价默认值，日期变更时自动带入当前表单内容
 const emptyForm = () => ({
   publish_date: today(),
+  ...calcDefaults(),
   gi_product_name: 'PRIME HOT DIPPED GALVANIZED STEEL COILS',
   gi_grade: 'DX51D',
   gi_spangle: 'REGULAR SPANGLE',
@@ -167,10 +187,25 @@ const saveErr = ref(false)
 
 const fieldLabel = key => FIELD_LABELS[key] || key
 
+// 后台实时预览：输入厚度加价即看到最终 USD 价格
+function previewFob(row, withAfp) {
+  return computeUsdPrice({ entry: form.value, thicknessAdj: parseCalcNumber(row?.thickness_adj), withAfp })
+}
+
 function applyEntry(entry) {
   if (!entry) return
   form.value = {
     publish_date: entry.publish_date,
+    base_price: entry.base_price ?? 0,
+    exchange_rate: entry.exchange_rate ?? 0,
+    sea_freight: entry.sea_freight ?? 0,
+    packaging_surcharge: entry.packaging_surcharge ?? 0,
+    head_tail_surcharge: entry.head_tail_surcharge ?? 0,
+    land_transport_surcharge: entry.land_transport_surcharge ?? 0,
+    port_charges_surcharge: entry.port_charges_surcharge ?? 0,
+    afp_surcharge: entry.afp_surcharge ?? 0,
+    extra_width_surcharge: entry.extra_width_surcharge ?? 0,
+    spray_code_surcharge: entry.spray_code_surcharge ?? 0,
     gi_product_name: entry.gi_product_name || '',
     gi_grade: entry.gi_grade || '',
     gi_spangle: entry.gi_spangle || '',
@@ -178,7 +213,7 @@ function applyEntry(entry) {
     gi_coil_id: entry.gi_coil_id || '',
     gi_coil_weight: entry.gi_coil_weight || '',
     gi_field_order: [...(entry.gi_field_order || [])],
-    gi_items: (entry.gi_items || []).map(r => ({ spec: r.spec || '', quantity: r.quantity || '', fob: r.fob || '' })),
+    gi_items: (entry.gi_items || []).map(r => ({ spec: r.spec || '', quantity: r.quantity || '', thickness_adj: r.thickness_adj ?? 0 })),
     gl_product_name: entry.gl_product_name || '',
     gl_grade: entry.gl_grade || '',
     gl_spangle: entry.gl_spangle || '',
@@ -186,7 +221,7 @@ function applyEntry(entry) {
     gl_coil_id: entry.gl_coil_id || '',
     gl_coil_weight: entry.gl_coil_weight || '',
     gl_field_order: [...(entry.gl_field_order || [])],
-    gl_items: (entry.gl_items || []).map(r => ({ spec: r.spec || '', quantity: r.quantity || '', fob: r.fob || '', afp: r.afp || '' })),
+    gl_items: (entry.gl_items || []).map(r => ({ spec: r.spec || '', quantity: r.quantity || '', thickness_adj: r.thickness_adj ?? 0 })),
     trade_terms: entry.trade_terms || '',
     payment_term: entry.payment_term || '',
     price_validity: entry.price_validity || ''
@@ -208,7 +243,7 @@ async function onDateChange() {
     applyEntry(existing)
   } else {
     form.value = { ...form.value, publish_date: date }
-    saveMsg.value = '新日期已自动带入当前内容，修改价格后保存即可'
+    saveMsg.value = '新日期已自动带入当前内容（含基价与全部加价），修改后保存即可'
     saveErr.value = false
   }
 }
@@ -223,8 +258,7 @@ async function saveAll() {
   saveMsg.value = ''
   saveErr.value = false
   try {
-    const payload = { ...form.value }
-    await api.saveDailyPrice(payload)
+    await api.saveDailyPrice({ ...form.value })
     saveMsg.value = '已保存发布 ✓'
     await refreshHistory()
   } catch (e) {
@@ -249,16 +283,14 @@ async function deleteDate(date) {
 }
 
 function moveField(side, idx, dir) {
-  const key = `${side}_field_order`
-  const list = form.value[key]
+  const list = form.value[`${side}_field_order`]
   const target = idx + dir
   if (target < 0 || target >= list.length) return
   ;[list[idx], list[target]] = [list[target], list[idx]]
 }
 
 function addRow(side) {
-  const key = `${side}_items`
-  form.value[key].push(side === 'gl' ? { spec: '', quantity: '', fob: '', afp: '' } : { spec: '', quantity: '', fob: '' })
+  form.value[`${side}_items`].push({ spec: '', quantity: '', thickness_adj: 0 })
 }
 
 function removeRow(side, idx) {
@@ -275,7 +307,7 @@ function moveRow(side, idx, dir) {
 onMounted(async () => {
   await refreshHistory()
   if (history.value.length) {
-    // 编辑器默认载入最新一期
+    // 编辑器默认载入最新一期（含最后一次填写的基价与加价）
     applyEntry(history.value[0])
   }
 })
@@ -289,6 +321,9 @@ onMounted(async () => {
 .toolbar { display: flex; align-items: end; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .save-msg { font-size: 13px; color: #16a34a; }
 .save-msg.err { color: #dc2626; }
+
+.calc-panel { border: 1px solid var(--border, #e2e8f0); border-radius: 10px; padding: 16px; background: #fffbeb; margin-bottom: 16px; }
+.calc-panel h2 { margin: 0 0 12px; font-size: 15px; }
 
 .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 1100px) { .panels { grid-template-columns: 1fr; } }
@@ -314,9 +349,9 @@ onMounted(async () => {
 
 .rows-box { border: 1px dashed var(--border, #cbd5e1); border-radius: 8px; padding: 10px; }
 .rows-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-secondary, #64748b); margin-bottom: 8px; }
-.row-line { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 6px; margin-bottom: 6px; }
-.row-line:not(.gl) { grid-template-columns: 1fr 1fr 1fr auto; }
+.row-line { display: grid; grid-template-columns: 1fr 1fr 1fr auto auto; gap: 6px; margin-bottom: 6px; align-items: center; }
 .row-line input { padding: 6px 8px; border: 1px solid var(--border, #e2e8f0); border-radius: 6px; font-size: 13px; min-width: 0; }
+.calc-preview { font-size: 12px; font-weight: 700; color: #16a34a; white-space: nowrap; }
 .row-btns { display: flex; gap: 4px; align-items: center; }
 button.danger { color: #dc2626; border-color: #fecaca !important; }
 button.small { padding: 5px 10px; font-size: 12px; }

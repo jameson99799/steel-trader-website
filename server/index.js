@@ -37,6 +37,7 @@ import { getPublicTranslationSettings } from './services/publicInitialState.js'
 import { buildHomeInitialState } from './services/homeInitialState.js'
 import { resolveHomeFaqs } from './services/homeFaq.js'
 import { createDailyPriceStore } from './services/dailyPrice.js'
+import { computeUsdPrice } from '../shared/dailyPriceCalc.js'
 import { createFaviconHandler } from './services/favicon.js'
 import authRoutes from './routes/auth.js'
 import securityRoutes from './routes/security.js'
@@ -619,7 +620,7 @@ ${contactLines.join('\n')}
       })
 
       // Helper: escape HTML entities in injected content
-      const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
       function renderPublicReviewsHtml(publicReviews, labels) {
         const schemaParts = buildReviewSchemaParts(publicReviews)
@@ -1457,11 +1458,13 @@ ${contactLines.join('\n')}
               coilId: 'coil_id',
               coilWeight: 'coil_weight'
             }
-            const priceSpecRows = (items, withAfp) => {
-              const rows = (items || []).map(item => withAfp
-                ? `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(item.fob)}</td><td>${esc(item.afp)}</td></tr>`
-                : `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(item.fob)}</td></tr>`
-              )
+            const priceSpecRows = (entry, items, withAfp) => {
+              const rows = (items || []).map(item => {
+                const fob = computeUsdPrice({ entry, thicknessAdj: item.thickness_adj, withAfp: false })
+                return withAfp
+                  ? `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(String(fob))}</td><td>${esc(String(computeUsdPrice({ entry, thicknessAdj: item.thickness_adj, withAfp: true })))}</td></tr>`
+                  : `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(String(fob))}</td></tr>`
+              })
               if (!rows.length) {
                 const cols = withAfp ? 4 : 3
                 rows.push(`<tr><td colspan="${cols}">Prices for today are being updated — please check back soon.</td></tr>`)
@@ -1488,7 +1491,7 @@ ${contactLines.join('\n')}
                 ssrHeader('FOB PRICE (USD/MT)'),
                 ...(withAfp ? [ssrHeader('FOB WITH ANTI-FINGER PRINT (USD/MT)')] : [])
               ].map(h => `<th>${h}</th>`).join('')
-              const rowsHtml = priceSpecRows(entry[`${prefix}_items`], withAfp)
+              const rowsHtml = priceSpecRows(entry, entry[`${prefix}_items`], withAfp)
               return `<article class="daily-price-panel"><h2>${esc(entry[`${prefix}_product_name`] || '')}</h2><ul>${infoHtml}</ul><table><thead><tr>${cols}</tr></thead><tbody>${rowsHtml}</tbody></table></article>`
             }
             const panelsHtml = priceEntry ? pricePanel('gi', priceEntry) + pricePanel('gl', priceEntry) : ''

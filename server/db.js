@@ -1411,11 +1411,23 @@ Requirements:
 
   // ── Daily Price Board (news/daily-price) ─────────────────────────────────
   // One row per publish date: GI (left panel) + GL (right panel) quote fields,
-  // per-side display field order and price-row arrays stored as JSON.
+  // per-side display field order and price-row arrays stored as JSON. Prices
+  // are computed, not stored: base_price (RMB) + surcharges / exchange_rate
+  // + sea_freight, with per-row thickness adjustments (see shared/dailyPriceCalc.js).
   db.exec(`
     CREATE TABLE IF NOT EXISTS daily_prices (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       publish_date TEXT UNIQUE NOT NULL,
+      base_price REAL,
+      exchange_rate REAL,
+      sea_freight REAL,
+      packaging_surcharge REAL,
+      head_tail_surcharge REAL,
+      land_transport_surcharge REAL,
+      port_charges_surcharge REAL,
+      afp_surcharge REAL,
+      extra_width_surcharge REAL,
+      spray_code_surcharge REAL,
       gi_product_name TEXT,
       gi_grade TEXT,
       gi_spangle TEXT,
@@ -1439,6 +1451,10 @@ Requirements:
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  // Additive columns for databases created before the base-price model.
+  for (const col of ['base_price', 'exchange_rate', 'sea_freight', 'packaging_surcharge', 'head_tail_surcharge', 'land_transport_surcharge', 'port_charges_surcharge', 'afp_surcharge', 'extra_width_surcharge', 'spray_code_surcharge']) {
+    try { db.exec(`ALTER TABLE daily_prices ADD COLUMN ${col} REAL`) } catch (e) { }
+  }
 
   // ── Performance Indexes ──────────────────────────────────────────────────
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)') } catch (e) { }
