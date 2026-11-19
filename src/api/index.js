@@ -429,10 +429,10 @@ export const api = {
   getFuturesSettings: () => request('/futures/settings'),
   updateFuturesSettings: (data) => request('/futures/settings', { method: 'PUT', body: JSON.stringify(data) }),
 
-  // Daily Price Board (GI / GL)
-  getDailyPriceLatest: () => request('/daily-price/latest'),
-  getDailyPriceDates: () => request('/daily-price/dates'),
-  getDailyPriceByDate: (date) => request(`/daily-price/date/${date}`),
+  // Daily Price Board (GI / GL) — lang param so translated content/labels apply
+  getDailyPriceLatest: () => request(appendLang('/daily-price/latest')),
+  getDailyPriceDates: () => request(appendLang('/daily-price/dates')),
+  getDailyPriceByDate: (date) => request(appendLang(`/daily-price/date/${date}`)),
   getAdminDailyPrices: () => request('/daily-price/admin'),
   saveDailyPrice: (data) => request('/daily-price/admin', { method: 'POST', body: JSON.stringify(data) }),
   deleteDailyPrice: (date) => request(`/daily-price/admin/${date}`, { method: 'DELETE' })

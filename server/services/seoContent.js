@@ -242,6 +242,7 @@ export const SEO_PAGE_KEYS = Object.freeze([
   'ralColors',
   'roofingProfiles',
   'futuresPrice',
+  'dailyPrice',
   'products',
   'news',
   'productCategory',
@@ -253,7 +254,7 @@ export const SUPPORTED_SEO_LANGS = Object.freeze([
 ])
 
 const LISTING_COPY_KEYS = ['products', 'news', 'productCategory', 'newsCategory']
-const STATIC_COPY_KEYS = ['about', 'contact', 'factory', 'ralColors', 'roofingProfiles', 'futuresPrice']
+const STATIC_COPY_KEYS = ['about', 'contact', 'factory', 'ralColors', 'roofingProfiles', 'futuresPrice', 'dailyPrice']
 
 export function getSeoCopy(lang, overrides = null) {
   const base = LISTING_I18N.en
@@ -332,6 +333,12 @@ const STATIC_PAGE_I18N = {
       intro: 'Track real-time and historical futures prices for Hot Rolled Coil, Iron Ore, Rebar, and more — essential market data for steel buyers and traders.',
       productName: 'Product Name',
       symbol: 'Symbol'
+    },
+    dailyPrice: {
+      title: 'Daily FOB Prices — GI & GL Steel Coils | {company}',
+      desc: 'Daily updated FOB Tianjin Port prices for hot dipped galvanized (GI) and galvalume (GL) steel coils. Sizes, quantities and anti-fingerprint pricing with the full published price history from {company}.',
+      h1: 'Daily FOB Prices — GI & GL Steel Coils',
+      intro: 'Daily updated FOB Tianjin Port prices for hot dipped galvanized (GI) and galvalume (GL) steel coils, including sizes, quantities and anti-fingerprint pricing. Browse the full published price history.'
     }
   },
   zh: {
@@ -391,6 +398,12 @@ const STATIC_PAGE_I18N = {
       intro: '跟踪热轧卷、铁矿石、螺纹钢等品种的实时与历史期货价格，为钢铁采购商与贸易商提供关键市场数据。',
       productName: '产品名称',
       symbol: '代码'
+    },
+    dailyPrice: {
+      title: '热镀锌与镀铝锌钢卷每日FOB价格 | {company}',
+      desc: '每日更新的热镀锌钢卷 (GI) 与镀铝锌钢卷 (GL) FOB 天津港价格，含规格、数量与耐指纹报价，可查看历史发布记录。',
+      h1: '热镀锌与镀铝锌钢卷每日FOB价格',
+      intro: '每日更新的热镀锌钢卷 (GI) 与热镀铝锌钢卷 (GL) FOB 天津港价格，含规格、数量与耐指纹报价，支持查看历史发布记录。'
     }
   },
   ru: {
@@ -450,6 +463,12 @@ const STATIC_PAGE_I18N = {
       intro: 'Текущие и исторические цены фьючерсов на горячекатаный рулон, железную руду, арматуру и другие позиции — ключевые рыночные данные для покупателей и трейдеров стали.',
       productName: 'Наименование',
       symbol: 'Символ'
+    },
+    dailyPrice: {
+      title: 'Ежедневные цены FOB на стальные рулоны GI и GL | {company}',
+      desc: 'Ежедневно обновляемые цены FOB порт Тяньцзинь на рулоны горячееоцинкованной (GI) и гальвалюмированной (GL) стали: размеры, количество и цены с покрытием AFP. Доступна история публикаций.',
+      h1: 'Ежедневные цены FOB — стальные рулоны GI и GL',
+      intro: 'Ежедневно обновляемые цены FOB порт Тяньцзинь на рулоны горячееоцинкованной (GI) и гальвалюмированной (GL) стали, включая размеры, количество и цены с покрытием AFP. Просмотр всей истории публикаций.'
     }
   }
 }
@@ -482,6 +501,10 @@ const STATIC_PAGE_SEO_I18N = {
     futuresPrice: {
       title: 'Precios de futuros de acero en tiempo real | {company}',
       desc: 'Siga los precios de futuros en tiempo real e históricos de bobina laminada en caliente, mineral de hierro, barras corrugadas y más.'
+    },
+    dailyPrice: {
+      title: 'Precios FOB diarios de bobinas GI y GL | {company}',
+      desc: 'Precios FOB Puerto de Tianjin actualizados a diario para bobinas galvanizadas en caliente (GI) y galvalume (GL): medidas, cantidades y precios AFP. Historial disponible.'
     }
   },
   fr: {
@@ -508,6 +531,10 @@ const STATIC_PAGE_SEO_I18N = {
     futuresPrice: {
       title: 'Prix des futures acier en temps réel | {company}',
       desc: 'Suivez les prix des futures en temps réel et historiques pour la bobine laminée à chaud, le minerai de fer, les barres d\'armature et plus encore.'
+    },
+    dailyPrice: {
+      title: 'Prix FOB quotidiens des bobines GI et GL | {company}',
+      desc: 'Prix FOB port de Tianjin mis à jour quotidiennement pour les bobines d\'acier galvanisé à chaud (GI) et galvalume (GL) : dimensions, quantités et prix AFP. Historique disponible.'
     }
   },
   pt: {
@@ -534,6 +561,10 @@ const STATIC_PAGE_SEO_I18N = {
     futuresPrice: {
       title: 'Preços de futuros de aço em tempo real | {company}',
       desc: 'Acompanhe preços de futuros em tempo real e históricos de bobina laminada a quente, minério de ferro, vergalhões e mais.'
+    },
+    dailyPrice: {
+      title: 'Preços FOB diários de bobinas GI e GL | {company}',
+      desc: 'Preços FOB Porto de Tianjin atualizados diariamente para bobinas galvanizadas a fogo (GI) e galvalume (GL): medidas, quantidades e preços AFP. Histórico disponível.'
     }
   },
   ar: {
@@ -560,6 +591,10 @@ const STATIC_PAGE_SEO_I18N = {
     futuresPrice: {
       title: 'أسعار عقود الصلب الآجلة في الوقت الفعلي | {company}',
       desc: 'تابع أسعار العقود الآجلة الفورية والتاريخية للفائف المدرفلة على الساخن وخام الحديد وحديد التسليح وغيرها.'
+    },
+    dailyPrice: {
+      title: 'الأسعار اليومية FOB لفولاذ GI و GL | {company}',
+      desc: 'أسعار FOB ميناء تيانجين المحدثة يوميًا للفولاذ المجلفن بالغمر الساخن (GI) والجالفانيوم (GL): المقاسات والكميات وأسعار AFP. السجل الكامل متاح.'
     }
   },
   hi: {
@@ -586,6 +621,10 @@ const STATIC_PAGE_SEO_I18N = {
     futuresPrice: {
       title: 'रीयल-टाइम स्टील फ्यूचर कीमतें | {company}',
       desc: 'हॉट रोल्ड कॉइल, आयरन ओर, रेबार और अन्य के रीयल-टाइम और ऐतिहासिक फ्यूचर कीमतों को ट्रैक करें।'
+    },
+    dailyPrice: {
+      title: 'GI और GL स्टील कॉइल के दैनिक FOB मूल्य | {company}',
+      desc: 'हॉट डिप्ड गैल्वनाइज़्ड (GI) और गैल्वेल्यूम (GL) स्टील कॉइल के लिए रोज़ अपडेट होने वाले FOB तियानजिन बंदरगाह मूल्य — आकार, मात्रा और AFP मूल्य सहित। प्रकाशित मूल्य इतिहास उपलब्ध।'
     }
   },
   th: {
@@ -612,6 +651,10 @@ const STATIC_PAGE_SEO_I18N = {
     futuresPrice: {
       title: 'ราคาฟิวเจอร์สเหล็กแบบเรียลไทม์ | {company}',
       desc: 'ติดตามราคาฟิวเจอร์สแบบเรียลไทม์และย้อนหลังสำหรับคอยล์รีดร้อน แร่เหล็ก เหล็กเส้น และอื่นๆ'
+    },
+    dailyPrice: {
+      title: 'ราคา FOB รายวัน ขดเหล็ก GI และ GL | {company}',
+      desc: 'ราคา FOB ท่าเรียนจิ้นอัปเดตรายวันสำหรับขดเหล็กกากับ (GI) และกัลวาลูม (GL) พร้อมขนาด ปริมาณ และราคา AFP ดูประวัติราคาย้อนหลังได้'
     }
   },
   tr: {
@@ -638,6 +681,10 @@ const STATIC_PAGE_SEO_I18N = {
     futuresPrice: {
       title: 'Gerçek Zamanlı Çelik Vadeli İşlem Fiyatları | {company}',
       desc: 'Sıcak haddelenmiş bobin, demir cevheri, inşaat demiri ve daha fazlası için gerçek zamanlı ve geçmiş vadeli işlem fiyatlarını takip edin.'
+    },
+    dailyPrice: {
+      title: 'Günlük FOB Fiyatları — GI ve GL Çelik Rulolar | {company}',
+      desc: 'Sıcak daldırma galvanizli (GI) ve galvalume (GL) çelik rulolar için günlük güncellenen FOB Tianjin Limanı fiyatları: ölçüler, miktarlar ve AFP fiyatları. Yayınlanmış fiyat geçmişi mevcut.'
     }
   }
 }

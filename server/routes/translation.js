@@ -854,6 +854,65 @@ function collectLanguageSeoCopy() {
     return items
 }
 
+// Daily price board texts: page chrome/labels plus every published entry's
+// quote content. The AI translation scope "daily_price" covers all of it;
+// the abbreviations MT / USD / AFP stay untouched (enforced in the prompt).
+const DAILY_PRICE_TEXTS_EN = {
+    dailyPriceBtn: 'Daily Price',
+    dailyPriceTitle: 'Daily FOB Prices',
+    dailyPriceDesc: 'Daily updated FOB Tianjin Port prices for hot dipped galvanized (GI) and galvalume (GL) steel coils. Full published price history available.',
+    priceHistory: 'Price History',
+    priceLoading: 'Loading prices...',
+    priceNoData: 'No prices published yet. Check back soon!',
+    priceNoRows: 'Prices being updated',
+    priceColSize: 'SIZE',
+    priceColQuantity: 'QUANTITY (MT)',
+    priceColFob: 'FOB PRICE (USD/MT)',
+    priceColFobAfp: 'AFP PRICE (USD/MT)',
+    priceTradeTerms: 'TRADE TERMS',
+    pricePaymentTerm: 'PAYMENT TERM',
+    priceValidity: 'PRICE VALIDITY',
+    priceFieldGrade: 'GRADE',
+    priceFieldSpangle: 'SPANGLE',
+    priceFieldCoating: 'COATING MASS',
+    priceFieldCoilId: 'COIL ID',
+    priceFieldCoilWeight: 'COIL WEIGHT',
+    viewDailyPrices: "View Today's FOB Prices"
+}
+
+function collectDailyPriceTexts() {
+    const items = []
+    const entries = Object.entries(DAILY_PRICE_TEXTS_EN)
+    const CHUNK_SIZE = 15
+    for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
+        const chunk = Object.fromEntries(entries.slice(i, i + CHUNK_SIZE))
+        const chunkIdx = Math.floor(i / CHUNK_SIZE)
+        items.push({
+            type: 'daily_price', id: 'static', field: `daily_price_chunk_${chunkIdx}`,
+            text: JSON.stringify(chunk),
+            combined: true, subFields: Object.keys(chunk),
+            itemName: `Daily Price Text (batch ${chunkIdx + 1}/${Math.ceil(entries.length / CHUNK_SIZE)})`
+        })
+    }
+    // Per published date: the quote sheet content buyers read
+    try {
+        const posts = getAll('SELECT id, publish_date, gi_product_name, gl_product_name, trade_terms, payment_term, price_validity FROM daily_prices ORDER BY publish_date DESC')
+        const FIELDS = ['gi_product_name', 'gl_product_name', 'trade_terms', 'payment_term', 'price_validity']
+        for (const post of posts) {
+            for (const field of FIELDS) {
+                const text = String(post[field] ?? '').trim()
+                if (!text) continue
+                items.push({
+                    type: 'daily_price', id: post.id, field,
+                    text,
+                    itemName: `Daily Price ${post.publish_date}: ${field}`
+                })
+            }
+        }
+    } catch (e) { /* table may not exist yet */ }
+    return items
+}
+
 function collectFuturesTexts() {
     const entries = Object.entries(FUTURES_TEXTS_EN)
     const CHUNK_SIZE = 15
@@ -1041,6 +1100,7 @@ const PAGES = {
     roofing_profiles: collectRoofingProfiles,
     factory: collectFactory,
     futures: () => collectFuturesTexts(),
+    daily_price: () => collectDailyPriceTexts(),
     language_seo_copy: () => collectLanguageSeoCopy(),
     chat: collectChatSupport
 };
@@ -1175,6 +1235,7 @@ Rules:
 - Translate ALL text completely and naturally into ${langName}.
 ${strictRule}
 - Keep HTML tags, product codes, units (mm, kg, MPa) unchanged
+- Keep abbreviations MT, USD, AFP, GI, GL, PPGI, PPGL, CRC unchanged — never translate or expand them
 - CRITICAL: DO NOT translate or modify values inside HTML attributes like href="#...", id="...", class="...", style="..." or src="...". They MUST remain exactly as in the original text to prevent link breaking.
 - Keep URLs, email addresses unchanged
 - DO NOT merge identical items. Each input number MUST have an output number.${fullOverride}`
@@ -1503,7 +1564,7 @@ router.post('/run-bulk', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'AI API key not configured' })
     }
 
-    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq', language_seo_copy: 'language_seo_copy' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', daily_price: 'daily_price', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq', language_seo_copy: 'language_seo_copy' }
     const manualOverrides = getAll('SELECT original_text, translated_text FROM translations WHERE language_code=? AND is_manual=1', [targetLang])
     let overrideNote = manualOverrides.length > 0
         ? '\n\nUse these approved translations as reference:\n' +
@@ -1701,7 +1762,7 @@ router.post('/run-one', authMiddleware, async (req, res) => {
     if (!s?.api_key && !getOne('SELECT api_key FROM ai_channels WHERE is_default = 1')?.api_key) return res.status(400).json({ error: 'AI API key not configured. Please add an AI channel in AI Translation settings.' })
 
     // Map singular type names to PAGES keys (product -> products, category -> categories, etc.)
-    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq', language_seo_copy: 'language_seo_copy' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', daily_price: 'daily_price', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq', language_seo_copy: 'language_seo_copy' }
     const pageKey = TYPE_TO_PAGE[content_type] || content_type
     if (!PAGES[pageKey]) return res.status(400).json({ error: `Unknown content type: ${content_type}` })
     const allItems = PAGES[pageKey]()
@@ -1969,7 +2030,7 @@ router.get('/ui-texts/:lang', (req, res) => {
     try {
         // Get all ui_text translations for this language
         const rows = getAll(
-            `SELECT content_field, translated_text FROM translations WHERE language_code = ? AND content_type IN ('ui_text', 'futures', 'chat_ui_text') AND content_id = ?`,
+            `SELECT content_field, translated_text FROM translations WHERE language_code = ? AND content_type IN ('ui_text', 'futures', 'chat_ui_text', 'daily_price') AND content_id = ?`,
             [lang, 'static']
         )
         
@@ -2392,7 +2453,7 @@ router.post('/run-selective', authMiddleware, async (req, res) => {
     if (!langs.length) return res.status(400).json({ error: 'No valid languages found' })
 
     const enhanced = enhanceWithDefaultChannel(s)
-    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq', language_seo_copy: 'language_seo_copy' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', daily_price: 'daily_price', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq', language_seo_copy: 'language_seo_copy' }
     const pageKey = TYPE_TO_PAGE[type]
     if (!PAGES[pageKey]) return res.status(400).json({ error: 'Invalid type' })
 
@@ -2849,7 +2910,7 @@ async function executeTranslationTask(targetLang, contentType, contentId, isRetr
         throw new Error('AI API key not configured.')
     }
 
-    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq', language_seo_copy: 'language_seo_copy' }
+    const TYPE_TO_PAGE = { product: 'products', product_review: 'reviews', news: 'news', company: 'company', page_text: 'page_texts', category: 'categories', news_category: 'news_categories', hero: 'hero', ui_text: 'ui_texts_static', ral_color: 'ral_colors', roofing_category: 'roofing_categories', roofing_profile: 'roofing_profiles', factory_group: 'factory', factory_media: 'factory', futures: 'futures', futures_watchlist: 'futures', daily_price: 'daily_price', chat_welcome_preset: 'chat', chat_auto_reply: 'chat', chat_ui_text: 'chat', home_seo: 'home_seo', home_faq: 'home_faq', language_seo_copy: 'language_seo_copy' }
     const pageKey = TYPE_TO_PAGE[contentType] || contentType
     if (!PAGES[pageKey]) throw new Error(`Unknown content type: ${contentType}`)
     

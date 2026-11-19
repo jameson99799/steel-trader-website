@@ -34,7 +34,7 @@ test('product schema uses the shared review parts (review + aggregateRating) and
   assert.doesNotMatch(articleBlock, /aggregateRating|review:/)
 })
 
-test('server and client product schemas emit offers only with a real price and no fabricated policy fields', () => {
+test('product pages link to the daily price board and emit no offers', () => {
   const serverProductBlock = source.slice(
     source.indexOf("'@context': 'https://schema.org', '@type': 'Product'"),
     source.indexOf("jsonLd(productSchema, 'product-jsonld')")
@@ -44,20 +44,20 @@ test('server and client product schemas emit offers only with a real price and n
     clientSource.indexOf("document.getElementById('product-jsonld')")
   )
 
+  // The price lives on the daily price board; the product page links to it
+  // instead of displaying a static number. Google requires offers.price to
+  // match visibly displayed prices — with no visible price, no offers are
+  // emitted and no offer policy fields can leak into the schema.
   for (const block of [serverProductBlock, clientProductBlock]) {
-    assert.match(block, /'@type': 'Offer'/)
-    assert.match(block, /priceCurrency:\s*'USD'/)
-    // The offer is gated on a real positive per-product price; no fabricated
-    // price/valid-until constants are emitted. Shipping and return policies are
-    // built from the admin SEO settings, not hardcoded in the page template.
-    assert.doesNotMatch(block, /price:\s*(?:'0'|0\b)/)
+    assert.doesNotMatch(block, /'@type': 'Offer'/)
+    assert.doesNotMatch(block, /buildProductOfferPolicy/)
     assert.doesNotMatch(block, /priceValidUntil/)
-    assert.match(block, /buildProductOfferPolicy\(seoSettings(?:\.value)?\)/)
   }
 
-  assert.match(serverProductBlock, /const productPrice = Number\(product\.price_usd\)/)
-  assert.match(serverProductBlock, /if \(Number\.isFinite\(productPrice\) && productPrice > 0\)/)
-  assert.match(clientProductBlock, /const productPrice = Number\(p\.price_usd\)/)
-  assert.match(serverProductBlock, /buildReviewSchemaParts\(publicReviews\)/)
+  // The click-through to the daily price board exists in both the SSR markup
+  // and the client page, and the review parts stay shared with the visible set
+  assert.match(source, /news\/daily-price/)
+  assert.match(clientSource, /news\/daily-price/)
+  assert.match(source, /buildReviewSchemaParts\(publicReviews\)/)
   assert.match(clientSource, /buildReviewSchemaParts\(publicReviews\.value\)/)
 })

@@ -9,7 +9,6 @@ import { dirname, join } from 'path'
 import { readFileSync, existsSync, unlinkSync } from 'fs'
 import { sanitizeRichHtml } from '../src/utils/sanitizeHtml.js'
 import { sizeContentImages } from '../src/utils/sizeContentImages.js'
-import { buildProductOfferPolicy } from '../shared/productOfferPolicy.js'
 import sharp from 'sharp'
 
 import { initDb, getAll, getOne, run, findFuzzyBySlug } from './db.js'
@@ -883,22 +882,10 @@ ${contactLines.join('\n')}
                 brand: { '@type': 'Brand', name: companyNameTranslated },
                 manufacturer: { '@type': orgType, name: companyNameTranslated, url: siteUrl }
               }
-              // Real per-product wholesale price (USD/ton). Google requires an
-              // Offer to carry a real price; products without one simply omit
-              // offers (an Offer without a price fails Search Console).
-              const productPrice = Number(product.price_usd)
-              if (Number.isFinite(productPrice) && productPrice > 0) {
-                productSchema.offers = {
-                  '@type': 'Offer',
-                  price: productPrice,
-                  priceCurrency: 'USD',
-                  availability: 'https://schema.org/InStock',
-                  itemCondition: 'https://schema.org/NewCondition',
-                  url: pageCanonical,
-                  seller: { '@type': orgType, name: companyNameTranslated },
-                  ...buildProductOfferPolicy(seoSettings)
-                }
-              }
+              // The price now lives on the daily price board — the product page
+              // links to it instead of showing a static number. Google requires
+              // offers.price to match visible page content, so with no visible
+              // price we emit no offers.
               if (productImages.length) productSchema.image = productImages
               const specsJson = product[`specs_${lang}`] || product.specs
               if (specsJson) {
@@ -966,10 +953,9 @@ ${contactLines.join('\n')}
               // every page view and competed with real assets. Images are
               // declared properly via the Product JSON-LD `image` array and
               // og:image instead.
-              // The Offer price must be visible on the page too (Google policy).
-              const ssrPriceHtml = (Number.isFinite(productPrice) && productPrice > 0)
-                ? `<p class="product-price">US$ ${esc(String(productPrice))} / ton</p>`
-                : ''
+              // Price click-through to the daily price board for GEO crawlers
+              // (no static price shown — offers are omitted accordingly).
+              const ssrPriceHtml = `<p class="product-price-link-wrap"><a class="product-price-link" href="${siteUrl}/${lang}/news/daily-price">${esc(ui('viewDailyPrices', "View Today's FOB Prices"))} →</a></p>`
               const publicReviewsHtml = renderPublicReviewsHtml(publicReviews, reviewLabels)
               
               // Internal linking for GEO crawler topic clusters
@@ -1429,26 +1415,39 @@ ${contactLines.join('\n')}
             const dailyPriceStore = createDailyPriceStore({ getAll, getOne, run })
             let priceEntry = null
             try { priceEntry = dailyPriceStore.getLatest() } catch (e) { /* table may be missing on stale DBs */ }
-            const dailyTitle = lang === 'zh'
-              ? `热镀锌钢卷与镀铝锌钢卷每日FOB价格 | ${companyNameTranslated}`
-              : `Daily FOB Prices — Hot Dipped Galvanized & Galvalume Steel Coils | ${companyNameTranslated}`
-            pageTitle = dailyTitle
-            pageDesc = lang === 'zh'
-              ? `每日更新的热镀锌钢卷 (GI) 与热镀铝锌钢卷 (GL) FOB 天津港价格，含规格、数量与耐指纹报价，可查看历史发布记录。`
-              : `Daily updated FOB Tianjin Port prices for hot dipped galvanized (GI) and galvalume (GL) steel coils, with sizes, quantities and anti-fingerprint pricing. Full published price history available.`
+            // Translate the quote sheet content for this language (translations
+            // table: content_type='daily_price', content_id=<entry id>)
+            if (priceEntry && lang !== 'en') {
+              try {
+                const t = tMap?.[`daily_price_${priceEntry.id}`]
+                if (t) {
+                  for (const field of ['gi_product_name', 'gl_product_name', 'trade_terms', 'payment_term', 'price_validity']) {
+                    if (t[field]) priceEntry[`${field}_${lang}`] = t[field]
+                  }
+                }
+              } catch (e) {}
+            }
+            const locPrice = (field) => priceEntry?.[`${field}_${lang}`] || priceEntry?.[field] || ''
+            // Page copy: per-language static copy with language_seo_copy overrides
+            pageTitle = fillTemplate(staticCopy.dailyPrice.title, { company: companyNameTranslated })
+            pageDesc = fillTemplate(staticCopy.dailyPrice.desc, { company: companyNameTranslated })
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
               { '@type': 'ListItem', position: 1, name: seoCopy.breadcrumbHome, item: `${siteUrl}/${lang}` },
               { '@type': 'ListItem', position: 2, name: seoCopy.breadcrumbNews, item: `${siteUrl}/${lang}/news` },
-              { '@type': 'ListItem', position: 3, name: ui('dailyPriceBtn', 'Daily Price'), item: pageCanonical }
+              { '@type': 'ListItem', position: 3, name: ui('dailyPriceBtn', staticCopy.dailyPrice.h1), item: pageCanonical }
             ] })
 
+            // Chrome/field labels: translated daily_price_static labels first,
+            // then the UI static translations, then the English defaults
+            const dpLabel = (key, fallback) =>
+              tMap?.daily_price_static?.[key] || tMap?.ui_text_static?.[key] || fallback
             const priceFieldLabels = {
               productName: '',
-              grade: 'GRADE',
-              spangle: 'SPANGLE',
-              coating: 'COATING MASS',
-              coilId: 'COIL ID',
-              coilWeight: 'COIL WEIGHT'
+              grade: dpLabel('priceFieldGrade', 'GRADE'),
+              spangle: dpLabel('priceFieldSpangle', 'SPANGLE'),
+              coating: dpLabel('priceFieldCoating', 'COATING MASS'),
+              coilId: dpLabel('priceFieldCoilId', 'COIL ID'),
+              coilWeight: dpLabel('priceFieldCoilWeight', 'COIL WEIGHT')
             }
             const priceFieldColumns = {
               productName: 'product_name',
@@ -1467,7 +1466,7 @@ ${contactLines.join('\n')}
               })
               if (!rows.length) {
                 const cols = withAfp ? 4 : 3
-                rows.push(`<tr><td colspan="${cols}">Prices for today are being updated — please check back soon.</td></tr>`)
+                rows.push(`<tr><td colspan="${cols}">${esc(dpLabel('priceNoRows', 'Prices for today are being updated — please check back soon.'))}</td></tr>`)
               }
               return rows.join('')
             }
@@ -1486,18 +1485,18 @@ ${contactLines.join('\n')}
                 .map(key => `<li><strong>${esc(priceFieldLabels[key])}:</strong> ${esc(entry[`${prefix}_${priceFieldColumns[key]}`] || '')}</li>`)
                 .join('')
               const cols = [
-                ssrHeader('SIZE'),
-                ssrHeader('QUANTITY (MT)'),
-                ssrHeader('FOB PRICE (USD/MT)'),
-                ...(withAfp ? [ssrHeader('AFP PRICE (USD/MT)')] : [])
+                ssrHeader(dpLabel('priceColSize', 'SIZE')),
+                ssrHeader(dpLabel('priceColQuantity', 'QUANTITY (MT)')),
+                ssrHeader(dpLabel('priceColFob', 'FOB PRICE (USD/MT)')),
+                ...(withAfp ? [ssrHeader(dpLabel('priceColFobAfp', 'AFP PRICE (USD/MT)'))] : [])
               ].map(h => `<th>${h}</th>`).join('')
               const rowsHtml = priceSpecRows(entry, entry[`${prefix}_items`], side, withAfp)
-              return `<article class="daily-price-panel"><h2>${esc(entry[`${prefix}_product_name`] || '')}</h2><ul>${infoHtml}</ul><table><thead><tr>${cols}</tr></thead><tbody>${rowsHtml}</tbody></table></article>`
+              return `<article class="daily-price-panel"><h2>${esc(locPrice(`${prefix}_product_name`))}</h2><ul>${infoHtml}</ul><table><thead><tr>${cols}</tr></thead><tbody>${rowsHtml}</tbody></table></article>`
             }
             const panelsHtml = priceEntry ? pricePanel('gi', priceEntry) + pricePanel('gl', priceEntry) : ''
-            const dateHtml = priceEntry ? `<p class="daily-price-date">${esc(priceEntry.publish_date)}</p>` : ''
-            const termsHtml = priceEntry ? `<ul class="daily-price-terms"><li><strong>TRADE TERMS:</strong> ${esc(priceEntry.trade_terms)}</li><li><strong>PAYMENT TERM:</strong> ${esc(priceEntry.payment_term)}</li><li><strong>PRICE VALIDITY:</strong> ${esc(priceEntry.price_validity)}</li></ul>` : ''
-            ssrContent = `<section id="ssr-daily-price"><h1>${esc(pageTitle)}</h1>${dateHtml}${panelsHtml}${termsHtml}</section>`
+            const dateHtml = priceEntry ? `<p class="daily-price-date"><time datetime="${esc(priceEntry.publish_date)}">${esc(priceEntry.publish_date)}</time></p>` : ''
+            const termsHtml = priceEntry ? `<ul class="daily-price-terms"><li><strong>${esc(dpLabel('priceTradeTerms', 'TRADE TERMS'))}:</strong> ${esc(locPrice('trade_terms'))}</li><li><strong>${esc(dpLabel('pricePaymentTerm', 'PAYMENT TERM'))}:</strong> ${esc(locPrice('payment_term'))}</li><li><strong>${esc(dpLabel('priceValidity', 'PRICE VALIDITY'))}:</strong> ${esc(locPrice('price_validity'))}</li></ul>` : ''
+            ssrContent = `<section id="ssr-daily-price"><h1>${esc(fillTemplate(staticCopy.dailyPrice.h1, { company: companyNameTranslated }))}</h1><p>${esc(fillTemplate(staticCopy.dailyPrice.intro, { company: companyNameTranslated }))}</p>${dateHtml}${panelsHtml}${termsHtml}</section>`
           }
 
           // ── Homepage BreadcrumbList + WebSite schema + SSR content ──

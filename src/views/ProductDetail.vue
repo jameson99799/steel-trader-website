@@ -73,7 +73,11 @@
           <div class="product-info">
             <div class="product-header">
               <h1 class="product-title">{{ localizedValue(product, 'name') }}</h1>
-              <div class="product-price" v-if="product.price_usd">US$ {{ product.price_usd }} / ton</div>
+              <router-link :to="langPath('/news/daily-price')" class="product-price-link">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+                <span>{{ t('viewDailyPrices') || "View Today's FOB Prices" }}</span>
+                <svg class="link-arrow" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+              </router-link>
               <div class="product-meta">
                 <span class="product-id">ID: {{ product.id }}</span>
               </div>
@@ -302,7 +306,6 @@ import api from '../api'
 import { imageUrl } from '../utils/imageUrl'
 import { sizeContentImages } from '../utils/sizeContentImages.js'
 import { getCenteredThumbnailScrollLeft } from '../utils/thumbnailScroll.js'
-import { buildProductOfferPolicy } from '../../shared/productOfferPolicy.js'
 import { sanitizeRichHtml } from '../utils/sanitizeHtml.js'
 import InquiryModal from '../components/InquiryModal.vue'
 import ProductReviews from '../components/ProductReviews.vue'
@@ -319,7 +322,6 @@ const product = ref(null)
 const currentImage = ref('')
 const showInquiry = ref(false)
 const company = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.company || null : null)
-const seoSettings = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.seoSettings || {} : {})
 const pageTexts = ref(typeof window !== 'undefined' ? window.__INITIAL_STATE__?.pageTexts || null : null)
 const lightboxImg = ref(null)
 const allCategories = ref([])
@@ -650,22 +652,9 @@ function updateProductSeo(comp) {
       manufacturer: { '@type': 'Organization', name: comp.name_en || comp.name }
     })
   }
-  // Match the SSR behavior: offers only with a real price (Google requires
-  // offers.price), and review + aggregateRating from the same public reviews
-  // shown on the page (review entries alone are invalid for Google).
-  const productPrice = Number(p.price_usd)
-  if (Number.isFinite(productPrice) && productPrice > 0) {
-    productSchema.offers = {
-      '@type': 'Offer',
-      price: productPrice,
-      priceCurrency: 'USD',
-      availability: 'https://schema.org/InStock',
-      itemCondition: 'https://schema.org/NewCondition',
-      url: productUrl,
-      seller: { '@type': 'Organization', name: comp?.name_en || comp?.name || 'Shandong Sunsea Steel Co., Ltd' },
-      ...buildProductOfferPolicy(seoSettings.value)
-    }
-  }
+  // Match the SSR behavior: the price lives on the daily price board (the
+  // product page links to it), so no offers are emitted — Google requires
+  // offers.price to match visible page content.
 
   const specsJson = localizedValue(p, 'specs') || p.specs
   if (specsJson) {
@@ -1122,13 +1111,18 @@ watch([() => route.params.slug, lang], () => loadProductPage())
   line-height: var(--leading-tight);
 }
 
-/* Visible price — must accompany the Offer price in the Product JSON-LD. */
-.product-price {
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  color: var(--primary, #2563eb);
-  margin-bottom: var(--spacing-sm);
+/* Click-through to the daily price board (replaces the static price display) */
+.product-price-link {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-bottom: var(--spacing-sm); padding: 10px 16px;
+  border: 1px solid #bfdbfe; border-radius: 10px;
+  background: #eff6ff; color: var(--primary, #2563eb);
+  font-weight: 700; font-size: var(--text-base, 15px);
+  text-decoration: none; transition: var(--transition, .15s ease);
 }
+.product-price-link:hover { background: #dbeafe; }
+.product-price-link svg { width: 18px; height: 18px; }
+.product-price-link .link-arrow { width: 14px; height: 14px; }
 
 .product-meta {
   display: flex;

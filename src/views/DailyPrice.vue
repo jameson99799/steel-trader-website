@@ -28,9 +28,9 @@
           :key="side.key"
           class="price-panel"
           :class="`price-panel-${side.key}`"
-          :aria-label="entry[sidePrefix(side.key) + '_product_name']"
+          :aria-label="localizedValue(entry, sidePrefix(side.key) + '_product_name')"
         >
-          <h2 class="panel-product">{{ entry[sidePrefix(side.key) + '_product_name'] }}</h2>
+          <h2 class="panel-product">{{ localizedValue(entry, sidePrefix(side.key) + '_product_name') }}</h2>
           <ul class="panel-info">
             <li v-for="field in infoFields(side.key)" :key="field.key">
               <strong>{{ field.label }}:</strong>
@@ -72,9 +72,9 @@
 
       <!-- Trade terms footer -->
       <ul class="price-terms">
-        <li><strong>{{ t('priceTradeTerms') }}:</strong> {{ entry.trade_terms }}</li>
-        <li><strong>{{ t('pricePaymentTerm') }}:</strong> {{ entry.payment_term }}</li>
-        <li><strong>{{ t('priceValidity') }}:</strong> {{ entry.price_validity }}</li>
+        <li><strong>{{ t('priceTradeTerms') }}:</strong> {{ localizedValue(entry, 'trade_terms') }}</li>
+        <li><strong>{{ t('pricePaymentTerm') }}:</strong> {{ localizedValue(entry, 'payment_term') }}</li>
+        <li><strong>{{ t('priceValidity') }}:</strong> {{ localizedValue(entry, 'price_validity') }}</li>
       </ul>
     </template>
 
@@ -90,7 +90,7 @@ import { useLang } from '../composables/useLang'
 import { computeUsdPrice } from '../../shared/dailyPriceCalc.js'
 
 const route = useRoute()
-const { t } = useLang()
+const { t, localizedValue } = useLang()
 
 const sides = [
   { key: 'gi' },
@@ -103,14 +103,15 @@ const loading = ref(true)
 const highlighted = reactive({ gi: -1, gl: -1 })
 
 const sidePrefix = key => (key === 'gi' ? 'gi' : 'gl')
-// Trade-document labels stay in English by convention (they are part of the
-// quote sheet itself, like the product name and trade terms).
-const FIELD_LABELS = {
-  grade: 'GRADE',
-  spangle: 'SPANGLE',
-  coating: 'COATING MASS',
-  coilId: 'COIL ID',
-  coilWeight: 'COIL WEIGHT'
+// Field labels are translatable UI entries (priceField_*); the abbreviations
+// GRADE / SPANGLE / COATING MASS / COIL ID / COIL WEIGHT stay as the English
+// defaults and MT / USD / AFP remain untranslated per trade-sheet convention.
+const FIELD_LABEL_KEYS = {
+  grade: 'priceFieldGrade',
+  spangle: 'priceFieldSpangle',
+  coating: 'priceFieldCoating',
+  coilId: 'priceFieldCoilId',
+  coilWeight: 'priceFieldCoilWeight'
 }
 const FIELD_COLUMNS = {
   productName: 'product_name',
@@ -130,7 +131,7 @@ function infoFields(sideKey) {
     .filter(key => key !== 'productName')
     .map(key => ({
       key,
-      label: FIELD_LABELS[key] || key,
+      label: t(FIELD_LABEL_KEYS[key] || key),
       value: entry.value?.[`${prefix}_${FIELD_COLUMNS[key]}`] || ''
     }))
 }
