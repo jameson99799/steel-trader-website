@@ -1,16 +1,20 @@
 <template>
   <div class="daily-price">
-    <!-- Date + history picker -->
+    <!-- Date picker: the date itself is the history selector -->
     <div class="price-toolbar">
-      <div class="price-date">
+      <label class="price-date">
         <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
-        <time :datetime="entry?.publish_date">{{ entry?.publish_date || '—' }}</time>
-      </div>
-      <label class="history-picker" v-if="dates.length > 1">
-        <span>{{ t('priceHistory') }}</span>
-        <select :value="entry?.publish_date" @change="onHistoryChange">
+        <select
+          class="date-select"
+          :value="entry?.publish_date || ''"
+          :disabled="loading"
+          :aria-label="t('priceHistory')"
+          @change="onHistoryChange"
+        >
+          <option v-if="!dates.length" :value="entry?.publish_date || ''">{{ entry?.publish_date || '—' }}</option>
           <option v-for="d in dates" :key="d.publish_date" :value="d.publish_date">{{ d.publish_date }}</option>
         </select>
+        <svg class="chevron" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
       </label>
     </div>
 
@@ -39,9 +43,7 @@
               <thead>
                 <tr>
                   <th>{{ t('priceColSize') }}</th>
-                  <th>{{ t('priceColQuantity') }}</th>
-                  <th>{{ t('priceColFob') }}</th>
-                  <th v-if="side.key === 'gl'" class="afp-col">{{ t('priceColFobAfp') }}</th>
+                  <th v-for="col in tableHeaders(side.key)" :key="col.full" v-html="col.html"></th>
                 </tr>
               </thead>
               <tbody>
@@ -132,6 +134,29 @@ function infoFields(sideKey) {
     }))
 }
 
+// Table headers with the unit pushed onto its own line: "FOB PRICE (USD/MT)"
+// renders as "FOB PRICE" / "(USD/MT)". Returns v-html strings split on the
+// first parenthesis group.
+function headerHtml(text) {
+  const label = String(text || '')
+  const match = label.match(/^([^()]*)\((.*)\)\s*$/)
+  if (!match) return { html: escapeHtml(label) }
+  return { html: `${escapeHtml(match[1].trim())}<br><span class="th-unit">(${escapeHtml(match[2])})</span>` }
+}
+
+function tableHeaders(sideKey) {
+  const keys = ['priceColQuantity', 'priceColFob']
+  if (sideKey === 'gl') keys.push('priceColFobAfp')
+  return keys.map(key => {
+    const full = t(key)
+    return { full, html: headerHtml(full).html }
+  })
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 function toggleHighlight(sideKey, index) {
   highlighted[sideKey] = highlighted[sideKey] === index ? -1 : index
 }
@@ -173,10 +198,16 @@ onMounted(async () => {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   margin-bottom: 20px; flex-wrap: wrap;
 }
-.price-date { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; }
-.price-date svg { width: 22px; height: 22px; color: var(--primary); }
-.history-picker { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-secondary); }
-.history-picker select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+.price-date { display: inline-flex; align-items: center; gap: 6px; }
+.price-date > svg:first-child { width: 22px; height: 22px; color: var(--primary); }
+.date-select {
+  appearance: none; -webkit-appearance: none; border: none; background: transparent;
+  font-size: 20px; font-weight: 700; color: var(--text-primary, #0f172a);
+  font-family: inherit; cursor: pointer; padding-right: 2px;
+}
+.date-select:focus-visible { outline: 2px solid var(--primary, #1e40af); outline-offset: 2px; border-radius: 4px; }
+.date-select:disabled { cursor: default; }
+.price-date .chevron { width: 16px; height: 16px; color: var(--text-secondary); pointer-events: none; }
 
 .price-panels {
   display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start;
@@ -190,8 +221,9 @@ onMounted(async () => {
 
 .panel-table-wrap { overflow-x: auto; }
 .price-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.price-table th, .price-table td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; white-space: nowrap; }
+.price-table th, .price-table td { border: 1px solid var(--border); padding: 8px 10px; text-align: center; white-space: nowrap; }
 .price-table th { background: var(--gray-100, #f1f5f9); font-size: 12px; letter-spacing: .04em; }
+.price-table th .th-unit { font-weight: 500; font-size: 11px; color: var(--text-secondary); }
 .price-table tbody tr { cursor: pointer; transition: background .12s ease; }
 .price-table tbody tr:hover { background: #f8fafc; }
 .price-table tbody tr.highlighted { background: #dbeafe; box-shadow: inset 3px 0 0 var(--primary); }

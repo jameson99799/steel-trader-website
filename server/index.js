@@ -1468,6 +1468,11 @@ ${contactLines.join('\n')}
               }
               return rows.join('')
             }
+            // Header label with the unit on its own line, e.g. "FOB PRICE" / "(USD/MT)"
+            const ssrHeader = label => {
+              const m = String(label).match(/^([^()]*)\((.*)\)\s*$/)
+              return m ? `${esc(m[1].trim())}<br><span class="th-unit">(${esc(m[2])})</span>` : esc(label)
+            }
             const pricePanel = (side, entry) => {
               if (!entry) return ''
               const prefix = side === 'gi' ? 'gi' : 'gl'
@@ -1477,9 +1482,12 @@ ${contactLines.join('\n')}
                 .filter(key => key !== 'productName')
                 .map(key => `<li><strong>${esc(priceFieldLabels[key])}:</strong> ${esc(entry[`${prefix}_${priceFieldColumns[key]}`] || '')}</li>`)
                 .join('')
-              const cols = withAfp
-                ? '<th>SIZE</th><th>QUANTITY (MT)</th><th>FOB PRICE (USD/MT)</th><th>FOB WITH ANTI-FINGER PRINT (USD/MT)</th>'
-                : '<th>SIZE</th><th>QUANTITY (MT)</th><th>FOB PRICE (USD/MT)</th>'
+              const cols = [
+                ssrHeader('SIZE'),
+                ssrHeader('QUANTITY (MT)'),
+                ssrHeader('FOB PRICE (USD/MT)'),
+                ...(withAfp ? [ssrHeader('FOB WITH ANTI-FINGER PRINT (USD/MT)')] : [])
+              ].map(h => `<th>${h}</th>`).join('')
               const rowsHtml = priceSpecRows(entry[`${prefix}_items`], withAfp)
               return `<article class="daily-price-panel"><h2>${esc(entry[`${prefix}_product_name`] || '')}</h2><ul>${infoHtml}</ul><table><thead><tr>${cols}</tr></thead><tbody>${rowsHtml}</tbody></table></article>`
             }
