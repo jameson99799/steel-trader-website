@@ -165,7 +165,7 @@ const builtInTranslations = {
     priceColSize: '尺寸',
     priceColQuantity: '数量 (MT)',
     priceColFob: 'FOB 单价 (USD/MT)',
-    priceColFobAfp: 'FOB 含耐指纹 (USD/MT)',
+    priceColFobAfp: 'AFP 单价 (USD/MT)',
     priceTradeTerms: '贸易条款',
     pricePaymentTerm: '付款方式',
     priceValidity: '价格有效期'
@@ -332,7 +332,7 @@ const builtInTranslations = {
     priceColSize: 'SIZE',
     priceColQuantity: 'QUANTITY (MT)',
     priceColFob: 'FOB PRICE (USD/MT)',
-    priceColFobAfp: 'FOB WITH ANTI-FINGER PRINT (USD/MT)',
+    priceColFobAfp: 'AFP PRICE (USD/MT)',
     priceTradeTerms: 'TRADE TERMS',
     pricePaymentTerm: 'PAYMENT TERM',
     priceValidity: 'PRICE VALIDITY',
@@ -373,7 +373,7 @@ const builtInTranslations = {
     priceColSize: 'MEDIDA',
     priceColQuantity: 'CANTIDAD (MT)',
     priceColFob: 'PRECIO FOB (USD/MT)',
-    priceColFobAfp: 'FOB CON ANTIHUELLA (USD/MT)',
+    priceColFobAfp: 'PRECIO AFP (USD/MT)',
     priceTradeTerms: 'TÉRMINOS COMERCIALES',
     pricePaymentTerm: 'FORMA DE PAGO',
     priceValidity: 'VALIDEZ DEL PRECIO'
@@ -407,7 +407,7 @@ const builtInTranslations = {
     priceColSize: 'DIMENSION',
     priceColQuantity: 'QUANTITÉ (MT)',
     priceColFob: 'PRIX FOB (USD/MT)',
-    priceColFobAfp: 'FOB AVEC ANTI-EMPREINTE (USD/MT)',
+    priceColFobAfp: 'PRIX AFP (USD/MT)',
     priceTradeTerms: 'CONDITIONS COMMERCIALES',
     pricePaymentTerm: 'MODALITÉS DE PAIEMENT',
     priceValidity: 'VALIDITÉ DU PRIX'
@@ -441,7 +441,7 @@ const builtInTranslations = {
     priceColSize: 'РАЗМЕР',
     priceColQuantity: 'КОЛИЧЕСТВО (MT)',
     priceColFob: 'ЦЕНА FOB (USD/MT)',
-    priceColFobAfp: 'FOB С ANTI-FINGER PRINT (USD/MT)',
+    priceColFobAfp: 'ЦЕНА AFP (USD/MT)',
     priceTradeTerms: 'УСЛОВИЯ СДЕЛКИ',
     pricePaymentTerm: 'УСЛОВИЯ ОПЛАТЫ',
     priceValidity: 'СРОК ДЕЙСТВИЯ ЦЕНЫ'
@@ -475,7 +475,7 @@ const builtInTranslations = {
     priceColSize: 'المقاس',
     priceColQuantity: 'الكمية (MT)',
     priceColFob: 'سعر FOB (دولار/طن)',
-    priceColFobAfp: 'FOB مع مضاد البصمات (دولار/طن)',
+    priceColFobAfp: 'سعر AFP (دولار/طن)',
     priceTradeTerms: 'شروط التجارة',
     pricePaymentTerm: 'طريقة الدفع',
     priceValidity: 'صلاحية السعر'
@@ -509,7 +509,7 @@ const builtInTranslations = {
     priceColSize: 'MEDIDA',
     priceColQuantity: 'QUANTIDADE (MT)',
     priceColFob: 'PREÇO FOB (USD/MT)',
-    priceColFobAfp: 'FOB COM ANTI-IMPRIMINDO (USD/MT)',
+    priceColFobAfp: 'PREÇO AFP (USD/MT)',
     priceTradeTerms: 'TERMOS COMERCIAIS',
     pricePaymentTerm: 'FORMA DE PAGAMENTO',
     priceValidity: 'VALIDADE DO PREÇO'
@@ -543,7 +543,7 @@ const builtInTranslations = {
     priceColSize: 'ÖLÇÜ',
     priceColQuantity: 'MİKTAR (MT)',
     priceColFob: 'FOB FİYATI (USD/MT)',
-    priceColFobAfp: 'PARMAK İZİ ÖNLEYİCİ FOB (USD/MT)',
+    priceColFobAfp: 'AFP FİYATI (USD/MT)',
     priceTradeTerms: 'TİCARİ ŞARTLAR',
     pricePaymentTerm: 'ÖDEME ŞEKLİ',
     priceValidity: 'FİYAT GEÇERLİLİĞİ'
@@ -577,7 +577,7 @@ const builtInTranslations = {
     priceColSize: 'आकार',
     priceColQuantity: 'मात्रा (MT)',
     priceColFob: 'FOB मूल्य (USD/MT)',
-    priceColFobAfp: 'एंटी-फिंगर प्रिंट सहित FOB (USD/MT)',
+    priceColFobAfp: 'AFP मूल्य (USD/MT)',
     priceTradeTerms: 'व्यापार शर्तें',
     pricePaymentTerm: 'भुगतान शर्त',
     priceValidity: 'मूल्य वैधता'
@@ -611,7 +611,7 @@ const builtInTranslations = {
     priceColSize: 'ขนาด',
     priceColQuantity: 'ปริมาณ (MT)',
     priceColFob: 'ราคา FOB (USD/ตัน)',
-    priceColFobAfp: 'FOB กันรอยนิ้วมือ (USD/ตัน)',
+    priceColFobAfp: 'ราคา AFP (USD/ตัน)',
     priceTradeTerms: 'เงื่อนไขการค้า',
     pricePaymentTerm: 'เงื่อนไขการชำระเงิน',
     priceValidity: 'อายุราคา'

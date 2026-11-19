@@ -163,7 +163,12 @@ function toggleHighlight(sideKey, index) {
 }
 
 const computedFob = (sideKey, row, withAfp = false) =>
-  computeUsdPrice({ entry: entry.value, thicknessAdj: row?.thickness_adj, withAfp: sideKey === 'gl' && withAfp })
+  computeUsdPrice({
+    entry: entry.value,
+    thicknessAdj: row?.thickness_adj,
+    afpAdj: row?.afp_adj,
+    withAfp: sideKey === 'gl' && withAfp
+  })
 
 async function loadDate(date) {
   loading.value = true

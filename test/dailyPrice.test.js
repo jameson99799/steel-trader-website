@@ -62,23 +62,23 @@ test('normalizeDailyPrice applies spec and calc defaults, normalizes rows and fi
   assert.equal(entry.base_price, calcDefaults().base_price)
   assert.equal(entry.exchange_rate, calcDefaults().exchange_rate)
   assert.equal(entry.sea_freight, calcDefaults().sea_freight)
-  assert.equal(entry.afp_surcharge, calcDefaults().afp_surcharge)
 
-  // Thickness adjustments accept signed decimals; +300 style input parses
+  // Thickness adjustments accept signed decimals; the GL row also carries its
+  // own anti-fingerprint adjustment (per thickness, no longer global)
   const full = normalizeDailyPrice({
     publish_date: '2026-11-19',
     base_price: '3600',
     exchange_rate: '7.2',
     sea_freight: '35',
-    afp_surcharge: '25',
     gi_items: [{ spec: '0.14×1000', quantity: '500MT', thickness_adj: '300' }],
-    gl_items: [{ spec: '0.14×1000', quantity: '500MT', thickness_adj: '350' }],
+    gl_items: [{ spec: '0.14×1000', quantity: '500MT', thickness_adj: '350', afp_adj: '20' }],
     gi_field_order: ['coating', 'grade', 'productName', 'coilId', 'coilWeight', 'spangle']
   })
   assert.equal(full.base_price, 3600)
   assert.equal(full.exchange_rate, 7.2)
   assert.equal(full.gi_items[0].thickness_adj, 300)
   assert.equal(full.gl_items[0].thickness_adj, 350)
+  assert.equal(full.gl_items[0].afp_adj, 20)
   assert.equal(!('fob' in full.gl_items[0]), true)
   assert.deepEqual(full.gi_field_order, ['coating', 'grade', 'productName', 'coilId', 'coilWeight', 'spangle'])
 
@@ -107,17 +107,21 @@ test('computeUsdPrice follows the agreed formula: (base+adj+surcharges)/rate + f
     head_tail_surcharge: 30,
     land_transport_surcharge: 60,
     port_charges_surcharge: 40,
-    afp_surcharge: 20,
     extra_width_surcharge: 0,
     spray_code_surcharge: 10
   }
   // (3500 + 300 + 50 + 30 + 60 + 40 + 0 + 10) / 7.15 + 30 = 588.0
   const fob = computeUsdPrice({ entry, thicknessAdj: 300, withAfp: false })
   assert.equal(fob, Math.round((3990 / 7.15 + 30) * 10) / 10)
-  // AFP column adds the anti-fingerprint surcharge inside the RMB sum
-  const afp = computeUsdPrice({ entry, thicknessAdj: 300, withAfp: true })
+  // The GL AFP column adds the ROW's own anti-fingerprint surcharge inside the
+  // RMB sum — the premium differs per thickness, so it is no longer a global
+  // field but a per-row value (afpAdj)
+  const afp = computeUsdPrice({ entry, thicknessAdj: 300, afpAdj: 20, withAfp: true })
   assert.equal(afp, Math.round((4010 / 7.15 + 30) * 10) / 10)
   assert.ok(afp > fob)
+  // Same row, different AFP adjustment → different AFP price
+  const afp25 = computeUsdPrice({ entry, thicknessAdj: 300, afpAdj: 25, withAfp: true })
+  assert.ok(afp25 > afp)
 
   // Negative adjustments and string inputs work
   assert.equal(parseCalcNumber('＋200'), 200)

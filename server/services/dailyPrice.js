@@ -105,17 +105,22 @@ function normalizeItems(value, { withAfp }) {
   if (items.length > MAX_ITEMS) throw new Error(`at most ${MAX_ITEMS} price rows per side`)
   const rows = items.map((item, index) => {
     if (!item || typeof item !== 'object') throw new Error(`price row ${index + 1} is invalid`)
-    // Rows carry only the per-size thickness adjustment; the displayed FOB /
-    // AFP prices are computed from the base price + surcharges at render time.
-    return {
+    // Rows carry their own thickness adjustment and — for GL — their own
+    // anti-fingerprint adjustment (the AFP premium differs per thickness).
+    // The displayed FOB / AFP prices are computed at render time.
+    const row = {
       spec: boundedText(item.spec, `row ${index + 1} size`, { max: 40 }),
       quantity: boundedText(item.quantity, `row ${index + 1} quantity`, { max: 40 }),
       thickness_adj: parseCalcNumber(item.thickness_adj ?? item.thicknessAdj)
     }
+    if (withAfp) row.afp_adj = parseCalcNumber(item.afp_adj ?? item.afpAdj)
+    return row
   })
   // A freshly added blank row (admin clicked ＋ but left it empty) is dropped
   // instead of failing the whole save.
-  return rows.filter(row => row.spec || row.quantity || row.thickness_adj !== 0)
+  return rows.filter(row =>
+    row.spec || row.quantity || row.thickness_adj !== 0 || (withAfp && row.afp_adj !== 0)
+  )
 }
 
 // Numeric calc fields follow the shared formula; blanks parse to 0.
@@ -213,11 +218,11 @@ export function createDailyPriceStore({ getAll, getOne, run }) {
         publish_date,
         base_price, exchange_rate, sea_freight,
         packaging_surcharge, head_tail_surcharge, land_transport_surcharge,
-        port_charges_surcharge, afp_surcharge, extra_width_surcharge, spray_code_surcharge,
+        port_charges_surcharge, extra_width_surcharge, spray_code_surcharge,
         gi_product_name, gi_grade, gi_spangle, gi_coating, gi_coil_id, gi_coil_weight, gi_field_order, gi_items,
         gl_product_name, gl_grade, gl_spangle, gl_coating, gl_coil_id, gl_coil_weight, gl_field_order, gl_items,
         trade_terms, payment_term, price_validity
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(publish_date) DO UPDATE SET
         base_price = excluded.base_price,
         exchange_rate = excluded.exchange_rate,
@@ -226,7 +231,6 @@ export function createDailyPriceStore({ getAll, getOne, run }) {
         head_tail_surcharge = excluded.head_tail_surcharge,
         land_transport_surcharge = excluded.land_transport_surcharge,
         port_charges_surcharge = excluded.port_charges_surcharge,
-        afp_surcharge = excluded.afp_surcharge,
         extra_width_surcharge = excluded.extra_width_surcharge,
         spray_code_surcharge = excluded.spray_code_surcharge,
         gi_product_name = excluded.gi_product_name,
@@ -253,7 +257,7 @@ export function createDailyPriceStore({ getAll, getOne, run }) {
       entry.publish_date,
       entry.base_price, entry.exchange_rate, entry.sea_freight,
       entry.packaging_surcharge, entry.head_tail_surcharge, entry.land_transport_surcharge,
-      entry.port_charges_surcharge, entry.afp_surcharge, entry.extra_width_surcharge, entry.spray_code_surcharge,
+      entry.port_charges_surcharge, entry.extra_width_surcharge, entry.spray_code_surcharge,
       entry.gi_product_name, entry.gi_grade, entry.gi_spangle, entry.gi_coating, entry.gi_coil_id, entry.gi_coil_weight,
       JSON.stringify(entry.gi_field_order), JSON.stringify(entry.gi_items),
       entry.gl_product_name, entry.gl_grade, entry.gl_spangle, entry.gl_coating, entry.gl_coil_id, entry.gl_coil_weight,

@@ -2,7 +2,7 @@
   <div class="admin-daily-price">
     <div class="page-head">
       <h1>每日价格管理 (GI / GL)</h1>
-      <p>按日期保存即发布。表格价格 = （基价 + 厚度加价 + 包装 + 头尾 + 陆运 + 港杂 + 耐指纹(仅AFP列) + 特宽 + 喷码）÷ 汇率 + 海运。新建日期自动带入当前内容，日常只需改基价/加价。</p>
+      <p>按日期保存即发布。表格价格 = （基价 + 厚度加价 + 包装 + 头尾 + 陆运 + 港杂 + 特宽 + 喷码）÷ 汇率 + 海运；GL 的 AFP 列再在分子中加上该行的耐指纹加价。新建日期自动带入当前内容，日常只需改基价/加价。</p>
     </div>
 
     <div class="toolbar">
@@ -24,7 +24,6 @@
         <label class="field"><span>头尾 (元)</span><input v-model="form.head_tail_surcharge" /></label>
         <label class="field"><span>陆运 (元)</span><input v-model="form.land_transport_surcharge" /></label>
         <label class="field"><span>港杂 (元)</span><input v-model="form.port_charges_surcharge" /></label>
-        <label class="field"><span>耐指纹 (元，仅AFP列)</span><input v-model="form.afp_surcharge" /></label>
         <label class="field"><span>特宽 (元)</span><input v-model="form.extra_width_surcharge" /></label>
         <label class="field"><span>喷码 (元)</span><input v-model="form.spray_code_surcharge" /></label>
       </div>
@@ -63,7 +62,9 @@
             <input v-model="row.spec" placeholder="尺寸 如 0.14×1000" />
             <input v-model="row.quantity" placeholder="数量 如 500MT" />
             <input v-model="row.thickness_adj" placeholder="厚度加价 如 +300" />
-            <span class="calc-preview">FOB ≈ {{ previewFob(row, false) }}</span>
+            <span class="calc-preview">
+              <span class="calc-line">FOB ≈ {{ previewFob(row) }}</span>
+            </span>
             <span class="row-btns">
               <button :disabled="idx === 0" @click="moveRow('gi', idx, -1)">↑</button>
               <button :disabled="idx === form.gi_items.length - 1" @click="moveRow('gi', idx, 1)">↓</button>
@@ -98,14 +99,18 @@
         </div>
         <div class="rows-box">
           <div class="rows-head">
-            <span>价格行：尺寸 / 数量 / 厚度加价 → 自动算 FOB 与 FOB(耐指纹)</span>
+            <span>价格行：尺寸 / 数量 / 厚度加价 / 耐指纹加价 → 自动算 FOB 与 AFP</span>
             <button class="btn small" @click="addRow('gl')">＋ 新增行</button>
           </div>
           <div class="row-line gl" v-for="(row, idx) in form.gl_items" :key="idx">
             <input v-model="row.spec" placeholder="尺寸 如 0.14×1000" />
             <input v-model="row.quantity" placeholder="数量 如 500MT" />
             <input v-model="row.thickness_adj" placeholder="厚度加价 如 +350" />
-            <span class="calc-preview">FOB ≈ {{ previewFob(row, false) }} / AFP ≈ {{ previewFob(row, true) }}</span>
+            <input v-model="row.afp_adj" placeholder="耐指纹加价 如 +20" />
+            <span class="calc-preview">
+              <span class="calc-line">FOB ≈ {{ previewFob(row, false) }}</span>
+              <span class="calc-line afp">AFP ≈ {{ previewFob(row, true) }}</span>
+            </span>
             <span class="row-btns">
               <button :disabled="idx === 0" @click="moveRow('gl', idx, -1)">↑</button>
               <button :disabled="idx === form.gl_items.length - 1" @click="moveRow('gl', idx, 1)">↓</button>
@@ -187,9 +192,14 @@ const saveErr = ref(false)
 
 const fieldLabel = key => FIELD_LABELS[key] || key
 
-// 后台实时预览：输入厚度加价即看到最终 USD 价格
-function previewFob(row, withAfp) {
-  return computeUsdPrice({ entry: form.value, thicknessAdj: parseCalcNumber(row?.thickness_adj), withAfp })
+// 后台实时预览：输入厚度加价（及 GL 行的耐指纹加价）即看到最终 USD 价格
+function previewFob(row, withAfp = false) {
+  return computeUsdPrice({
+    entry: form.value,
+    thicknessAdj: parseCalcNumber(row?.thickness_adj),
+    afpAdj: parseCalcNumber(row?.afp_adj),
+    withAfp
+  })
 }
 
 function applyEntry(entry) {
@@ -203,7 +213,6 @@ function applyEntry(entry) {
     head_tail_surcharge: entry.head_tail_surcharge ?? 0,
     land_transport_surcharge: entry.land_transport_surcharge ?? 0,
     port_charges_surcharge: entry.port_charges_surcharge ?? 0,
-    afp_surcharge: entry.afp_surcharge ?? 0,
     extra_width_surcharge: entry.extra_width_surcharge ?? 0,
     spray_code_surcharge: entry.spray_code_surcharge ?? 0,
     gi_product_name: entry.gi_product_name || '',
@@ -221,7 +230,7 @@ function applyEntry(entry) {
     gl_coil_id: entry.gl_coil_id || '',
     gl_coil_weight: entry.gl_coil_weight || '',
     gl_field_order: [...(entry.gl_field_order || [])],
-    gl_items: (entry.gl_items || []).map(r => ({ spec: r.spec || '', quantity: r.quantity || '', thickness_adj: r.thickness_adj ?? 0 })),
+    gl_items: (entry.gl_items || []).map(r => ({ spec: r.spec || '', quantity: r.quantity || '', thickness_adj: r.thickness_adj ?? 0, afp_adj: r.afp_adj ?? 0 })),
     trade_terms: entry.trade_terms || '',
     payment_term: entry.payment_term || '',
     price_validity: entry.price_validity || ''
@@ -290,7 +299,9 @@ function moveField(side, idx, dir) {
 }
 
 function addRow(side) {
-  form.value[`${side}_items`].push({ spec: '', quantity: '', thickness_adj: 0 })
+  form.value[`${side}_items`].push(side === 'gl'
+    ? { spec: '', quantity: '', thickness_adj: 0, afp_adj: 0 }
+    : { spec: '', quantity: '', thickness_adj: 0 })
 }
 
 function removeRow(side, idx) {
@@ -350,8 +361,11 @@ onMounted(async () => {
 .rows-box { border: 1px dashed var(--border, #cbd5e1); border-radius: 8px; padding: 10px; }
 .rows-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-secondary, #64748b); margin-bottom: 8px; }
 .row-line { display: grid; grid-template-columns: 1fr 1fr 1fr auto auto; gap: 6px; margin-bottom: 6px; align-items: center; }
+.row-line.gl { grid-template-columns: 1fr 1fr 1fr 1fr auto auto; }
 .row-line input { padding: 6px 8px; border: 1px solid var(--border, #e2e8f0); border-radius: 6px; font-size: 13px; min-width: 0; }
-.calc-preview { font-size: 12px; font-weight: 700; color: #16a34a; white-space: nowrap; }
+.calc-preview { display: flex; flex-direction: column; gap: 2px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.calc-line { color: #16a34a; }
+.calc-line.afp { color: #b45309; }
 .row-btns { display: flex; gap: 4px; align-items: center; }
 button.danger { color: #dc2626; border-color: #fecaca !important; }
 button.small { padding: 5px 10px; font-size: 12px; }

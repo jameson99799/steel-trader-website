@@ -1462,7 +1462,7 @@ ${contactLines.join('\n')}
               const rows = (items || []).map(item => {
                 const fob = computeUsdPrice({ entry, thicknessAdj: item.thickness_adj, withAfp: false })
                 return withAfp
-                  ? `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(String(fob))}</td><td>${esc(String(computeUsdPrice({ entry, thicknessAdj: item.thickness_adj, withAfp: true })))}</td></tr>`
+                  ? `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(String(fob))}</td><td>${esc(String(computeUsdPrice({ entry, thicknessAdj: item.thickness_adj, afpAdj: item.afp_adj, withAfp: true })))}</td></tr>`
                   : `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(String(fob))}</td></tr>`
               })
               if (!rows.length) {
@@ -1489,7 +1489,7 @@ ${contactLines.join('\n')}
                 ssrHeader('SIZE'),
                 ssrHeader('QUANTITY (MT)'),
                 ssrHeader('FOB PRICE (USD/MT)'),
-                ...(withAfp ? [ssrHeader('FOB WITH ANTI-FINGER PRINT (USD/MT)')] : [])
+                ...(withAfp ? [ssrHeader('AFP PRICE (USD/MT)')] : [])
               ].map(h => `<th>${h}</th>`).join('')
               const rowsHtml = priceSpecRows(entry, entry[`${prefix}_items`], withAfp)
               return `<article class="daily-price-panel"><h2>${esc(entry[`${prefix}_product_name`] || '')}</h2><ul>${infoHtml}</ul><table><thead><tr>${cols}</tr></thead><tbody>${rowsHtml}</tbody></table></article>`
