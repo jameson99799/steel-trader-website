@@ -1,5 +1,5 @@
 <template>
-  <div class="email-page">
+  <div class="email-page crm-scope crm-page">
     <h1>📧 邮件通知设置</h1>
 
     <!-- SSL状态 -->
@@ -253,53 +253,65 @@ async function saveSettings() {
 </script>
 
 <style scoped>
-.email-page { padding: 0 }
-h1 { font-size: 24px; font-weight: 700; margin-bottom: 24px; color: #1e293b }
-.card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px }
-.card-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #e2e8f0 }
-.card-header h3 { margin: 0; font-size: 15px; font-weight: 600 }
+.email-page { color: var(--crm-text) }
+h1 { font-size: 20px; font-weight: 800; color: var(--crm-text); margin: 0 0 20px; display: flex; align-items: center; gap: 8px }
+.card {
+  background: var(--crm-card); border: 1px solid var(--crm-border);
+  border-radius: var(--crm-radius); box-shadow: var(--crm-shadow);
+  margin-bottom: 16px; overflow: hidden;
+}
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px; border-bottom: 1px solid var(--crm-border);
+  background: var(--crm-bg);
+}
+.card-header h3 { margin: 0; font-size: 14px; font-weight: 700; color: var(--crm-text) }
 .card-body { padding: 20px }
 .card-body.no-pad { padding: 0 }
+
 .ssl-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap }
-.badge { padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600 }
-.badge-ok { background: #dcfce7; color: #15803d }
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 600 }
+.badge-ok { background: #d1fae5; color: #047857 }
 .badge-warn { background: #fef3c7; color: #92400e }
 .badge-err { background: #fee2e2; color: #b91c1c }
-.badge-none { background: #f1f5f9; color: #64748b }
-.hint-text { font-size: 13px; color: #94a3b8 }
+.badge-none { background: #e2e8f0; color: #475569 }
+.hint-text { font-size: 12px; color: var(--crm-text-3) }
+
 .acct-table { width: 100%; border-collapse: collapse; font-size: 13px }
-.acct-table th { background: #f8fafc; padding: 10px 14px; text-align: left; font-weight: 600; color: #64748b; border-bottom: 1px solid #e2e8f0 }
-.acct-table td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9 }
-.acct-table tbody tr:hover { background: #f8fafc }
-.acct-table tbody tr:last-child td { border-bottom: none }
-.row-default { background: #eff6ff !important }
-.acct-actions { display: flex; gap: 6px }
-.empty-tip { padding: 24px; text-align: center; color: #94a3b8; font-size: 14px }
-.grid { display: grid; gap: 16px }
+.acct-table th { background: var(--crm-bg); padding: 10px 14px; text-align: left; font-weight: 700; color: var(--crm-text-2); border-bottom: 1px solid var(--crm-border); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em }
+.acct-table td { padding: 10px 14px; border-bottom: 1px solid var(--crm-border) }
+.acct-table tbody tr { transition: background .1s }
+.acct-table tbody tr:hover { background: var(--crm-bg) }
+.acct-table .row-default { background: var(--crm-primary-soft) }
+.acct-actions { display: flex; gap: 6px; flex-wrap: wrap }
+.empty-tip { text-align: center; color: var(--crm-text-3); padding: 30px; font-size: 13px }
+
+.grid { display: grid; gap: 14px }
 .grid-2 { grid-template-columns: 1fr 1fr }
 .form-group { margin-bottom: 14px }
-.form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 5px; color: #374151 }
-.form-group label small { font-weight: 400; color: #94a3b8 }
-.form-control { width: 100%; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; box-sizing: border-box }
-.form-hint { font-size: 11px; color: #94a3b8; margin: 3px 0 0 }
-.toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px }
-.flex-row { display: flex; align-items: center }
-.gap-12 { gap: 20px }
-.actions { margin-top: 8px }
-.btn { padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s }
-.btn-primary { background: #3b82f6; color: #fff }
-.btn-primary:hover { background: #2563eb }
-.btn-outline { background: #fff; color: #374151; border: 1px solid #d1d5db }
-.btn-outline:hover { background: #f9fafb }
-.btn-sm { padding: 5px 12px; font-size: 12px }
-.btn:disabled { opacity: 0.6; cursor: not-allowed }
-.result-box { margin-top: 10px; padding: 10px 14px; border-radius: 8px; font-size: 13px }
-.result-ok { background: #dcfce7; color: #15803d }
-.result-err { background: #fee2e2; color: #b91c1c }
-.mt-8 { margin-top: 8px }
-.mt-16 { margin-top: 16px }
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000 }
-.modal-box { background: #fff; border-radius: 14px; padding: 28px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto }
-.modal-box h3 { margin: 0 0 18px; font-size: 18px; font-weight: 700 }
-.modal-actions { display: flex; gap: 10px }
+.form-group label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 5px; color: var(--crm-text-2) }
+.form-group label small { font-weight: 400; color: var(--crm-text-3) }
+.form-control { width: 100%; padding: 9px 12px; border: 1px solid var(--crm-border); border-radius: var(--crm-radius-sm); font-size: 13px; box-sizing: border-box; color: var(--crm-text); font-family: inherit; transition: border-color .15s, box-shadow .15s; background: var(--crm-card) }
+.form-control:focus { outline: none; border-color: var(--crm-primary); box-shadow: 0 0 0 3px rgba(30,64,175,0.08) }
+.toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--crm-text) }
+.toggle-label input[type="checkbox"] { accent-color: var(--crm-primary); width: 15px; height: 15px; cursor: pointer }
+
+.btn { padding: 8px 18px; border-radius: var(--crm-radius-sm); font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; font-family: inherit }
+.btn-primary { background: var(--crm-primary); color: #fff }
+.btn-primary:hover { background: var(--crm-primary-hover) }
+.btn-outline { background: var(--crm-card); color: var(--crm-text); border: 1px solid var(--crm-border) }
+.btn-outline:hover { border-color: var(--crm-primary); color: var(--crm-primary) }
+.btn-sm { padding: 5px 13px; font-size: 12px; border-radius: 8px }
+.btn:disabled { opacity: 0.5; cursor: not-allowed }
+.actions { display: flex; gap: 10px; margin-top: 14px }
+
+.result-box { padding: 10px 16px; border-radius: var(--crm-radius-sm); font-size: 13px; margin-top: 10px }
+.result-ok { background: #f0fdf4; color: var(--crm-success); border: 1px solid #bbf7d0 }
+.result-err { background: #fef2f2; color: var(--crm-danger); border: 1px solid #fecaca }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000 }
+.modal-box { background: var(--crm-card); border-radius: var(--crm-radius); padding: 26px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 64px rgba(15,23,42,0.25) }
+.modal-box h3 { margin: 0 0 18px; font-size: 16px; font-weight: 800; color: var(--crm-text) }
+.modal-actions { display: flex; gap: 10px; margin-top: 18px; justify-content: flex-end }
 </style>
+

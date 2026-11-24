@@ -1,5 +1,5 @@
 <template>
-  <div class="inquiries-page">
+  <div class="inquiries-page crm-scope crm-page">
     <div class="page-header">
       <h1>询盘管理</h1>
       <span class="unread-count" v-if="unreadCount">{{ unreadCount }} 条未读</span>
@@ -144,37 +144,51 @@ onMounted(loadInquiries)
 </script>
 
 <style scoped>
+.inquiries-page { color: var(--crm-text) }
 .page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 20px;
 }
-
+.page-header h1 { margin: 0; font-size: 20px; font-weight: 800; color: var(--crm-text); display: flex; align-items: center; gap: 8px }
 .unread-count {
-  background: var(--danger);
-  color: #fff;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 14px;
+  background: var(--crm-danger); color: #fff;
+  padding: 4px 14px; border-radius: 999px; font-size: 12px; font-weight: 700;
 }
+.card {
+  background: var(--crm-card); border: 1px solid var(--crm-border);
+  border-radius: var(--crm-radius); box-shadow: var(--crm-shadow);
+  overflow: hidden;
+}
+.card-body { padding: 0; overflow-x: auto }
+.table { width: 100%; border-collapse: collapse; font-size: 13px }
+.table th { background: var(--crm-bg); padding: 10px 14px; text-align: left; font-weight: 700; color: var(--crm-text-2); border-bottom: 1px solid var(--crm-border); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap }
+.table td { padding: 10px 14px; border-bottom: 1px solid var(--crm-border) }
+.table tbody tr { transition: background .1s }
+.table tbody tr:hover { background: var(--crm-bg) }
+.table tbody tr:last-child td { border-bottom: none }
+.unread { background: #fffbeb }
+.badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600 }
+.badge-success { background: #d1fae5; color: #047857 }
+.badge-warning { background: #fef3c7; color: #92400e }
+.text-center { text-align: center; padding: 30px; color: var(--crm-text-3); font-size: 13px }
+.btn { padding: 5px 13px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; font-family: inherit }
+.btn-secondary { background: var(--crm-card); color: var(--crm-text); border: 1px solid var(--crm-border) }
+.btn-secondary:hover { border-color: var(--crm-primary); color: var(--crm-primary) }
+.btn-danger { background: var(--crm-card); color: var(--crm-danger); border-color: #fecaca }
+.btn-danger:hover { background: #fef2f2 }
+.btn-sm { font-size: 12px }
 
-.unread {
-  background: #fef3c7;
-}
-
-.detail-row {
-  margin-bottom: 16px;
-}
-
-.detail-row label {
-  display: block;
-  font-weight: 600;
-  margin-bottom: 4px;
-  color: var(--secondary);
-}
-
-.detail-row p {
-  white-space: pre-wrap;
-}
+.modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000 }
+.modal { background: var(--crm-card); border-radius: var(--crm-radius); padding: 26px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 64px rgba(15,23,42,0.25) }
+.modal-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 1px solid var(--crm-border); margin-bottom: 18px }
+.modal-header h3 { margin: 0; font-size: 16px; font-weight: 800; color: var(--crm-text) }
+.modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--crm-text-3); padding: 2px; border-radius: 6px }
+.modal-close:hover { background: var(--crm-bg); color: var(--crm-text) }
+.modal-body { margin-bottom: 18px }
+.modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding-top: 14px; border-top: 1px solid var(--crm-border) }
+.detail-row { margin-bottom: 14px }
+.detail-row label { display: block; font-size: 11px; font-weight: 700; margin-bottom: 3px; color: var(--crm-text-3); text-transform: uppercase; letter-spacing: .04em }
+.detail-row span { font-size: 13px; color: var(--crm-text) }
+.detail-row p { white-space: pre-wrap; font-size: 13px; color: var(--crm-text); margin: 4px 0 0; line-height: 1.7 }
 </style>
+
