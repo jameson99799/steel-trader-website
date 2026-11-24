@@ -231,6 +231,10 @@ async function runTask(taskId, isResume = false) {
                 body = body.replace(/\{\{phone\}\}/g, senderPhone)
                 body = body.replace(/\{\{whatsapp_link\}\}/g, waLink)
                 body = body.replace(/\{\{company_name\}\}/g, comp?.name_en || 'SunSea Steel')
+                subj = subj.replace(/\{\{email\}\}/g, senderEmail)
+                subj = subj.replace(/\{\{phone\}\}/g, senderPhone)
+                subj = subj.replace(/\{\{whatsapp_link\}\}/g, waLink)
+                subj = subj.replace(/\{\{company_name\}\}/g, comp?.name_en || 'SunSea Steel')
             } catch (_) { }
             // Replace {{subject}} with actual email subject (URL-encoded for mailto)
             body = body.replace(/\{\{subject\}\}/g, encodeURIComponent('Re: ' + subj))
@@ -253,8 +257,9 @@ async function runTask(taskId, isResume = false) {
                 body = body.replace(/<span\s+class=["']replace-tip["'][^>]*>.*?<\/span>/gi, '')
             } catch (urlErr) { console.error('URL conversion error', urlErr) }
 
-            // Replace custom variables (emoji groups, random, etc.)
+            // Replace custom variables (emoji groups, random, etc.) - in both body AND subject
             body = replaceCustomVars(body)
+            subj = replaceCustomVars(subj)
 
             // Build attachment list from task's attachment_paths
             const taskAttachments = []

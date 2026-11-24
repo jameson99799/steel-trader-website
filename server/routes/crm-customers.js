@@ -537,6 +537,8 @@ router.post('/email/quick-send', dualAuth, async (req, res) => {
   body = fixEmailImageUrls(body)
   body = replaceSenderVars(body, smtp.smtp_user)
   body = replaceCustomVars(body)
+  subj = replaceSenderVars(subj, smtp.smtp_user)
+  subj = replaceCustomVars(subj)
   body = body.replace(/\{\{subject\}\}/g, encodeURIComponent('Re: ' + subj))
   body = body.replace(/\{\{subject_raw\}\}/g, subj)
 
@@ -606,6 +608,8 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
   body = fixEmailImageUrls(body)
   body = replaceSenderVars(body, smtp.smtp_user)
   body = replaceCustomVars(body)
+  subj = replaceSenderVars(subj, smtp.smtp_user)
+  subj = replaceCustomVars(subj)
   body = body.replace(/\{\{subject\}\}/g, encodeURIComponent('Re: ' + (subject || '')))
   body = body.replace(/\{\{subject_raw\}\}/g, subject || '')
 
