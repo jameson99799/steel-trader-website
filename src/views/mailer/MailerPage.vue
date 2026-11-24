@@ -1008,12 +1008,9 @@ async function rteUploadImage() {
     const fd = new FormData(); fd.append('image', file)
     try {
       savingTpl.value = true
-      const token = localStorage.getItem('crm_token') || localStorage.getItem('token')token')
-      const res = await api.request('/upload/image', {
+      const data = await api.request('/upload/image', {
         method: 'POST', body: fd
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || '服务器错误')
       const url = `https://www.sunseasteel.com${data.url}`
       rteCmd('insertImage', url)
     } catch (e) { alert('图片上传失败: ' + e.message) }
@@ -1422,9 +1419,8 @@ function initHtmlVisual() {
             const file = input.files[0]; if (!file) return
             const fd = new FormData(); fd.append('image', file)
             try {
-              const token = localStorage.getItem('crm_token') || localStorage.getItem('token')token')
-              const res = await fetch('/api/upload/image', { method:'POST', headers:{Authorization:`Bearer ${token}`}, body:fd })
-              const data = await res.json()
+              const token = localStorage.getItem('crm_token') || localStorage.getItem('token')
+              const data = await api.request('/upload/image', { method: 'POST', body: fd })
               if (data.url || data.path) {
                 imgEl.src = data.url || data.path
                 // Remove adjacent replace-tip
@@ -1450,9 +1446,8 @@ function initHtmlVisual() {
               const file = input.files[0]; if (!file) return
               const fd = new FormData(); fd.append('image', file)
               try {
-                const token = localStorage.getItem('crm_token') || localStorage.getItem('token')token')
-                const res = await fetch('/api/upload/image', { method:'POST', headers:{Authorization:`Bearer ${token}`}, body:fd })
-                const data = await res.json()
+                const token = localStorage.getItem('crm_token') || localStorage.getItem('token')
+                const data = await api.request('/upload/image', { method: 'POST', body: fd })
                 if (data.url || data.path) {
                   nearImg.src = data.url || data.path
                   tip.remove()
@@ -1731,11 +1726,9 @@ function htmlInsertImage() {
     for (const file of files) {
       const fd = new FormData(); fd.append('image', file)
       try {
-        const token = localStorage.getItem('crm_token') || localStorage.getItem('token')token')
-        const res = await fetch('/api/upload/image', {
-          method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd
-        })
-        const data = await res.json()
+        const token = localStorage.getItem('crm_token') || localStorage.getItem('token')
+        const data = await api.request('/upload/image', { method: 'POST', body: fd })
+
         const imgUrl = data.url || data.path
         if (!imgUrl) { alert('上传失败'); return }
         const imgTag = `<img src="${imgUrl}" style="max-width:100%;height:auto" />`
@@ -1762,11 +1755,9 @@ function htmlInsertImageGrid(cols) {
     for (const file of files) {
       const fd = new FormData(); fd.append('image', file)
       try {
-        const token = localStorage.getItem('crm_token') || localStorage.getItem('token')token')
-        const res = await fetch('/api/upload/image', {
-          method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd
-        })
-        const data = await res.json()
+        const token = localStorage.getItem('crm_token') || localStorage.getItem('token')
+        const data = await api.request('/upload/image', { method: 'POST', body: fd })
+
         const imgUrl = data.url || data.path
         if (imgUrl) urls.push(imgUrl)
       } catch (e) { alert('图片上传失败: ' + e.message) }
