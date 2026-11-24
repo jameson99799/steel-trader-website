@@ -12,7 +12,7 @@
  * By patching here (parent setup), we ensure the child's loadAll() uses CRM token.
  */
 import { onUnmounted } from 'vue'
-import MailerPage from '../admin/Mailer.vue'
+import MailerPage from '../mailer/MailerPage.vue'
 import api from '../../api'
 import crmApi from '../../api/crm'
 
