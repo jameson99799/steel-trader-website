@@ -15,28 +15,22 @@ const uploadsDir = join(__dirname, '..', '..', 'uploads')
 
 const router = express.Router()
 
-// ─── Embed images as cid attachments for email display ────────────────────
-// Downloads images referenced in <img src="https://...uploads/..."> from the
-// uploads directory and embeds them as nodemailer attachments with cid:
-// references. This guarantees images display in ALL email clients (Gmail,
-// Outlook etc. block external images by default but always show cid images).
+// ─── Embed images as cid attachments ─────────────────────────────────────────
 async function embedImagesAsAttachments(html, uploadsDir) {
     const attachments = []
     const seen = new Set()
     const imgRegex = /<img[^>]+src=["'](https?:\/\/[^"']*\/uploads\/([^"']+))["']/gi
-    let match
-    let cidIdx = 0
+    let match, cidIdx = 0
     let workingHtml = html
     while ((match = imgRegex.exec(html)) !== null) {
-        const fullUrl = match[1]
-        const filename = match[2]
+        const fullUrl = match[1], filename = match[2]
         if (seen.has(filename)) continue
         seen.add(filename)
         const cid = 'img' + (++cidIdx)
         try {
             const fullPath = resolveUploadPath(uploadsDir, filename)
             if (fs.existsSync(fullPath)) {
-                attachments.push({ filename: filename, path: fullPath, cid: cid })
+                attachments.push({ filename, path: fullPath, cid })
                 workingHtml = workingHtml.split(fullUrl).join('cid:' + cid)
             }
         } catch (e) { console.error('Embed image error:', filename, e.message) }
@@ -247,10 +241,6 @@ async function runTask(taskId, isResume = false) {
             }
 
             const subj = template.subject.replace(/{{name}}/g, contact.name || '').replace(/{{company}}/g, contact.company || '').replace(/{{first_name}}/g, contact.name?.split(' ')[0] || '').replace(/{{last_name}}/g, contact.name?.split(' ').slice(1).join(' ') || '')
-            const nowStr = new Date().toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-            const rand6 = Array.from({length: 6}, () => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random()*26)]).join('')
-            subj = subj.replace(/\{\{current_time\}\}/g, nowStr).replace(/\{\{random_6\}\}/g, rand6)
-            body = body.replace(/\{\{current_time\}\}/g, nowStr).replace(/\{\{random_6\}\}/g, rand6)
             let body = template.html_body.replace(/{{name}}/g, contact.name || '').replace(/{{company}}/g, contact.company || '').replace(/{{first_name}}/g, contact.name?.split(' ')[0] || '').replace(/{{last_name}}/g, contact.name?.split(' ').slice(1).join(' ') || '')
 
             // Replace sender variables (email, phone, whatsapp)
@@ -264,10 +254,6 @@ async function runTask(taskId, isResume = false) {
                 body = body.replace(/\{\{phone\}\}/g, senderPhone)
                 body = body.replace(/\{\{whatsapp_link\}\}/g, waLink)
                 body = body.replace(/\{\{company_name\}\}/g, comp?.name_en || 'SunSea Steel')
-                subj = subj.replace(/\{\{email\}\}/g, senderEmail)
-                subj = subj.replace(/\{\{phone\}\}/g, senderPhone)
-                subj = subj.replace(/\{\{whatsapp_link\}\}/g, waLink)
-                subj = subj.replace(/\{\{company_name\}\}/g, comp?.name_en || 'SunSea Steel')
             } catch (_) { }
             // Replace {{subject}} with actual email subject (URL-encoded for mailto)
             body = body.replace(/\{\{subject\}\}/g, encodeURIComponent('Re: ' + subj))
@@ -290,9 +276,22 @@ async function runTask(taskId, isResume = false) {
                 body = body.replace(/<span\s+class=["']replace-tip["'][^>]*>.*?<\/span>/gi, '')
             } catch (urlErr) { console.error('URL conversion error', urlErr) }
 
-            // Replace custom variables (emoji groups, random, etc.) - in both body AND subject
+            // Replace custom variables (emoji groups, random, etc.)
             body = replaceCustomVars(body)
             subj = replaceCustomVars(subj)
+            // Dynamic variables + image embedding (LAST so nothing interferes)
+            try {
+                const uploadsDir = join(__dirname, '..', 'uploads')
+                const embedded = await embedImagesAsAttachments(body, uploadsDir)
+                body = embedded.html
+                if (embedded.attachments.length) taskAttachments.push(...embedded.attachments)
+            } catch (embedErr) { console.error('Image embedding error:', embedErr.message) }
+            const nowStr = new Date().toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+            const rand6 = Array.from({length: 6}, () => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random()*26)]).join('')
+            subj = subj.replace(/\{\{current_time\}\}/g, '   ' + nowStr + '   ')
+            subj = subj.replace(/\{\{random_6\}\}/g, rand6)
+            body = body.replace(/\{\{current_time\}\}/g, nowStr)
+            body = body.replace(/\{\{random_6\}\}/g, rand6)
 
             // Build attachment list from task's attachment_paths
             const taskAttachments = []
@@ -315,16 +314,7 @@ async function runTask(taskId, isResume = false) {
             }
             Object.assign(mailOpts, applyUnsubscribe(mailOpts, contact.email))
             if (task.cc) mailOpts.cc = task.cc
-                        // Embed images as cid attachments (guaranteed display in all email clients)
-                        try {
-                            const uploadsDir = join(__dirname, '.', 'uploads')
-                            const embedded = await embedImagesAsAttachments(mailOpts.html, uploadsDir)
-                            mailOpts.html = embedded.html
-                            if (embedded.attachments.length) {
-                                mailOpts.attachments = [...(mailOpts.attachments || []), ...embedded.attachments]
-                            }
-                        } catch (embedErr) { console.error('Image embedding error:', embedErr.message) }
-                        if (task.read_receipt) {
+            if (task.read_receipt) {
                 mailOpts.headers = {
                     ...(mailOpts.headers || {}),
                     'Disposition-Notification-To': account.smtp_user,

@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 import { getAll, getOne, run } from '../db.js'
-import { replaceCustomVars } from './mailer.js'
+import { replaceCustomVars, embedImagesAsAttachments } from './mailer.js'
 import { ZipArchive } from 'archiver'
 import AdmZip from 'adm-zip'
 import { join, basename, dirname, resolve } from 'path'
@@ -481,10 +481,6 @@ router.post('/email/send', dualAuth, async (req, res) => {
   for (const c of customers) {
     try {
       const subj = subject.replace(/\{\{name\}\}/g, c.name||'').replace(/\{\{company\}\}/g, c.company||'')
-  const nowStr = new Date().toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-  const rand6 = Array.from({length: 6}, () => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random()*26)]).join('')
-  subj = subj.replace(/\{\{current_time\}\}/g, nowStr).replace(/\{\{random_6\}\}/g, rand6)
-  body = body.replace(/\{\{current_time\}\}/g, nowStr).replace(/\{\{random_6\}\}/g, rand6)
       const body = html_body.replace(/\{\{name\}\}/g, c.name||'').replace(/\{\{company\}\}/g, c.company||'')
       const suppressed = getOne('SELECT email FROM mail_suppressions WHERE LOWER(email)=LOWER(?)', [c.email])
       if (suppressed) continue
@@ -538,15 +534,23 @@ router.post('/email/quick-send', dualAuth, async (req, res) => {
     subj = subj.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
     body = body.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v)
   }
-  const nowStr = new Date().toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-  const rand6 = Array.from({length: 6}, () => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random()*26)]).join('')
-  subj = subj.replace(/\{\{current_time\}\}/g, nowStr).replace(/\{\{random_6\}\}/g, rand6)
-  body = body.replace(/\{\{current_time\}\}/g, nowStr).replace(/\{\{random_6\}\}/g, rand6)
   body = fixEmailImageUrls(body)
   body = replaceSenderVars(body, smtp.smtp_user)
   body = replaceCustomVars(body)
-  subj = replaceSenderVars(subj, smtp.smtp_user)
   subj = replaceCustomVars(subj)
+  // Dynamic variables + image embedding (LAST)
+  try {
+      const uploadsDir = join(__dirname, '..', 'uploads')
+      const embedded = await embedImagesAsAttachments(body, uploadsDir)
+      body = embedded.html
+      var emailAtt = embedded.attachments
+  } catch (embedErr) { console.error('Image embedding error:', embedErr.message) }
+  const nowStr = new Date().toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  const rand6 = Array.from({length: 6}, () => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random()*26)]).join('')
+  subj = subj.replace(/\{\{current_time\}\}/g, '   ' + nowStr + '   ')
+  subj = subj.replace(/\{\{random_6\}\}/g, rand6)
+  body = body.replace(/\{\{current_time\}\}/g, nowStr)
+  body = body.replace(/\{\{random_6\}\}/g, rand6)
   body = body.replace(/\{\{subject\}\}/g, encodeURIComponent('Re: ' + subj))
   body = body.replace(/\{\{subject_raw\}\}/g, subj)
 
@@ -616,8 +620,20 @@ router.post('/email/quick-followup', dualAuth, async (req, res) => {
   body = fixEmailImageUrls(body)
   body = replaceSenderVars(body, smtp.smtp_user)
   body = replaceCustomVars(body)
-  subj = replaceSenderVars(subj, smtp.smtp_user)
   subj = replaceCustomVars(subj)
+  // Dynamic variables + image embedding (LAST)
+  try {
+      const uploadsDir = join(__dirname, '..', 'uploads')
+      const embedded = await embedImagesAsAttachments(body, uploadsDir)
+      body = embedded.html
+      var emailAtt = embedded.attachments
+  } catch (embedErr) { console.error('Image embedding error:', embedErr.message) }
+  const nowStr = new Date().toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  const rand6 = Array.from({length: 6}, () => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random()*26)]).join('')
+  subj = subj.replace(/\{\{current_time\}\}/g, '   ' + nowStr + '   ')
+  subj = subj.replace(/\{\{random_6\}\}/g, rand6)
+  body = body.replace(/\{\{current_time\}\}/g, nowStr)
+  body = body.replace(/\{\{random_6\}\}/g, rand6)
   body = body.replace(/\{\{subject\}\}/g, encodeURIComponent('Re: ' + (subject || '')))
   body = body.replace(/\{\{subject_raw\}\}/g, subject || '')
 
