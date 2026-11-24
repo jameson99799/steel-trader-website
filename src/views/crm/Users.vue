@@ -1,12 +1,15 @@
 <template>
-  <div class="crm-users-page">
-    <div class="page-header">
-      <h1>⚙️ 账户管理</h1>
-      <button class="btn btn-primary" @click="openModal()">➕ 添加子账户</button>
+  <div class="crm-page crm-users-page">
+    <div class="crm-between page-head">
+      <div>
+        <h1 class="crm-page-title">⚙️ 账户管理</h1>
+        <p class="crm-page-sub">CRM 子账户与管理员</p>
+      </div>
+      <button class="crm-btn crm-btn-primary" @click="openModal()">＋ 添加子账户</button>
     </div>
 
-    <div class="table-wrap">
-      <table v-if="users.length">
+    <div class="crm-card" style="padding:0;overflow-x:auto" v-if="users.length">
+      <table class="users-table">
         <thead>
           <tr>
             <th>用户名</th>
@@ -22,62 +25,67 @@
           <tr v-for="u in users" :key="u.id">
             <td><strong>{{ u.username }}</strong></td>
             <td>{{ u.display_name }}</td>
-            <td>{{ u.email || '-' }}</td>
-            <td><span :class="['role-badge', u.role]">{{ u.role === 'admin' ? '管理员' : '子账户' }}</span></td>
-            <td><span :class="['status-dot', u.status ? 'active' : 'inactive']"></span> {{ u.status ? '启用' : '禁用' }}</td>
-            <td>{{ formatDate(u.created_at) }}</td>
+            <td>{{ u.email || '—' }}</td>
+            <td><span :class="['crm-badge', u.role === 'admin' ? 'crm-badge-dev' : 'crm-badge-info']">{{ u.role === 'admin' ? '管理员' : '子账户' }}</span></td>
             <td>
-              <button class="btn-sm btn-edit" @click="openModal(u)">编辑</button>
-              <button class="btn-sm btn-danger" @click="handleDelete(u)">删除</button>
+              <span class="status-line" :class="u.status ? 'on' : 'off'">
+                <i class="dot"></i>{{ u.status ? '启用' : '禁用' }}
+              </span>
+            </td>
+            <td class="crm-small crm-muted">{{ formatDate(u.created_at) }}</td>
+            <td>
+              <button class="crm-btn crm-btn-outline crm-btn-sm" @click="openModal(u)">编辑</button>
+              <button class="crm-btn crm-btn-danger crm-btn-sm" @click="handleDelete(u)">删除</button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
+    <div class="crm-card crm-empty" v-else><span class="crm-empty-icon">⚙️</span>暂无账户</div>
 
     <!-- Modal -->
-    <div v-if="showModal" class="modal-overlay" @click.self="showModal = false">
-      <div class="modal">
-        <div class="modal-header">
+    <div v-if="showModal" class="crm-modal-overlay" @click.self="showModal = false">
+      <div class="crm-modal">
+        <div class="crm-modal-head">
           <h3>{{ editId ? '编辑账户' : '添加子账户' }}</h3>
-          <button class="modal-close" @click="showModal = false">&times;</button>
+          <button class="crm-modal-close" @click="showModal = false">&times;</button>
         </div>
         <form @submit.prevent="handleSave">
-          <div class="modal-body">
-            <div class="form-group">
+          <div class="crm-modal-body">
+            <div class="crm-field">
               <label>用户名 *</label>
-              <input v-model="form.username" required :disabled="!!editId" />
+              <input class="crm-input" v-model="form.username" required :disabled="!!editId" />
             </div>
-            <div class="form-group">
+            <div class="crm-field">
               <label>{{ editId ? '新密码（留空不修改）' : '密码 *' }}</label>
-              <input v-model="form.password" type="password" :required="!editId" />
+              <input class="crm-input" v-model="form.password" type="password" :required="!editId" />
             </div>
-            <div class="form-group">
+            <div class="crm-field">
               <label>显示名称 *</label>
-              <input v-model="form.display_name" required placeholder="例如：Jameson" />
+              <input class="crm-input" v-model="form.display_name" required placeholder="例如：Jameson" />
             </div>
-            <div class="form-group">
+            <div class="crm-field">
               <label>邮箱</label>
-              <input v-model="form.email" type="email" />
+              <input class="crm-input" v-model="form.email" type="email" />
             </div>
-            <div class="form-group">
+            <div class="crm-field">
               <label>角色</label>
-              <select v-model="form.role">
+              <select class="crm-select" v-model="form.role">
                 <option value="sub">子账户</option>
                 <option value="admin">管理员</option>
               </select>
             </div>
-            <div class="form-group">
+            <div class="crm-field">
               <label>状态</label>
-              <select v-model="form.status">
+              <select class="crm-select" v-model="form.status">
                 <option :value="1">启用</option>
                 <option :value="0">禁用</option>
               </select>
             </div>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="showModal = false">取消</button>
-            <button type="submit" class="btn btn-primary">{{ editId ? '更新' : '保存' }}</button>
+          <div class="crm-modal-foot">
+            <button type="button" class="crm-btn crm-btn-outline" @click="showModal = false">取消</button>
+            <button type="submit" class="crm-btn crm-btn-primary">{{ editId ? '更新' : '保存' }}</button>
           </div>
         </form>
       </div>
@@ -141,39 +149,19 @@ async function handleDelete(u) {
   } catch (e) { alert(e.message) }
 }
 
-function formatDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : '-' }
+function formatDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : '—' }
 
 onMounted(loadUsers)
 </script>
 
 <style scoped>
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.page-header h1 { margin: 0; font-size: 24px; }
-.table-wrap { background: #fff; border-radius: 10px; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th { background: #f8fafc; padding: 12px; text-align: left; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; }
-td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
-.role-badge { padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; }
-.role-badge.admin { background: #fef3c7; color: #92400e; }
-.role-badge.sub { background: #eff6ff; color: #2563eb; }
-.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
-.status-dot.active { background: #10b981; }
-.status-dot.inactive { background: #ef4444; }
-.btn-sm { padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px; }
-.btn-edit { background: #eff6ff; color: #2563eb; }
-.btn-danger { background: #fef2f2; color: #dc2626; }
-
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal { background: #fff; border-radius: 14px; width: 480px; max-width: 92vw; }
-.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid #e2e8f0; }
-.modal-header h3 { margin: 0; }
-.modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b; }
-.modal-body { padding: 24px; }
-.form-group { margin-bottom: 14px; }
-.form-group label { display: block; margin-bottom: 4px; font-size: 13px; font-weight: 600; color: #334155; }
-.form-group input, .form-group select { width: 100%; padding: 9px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
-.modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid #e2e8f0; }
-.btn { padding: 9px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
-.btn-primary { background: #2563eb; color: #fff; }
-.btn-secondary { background: #f1f5f9; color: #334155; }
+.users-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.users-table th { text-align: left; padding: 12px 16px; color: var(--crm-text-3); font-size: 11px; font-weight: 700; background: var(--crm-bg); border-bottom: 1px solid var(--crm-border); white-space: nowrap; }
+.users-table td { padding: 12px 16px; border-bottom: 1px solid var(--crm-border); }
+.users-table tr:last-child td { border-bottom: none; }
+.status-line { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.status-line .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.status-line.on .dot { background: var(--crm-success); }
+.status-line.off .dot { background: var(--crm-danger); }
+.status-line.off { color: var(--crm-danger); }
 </style>
