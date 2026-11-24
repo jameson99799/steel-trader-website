@@ -14,6 +14,35 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const uploadsDir = join(__dirname, '..', '..', 'uploads')
 
 const router = express.Router()
+
+// ─── Embed images as cid attachments for email display ────────────────────
+// Downloads images referenced in <img src="https://...uploads/..."> from the
+// uploads directory and embeds them as nodemailer attachments with cid:
+// references. This guarantees images display in ALL email clients (Gmail,
+// Outlook etc. block external images by default but always show cid images).
+async function embedImagesAsAttachments(html, uploadsDir) {
+    const attachments = []
+    const seen = new Set()
+    const imgRegex = /<img[^>]+src=["'](https?:\/\/[^"']*\/uploads\/([^"']+))["']/gi
+    let match
+    let cidIdx = 0
+    let workingHtml = html
+    while ((match = imgRegex.exec(html)) !== null) {
+        const fullUrl = match[1]
+        const filename = match[2]
+        if (seen.has(filename)) continue
+        seen.add(filename)
+        const cid = 'img' + (++cidIdx)
+        try {
+            const fullPath = resolveUploadPath(uploadsDir, filename)
+            if (fs.existsSync(fullPath)) {
+                attachments.push({ filename: filename, path: fullPath, cid: cid })
+                workingHtml = workingHtml.split(fullUrl).join('cid:' + cid)
+            }
+        } catch (e) { console.error('Embed image error:', filename, e.message) }
+    }
+    return { html: workingHtml, attachments }
+}
 router.use(express.json({ limit: '5mb' }))
 
 // ─── User identity helper for data isolation ────────────────────────────────
@@ -286,7 +315,16 @@ async function runTask(taskId, isResume = false) {
             }
             Object.assign(mailOpts, applyUnsubscribe(mailOpts, contact.email))
             if (task.cc) mailOpts.cc = task.cc
-            if (task.read_receipt) {
+                        // Embed images as cid attachments (guaranteed display in all email clients)
+                        try {
+                            const uploadsDir = join(__dirname, '.', 'uploads')
+                            const embedded = await embedImagesAsAttachments(mailOpts.html, uploadsDir)
+                            mailOpts.html = embedded.html
+                            if (embedded.attachments.length) {
+                                mailOpts.attachments = [...(mailOpts.attachments || []), ...embedded.attachments]
+                            }
+                        } catch (embedErr) { console.error('Image embedding error:', embedErr.message) }
+                        if (task.read_receipt) {
                 mailOpts.headers = {
                     ...(mailOpts.headers || {}),
                     'Disposition-Notification-To': account.smtp_user,

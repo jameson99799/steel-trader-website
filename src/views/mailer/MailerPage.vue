@@ -1008,13 +1008,13 @@ async function rteUploadImage() {
     const fd = new FormData(); fd.append('image', file)
     try {
       savingTpl.value = true
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/upload/image', {
-        method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd
+      const token = localStorage.getItem('crm_token') || localStorage.getItem('token')token')
+      const res = await api.request('/upload/image', {
+        method: 'POST', body: fd
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || '服务器错误')
-      const url = `${window.location.origin}${data.url}`
+      const url = `https://www.sunseasteel.com${data.url}`
       rteCmd('insertImage', url)
     } catch (e) { alert('图片上传失败: ' + e.message) }
     finally { savingTpl.value = false }
@@ -1422,7 +1422,7 @@ function initHtmlVisual() {
             const file = input.files[0]; if (!file) return
             const fd = new FormData(); fd.append('image', file)
             try {
-              const token = localStorage.getItem('token')
+              const token = localStorage.getItem('crm_token') || localStorage.getItem('token')token')
               const res = await fetch('/api/upload/image', { method:'POST', headers:{Authorization:`Bearer ${token}`}, body:fd })
               const data = await res.json()
               if (data.url || data.path) {
@@ -1450,7 +1450,7 @@ function initHtmlVisual() {
               const file = input.files[0]; if (!file) return
               const fd = new FormData(); fd.append('image', file)
               try {
-                const token = localStorage.getItem('token')
+                const token = localStorage.getItem('crm_token') || localStorage.getItem('token')token')
                 const res = await fetch('/api/upload/image', { method:'POST', headers:{Authorization:`Bearer ${token}`}, body:fd })
                 const data = await res.json()
                 if (data.url || data.path) {
@@ -1731,7 +1731,7 @@ function htmlInsertImage() {
     for (const file of files) {
       const fd = new FormData(); fd.append('image', file)
       try {
-        const token = localStorage.getItem('token')
+        const token = localStorage.getItem('crm_token') || localStorage.getItem('token')token')
         const res = await fetch('/api/upload/image', {
           method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd
         })
@@ -1762,7 +1762,7 @@ function htmlInsertImageGrid(cols) {
     for (const file of files) {
       const fd = new FormData(); fd.append('image', file)
       try {
-        const token = localStorage.getItem('token')
+        const token = localStorage.getItem('crm_token') || localStorage.getItem('token')token')
         const res = await fetch('/api/upload/image', {
           method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd
         })
