@@ -16,7 +16,7 @@ const uploadsDir = join(__dirname, '..', '..', 'uploads')
 const router = express.Router()
 
 // ─── Embed images as cid attachments ─────────────────────────────────────────
-async function embedImagesAsAttachments(html, uploadsDir) {
+export async function embedImagesAsAttachments(html, uploadsDir) {
     const attachments = []
     const seen = new Set()
     const imgRegex = /<img[^>]+src=["'](https?:\/\/[^"']*\/uploads\/([^"']+))["']/gi
