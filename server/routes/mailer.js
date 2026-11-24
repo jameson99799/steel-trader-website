@@ -218,6 +218,10 @@ async function runTask(taskId, isResume = false) {
             }
 
             const subj = template.subject.replace(/{{name}}/g, contact.name || '').replace(/{{company}}/g, contact.company || '').replace(/{{first_name}}/g, contact.name?.split(' ')[0] || '').replace(/{{last_name}}/g, contact.name?.split(' ').slice(1).join(' ') || '')
+            const nowStr = new Date().toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+            const rand6 = Array.from({length: 6}, () => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random()*26)]).join('')
+            subj = subj.replace(/\{\{current_time\}\}/g, nowStr).replace(/\{\{random_6\}\}/g, rand6)
+            body = body.replace(/\{\{current_time\}\}/g, nowStr).replace(/\{\{random_6\}\}/g, rand6)
             let body = template.html_body.replace(/{{name}}/g, contact.name || '').replace(/{{company}}/g, contact.company || '').replace(/{{first_name}}/g, contact.name?.split(' ')[0] || '').replace(/{{last_name}}/g, contact.name?.split(' ').slice(1).join(' ') || '')
 
             // Replace sender variables (email, phone, whatsapp)

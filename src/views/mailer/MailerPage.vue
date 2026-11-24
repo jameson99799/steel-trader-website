@@ -721,7 +721,9 @@
           <div class="var-dropdown-item" @click="insertVar('name')"><code v-pre>{{name}}</code> 收件人姓名</div>
           <div class="var-dropdown-item" @click="insertVar('company')"><code v-pre>{{company}}</code> 收件人公司</div>
           <div class="var-dropdown-item" @click="insertVar('first_name')"><code v-pre>{{first_name}}</code> 名</div>
-          <div class="var-dropdown-item" @click="insertVar('last_name')"><code v-pre>{{last_name}}</code> 姓</div>
+          <div class="var-dropdown-item" @click="insertVar('last_name')"><code v-pre>{{last_name}}</code>
+          <div class="var-dropdown-item" @click="insertVar('current_time')"><code v-pre>{{current_time}}</code> 当前时间</div>
+          <div class="var-dropdown-item" @click="insertVar('random_6')"><code v-pre>{{random_6}}</code> 随机6位字母</div> 姓</div>
           <div class="var-dropdown-item" @click="insertVar('email')"><code v-pre>{{email}}</code> 发件人邮箱</div>
           <div class="var-dropdown-item" @click="insertVar('phone')"><code v-pre>{{phone}}</code> 电话</div>
           <div class="var-dropdown-item" @click="insertVar('whatsapp_link')"><code v-pre>{{whatsapp_link}}</code> WhatsApp链接</div>
@@ -1695,9 +1697,14 @@ function insertVar(key) {
   if (varDropdown.target === 'subject') {
     const input = subjectInput.value
     if (input) {
-      const start = input.selectionStart || editTpl.subject.length
-      editTpl.subject = editTpl.subject.slice(0, start) + varText + editTpl.subject.slice(input.selectionEnd || start)
-      nextTick(() => { input.focus(); input.selectionStart = input.selectionEnd = start + varText.length })
+      const sel = input.selectionStart ?? editTpl.subject.length
+      const selEnd = input.selectionEnd ?? sel
+      // Auto-add a space before the variable if the char before cursor is not a space
+      const before = editTpl.subject.slice(0, sel)
+      const needsSpace = before.length > 0 && !before.endsWith(' ') && !before.endsWith('\u00a0')
+      const insertText = (needsSpace ? ' ' : '') + varText
+      editTpl.subject = before + insertText + editTpl.subject.slice(selEnd)
+      nextTick(() => { input.focus(); input.selectionStart = input.selectionEnd = sel + insertText.length })
     } else {
       editTpl.subject = (editTpl.subject || '') + varText
     }
