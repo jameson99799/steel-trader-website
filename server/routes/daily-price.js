@@ -23,6 +23,11 @@ function applyEntryTranslation(entry, lang) {
       for (const field of TRANSLATED_FIELDS) {
         if (t[field]) entry[`${field}_${lang}`] = t[field]
       }
+      // Dynamic panels: `<panelKey>_product_name` (covers legacy gi_/gl_ too)
+      for (const panel of entry.panels || []) {
+        const tn = t[`${panel.key}_product_name`]
+        if (tn) panel.productName = tn
+      }
     }
   } catch (e) { /* translations table may be unavailable — serve base text */ }
   return entry

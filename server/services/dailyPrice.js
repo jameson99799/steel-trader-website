@@ -1,10 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Daily price board store — one row per publish date, GI (galvanized) on the
-// left and GL (galvalume) on the right. Table rows are stored as JSON arrays
-// so the admin repeater can add/remove/reorder sizes atomically per date.
-//
-// Field display order is customizable per side and stored as a JSON array of
-// field keys; the fixed keys are the six quote fields of a steel price sheet.
+// Daily price board store — dynamic panel system.
+// Each publish date has a "panels" JSON array; each panel is a product quote
+// sheet (GI, GL, CRC, or any custom product). Admin can add/remove panels,
+// toggle visibility per day, and customize all fields.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
@@ -31,22 +29,44 @@ export const DEFAULT_FIELD_ORDER = Object.freeze([
   'coilWeight'
 ])
 
-export const DEFAULT_GI = Object.freeze({
-  productName: 'PRIME HOT DIPPED GALVANIZED STEEL COILS',
-  grade: 'DX51D',
-  spangle: 'REGULAR SPANGLE',
-  coating: 'Z100',
-  coilId: '508mm',
-  coilWeight: '6-9MT'
-})
-
-export const DEFAULT_GL = Object.freeze({
-  productName: 'PRIME HOT DIPPED GALVALUME STEEL COILS',
-  grade: 'DX51D',
-  spangle: 'REGULAR SPANGLE',
-  coating: 'AZ100',
-  coilId: '508mm',
-  coilWeight: '6-9MT'
+// Default panel templates
+export const DEFAULT_PANEL_TEMPLATES = Object.freeze({
+  gi: {
+    key: 'gi',
+    productName: 'PRIME HOT DIPPED GALVANIZED STEEL COILS',
+    grade: 'DX51D',
+    spangle: 'REGULAR SPANGLE',
+    coating: 'Z100',
+    coilId: '508mm',
+    coilWeight: '6-9MT',
+    base_price: 3500,
+    has_afp: false,
+    visible: true
+  },
+  gl: {
+    key: 'gl',
+    productName: 'PRIME HOT DIPPED GALVALUME STEEL COILS',
+    grade: 'DX51D',
+    spangle: 'REGULAR SPANGLE',
+    coating: 'AZ100',
+    coilId: '508mm',
+    coilWeight: '6-9MT',
+    base_price: 3600,
+    has_afp: true,
+    visible: true
+  },
+  crc: {
+    key: 'crc',
+    productName: 'PRIME COLD ROLLED STEEL COILS',
+    grade: 'SPCC',
+    spangle: '—',
+    coating: '—',
+    coilId: '508mm',
+    coilWeight: '3-8MT',
+    base_price: 3800,
+    has_afp: false,
+    visible: false
+  }
 })
 
 export const DEFAULT_FOOTER = Object.freeze({
@@ -65,7 +85,7 @@ function todayStr() {
 export function normalizePriceDate(value) {
   const text = String(value ?? '').trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw new Error('publish_date must be YYYY-MM-DD')
-  const d = new Date(`${text}T00:00:00Z`)
+  const d = new Date(text + 'T00:00:00Z')
   if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== text) {
     throw new Error('publish_date is not a real calendar date')
   }
@@ -74,8 +94,8 @@ export function normalizePriceDate(value) {
 
 function boundedText(value, label, { max = MAX_TEXT, required = false } = {}) {
   const normalized = String(value ?? '').trim()
-  if (required && !normalized) throw new Error(`${label} is required`)
-  if (normalized.length > max) throw new Error(`${label} must contain at most ${max} characters`)
+  if (required && !normalized) throw new Error(label + ' is required')
+  if (normalized.length > max) throw new Error(label + ' must contain at most ' + max + ' characters')
   return normalized
 }
 
@@ -86,12 +106,8 @@ function normalizeFieldOrder(value, label) {
   }
   if (!Array.isArray(order)) return [...DEFAULT_FIELD_ORDER]
   const cleaned = order.filter(key => PRICE_FIELD_KEYS.includes(key))
-  // Append any missing keys so every field always renders once.
   for (const key of PRICE_FIELD_KEYS) {
     if (!cleaned.includes(key)) cleaned.push(key)
-  }
-  if (cleaned.length !== PRICE_FIELD_KEYS.length) {
-    throw new Error(`${label} must contain each field exactly once`)
   }
   return cleaned
 }
@@ -102,30 +118,22 @@ function normalizeItems(value, { withAfp }) {
     try { items = JSON.parse(items) } catch { items = [] }
   }
   if (!Array.isArray(items)) items = []
-  if (items.length > MAX_ITEMS) throw new Error(`at most ${MAX_ITEMS} price rows per side`)
+  if (items.length > MAX_ITEMS) throw new Error('at most ' + MAX_ITEMS + ' price rows per side')
   const rows = items.map((item, index) => {
-    if (!item || typeof item !== 'object') throw new Error(`price row ${index + 1} is invalid`)
-    // Rows carry their own thickness adjustment and — for GL — their own
-    // anti-fingerprint adjustment (the AFP premium differs per thickness).
-    // The displayed FOB / AFP prices are computed at render time.
+    if (!item || typeof item !== 'object') throw new Error('price row ' + (index + 1) + ' is invalid')
     const row = {
-      spec: boundedText(item.spec, `row ${index + 1} size`, { max: 40 }),
-      quantity: boundedText(item.quantity, `row ${index + 1} quantity`, { max: 40 }),
+      spec: boundedText(item.spec, 'row ' + (index + 1) + ' size', { max: 40 }),
+      quantity: boundedText(item.quantity, 'row ' + (index + 1) + ' quantity', { max: 40 }),
       thickness_adj: parseCalcNumber(item.thickness_adj ?? item.thicknessAdj)
     }
     if (withAfp) row.afp_adj = parseCalcNumber(item.afp_adj ?? item.afpAdj)
     return row
   })
-  // A freshly added blank row (admin clicked ＋ but left it empty) is dropped
-  // instead of failing the whole save.
   return rows.filter(row =>
     row.spec || row.quantity || row.thickness_adj !== 0 || (withAfp && row.afp_adj !== 0)
   )
 }
 
-// Numeric calc fields follow the shared formula; blanks parse to 0.
-// Compatibility: entries saved before the two-base split carry only the
-// shared base_price — it fills in for both sides until they are edited.
 function normalizeCalcFields(input) {
   const defaults = calcDefaults()
   const out = {}
@@ -137,50 +145,65 @@ function normalizeCalcFields(input) {
       out[field] = parseCalcNumber(raw)
     }
   }
-  const legacyBase = input.base_price
-  if ((input.gi_base_price === undefined || input.gi_base_price === null || String(input.gi_base_price).trim() === '') &&
-      legacyBase !== undefined && legacyBase !== null && String(legacyBase).trim() !== '') {
-    out.gi_base_price = parseCalcNumber(legacyBase)
-  }
-  if ((input.gl_base_price === undefined || input.gl_base_price === null || String(input.gl_base_price).trim() === '') &&
-      legacyBase !== undefined && legacyBase !== null && String(legacyBase).trim() !== '') {
-    out.gl_base_price = parseCalcNumber(legacyBase)
-  }
   return out
 }
 
-// Accept either the raw DB row (strings for JSON columns) or a form payload.
+// Normalize a single panel
+function normalizePanel(panel, index) {
+  if (!panel || typeof panel !== 'object') throw new Error('panel ' + (index + 1) + ' is invalid')
+  const key = boundedText(panel.key, 'panel key', { max: 30 }) || ('panel_' + (index + 1))
+  return {
+    key,
+    productName: boundedText(panel.productName ?? panel.product_name, 'panel product name'),
+    grade: boundedText(panel.grade, 'panel grade'),
+    spangle: boundedText(panel.spangle, 'panel spangle'),
+    coating: boundedText(panel.coating, 'panel coating'),
+    coilId: boundedText(panel.coilId ?? panel.coil_id, 'panel coil ID'),
+    coilWeight: boundedText(panel.coilWeight ?? panel.coil_weight, 'panel coil weight'),
+    base_price: parseCalcNumber(panel.base_price),
+    field_order: normalizeFieldOrder(panel.field_order, 'panel field order'),
+    items: normalizeItems(panel.items, { withAfp: !!panel.has_afp }),
+    has_afp: !!panel.has_afp,
+    visible: panel.visible !== false
+  }
+}
+
+// Normalize the full panels array
+function normalizePanels(value) {
+  let panels = value
+  if (typeof panels === 'string') {
+    try { panels = JSON.parse(panels) } catch { panels = null }
+  }
+  if (!Array.isArray(panels)) return buildDefaultPanels()
+  return panels.map((p, i) => normalizePanel(p, i))
+}
+
+// Build default panels (GI visible, GL visible, CRC hidden)
+function buildDefaultPanels() {
+  return Object.values(DEFAULT_PANEL_TEMPLATES).map(tpl => ({
+    ...tpl,
+    field_order: [...DEFAULT_FIELD_ORDER],
+    items: []
+  }))
+}
+
+// Accept either the raw DB row or a form payload
 export function normalizeDailyPrice(input) {
   if (!input || typeof input !== 'object') throw new Error('daily price input must be an object')
   const publishDate = normalizePriceDate(input.publish_date ?? input.publishDate ?? todayStr())
+  const calc = normalizeCalcFields(input)
+  const panels = normalizePanels(input.panels)
   return {
     publish_date: publishDate,
-    ...normalizeCalcFields(input),
-    gi_product_name: boundedText(input.gi_product_name ?? DEFAULT_GI.productName, 'GI product name'),
-    gi_grade: boundedText(input.gi_grade ?? DEFAULT_GI.grade, 'GI grade'),
-    gi_spangle: boundedText(input.gi_spangle ?? DEFAULT_GI.spangle, 'GI spangle'),
-    gi_coating: boundedText(input.gi_coating ?? DEFAULT_GI.coating, 'GI coating mass'),
-    gi_coil_id: boundedText(input.gi_coil_id ?? DEFAULT_GI.coilId, 'GI coil ID'),
-    gi_coil_weight: boundedText(input.gi_coil_weight ?? DEFAULT_GI.coilWeight, 'GI coil weight'),
-    gi_field_order: normalizeFieldOrder(input.gi_field_order, 'GI field order'),
-    gi_items: normalizeItems(input.gi_items, { withAfp: false }),
-    gl_product_name: boundedText(input.gl_product_name ?? DEFAULT_GL.productName, 'GL product name'),
-    gl_grade: boundedText(input.gl_grade ?? DEFAULT_GL.grade, 'GL grade'),
-    gl_spangle: boundedText(input.gl_spangle ?? DEFAULT_GL.spangle, 'GL spangle'),
-    gl_coating: boundedText(input.gl_coating ?? DEFAULT_GL.coating, 'GL coating mass'),
-    gl_coil_id: boundedText(input.gl_coil_id ?? DEFAULT_GL.coilId, 'GL coil ID'),
-    gl_coil_weight: boundedText(input.gl_coil_weight ?? DEFAULT_GL.coilWeight, 'GL coil weight'),
-    gl_field_order: normalizeFieldOrder(input.gl_field_order, 'GL field order'),
-    gl_items: normalizeItems(input.gl_items, { withAfp: true }),
+    ...calc,
+    panels,
     trade_terms: boundedText(input.trade_terms ?? DEFAULT_FOOTER.tradeTerms, 'trade terms'),
     payment_term: boundedText(input.payment_term ?? DEFAULT_FOOTER.paymentTerm, 'payment term'),
     price_validity: boundedText(input.price_validity ?? DEFAULT_FOOTER.priceValidity, 'price validity')
   }
 }
 
-// Shape handed to the public page / SSR: JSON strings parsed into arrays.
-// Legacy entries saved with the single shared base_price fill both sides
-// from it so they render correctly without a manual re-save.
+// Shape handed to the public page / SSR: JSON strings parsed
 export function expandDailyPrice(row) {
   if (!row) return null
   const parse = (value, fallback) => {
@@ -191,16 +214,58 @@ export function expandDailyPrice(row) {
   }
   const expanded = {
     ...row,
-    gi_field_order: normalizeFieldOrder(row.gi_field_order, 'GI field order'),
-    gl_field_order: normalizeFieldOrder(row.gl_field_order, 'GL field order'),
-    gi_items: parse(row.gi_items, []),
-    gl_items: parse(row.gl_items, [])
+    panels: parse(row.panels, null)
   }
-  if (expanded.base_price != null && String(expanded.base_price).trim() !== '') {
-    if (expanded.gi_base_price == null) expanded.gi_base_price = expanded.base_price
-    if (expanded.gl_base_price == null) expanded.gl_base_price = expanded.base_price
+  // Backward compat: if no panels column, build from legacy gi_/gl_ fields
+  if (!expanded.panels) {
+    expanded.panels = buildLegacyPanels(row)
   }
   return expanded
+}
+
+// Build panels from legacy gi_/gl_ column format
+function buildLegacyPanels(row) {
+  const panels = []
+  if (row.gi_product_name || row.gi_base_price != null) {
+    panels.push({
+      key: 'gi',
+      productName: row.gi_product_name || '',
+      grade: row.gi_grade || '',
+      spangle: row.gi_spangle || '',
+      coating: row.gi_coating || '',
+      coilId: row.gi_coil_id || '',
+      coilWeight: row.gi_coil_weight || '',
+      base_price: row.gi_base_price ?? 3500,
+      field_order: normalizeFieldOrder(row.gi_field_order, 'GI'),
+      items: safeParseItems(row.gi_items),
+      has_afp: false,
+      visible: true
+    })
+  }
+  if (row.gl_product_name || row.gl_base_price != null) {
+    panels.push({
+      key: 'gl',
+      productName: row.gl_product_name || '',
+      grade: row.gl_grade || '',
+      spangle: row.gl_spangle || '',
+      coating: row.gl_coating || '',
+      coilId: row.gl_coil_id || '',
+      coilWeight: row.gl_coil_weight || '',
+      base_price: row.gl_base_price ?? 3600,
+      field_order: normalizeFieldOrder(row.gl_field_order, 'GL'),
+      items: safeParseItems(row.gl_items),
+      has_afp: true,
+      visible: true
+    })
+  }
+  return panels
+}
+
+function safeParseItems(value) {
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch { return [] }
 }
 
 export function createDailyPriceStore({ getAll, getOne, run }) {
@@ -214,12 +279,7 @@ export function createDailyPriceStore({ getAll, getOne, run }) {
 
   function getByDate(date) {
     let normalized
-    try {
-      normalized = normalizePriceDate(date)
-    } catch {
-      // Malformed date strings (e.g. from a stale history link) are simply "not found"
-      return null
-    }
+    try { normalized = normalizePriceDate(date) } catch { return null }
     return expandDailyPrice(getOne('SELECT * FROM daily_prices WHERE publish_date = ?', [normalized]))
   }
 
@@ -227,60 +287,22 @@ export function createDailyPriceStore({ getAll, getOne, run }) {
     return expandDailyPrice(getOne('SELECT * FROM daily_prices ORDER BY publish_date DESC LIMIT 1'))
   }
 
-  // Upsert by publish date: saving today publishes immediately; saving a past
-  // date revises that history entry.
   function save(input) {
     const entry = normalizeDailyPrice(input)
+    const calcCols = [...NUMERIC_CALC_FIELDS]
+    const cols = ['publish_date', 'panels', ...calcCols, 'trade_terms', 'payment_term', 'price_validity']
+    const placeholders = cols.map(() => '?').join(',')
+    const updates = cols.filter(c => c !== 'publish_date').map(c => `${c} = excluded.${c}`).join(', ')
     run(`
-      INSERT INTO daily_prices (
-        publish_date,
-        gi_base_price, gl_base_price, exchange_rate, sea_freight,
-        packaging_surcharge, head_tail_surcharge, land_transport_surcharge,
-        port_charges_surcharge, extra_width_surcharge, spray_code_surcharge,
-        gi_product_name, gi_grade, gi_spangle, gi_coating, gi_coil_id, gi_coil_weight, gi_field_order, gi_items,
-        gl_product_name, gl_grade, gl_spangle, gl_coating, gl_coil_id, gl_coil_weight, gl_field_order, gl_items,
-        trade_terms, payment_term, price_validity
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO daily_prices (${cols.join(', ')})
+      VALUES (${placeholders})
       ON CONFLICT(publish_date) DO UPDATE SET
-        gi_base_price = excluded.gi_base_price,
-        gl_base_price = excluded.gl_base_price,
-        exchange_rate = excluded.exchange_rate,
-        sea_freight = excluded.sea_freight,
-        packaging_surcharge = excluded.packaging_surcharge,
-        head_tail_surcharge = excluded.head_tail_surcharge,
-        land_transport_surcharge = excluded.land_transport_surcharge,
-        port_charges_surcharge = excluded.port_charges_surcharge,
-        extra_width_surcharge = excluded.extra_width_surcharge,
-        spray_code_surcharge = excluded.spray_code_surcharge,
-        gi_product_name = excluded.gi_product_name,
-        gi_grade = excluded.gi_grade,
-        gi_spangle = excluded.gi_spangle,
-        gi_coating = excluded.gi_coating,
-        gi_coil_id = excluded.gi_coil_id,
-        gi_coil_weight = excluded.gi_coil_weight,
-        gi_field_order = excluded.gi_field_order,
-        gi_items = excluded.gi_items,
-        gl_product_name = excluded.gl_product_name,
-        gl_grade = excluded.gl_grade,
-        gl_spangle = excluded.gl_spangle,
-        gl_coating = excluded.gl_coating,
-        gl_coil_id = excluded.gl_coil_id,
-        gl_coil_weight = excluded.gl_coil_weight,
-        gl_field_order = excluded.gl_field_order,
-        gl_items = excluded.gl_items,
-        trade_terms = excluded.trade_terms,
-        payment_term = excluded.payment_term,
-        price_validity = excluded.price_validity,
+        ${updates},
         updated_at = CURRENT_TIMESTAMP
     `, [
       entry.publish_date,
-      entry.gi_base_price, entry.gl_base_price, entry.exchange_rate, entry.sea_freight,
-      entry.packaging_surcharge, entry.head_tail_surcharge, entry.land_transport_surcharge,
-      entry.port_charges_surcharge, entry.extra_width_surcharge, entry.spray_code_surcharge,
-      entry.gi_product_name, entry.gi_grade, entry.gi_spangle, entry.gi_coating, entry.gi_coil_id, entry.gi_coil_weight,
-      JSON.stringify(entry.gi_field_order), JSON.stringify(entry.gi_items),
-      entry.gl_product_name, entry.gl_grade, entry.gl_spangle, entry.gl_coating, entry.gl_coil_id, entry.gl_coil_weight,
-      JSON.stringify(entry.gl_field_order), JSON.stringify(entry.gl_items),
+      JSON.stringify(entry.panels),
+      ...calcCols.map(c => entry[c]),
       entry.trade_terms, entry.payment_term, entry.price_validity
     ])
     return getByDate(entry.publish_date)
@@ -300,4 +322,17 @@ export function createDailyPriceStore({ getAll, getOne, run }) {
   }
 
   return { listDates, getByDate, getLatest, save, remove, seedDefaultsIfEmpty }
+}
+
+// Compute USD price for a panel row
+export function computePanelPrice({ panel, thicknessAdj = 0, afpAdj = 0, withAfp = false, exchangeRate, seaFreight }) {
+  const base = parseCalcNumber(panel?.base_price)
+  const rate = parseCalcNumber(exchangeRate)
+  const freight = parseCalcNumber(seaFreight)
+  const surcharges = 0 // global surcharges handled by caller
+  let sum = base + parseCalcNumber(thicknessAdj) + surcharges
+  if (withAfp) sum += parseCalcNumber(afpAdj)
+  const usd = sum / (rate || 1) + freight
+  const rounded = Math.round(usd * 10) / 10
+  return Number.isFinite(rounded) ? rounded : 0
 }

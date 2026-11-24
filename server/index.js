@@ -36,7 +36,7 @@ import { getPublicTranslationSettings } from './services/publicInitialState.js'
 import { buildHomeInitialState } from './services/homeInitialState.js'
 import { resolveHomeFaqs } from './services/homeFaq.js'
 import { createDailyPriceStore } from './services/dailyPrice.js'
-import { computeUsdPrice } from '../shared/dailyPriceCalc.js'
+import { computePanelRowPrice } from '../shared/dailyPriceCalc.js'
 import { createFaviconHandler } from './services/favicon.js'
 import authRoutes from './routes/auth.js'
 import securityRoutes from './routes/security.js'
@@ -1408,27 +1408,28 @@ ${contactLines.join('\n')}
             }
             ssrContent = `<section id="ssr-futures"><h1>${esc(ui('futuresTitle', staticCopy.futuresPrice.h1))}</h1><p>${esc(ui('futuresDesc', staticCopy.futuresPrice.intro))}</p>${tableHtml}</section>`
           } else if (subPath === '/news/daily-price' || subPath === '/news/daily-price/') {
-            // ── Daily price board (GI / GL) ──
+            // ── Daily price board — dynamic panels (GI/GL/CRC/custom) ──
             matchedRoute = true
             isNotFound = false
             routeIndexableLangs = routeLangs('staticNews')
             const dailyPriceStore = createDailyPriceStore({ getAll, getOne, run })
             let priceEntry = null
-            try { priceEntry = dailyPriceStore.getLatest() } catch (e) { /* table may be missing on stale DBs */ }
-            // Translate the quote sheet content for this language (translations
-            // table: content_type='daily_price', content_id=<entry id>)
+            try { priceEntry = dailyPriceStore.getLatest() } catch (e) {}
             if (priceEntry && lang !== 'en') {
               try {
                 const t = tMap?.[`daily_price_${priceEntry.id}`]
                 if (t) {
-                  for (const field of ['gi_product_name', 'gl_product_name', 'trade_terms', 'payment_term', 'price_validity']) {
+                  for (const field of ['trade_terms', 'payment_term', 'price_validity']) {
                     if (t[field]) priceEntry[`${field}_${lang}`] = t[field]
+                  }
+                  for (const p of priceEntry.panels || []) {
+                    const pn = t[`${p.key}_product_name`]
+                    if (pn) p.productName = pn
                   }
                 }
               } catch (e) {}
             }
             const locPrice = (field) => priceEntry?.[`${field}_${lang}`] || priceEntry?.[field] || ''
-            // Page copy: per-language static copy with language_seo_copy overrides
             pageTitle = fillTemplate(staticCopy.dailyPrice.title, { company: companyNameTranslated })
             pageDesc = fillTemplate(staticCopy.dailyPrice.desc, { company: companyNameTranslated })
             extraSchemas += jsonLd({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
@@ -1436,69 +1437,32 @@ ${contactLines.join('\n')}
               { '@type': 'ListItem', position: 2, name: seoCopy.breadcrumbNews, item: `${siteUrl}/${lang}/news` },
               { '@type': 'ListItem', position: 3, name: ui('dailyPriceBtn', staticCopy.dailyPrice.h1), item: pageCanonical }
             ] })
-
-            // Chrome/field labels: translated daily_price_static labels first,
-            // then the UI static translations, then the English defaults
-            const dpLabel = (key, fallback) =>
-              tMap?.daily_price_static?.[key] || tMap?.ui_text_static?.[key] || fallback
-            const priceFieldLabels = {
-              productName: '',
-              grade: dpLabel('priceFieldGrade', 'GRADE'),
-              spangle: dpLabel('priceFieldSpangle', 'SPANGLE'),
-              coating: dpLabel('priceFieldCoating', 'COATING MASS'),
-              coilId: dpLabel('priceFieldCoilId', 'COIL ID'),
-              coilWeight: dpLabel('priceFieldCoilWeight', 'COIL WEIGHT')
-            }
-            const priceFieldColumns = {
-              productName: 'product_name',
-              grade: 'grade',
-              spangle: 'spangle',
-              coating: 'coating',
-              coilId: 'coil_id',
-              coilWeight: 'coil_weight'
-            }
-            const priceSpecRows = (entry, items, side, withAfp) => {
-              const rows = (items || []).map(item => {
-                const fob = computeUsdPrice({ entry, side, thicknessAdj: item.thickness_adj, withAfp: false })
-                return withAfp
-                  ? `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(String(fob))}</td><td>${esc(String(computeUsdPrice({ entry, side, thicknessAdj: item.thickness_adj, afpAdj: item.afp_adj, withAfp: true })))}</td></tr>`
-                  : `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(String(fob))}</td></tr>`
-              })
-              if (!rows.length) {
-                const cols = withAfp ? 4 : 3
-                rows.push(`<tr><td colspan="${cols}">${esc(dpLabel('priceNoRows', 'Prices for today are being updated — please check back soon.'))}</td></tr>`)
-              }
-              return rows.join('')
-            }
-            // Header label with the unit on its own line, e.g. "FOB PRICE" / "(USD/MT)"
+            const dpLabel = (key, fallback) => tMap?.daily_price_static?.[key] || tMap?.ui_text_static?.[key] || fallback
             const ssrHeader = label => {
               const m = String(label).match(/^([^()]*)\((.*)\)\s*$/)
               return m ? `${esc(m[1].trim())}<br><span class="th-unit">(${esc(m[2])})</span>` : esc(label)
             }
-            const pricePanel = (side, entry) => {
-              if (!entry) return ''
-              const prefix = side === 'gi' ? 'gi' : 'gl'
-              const withAfp = side !== 'gi'
-              const order = entry[`${prefix}_field_order`] || []
-              const infoHtml = order
-                .filter(key => key !== 'productName')
-                .map(key => `<li><strong>${esc(priceFieldLabels[key])}:</strong> ${esc(entry[`${prefix}_${priceFieldColumns[key]}`] || '')}</li>`)
-                .join('')
-              const cols = [
-                ssrHeader(dpLabel('priceColSize', 'SIZE')),
-                ssrHeader(dpLabel('priceColQuantity', 'QUANTITY (MT)')),
-                ssrHeader(dpLabel('priceColFob', 'FOB PRICE (USD/MT)')),
-                ...(withAfp ? [ssrHeader(dpLabel('priceColFobAfp', 'AFP PRICE (USD/MT)'))] : [])
-              ].map(h => `<th>${h}</th>`).join('')
-              const rowsHtml = priceSpecRows(entry, entry[`${prefix}_items`], side, withAfp)
-              return `<article class="daily-price-panel"><h2>${esc(locPrice(`${prefix}_product_name`))}</h2><ul>${infoHtml}</ul><table><thead><tr>${cols}</tr></thead><tbody>${rowsHtml}</tbody></table></article>`
-            }
-            const panelsHtml = priceEntry ? pricePanel('gi', priceEntry) + pricePanel('gl', priceEntry) : ''
+            const visiblePanels = (priceEntry?.panels || []).filter(p => p.visible)
+            const panelsHtml = visiblePanels.map(panel => {
+              const withAfp = !!panel.has_afp
+              const order = panel.field_order || []
+              const fieldLabels = { productName: '', grade: dpLabel('priceFieldGrade', 'GRADE'), spangle: dpLabel('priceFieldSpangle', 'SPANGLE'), coating: dpLabel('priceFieldCoating', 'COATING MASS'), coilId: dpLabel('priceFieldCoilId', 'COIL ID'), coilWeight: dpLabel('priceFieldCoilWeight', 'COIL WEIGHT') }
+              const fieldCols = { productName: 'productName', grade: 'grade', spangle: 'spangle', coating: 'coating', coilId: 'coilId', coilWeight: 'coilWeight' }
+              const infoHtml = order.filter(k => k !== 'productName').map(k => `<li><strong>${esc(fieldLabels[k])}:</strong> ${esc(panel[fieldCols[k]] || '')}</li>`).join('')
+              const cols = [ssrHeader(dpLabel('priceColSize', 'SIZE')), ssrHeader(dpLabel('priceColQuantity', 'QUANTITY (MT)')), ssrHeader(dpLabel('priceColFob', 'FOB PRICE (USD/MT)')), ...(withAfp ? [ssrHeader(dpLabel('priceColFobAfp', 'AFP PRICE (USD/MT)'))] : [])].map(h => `<th>${h}</th>`).join('')
+              const rows = (panel.items || []).map(item => {
+                const fob = computePanelRowPrice(priceEntry, panel, item, false)
+                return withAfp
+                  ? `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(String(fob))}</td><td>${esc(String(computePanelRowPrice(priceEntry, panel, item, true)))}</td></tr>`
+                  : `<tr><td>${esc(item.spec)}</td><td>${esc(item.quantity)}</td><td>${esc(String(fob))}</td></tr>`
+              })
+              if (!rows.length) { const cols2 = withAfp ? 4 : 3; rows.push(`<tr><td colspan="${cols2}">${esc(dpLabel('priceNoRows', 'Prices for today are being updated — please check back soon.'))}</td></tr>`) }
+              return `<article class="daily-price-panel"><h2>${esc(panel.productName)}</h2><ul>${infoHtml}</ul><table><thead><tr>${cols}</tr></thead><tbody>${rows.join('')}</tbody></table></article>`
+            }).join('')
             const dateHtml = priceEntry ? `<p class="daily-price-date"><time datetime="${esc(priceEntry.publish_date)}">${esc(priceEntry.publish_date)}</time></p>` : ''
             const termsHtml = priceEntry ? `<ul class="daily-price-terms"><li><strong>${esc(dpLabel('priceTradeTerms', 'TRADE TERMS'))}:</strong> ${esc(locPrice('trade_terms'))}</li><li><strong>${esc(dpLabel('pricePaymentTerm', 'PAYMENT TERM'))}:</strong> ${esc(locPrice('payment_term'))}</li><li><strong>${esc(dpLabel('priceValidity', 'PRICE VALIDITY'))}:</strong> ${esc(locPrice('price_validity'))}</li></ul>` : ''
             ssrContent = `<section id="ssr-daily-price"><h1>${esc(fillTemplate(staticCopy.dailyPrice.h1, { company: companyNameTranslated }))}</h1><p>${esc(fillTemplate(staticCopy.dailyPrice.intro, { company: companyNameTranslated }))}</p>${dateHtml}${panelsHtml}${termsHtml}</section>`
           }
-
           // ── Homepage BreadcrumbList + WebSite schema + SSR content ──
           if (!subPath || subPath === '/') {
             matchedRoute = true

@@ -1,16 +1,9 @@
 <template>
   <div class="daily-price">
-    <!-- Date picker: the date itself is the history selector -->
     <div class="price-toolbar">
       <label class="price-date">
         <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
-        <select
-          class="date-select"
-          :value="entry?.publish_date || ''"
-          :disabled="loading"
-          :aria-label="t('priceHistory')"
-          @change="onHistoryChange"
-        >
+        <select class="date-select" :value="entry?.publish_date || ''" :disabled="loading" :aria-label="t('priceHistory')" @change="onHistoryChange">
           <option v-if="!dates.length" :value="entry?.publish_date || ''">{{ entry?.publish_date || '—' }}</option>
           <option v-for="d in dates" :key="d.publish_date" :value="d.publish_date">{{ d.publish_date }}</option>
         </select>
@@ -21,48 +14,39 @@
     <div v-if="loading" class="price-loading">{{ t('priceLoading') }}</div>
 
     <template v-else-if="entry">
-      <!-- GI left / GL right -->
       <div class="price-panels">
-        <section
-          v-for="side in sides"
-          :key="side.key"
-          class="price-panel"
-          :class="`price-panel-${side.key}`"
-          :aria-label="localizedValue(entry, sidePrefix(side.key) + '_product_name')"
-        >
-          <h2 class="panel-product">{{ localizedValue(entry, sidePrefix(side.key) + '_product_name') }}</h2>
+        <section v-for="panel in visiblePanels" :key="panel.key" class="price-panel" :class="'price-panel-' + panel.key" :aria-label="panel.productName">
+          <h2 class="panel-product">{{ panel.productName }}</h2>
           <ul class="panel-info">
-            <li v-for="field in infoFields(side.key)" :key="field.key">
+            <li v-for="field in infoFields(panel)" :key="field.key">
               <strong>{{ field.label }}:</strong>
               <span>{{ field.value }}</span>
             </li>
           </ul>
-
           <div class="panel-table-wrap">
             <table class="price-table">
               <thead>
                 <tr>
                   <th>{{ t('priceColSize') }}</th>
-                  <th v-for="col in tableHeaders(side.key)" :key="col.full" v-html="col.html"></th>
+                  <th>{{ t('priceColQuantity') }}</th>
+                  <th>{{ t('priceColFob') }}</th>
+                  <th v-if="panel.has_afp" class="afp-col">{{ t('priceColFobAfp') }}</th>
                 </tr>
               </thead>
               <tbody>
-                <tr
-                  v-for="(row, index) in entry[sidePrefix(side.key) + '_items']"
-                  :key="index"
-                  :class="{ highlighted: highlighted[side.key] === index }"
-                  tabindex="0"
-                  @click="toggleHighlight(side.key, index)"
-                  @keydown.enter.prevent="toggleHighlight(side.key, index)"
-                  @keydown.space.prevent="toggleHighlight(side.key, index)"
-                >
+                <tr v-for="(row, index) in panel.items" :key="index"
+                    :class="{ highlighted: highlighted[panel.key] === index }"
+                    tabindex="0"
+                    @click="toggleHighlight(panel.key, index)"
+                    @keydown.enter.prevent="toggleHighlight(panel.key, index)"
+                    @keydown.space.prevent="toggleHighlight(panel.key, index)">
                   <td>{{ row.spec }}</td>
                   <td>{{ row.quantity }}</td>
-                  <td>{{ computedFob(side.key, row) }}</td>
-                  <td v-if="side.key === 'gl'" class="afp-col">{{ computedFob(side.key, row, true) }}</td>
+                  <td>{{ computedFob(panel, row, false) }}</td>
+                  <td v-if="panel.has_afp" class="afp-col">{{ computedFob(panel, row, true) }}</td>
                 </tr>
-                <tr v-if="!(entry[sidePrefix(side.key) + '_items'] || []).length">
-                  <td :colspan="side.key === 'gl' ? 4 : 3" class="table-empty">{{ t('priceNoRows') }}</td>
+                <tr v-if="!(panel.items || []).length">
+                  <td :colspan="panel.has_afp ? 4 : 3" class="table-empty">{{ t('priceNoRows') }}</td>
                 </tr>
               </tbody>
             </table>
@@ -70,7 +54,6 @@
         </section>
       </div>
 
-      <!-- Trade terms footer -->
       <ul class="price-terms">
         <li><strong>{{ t('priceTradeTerms') }}:</strong> {{ localizedValue(entry, 'trade_terms') }}</li>
         <li><strong>{{ t('pricePaymentTerm') }}:</strong> {{ localizedValue(entry, 'payment_term') }}</li>
@@ -83,29 +66,23 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api'
 import { useLang } from '../composables/useLang'
-import { computeUsdPrice } from '../../shared/dailyPriceCalc.js'
+import { computePanelRowPrice, globalSurcharges } from '../../shared/dailyPriceCalc.js'
 
 const route = useRoute()
 const { t, localizedValue } = useLang()
 
-const sides = [
-  { key: 'gi' },
-  { key: 'gl' }
-]
-
 const entry = ref(null)
 const dates = ref([])
 const loading = ref(true)
-const highlighted = reactive({ gi: -1, gl: -1 })
+const highlighted = reactive({})
 
-const sidePrefix = key => (key === 'gi' ? 'gi' : 'gl')
-// Field labels are translatable UI entries (priceField_*); the abbreviations
-// GRADE / SPANGLE / COATING MASS / COIL ID / COIL WEIGHT stay as the English
-// defaults and MT / USD / AFP remain untranslated per trade-sheet convention.
+const visiblePanels = computed(() => (entry.value?.panels || []).filter(p => p.visible))
+const surchargeSum = computed(() => globalSurcharges(entry.value))
+
 const FIELD_LABEL_KEYS = {
   grade: 'priceFieldGrade',
   spangle: 'priceFieldSpangle',
@@ -113,139 +90,81 @@ const FIELD_LABEL_KEYS = {
   coilId: 'priceFieldCoilId',
   coilWeight: 'priceFieldCoilWeight'
 }
-const FIELD_COLUMNS = {
-  productName: 'product_name',
+const FIELD_KEYS = {
+  productName: 'productName',
   grade: 'grade',
   spangle: 'spangle',
   coating: 'coating',
-  coilId: 'coil_id',
-  coilWeight: 'coil_weight'
+  coilId: 'coilId',
+  coilWeight: 'coilWeight'
 }
 
-// Ordered info rows for one panel: follows the admin-defined field order,
-// productName renders as the panel heading so it is skipped here.
-function infoFields(sideKey) {
-  const prefix = sidePrefix(sideKey)
-  const order = entry.value?.[`${prefix}_field_order`] || []
+function infoFields(panel) {
+  const order = panel.field_order || []
   return order
     .filter(key => key !== 'productName')
     .map(key => ({
       key,
       label: t(FIELD_LABEL_KEYS[key] || key),
-      value: entry.value?.[`${prefix}_${FIELD_COLUMNS[key]}`] || ''
+      value: panel[FIELD_KEYS[key]] || ''
     }))
 }
 
-// Table headers with the unit pushed onto its own line: "FOB PRICE (USD/MT)"
-// renders as "FOB PRICE" / "(USD/MT)". Returns v-html strings split on the
-// first parenthesis group.
-function headerHtml(text) {
-  const label = String(text || '')
-  const match = label.match(/^([^()]*)\((.*)\)\s*$/)
-  if (!match) return { html: escapeHtml(label) }
-  return { html: `${escapeHtml(match[1].trim())}<br><span class="th-unit">(${escapeHtml(match[2])})</span>` }
+function toggleHighlight(panelKey, index) {
+  highlighted[panelKey] = highlighted[panelKey] === index ? -1 : index
 }
 
-function tableHeaders(sideKey) {
-  const keys = ['priceColQuantity', 'priceColFob']
-  if (sideKey === 'gl') keys.push('priceColFobAfp')
-  return keys.map(key => {
-    const full = t(key)
-    return { full, html: headerHtml(full).html }
-  })
-}
-
-function escapeHtml(value) {
-  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
-function toggleHighlight(sideKey, index) {
-  highlighted[sideKey] = highlighted[sideKey] === index ? -1 : index
-}
-
-const computedFob = (sideKey, row, withAfp = false) =>
-  computeUsdPrice({
-    entry: entry.value,
-    side: sideKey,
-    thicknessAdj: row?.thickness_adj,
-    afpAdj: row?.afp_adj,
-    withAfp: sideKey === 'gl' && withAfp
-  })
+const computedFob = (panel, row, withAfp) =>
+  computePanelRowPrice(entry.value, panel, row, panel.has_afp && withAfp)
 
 async function loadDate(date) {
   loading.value = true
   try {
     const data = date ? await api.getDailyPriceByDate(date) : await api.getDailyPriceLatest()
-    if (data) {
-      entry.value = data
-      highlighted.gi = -1
-      highlighted.gl = -1
-    } else if (!date) {
-      entry.value = null
-    }
+    if (data) { entry.value = data; Object.keys(highlighted).forEach(k => delete highlighted[k]) }
+    else if (!date) entry.value = null
   } catch (e) {
-    if (date) {
-      // Requested history date no longer exists — fall back to latest
-      entry.value = await api.getDailyPriceLatest().catch(() => null)
-    }
-  } finally {
-    loading.value = false
-  }
+    if (date) entry.value = await api.getDailyPriceLatest().catch(() => null)
+  } finally { loading.value = false }
 }
 
-async function onHistoryChange(event) {
-  await loadDate(event.target.value)
-}
+async function onHistoryChange(event) { await loadDate(event.target.value) }
 
-onMounted(async () => {
+onMounted(() => {
   loadDate(null)
   api.getDailyPriceDates().then(list => { dates.value = list || [] }).catch(() => {})
 })
 </script>
 
 <style scoped>
-.daily-price { color: var(--text-primary); }
-.price-toolbar {
-  display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  margin-bottom: 20px; flex-wrap: wrap;
-}
+.daily-price { color: var(--crm-text, #0f172a); }
+.price-toolbar { display: flex; align-items: center; margin-bottom: 20px; }
 .price-date { display: inline-flex; align-items: center; gap: 6px; }
-.price-date > svg:first-child { width: 22px; height: 22px; color: var(--primary); }
-.date-select {
-  appearance: none; -webkit-appearance: none; border: none; background: transparent;
-  font-size: 20px; font-weight: 700; color: var(--text-primary, #0f172a);
-  font-family: inherit; cursor: pointer; padding-right: 2px;
-}
-.date-select:focus-visible { outline: 2px solid var(--primary, #1e40af); outline-offset: 2px; border-radius: 4px; }
+.price-date > svg:first-child { width: 22px; height: 22px; color: var(--crm-primary, #1e40af); }
+.date-select { appearance: none; -webkit-appearance: none; border: none; background: transparent; font-size: 20px; font-weight: 700; color: var(--crm-text, #0f172a); font-family: inherit; cursor: pointer; padding-right: 2px; }
+.date-select:focus-visible { outline: 2px solid var(--crm-primary, #1e40af); outline-offset: 2px; border-radius: 4px; }
 .date-select:disabled { cursor: default; }
-.price-date .chevron { width: 16px; height: 16px; color: var(--text-secondary); pointer-events: none; }
+.price-date .chevron { width: 16px; height: 16px; color: var(--crm-text-2, #64748b); pointer-events: none; }
 
-.price-panels {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start;
-}
-@media (max-width: 900px) { .price-panels { grid-template-columns: 1fr; } }
-
-.price-panel { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: var(--white, #fff); }
+.price-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; align-items: start; }
+.price-panel { border: 1px solid var(--crm-border, #e6eaf2); border-radius: var(--crm-radius, 14px); padding: 18px; background: var(--crm-card, #fff); }
 .panel-product { font-size: 16px; font-weight: 800; letter-spacing: .02em; margin: 0 0 12px; line-height: 1.4; }
 .panel-info { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 4px; font-size: 14px; }
-.panel-info strong { color: var(--text-secondary); font-size: 12px; letter-spacing: .05em; }
+.panel-info strong { color: var(--crm-text-2, #64748b); font-size: 12px; letter-spacing: .05em; }
 
 .panel-table-wrap { overflow-x: auto; }
 .price-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.price-table th, .price-table td { border: 1px solid var(--border); padding: 8px 10px; text-align: center; white-space: nowrap; }
-.price-table th { background: var(--gray-100, #f1f5f9); font-size: 12px; letter-spacing: .04em; }
-.price-table th .th-unit { font-weight: 500; font-size: 11px; color: var(--text-secondary); }
+.price-table th, .price-table td { border: 1px solid var(--crm-border, #e6eaf2); padding: 8px 10px; text-align: center; white-space: nowrap; }
+.price-table th { background: var(--crm-bg, #f6f8fb); font-size: 12px; letter-spacing: .04em; }
+.price-table th .th-unit { font-weight: 500; font-size: 11px; color: var(--crm-text-2, #64748b); }
 .price-table tbody tr { cursor: pointer; transition: background .12s ease; }
 .price-table tbody tr:hover { background: #f8fafc; }
-.price-table tbody tr.highlighted { background: #dbeafe; box-shadow: inset 3px 0 0 var(--primary); }
+.price-table tbody tr.highlighted { background: #dbeafe; box-shadow: inset 3px 0 0 var(--crm-primary, #1e40af); }
 .price-table .afp-col { background: #fffbeb; }
 .price-table tr.highlighted .afp-col { background: #fde68a; }
-.table-empty { text-align: center; color: var(--text-secondary); cursor: default; }
+.table-empty { text-align: center; color: var(--crm-text-2, #64748b); cursor: default; }
 .table-empty:hover { background: transparent; }
 
-.price-terms {
-  margin: 20px 0 0; padding: 14px 18px; border: 1px solid var(--border); border-radius: 12px;
-  background: var(--gray-50, #f8fafc); list-style: none; font-size: 14px; display: grid; gap: 4px;
-}
-.price-loading, .price-empty { padding: 40px 0; text-align: center; color: var(--text-secondary); }
+.price-terms { margin: 20px 0 0; padding: 14px 18px; border: 1px solid var(--crm-border, #e6eaf2); border-radius: var(--crm-radius, 14px); background: var(--crm-bg, #f8fafc); list-style: none; font-size: 14px; display: grid; gap: 4px; }
+.price-loading, .price-empty { padding: 40px 0; text-align: center; color: var(--crm-text-2, #64748b); }
 </style>

@@ -1,31 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Daily price board calculation (shared by client, SSR and tests).
-//
-// The admin maintains a base price in RMB plus a set of global surcharges;
-// each table row carries its own thickness adjustment and — for the GL side —
-// its own anti-fingerprint (AFP) adjustment, because the AFP premium differs
-// per thickness. The displayed USD price is:
-//
-//   FOB  = (base + thicknessAdj + packaging + headTail + landTransport
-//            + portCharges + extraWidth + sprayCode) / exchangeRate + seaFreight
-//   AFP  = same RMB sum + row.afpAdj, then / exchangeRate + seaFreight
-//
+// Each panel has its own base_price. Global surcharges + exchange rate +
+// sea freight are shared across panels. Per-row thickness/AFP adjustments.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const NUMERIC_CALC_FIELDS = Object.freeze([
-  'gi_base_price',
-  'gl_base_price',
-  'exchange_rate',
-  'sea_freight',
-  'packaging_surcharge',
-  'head_tail_surcharge',
-  'land_transport_surcharge',
-  'port_charges_surcharge',
-  'extra_width_surcharge',
-  'spray_code_surcharge'
-])
-
-export { NUMERIC_CALC_FIELDS }
 
 export function parseCalcNumber(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -37,8 +14,6 @@ export function parseCalcNumber(value) {
 
 export function calcDefaults() {
   return {
-    gi_base_price: 3500,
-    gl_base_price: 3600,
     exchange_rate: 7.15,
     sea_freight: 30,
     packaging_surcharge: 50,
@@ -50,41 +25,43 @@ export function calcDefaults() {
   }
 }
 
-// Each side prices from its own base: GI from the galvanized base price,
-// GL from the galvalume base price. The rest of the formula is identical.
-function basePriceFor(entry, side) {
-  return parseCalcNumber(entry?.[side === 'gl' ? 'gl_base_price' : 'gi_base_price'])
-}
+// Numeric calc fields persisted per entry (exchange rate, freight, surcharges)
+export const NUMERIC_CALC_FIELDS = Object.freeze(Object.keys(calcDefaults()))
 
-// Raw RMB sum for a row (before exchange conversion)
-export function rmbSum({ entry, side = 'gi', thicknessAdj = 0, afpAdj = 0, withAfp = false }) {
+// Global surcharges sum (RMB)
+export function globalSurcharges(entry) {
   const num = field => parseCalcNumber(entry?.[field])
   return (
-    basePriceFor(entry, side) +
-    parseCalcNumber(thicknessAdj) +
     num('packaging_surcharge') +
     num('head_tail_surcharge') +
     num('land_transport_surcharge') +
     num('port_charges_surcharge') +
-    (withAfp ? parseCalcNumber(afpAdj) : 0) +
     num('extra_width_surcharge') +
     num('spray_code_surcharge')
   )
 }
 
-export function computeUsdPrice({ entry, side = 'gi', thicknessAdj = 0, afpAdj = 0, withAfp = false }) {
-  const rate = parseCalcNumber(entry?.exchange_rate)
-  const freight = parseCalcNumber(entry?.sea_freight)
-  const usd = rmbSum({ entry, side, thicknessAdj, afpAdj, withAfp }) / (rate || 1) + freight
-  return roundUsd(usd)
-}
-
-function roundUsd(value) {
-  const rounded = Math.round(value * 10) / 10
+// Compute USD price for one row in one panel
+export function computeUsdPrice({ panel, thicknessAdj = 0, afpAdj = 0, withAfp = false, exchangeRate, seaFreight, globalSurchargeSum = 0 }) {
+  const base = parseCalcNumber(panel?.base_price)
+  const rate = parseCalcNumber(exchangeRate)
+  const freight = parseCalcNumber(seaFreight)
+  let sum = base + parseCalcNumber(thicknessAdj) + globalSurchargeSum
+  if (withAfp) sum += parseCalcNumber(afpAdj)
+  const usd = sum / (rate || 1) + freight
+  const rounded = Math.round(usd * 10) / 10
   return Number.isFinite(rounded) ? rounded : 0
 }
 
-// Display formatter: 598 -> "598", 598.4 -> "598.4"
-export function formatUsd(value) {
-  return String(value)
+// Convenience: compute from entry + panel (extracts exchange_rate, sea_freight, global surcharges from entry)
+export function computePanelRowPrice(entry, panel, row, withAfp = false) {
+  return computeUsdPrice({
+    panel,
+    thicknessAdj: parseCalcNumber(row?.thickness_adj),
+    afpAdj: parseCalcNumber(row?.afp_adj),
+    withAfp,
+    exchangeRate: entry?.exchange_rate,
+    seaFreight: entry?.sea_freight,
+    globalSurchargeSum: globalSurcharges(entry)
+  })
 }
