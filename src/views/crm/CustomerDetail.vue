@@ -1,114 +1,175 @@
 <template>
-  <div class="customer-detail" v-if="customer">
-    <div class="detail-header">
-      <button class="btn-back" @click="$router.push(($route.path.startsWith('/crm/sub') ? '/crm/sub' : '/crm') + '/customers')">← 返回</button>
-      <h1>{{ customer.name }}</h1>
-      <span :class="['status-badge', getStatusClass(customer.status)]">{{ customer.status }}</span>
+  <div class="crm-page customer-detail crm-scope" v-if="customer">
+    <!-- Header bar -->
+    <div class="detail-topbar">
+      <button class="crm-btn crm-btn-ghost crm-btn-sm" @click="$router.push(backPath)">
+        <svg viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+        返回
+      </button>
+      <span class="crm-small crm-muted">客户详情</span>
     </div>
 
-    <!-- Info Card -->
-    <div class="info-card">
-      <div class="info-grid">
-        <div class="info-item"><label>🏢 公司</label><span>{{ customer.company || '-' }}</span></div>
-        <div class="info-item"><label>🌍 国家</label><span>{{ customer.country || '-' }}</span></div>
-        <div class="info-item"><label>📞 电话</label><span>{{ customer.phone || '-' }}</span></div>
-        <div class="info-item"><label>✉️ 邮箱</label><span>{{ customer.email || '-' }}</span></div>
-        <div class="info-item"><label><svg viewBox="0 0 24 24" width="14" height="14" fill="#25D366" style="vertical-align:-2px"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.116.553 4.103 1.515 5.834L0 24l6.335-1.652A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.7 9.7 0 01-5.25-1.537l-.375-.225-3.885 1.02 1.035-3.795-.247-.393A9.72 9.72 0 012.25 12 9.75 9.75 0 0112 2.25 9.75 9.75 0 0121.75 12 9.75 9.75 0 0112 21.75z"/></svg> WhatsApp</label><span>{{ customer.whatsapp || '-' }}</span></div>
-        <div class="info-item"><label><svg viewBox="0 0 24 24" width="14" height="14" fill="#07C160" style="vertical-align:-2px"><path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.534c0 2.22 1.174 4.205 3.008 5.564l-.757 2.271 2.638-1.355c.88.251 1.825.39 2.802.39.317 0 .629-.018.937-.048a5.9 5.9 0 01-.234-1.634c0-3.526 3.281-6.387 7.33-6.387.32 0 .635.022.945.059C16.145 4.83 12.756 2.188 8.691 2.188zm-3.11 4.497a1.028 1.028 0 110 2.055 1.028 1.028 0 010-2.055zm5.2 0a1.028 1.028 0 110 2.055 1.028 1.028 0 010-2.055zM15.724 8.5c-3.506 0-6.353 2.431-6.353 5.432 0 3.001 2.847 5.432 6.353 5.432.694 0 1.363-.1 1.99-.28L20.1 20.5l-.615-1.843c1.548-1.146 2.539-2.835 2.539-4.724C22.024 10.931 19.23 8.5 15.724 8.5zm-2.669 3.38a.867.867 0 110 1.733.867.867 0 010-1.733zm4.385 0a.867.867 0 110 1.733.867.867 0 010-1.733z"/></svg> 微信</label><span>{{ customer.wechat || '-' }}</span></div>
-        <div class="info-item"><label>👤 负责人</label><span>{{ customer.owner_name || '-' }}</span></div>
-        <div class="info-item"><label>📅 添加时间</label><span>{{ formatDate(customer.created_at) }}</span></div>
-        <div class="info-item"><label>🔄 公海次数</label><span>{{ customer.sea_pool_count || 0 }}</span></div>
+    <!-- Customer hero card -->
+    <div class="crm-card hero-card">
+      <span class="crm-avatar hero-avatar" :style="{ background: avatarColor }">{{ (customer.name || 'U').charAt(0).toUpperCase() }}</span>
+      <div class="hero-main">
+        <div class="hero-name-row">
+          <h1 class="hero-name">{{ customer.name }}</h1>
+          <span :class="['crm-badge', statusBadge(customer.status)]">{{ customer.status }}</span>
+        </div>
+        <div class="hero-tags" v-if="customer.tags?.length">
+          <span v-for="t in customer.tags" :key="t" class="crm-pill">{{ t }}</span>
+        </div>
+        <div class="hero-meta">
+          <span>🏢 {{ customer.company || '—' }}</span>
+          <span>🌍 {{ customer.country || '—' }}</span>
+          <span>👤 {{ customer.owner_name || '—' }}</span>
+          <span>📅 {{ formatDate(customer.created_at) }}</span>
+          <span>🔄 公海 {{ customer.sea_pool_count || 0 }} 次</span>
+        </div>
+        <div class="hero-note" v-if="customer.note">📝 {{ customer.note }}</div>
+        <div class="claim-history" v-if="customer.claim_history?.length">
+          <span class="crm-small crm-muted">📜 申领历史：</span>
+          <span v-for="(h, i) in customer.claim_history" :key="i" class="crm-pill" :class="{ 'pool-blue': h.action === 'auto_pool' }">
+            {{ h.action === 'auto_pool' ? '→公海池' : h.to_name || '申领' }} · {{ formatDate(h.created_at) }}
+          </span>
+        </div>
       </div>
-      <div v-if="customer.note" class="note-row"><label>📝 备注:</label> {{ customer.note }}</div>
-      <div v-if="customer.tags?.length" class="tag-row">
-        <span v-for="t in customer.tags" :key="t" class="tag-badge">{{ t }}</span>
+      <div class="hero-actions">
+        <button class="crm-btn crm-btn-primary" @click="showSendEmailModal = true">✉️ 发邮件</button>
+        <button class="crm-btn crm-btn-outline" @click="quickFollowup">⚡ 快速跟进</button>
+        <button v-if="customer.status !== '公海池'" class="crm-btn crm-btn-outline" @click="moveToPool">🌊 移入公海</button>
       </div>
-      <div v-if="customer.claim_history?.length" class="claim-history">
-        <label>📜 申领历史:</label>
-        <span v-for="(h, i) in customer.claim_history" :key="i" class="claim-item">
-          <span :class="{ 'pool-blue': h.action === 'auto_pool' }">{{ h.action === 'auto_pool' ? '→公海池' : h.to_name || '申领' }}</span>
-          <small>{{ formatDate(h.created_at) }}</small>
-        </span>
-      </div>
+    </div>
+
+    <!-- Contact strip -->
+    <div class="crm-card contact-strip">
+      <span class="contact-chip">📞 {{ customer.phone || '—' }}</span>
+      <a class="contact-chip link" :href="customer.email ? 'mailto:' + customer.email : undefined">✉️ {{ customer.email || '—' }}</a>
+      <span class="contact-chip">🟢 {{ customer.whatsapp || '—' }}</span>
+      <span class="contact-chip">💬 {{ customer.wechat || '—' }}</span>
     </div>
 
     <!-- Tabs -->
     <div class="tabs">
-      <button :class="['tab', { active: activeTab === 'inquiry' }]" @click="activeTab='inquiry'">📋 询盘 ({{ inquiries.length }})</button>
-      <button :class="['tab', { active: activeTab === 'quotation' }]" @click="activeTab='quotation'">💰 报价 ({{ quotations.length }})</button>
-      <button :class="['tab', { active: activeTab === 'followup' }]" @click="activeTab='followup'">📝 跟进 ({{ followups.length }})</button>
+      <button :class="['tab', { active: activeTab === 'inquiry' }]" @click="activeTab='inquiry'">📋 询盘 <b>{{ inquiries.length }}</b></button>
+      <button :class="['tab', { active: activeTab === 'quotation' }]" @click="activeTab='quotation'">💰 报价 <b>{{ quotations.length }}</b></button>
+      <button :class="['tab', { active: activeTab === 'followup' }]" @click="activeTab='followup'">📝 跟进 <b>{{ followups.length }}</b></button>
     </div>
 
     <!-- Inquiry Tab -->
     <div v-if="activeTab === 'inquiry'" class="tab-content">
-      <div class="tab-header">
-        <h3>询盘记录</h3>
-        <button class="btn btn-primary" @click="openInquiryModal()">➕ 添加询盘</button>
+      <div class="crm-between tab-header">
+        <h2 class="crm-section-title">询盘记录</h2>
+        <button class="crm-btn crm-btn-primary crm-btn-sm" @click="openInquiryModal()">＋ 添加询盘</button>
       </div>
-      <div v-for="inq in inquiries" :key="inq.id" class="record-row">
-        <div class="record-left">
-          <div class="record-note">{{ inq.note || '询盘记录' }}</div>
-          <div class="record-time">{{ formatDateTime(inq.inquiry_time) }}</div>
-        </div>
-        <div class="record-right">
-          <button class="btn-sm btn-view" @click="openCombinedPreview(inq, 'inquiry')">预览</button>
-          <button class="btn-sm btn-edit" @click="openInquiryModal(inq)">编辑</button>
-          <button class="btn-sm btn-danger" @click="deleteInquiry(inq)">删除</button>
+      <div class="timeline" v-if="inquiries.length">
+        <div v-for="inq in inquiries" :key="inq.id" class="timeline-item">
+          <span class="tl-dot"></span>
+          <div class="crm-card tl-card">
+            <div class="crm-between">
+              <div class="tl-head"><strong>{{ inq.note || '询盘记录' }}</strong><time class="crm-small crm-muted">{{ formatDateTime(inq.inquiry_time) }}</time></div>
+              <div class="crm-flex" style="gap:6px">
+                <button class="crm-btn crm-btn-outline crm-btn-sm" @click="openCombinedPreview(inq, 'inquiry')">预览</button>
+                <button class="crm-btn crm-btn-outline crm-btn-sm" @click="openInquiryModal(inq)">编辑</button>
+                <button class="crm-btn crm-btn-danger crm-btn-sm" @click="deleteInquiry(inq)">删除</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-      <p v-if="!inquiries.length" class="empty">暂无询盘记录</p>
+      <div class="crm-empty" v-else><span class="crm-empty-icon">📋</span>暂无询盘记录</div>
     </div>
 
     <!-- Quotation Tab -->
     <div v-if="activeTab === 'quotation'" class="tab-content">
-      <div class="tab-header">
-        <h3>报价记录</h3>
-        <button class="btn btn-primary" @click="openQuotationModal()">➕ 添加报价</button>
+      <div class="crm-between tab-header">
+        <h2 class="crm-section-title">报价记录</h2>
+        <button class="crm-btn crm-btn-primary crm-btn-sm" @click="openQuotationModal()">＋ 添加报价</button>
       </div>
-      <div v-for="qt in quotations" :key="qt.id" class="record-row">
-        <div class="record-left">
-          <div class="record-note">{{ qt.note || '报价记录' }}</div>
-          <div class="record-time">{{ formatDateTime(qt.quotation_time) }}</div>
-          <div v-if="qt.price_rows?.length" class="record-cfr">
-            <span v-for="(r, i) in qt.price_rows.slice(0,3)" :key="i" class="cfr-chip">CFR {{ r.cfr || '-' }}</span>
+      <div class="timeline" v-if="quotations.length">
+        <div v-for="qt in quotations" :key="qt.id" class="timeline-item">
+          <span class="tl-dot"></span>
+          <div class="crm-card tl-card">
+            <div class="crm-between">
+              <div class="tl-head">
+                <strong>{{ qt.note || '报价记录' }}</strong><time class="crm-small crm-muted">{{ formatDateTime(qt.quotation_time) }}</time>
+                <div v-if="qt.price_rows?.length" class="crm-flex" style="gap:5px;flex-wrap:wrap;margin-top:4px">
+                  <span v-for="(r, i) in qt.price_rows.slice(0,3)" :key="i" class="crm-pill">CFR {{ r.cfr || '—' }}</span>
+                </div>
+              </div>
+              <div class="crm-flex" style="gap:6px">
+                <button class="crm-btn crm-btn-outline crm-btn-sm" @click="openCombinedPreview(qt, 'quotation')">预览</button>
+                <button class="crm-btn crm-btn-outline crm-btn-sm" @click="openQuotationModal(qt)">编辑</button>
+                <button class="crm-btn crm-btn-danger crm-btn-sm" @click="deleteQuotation(qt)">删除</button>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="record-right">
-          <button class="btn-sm btn-view" @click="openCombinedPreview(qt, 'quotation')">预览</button>
-          <button class="btn-sm btn-edit" @click="openQuotationModal(qt)">编辑</button>
-          <button class="btn-sm btn-danger" @click="deleteQuotation(qt)">删除</button>
-        </div>
       </div>
-      <p v-if="!quotations.length" class="empty">暂无报价记录</p>
+      <div class="crm-empty" v-else><span class="crm-empty-icon">💰</span>暂无报价记录</div>
     </div>
 
     <!-- Followup Tab -->
     <div v-if="activeTab === 'followup'" class="tab-content">
-      <div class="tab-header">
-        <h3>跟进记录</h3>
-        <button class="btn btn-primary" @click="openFollowupModal()">➕ 添加跟进</button>
+      <div class="crm-between tab-header">
+        <h2 class="crm-section-title">跟进记录</h2>
+        <button class="crm-btn crm-btn-primary crm-btn-sm" @click="openFollowupModal()">＋ 添加跟进</button>
       </div>
-      <div v-for="f in followups" :key="f.id" class="record-row">
-        <div class="record-left">
-          <div class="record-note">{{ f.user_name || '跟进' }} · {{ formatDateTime(f.created_at) }}</div>
-        </div>
-        <div class="record-right">
-          <button class="btn-sm btn-view" @click="previewFollowup = f">预览</button>
-          <button class="btn-sm btn-edit" @click="openFollowupModal(f)">编辑</button>
-          <button class="btn-sm btn-danger" @click="deleteFollowup(f)">删除</button>
+      <div class="timeline" v-if="followups.length">
+        <div v-for="f in followups" :key="f.id" class="timeline-item">
+          <span class="tl-dot"></span>
+          <div class="crm-card tl-card">
+            <div class="crm-between">
+              <div class="tl-head"><strong>{{ f.user_name || '跟进' }}</strong><time class="crm-small crm-muted">{{ formatDateTime(f.created_at) }}</time></div>
+              <div class="crm-flex" style="gap:6px">
+                <button class="crm-btn crm-btn-outline crm-btn-sm" @click="previewFollowup = f">预览</button>
+                <button class="crm-btn crm-btn-outline crm-btn-sm" @click="openFollowupModal(f)">编辑</button>
+                <button class="crm-btn crm-btn-danger crm-btn-sm" @click="deleteFollowup(f)">删除</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-      <p v-if="!followups.length" class="empty">暂无跟进记录</p>
+      <div class="crm-empty" v-else><span class="crm-empty-icon">📝</span>暂无跟进记录</div>
+    </div>
+
+    <!-- ═══ Send Email Modal ═══ -->
+    <div v-if="showSendEmailModal" class="crm-modal-overlay" @click.self="showSendEmailModal = false">
+      <div class="crm-modal">
+        <div class="crm-modal-head">
+          <h3>✉️ 发送邮件给 {{ customer.name }}</h3>
+          <button class="crm-modal-close" @click="showSendEmailModal = false">&times;</button>
+        </div>
+        <div class="crm-modal-body">
+          <div class="crm-field">
+            <label>收件人</label>
+            <input class="crm-input" :value="customer.email" disabled />
+          </div>
+          <div class="crm-field">
+            <label>邮件主题</label>
+            <input class="crm-input" v-model="sendEmailForm.subject" placeholder="邮件主题" />
+          </div>
+          <div class="crm-field">
+            <label>邮件正文（HTML）</label>
+            <textarea class="crm-textarea" v-model="sendEmailForm.html_body" rows="8" placeholder="支持 HTML"></textarea>
+          </div>
+        </div>
+        <div class="crm-modal-foot">
+          <button class="crm-btn crm-btn-outline" @click="showSendEmailModal = false">取消</button>
+          <button class="crm-btn crm-btn-primary" :disabled="sendingEmail" @click="sendEmailNow">{{ sendingEmail ? '发送中…' : '发送' }}</button>
+        </div>
+      </div>
     </div>
 
     <!-- ═══ Combined Preview Modal ═══ -->
-    <div v-if="showCombinedPreview" class="modal-overlay">
-      <div class="modal modal-xl">
-        <div class="modal-header">
+    <div v-if="showCombinedPreview" class="crm-modal-overlay" @click.self="showCombinedPreview = false">
+      <div class="crm-modal" style="width:1000px">
+        <div class="crm-modal-head">
           <h3>👁️ {{ combinedPreviewType === 'inquiry' ? '询盘' : '报价' }}预览</h3>
-          <button class="modal-close" @click="showCombinedPreview = false">&times;</button>
+          <button class="crm-modal-close" @click="showCombinedPreview = false">&times;</button>
         </div>
-        <div class="modal-body">
+        <div class="crm-modal-body">
           <div :class="['preview-split', { 'single-view': !hasMatchingPair }]">
             <div v-if="combinedInquiry" class="preview-panel">
               <h4>📋 询盘内容</h4>
@@ -138,9 +199,9 @@
                   <thead><tr><th>FOB</th><th>港杂费</th><th>汇率</th><th>利润率</th><th>运费</th><th>CFR</th></tr></thead>
                   <tbody>
                     <tr v-for="(r, i) in combinedQuotation.price_rows" :key="i">
-                      <td>{{ r.fob || '-' }}</td><td>{{ r.port_charge || '-' }}</td>
-                      <td>{{ r.exchange_rate || '-' }}</td><td>{{ r.profit_rate || '-' }}</td>
-                      <td>{{ r.freight || '-' }}</td><td class="cfr-val">{{ r.cfr || '-' }}</td>
+                      <td>{{ r.fob || '—' }}</td><td>{{ r.port_charge || '—' }}</td>
+                      <td>{{ r.exchange_rate || '—' }}</td><td>{{ r.profit_rate || '—' }}</td>
+                      <td>{{ r.freight || '—' }}</td><td class="cfr-val">{{ r.cfr || '—' }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -162,22 +223,22 @@
             </div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showCombinedPreview = false">关闭</button>
+        <div class="crm-modal-foot">
+          <button class="crm-btn crm-btn-outline" @click="showCombinedPreview = false">关闭</button>
         </div>
       </div>
     </div>
 
     <!-- ═══ Followup Preview ═══ -->
-    <div v-if="previewFollowup" class="modal-overlay">
-      <div class="modal modal-lg">
-        <div class="modal-header">
+    <div v-if="previewFollowup" class="crm-modal-overlay" @click.self="previewFollowup = null">
+      <div class="crm-modal">
+        <div class="crm-modal-head">
           <h3>📝 跟进预览</h3>
-          <button class="modal-close" @click="previewFollowup = null">&times;</button>
+          <button class="crm-modal-close" @click="previewFollowup = null">&times;</button>
         </div>
-        <div class="modal-body">
+        <div class="crm-modal-body">
           <div class="preview-meta">{{ previewFollowup.user_name }} · {{ formatDateTime(previewFollowup.created_at) }}</div>
-          <div v-if="previewFollowup.note" class="preview-meta" style="margin-top:4px;color:#475569;">📌 {{ previewFollowup.note }}</div>
+          <div v-if="previewFollowup.note" class="preview-meta" style="margin-top:4px;color:var(--crm-text-2);">📌 {{ previewFollowup.note }}</div>
           <div class="preview-html" v-html="sanitizeRichHtml(previewFollowup.content_html)"></div>
           <div v-if="previewFollowup.images?.length || previewFollowup.attachments?.length" class="preview-attach">
             <h5 v-if="previewFollowup.images?.length">📷 图片</h5>
@@ -192,8 +253,8 @@
             </div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="previewFollowup = null">关闭</button>
+        <div class="crm-modal-foot">
+          <button class="crm-btn crm-btn-outline" @click="previewFollowup = null">关闭</button>
         </div>
       </div>
     </div>
@@ -208,28 +269,28 @@
     </div>
 
     <!-- ═══ Inquiry Modal ═══ -->
-    <div v-if="showInquiryModal" class="modal-overlay">
-      <div class="modal modal-lg">
-        <div class="modal-header">
+    <div v-if="showInquiryModal" class="crm-modal-overlay" @click.self="showInquiryModal = false">
+      <div class="crm-modal" style="width:820px">
+        <div class="crm-modal-head">
           <h3>{{ editInquiryId ? '编辑询盘' : '添加询盘' }}</h3>
-          <button class="modal-close" @click="showInquiryModal = false">&times;</button>
+          <button class="crm-modal-close" @click="showInquiryModal = false">&times;</button>
         </div>
-        <div class="modal-body">
+        <div class="crm-modal-body">
           <div class="form-row2">
-            <div class="form-group">
+            <div class="crm-field">
               <label>备注</label>
-              <input v-model="inqForm.note" placeholder="例如：20260316巴西xxx客户镀铝锌钢卷询盘" />
+              <input class="crm-input" v-model="inqForm.note" placeholder="例如：20260316巴西xxx客户镀铝锌钢卷询盘" />
             </div>
-            <div class="form-group">
+            <div class="crm-field">
               <label>询盘时间</label>
-              <input v-model="inqForm.inquiry_time" type="datetime-local" />
+              <input class="crm-input" v-model="inqForm.inquiry_time" type="datetime-local" />
             </div>
           </div>
-          <div class="form-group">
+          <div class="crm-field">
             <label>询盘内容（支持粘贴Excel表格、富文本、图片）</label>
             <div ref="inqEditorRef" class="rich-editor" contenteditable="true" @paste="handlePaste($event)" v-html="sanitizeRichHtml(inqForm.content_html)"></div>
           </div>
-          <div class="form-group">
+          <div class="crm-field">
             <label>上传图片</label>
             <input type="file" accept="image/*" multiple @change="uploadFiles($event, inqForm.images, 'image')" />
             <div class="img-grid">
@@ -239,51 +300,51 @@
               </div>
             </div>
           </div>
-          <div class="form-group">
+          <div class="crm-field">
             <label>上传附件</label>
             <input type="file" multiple @change="uploadFiles($event, inqForm.files, 'file')" />
             <div v-for="(f, i) in inqForm.files" :key="i" class="file-item">
               <a :href="f.url" target="_blank">📎 {{ f.name }}</a>
-              <button class="btn-sm btn-danger" @click="inqForm.files.splice(i,1)">删除</button>
+              <button class="crm-btn crm-btn-danger crm-btn-sm" @click="inqForm.files.splice(i,1)">删除</button>
             </div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showInquiryModal = false">取消</button>
-          <button class="btn btn-primary" @click="saveInquiry">保存</button>
+        <div class="crm-modal-foot">
+          <button class="crm-btn crm-btn-outline" @click="showInquiryModal = false">取消</button>
+          <button class="crm-btn crm-btn-primary" @click="saveInquiry">保存</button>
         </div>
       </div>
     </div>
 
     <!-- ═══ Quotation Modal ═══ -->
-    <div v-if="showQuotationModal" class="modal-overlay">
-      <div class="modal modal-xl">
-        <div class="modal-header">
+    <div v-if="showQuotationModal" class="crm-modal-overlay" @click.self="showQuotationModal = false">
+      <div class="crm-modal" style="width:1100px">
+        <div class="crm-modal-head">
           <h3>{{ editQuotationId ? '编辑报价' : '添加报价' }}</h3>
-          <button class="modal-close" @click="showQuotationModal = false">&times;</button>
+          <button class="crm-modal-close" @click="showQuotationModal = false">&times;</button>
         </div>
-        <div class="modal-body">
+        <div class="crm-modal-body">
           <div class="quotation-layout">
             <div class="quot-left">
               <!-- Inquiry reference -->
               <div v-if="inquiries.length" class="inquiry-ref">
                 <div class="ref-header">
                   <h4>📋 询盘参考</h4>
-                  <select v-model="refInquiryIdx" class="ref-select">
+                  <select v-model="refInquiryIdx" class="crm-select">
                     <option v-for="(inq, i) in inquiries" :key="inq.id" :value="i">{{ inq.note || `询盘 ${i+1}` }} - {{ formatDateTime(inq.inquiry_time) }}</option>
                   </select>
                 </div>
                 <div class="ref-content" v-html="sanitizeRichHtml(inquiries[refInquiryIdx]?.content_html)"></div>
               </div>
               <div class="form-row2">
-                <div class="form-group"><label>备注</label><input v-model="qtForm.note" placeholder="报价备注..." /></div>
-                <div class="form-group"><label>报价时间</label><input v-model="qtForm.quotation_time" type="datetime-local" /></div>
+                <div class="crm-field"><label>备注</label><input class="crm-input" v-model="qtForm.note" placeholder="报价备注…" /></div>
+                <div class="crm-field"><label>报价时间</label><input class="crm-input" v-model="qtForm.quotation_time" type="datetime-local" /></div>
               </div>
-              <div class="form-group">
+              <div class="crm-field">
                 <label>报价内容（支持粘贴Excel表格、图片）</label>
                 <div ref="qtEditorRef" class="rich-editor" contenteditable="true" @paste="handlePaste($event)" v-html="sanitizeRichHtml(qtForm.content_html)"></div>
               </div>
-              <div class="form-group">
+              <div class="crm-field">
                 <label>报价图片</label>
                 <input type="file" accept="image/*" multiple @change="uploadFiles($event, qtForm.images, 'image')" />
                 <div class="img-grid">
@@ -293,39 +354,39 @@
                   </div>
                 </div>
               </div>
-              <div class="form-group">
+              <div class="crm-field">
                 <label>附件文件</label>
                 <input type="file" multiple @change="uploadFiles($event, qtForm.files, 'file')" />
                 <div v-for="(f, i) in qtForm.files" :key="i" class="file-item">
                   <a :href="f.url" target="_blank">📎 {{ f.name }}</a>
-                  <button class="btn-sm btn-danger" @click="qtForm.files.splice(i,1)">删除</button>
+                  <button class="crm-btn crm-btn-danger crm-btn-sm" @click="qtForm.files.splice(i,1)">删除</button>
                 </div>
               </div>
             </div>
             <!-- Right: price calculator -->
             <div class="quot-right">
               <h4>运费信息</h4>
-              <div class="form-group">
+              <div class="crm-field">
                 <label>运输方式</label>
-                <select v-model="qtForm.freight_type"><option value="container">集装箱</option><option value="bulk">散货</option></select>
+                <select class="crm-select" v-model="qtForm.freight_type"><option value="container">集装箱</option><option value="bulk">散货</option></select>
               </div>
               <div v-for="(p, i) in qtForm.ports" :key="i" class="port-row">
-                <input v-model="p.name" placeholder="港口名称" class="port-input" />
-                <input v-model.number="p.freight" placeholder="运费" type="number" step="0.01" class="port-input" />
-                <button class="btn-sm btn-danger" @click="qtForm.ports.splice(i,1)">×</button>
+                <input class="crm-input" v-model="p.name" placeholder="港口名称" />
+                <input class="crm-input" v-model.number="p.freight" placeholder="运费" type="number" step="0.01" />
+                <button class="crm-btn crm-btn-danger crm-btn-sm" @click="qtForm.ports.splice(i,1)">×</button>
               </div>
-              <button class="btn btn-sm btn-secondary" @click="qtForm.ports.push({ name: '', freight: 0 })">+ 添加港口</button>
+              <button class="crm-btn crm-btn-outline crm-btn-sm" @click="qtForm.ports.push({ name: '', freight: 0 })">＋ 添加港口</button>
 
               <h4 style="margin-top:20px">价格计算</h4>
               <!-- FOB Search -->
               <div class="fob-search-bar">
-                <input v-model="fobSearchQuery" type="text" placeholder="🔍 搜索FOB价格..." class="fob-search-input" @input="searchFOB" />
+                <input class="crm-input" v-model="fobSearchQuery" type="text" placeholder="🔍 搜索FOB价格…" @input="searchFOB" />
               </div>
               <div v-if="fobSearchResults.length" class="fob-search-results">
                 <div class="fob-result-header">搜索结果 ({{ fobSearchResults.length }})</div>
                 <div v-for="r in fobSearchResults" :key="r.idx" class="fob-result-row">
                   <span>行 {{ r.idx + 1 }}: FOB <strong>{{ r.fob }}</strong></span>
-                  <span>CFR <strong class="cfr-val">{{ r.cfr || '-' }}</strong></span>
+                  <span>CFR <strong class="cfr-val">{{ r.cfr || '—' }}</strong></span>
                 </div>
               </div>
 
@@ -343,33 +404,33 @@
                 <button v-if="i > 0" class="fill-down-btn del" @click="qtForm.price_rows.splice(i,1)">×</button>
               </div>
               <div class="price-row-actions">
-                <button class="btn btn-sm btn-secondary" @click="addPriceRow">+ 添加行</button>
-                <button class="btn btn-sm btn-outline" @click="fillAllRows">📋 全部填充</button>
+                <button class="crm-btn crm-btn-outline crm-btn-sm" @click="addPriceRow">＋ 添加行</button>
+                <button class="crm-btn crm-btn-outline crm-btn-sm" @click="fillAllRows">📋 全部填充</button>
               </div>
             </div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showQuotationModal = false">取消</button>
-          <button class="btn btn-primary" @click="saveQuotation">保存</button>
+        <div class="crm-modal-foot">
+          <button class="crm-btn crm-btn-outline" @click="showQuotationModal = false">取消</button>
+          <button class="crm-btn crm-btn-primary" @click="saveQuotation">保存</button>
         </div>
       </div>
     </div>
 
     <!-- ═══ Followup Modal ═══ -->
-    <div v-if="showFollowupModal" class="modal-overlay">
-      <div class="modal modal-lg">
-        <div class="modal-header">
+    <div v-if="showFollowupModal" class="crm-modal-overlay" @click.self="showFollowupModal = false">
+      <div class="crm-modal">
+        <div class="crm-modal-head">
           <h3>{{ editFollowupId ? '编辑跟进' : '添加跟进' }}</h3>
-          <button class="modal-close" @click="showFollowupModal = false">&times;</button>
+          <button class="crm-modal-close" @click="showFollowupModal = false">&times;</button>
         </div>
-        <div class="modal-body">
-          <div class="form-group"><label>跟进备注</label><input v-model="followForm.note" placeholder="跟进说明..." /></div>
-          <div class="form-group">
+        <div class="crm-modal-body">
+          <div class="crm-field"><label>跟进备注</label><input class="crm-input" v-model="followForm.note" placeholder="跟进说明…" /></div>
+          <div class="crm-field">
             <label>跟进内容（支持粘贴截图）</label>
             <div ref="followEditorRef" class="rich-editor" contenteditable="true" @paste="handleFollowupPaste($event)" v-html="sanitizeRichHtml(followForm.content_html)"></div>
           </div>
-          <div class="form-group">
+          <div class="crm-field">
             <label>上传图片</label>
             <input type="file" accept="image/*" multiple @change="uploadFiles($event, followForm.images, 'image')" />
             <div class="img-grid">
@@ -379,18 +440,18 @@
               </div>
             </div>
           </div>
-          <div class="form-group">
+          <div class="crm-field">
             <label>上传附件</label>
             <input type="file" multiple @change="uploadFiles($event, followForm.attachments, 'file')" />
             <div v-for="(f, i) in followForm.attachments" :key="i" class="file-item">
               <a :href="f.url" target="_blank">📎 {{ f.name }}</a>
-              <button class="btn-sm btn-danger" @click="followForm.attachments.splice(i,1)">删除</button>
+              <button class="crm-btn crm-btn-danger crm-btn-sm" @click="followForm.attachments.splice(i,1)">删除</button>
             </div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showFollowupModal = false">取消</button>
-          <button class="btn btn-primary" @click="saveFollowup">保存</button>
+        <div class="crm-modal-foot">
+          <button class="crm-btn crm-btn-outline" @click="showFollowupModal = false">取消</button>
+          <button class="crm-btn crm-btn-primary" @click="saveFollowup">保存</button>
         </div>
       </div>
     </div>
@@ -689,149 +750,202 @@ function getStatusClass(s) { return { '开发中': 'status-dev', '联系中': 's
 function formatDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : '-' }
 function formatDateTime(d) { return d ? new Date(d).toLocaleString('zh-CN') : '-' }
 onMounted(loadData)
+
+// ── Redesign additions (presentation-level; existing endpoints only) ──
+const backPath = computed(() => (route.path.startsWith('/crm/sub') ? '/crm/sub' : '/crm') + '/customers')
+
+const AVATAR_COLORS = ['#1e40af', '#0e7490', '#7c3aed', '#b45309', '#047857', '#be185d']
+const avatarColor = AVATAR_COLORS[(String(customer.value?.id || 0)) % AVATAR_COLORS.length]
+function statusBadge(status) {
+  const map = { '开发中': 'crm-badge-dev', '联系中': 'crm-badge-contact', '已成交': 'crm-badge-closed', '公海池': 'crm-badge-pool' }
+  return map[status] || 'crm-badge-pool'
+}
+
+const showSendEmailModal = ref(false)
+const sendingEmail = ref(false)
+const sendEmailForm = reactive({ subject: '', html_body: '' })
+
+async function sendEmailNow() {
+  if (sendingEmail.value) return
+  sendingEmail.value = true
+  try {
+    await crmApi.request('/customers/email/send', {
+      method: 'POST',
+      body: JSON.stringify({
+        customer_ids: [customerId],
+        subject: sendEmailForm.subject,
+        html_body: sendEmailForm.html_body
+      })
+    })
+    alert('✅ 邮件已发送')
+    showSendEmailModal.value = false
+    sendEmailForm.subject = ''
+    sendEmailForm.html_body = ''
+  } catch (e) { alert('发送失败: ' + e.message) }
+  finally { sendingEmail.value = false }
+}
+
+async function quickFollowup() {
+  try {
+    await crmApi.request('/customers/email/quick-followup', {
+      method: 'POST',
+      body: JSON.stringify({ customer_id: Number(customerId) })
+    })
+    alert('✅ 已使用默认跟进模板发送')
+  } catch (e) { alert('跟进失败: ' + e.message) }
+}
+
+async function moveToPool() {
+  if (!confirm(`确认将客户「${customer.value.name}」移入公海池？`)) return
+  try {
+    await crmApi.moveToPool(customer.value.id)
+    await loadData()
+  } catch (e) { alert(e.message) }
+}
+
 </script>
-
 <style scoped>
-.detail-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-.detail-header h1 { margin: 0; font-size: 24px; }
-.btn-back { background: none; border: none; cursor: pointer; font-size: 16px; color: #2563eb; font-weight: 600; }
-.status-badge { padding: 4px 12px; border-radius: 10px; font-size: 13px; font-weight: 600; }
-.status-dev { background: #fef3c7; color: #92400e; } .status-contact { background: #ede9fe; color: #5b21b6; }
-.status-closed { background: #d1fae5; color: #065f46; } .status-pool { background: #f1f5f9; color: #64748b; }
-
-.info-card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-.info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
-.info-item label { display: block; font-size: 12px; color: #64748b; margin-bottom: 2px; }
-.info-item span { font-size: 14px; font-weight: 600; color: #0f172a; }
-.note-row { margin-top: 12px; font-size: 13px; color: #475569; padding: 8px 12px; background: #f8fafc; border-radius: 6px; }
-.tag-row { margin-top: 12px; display: flex; gap: 6px; }
-.tag-badge { background: #f0fdf4; color: #166534; padding: 3px 8px; border-radius: 4px; font-size: 12px; }
-
-.tabs { display: flex; gap: 4px; margin-bottom: 16px; }
-.tab { padding: 10px 20px; border: none; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 14px; font-weight: 600; background: #e2e8f0; color: #64748b; }
-.tab.active { background: #fff; color: #2563eb; box-shadow: 0 -2px 0 #2563eb inset; }
-
-.tab-content { background: #fff; border-radius: 0 12px 12px 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-.tab-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.tab-header h3 { margin: 0; }
-
-.record-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; }
-.record-row:hover { background: #fafafe; }
-.record-left { flex: 1; }
-.record-note { font-size: 14px; font-weight: 600; color: #0f172a; }
-.record-time { font-size: 12px; color: #64748b; margin-top: 2px; }
-.record-cfr { margin-top: 4px; display: flex; gap: 6px; }
-.cfr-chip { background: #f0fdf4; color: #059669; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
-.record-right { display: flex; gap: 6px; flex-shrink: 0; }
-.empty { color: #94a3b8; text-align: center; padding: 20px; }
-
-.preview-split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.detail-topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.hero-card { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 14px; }
+.hero-avatar { width: 58px; height: 58px; font-size: 22px; }
+.hero-main { flex: 1; min-width: 240px; }
+.hero-name-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hero-name { margin: 0; font-size: 20px; font-weight: 800; }
+.hero-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.hero-meta { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: 12.5px; color: var(--crm-text-2); }
+.hero-note {
+  margin-top: 8px; padding: 8px 12px; border-radius: var(--crm-radius-sm);
+  background: var(--crm-bg); color: var(--crm-text-2); font-size: 12.5px;
+}
+.claim-history { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.claim-history .crm-pill { font-size: 10.5px; }
+.claim-history .pool-blue { background: var(--crm-primary-soft); color: var(--crm-primary); }
+.hero-actions { display: flex; flex-direction: column; gap: 8px; min-width: 150px; }
+.contact-strip { display: flex; gap: 10px; flex-wrap: wrap; padding: 12px 20px; margin-bottom: 16px; }
+.contact-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 999px;
+  background: var(--crm-bg); border: 1px solid var(--crm-border);
+  font-size: 12.5px; color: var(--crm-text);
+  text-decoration: none; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.contact-chip.link:hover { border-color: var(--crm-primary); color: var(--crm-primary); }
+.tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.tab {
+  padding: 8px 18px; border-radius: 999px; border: 1px solid var(--crm-border);
+  background: var(--crm-card); color: var(--crm-text-2);
+  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+  transition: all .15s;
+}
+.tab b { font-weight: 700; color: var(--crm-text-3); }
+.tab.active { background: var(--crm-primary); border-color: var(--crm-primary); color: #fff; }
+.tab.active b { color: rgba(255,255,255,0.8); }
+.tab:hover:not(.active) { border-color: var(--crm-primary); color: var(--crm-primary); }
+.tab-header { margin-bottom: 14px; }
+.timeline { position: relative; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
+.timeline::before {
+  content: ''; position: absolute; left: 5px; top: 8px; bottom: 8px;
+  width: 2px; background: var(--crm-border); border-radius: 2px;
+}
+.timeline-item { position: relative; }
+.tl-dot {
+  position: absolute; left: -20px; top: 18px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--crm-primary); border: 2.5px solid var(--crm-bg);
+  box-shadow: 0 0 0 2px var(--crm-primary-soft);
+}
+.tl-card { padding: 14px 18px; }
+.tl-head { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tl-head strong { font-size: 13.5px; }
+.form-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.preview-split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .preview-split.single-view { grid-template-columns: 1fr; }
-.preview-panel { border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; max-height: 60vh; overflow-y: auto; }
-.preview-panel h4 { margin: 0 0 8px; font-size: 15px; }
-.preview-meta { font-size: 12px; color: #64748b; margin-bottom: 10px; }
-.preview-html { font-size: 14px; line-height: 1.6; }
-.preview-html :deep(img) { max-width: 100%; height: auto; cursor: pointer; }
-.preview-html :deep(table) { border-collapse: collapse; width: 100%; }
-.preview-html :deep(td), .preview-html :deep(th) { border: 1px solid #ddd; padding: 6px 8px; }
-.preview-price { margin-top: 12px; }
-.price-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.price-table th { background: #f8fafc; padding: 6px 8px; text-align: center; font-size: 12px; border: 1px solid #e2e8f0; }
-.price-table td { padding: 6px 8px; text-align: center; border: 1px solid #e2e8f0; }
-.cfr-val { font-weight: 700; color: #059669; }
-
-/* Image preview overlay */
-.img-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 3000; cursor: pointer; }
-.img-overlay.pinned { pointer-events: none; background: rgba(0,0,0,0.3); }
-.img-overlay.pinned img, .img-overlay.pinned .img-overlay-toolbar { pointer-events: auto; }
-.img-overlay img { max-width: 90vw; max-height: 80vh; object-fit: contain; border-radius: 8px; cursor: default; }
-.img-overlay-toolbar { display: flex; gap: 10px; margin-top: 12px; pointer-events: auto; }
-.img-toolbar-btn { background: rgba(255,255,255,0.2); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
-.img-toolbar-btn:hover { background: rgba(255,255,255,0.4); }
-
-/* Claim history */
-.claim-history { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
-.claim-history label { font-weight: 600; color: #334155; }
-.claim-item { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: #f8fafc; border-radius: 4px; border: 1px solid #e2e8f0; }
-.claim-item small { color: #94a3b8; font-size: 11px; }
-.pool-blue { color: #2563eb; font-weight: 600; }
-
-/* Cell-wrap with fill-down button */
-.cell-wrap { position: relative; min-width: 0; }
-.cell-wrap input { width: 100%; }
-.cell-fill { position: absolute; right: 1px; bottom: 1px; width: 16px; height: 16px; border: none; background: #2563eb; color: #fff; font-size: 9px; cursor: pointer; border-radius: 2px; opacity: 0; transition: opacity 0.15s; display: flex; align-items: center; justify-content: center; padding: 0; }
-.cell-wrap:hover .cell-fill { opacity: 1; }
-
-.btn-sm { padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
-.btn-edit { background: #eff6ff; color: #2563eb; } .btn-view { background: #f0fdf4; color: #15803d; }
-.btn-danger { background: #fef2f2; color: #dc2626; } .btn-outline { background: #fff; border: 1px solid #e2e8f0; color: #334155; }
-.btn-sm:hover { opacity: 0.85; }
-
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal { background: #fff; border-radius: 14px; max-height: 90vh; overflow-y: auto; }
-.modal-lg { width: 720px; max-width: 95vw; } .modal-xl { width: 1200px; max-width: 95vw; }
-.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; background: #fff; z-index: 1; border-radius: 14px 14px 0 0; }
-.modal-header h3 { margin: 0; }
-.modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b; }
-.modal-body { padding: 24px; }
-.modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid #e2e8f0; position: sticky; bottom: 0; background: #fff; border-radius: 0 0 14px 14px; }
-
-.form-group { margin-bottom: 14px; }
-.form-group label { display: block; margin-bottom: 4px; font-size: 13px; font-weight: 600; color: #334155; }
-.form-group input, .form-group select { width: 100%; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
-.form-group input:focus, .form-group select:focus { outline: none; border-color: #2563eb; }
-.form-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-
-.rich-editor { min-height: 180px; padding: 14px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; line-height: 1.6; overflow-y: auto; max-height: 400px; }
-.rich-editor:focus { outline: none; border-color: #2563eb; }
-.rich-editor img { max-width: 100%; height: auto; } .rich-editor table { border-collapse: collapse; width: 100%; }
-.rich-editor td, .rich-editor th { border: 1px solid #ddd; padding: 4px 8px; }
-
-.quotation-layout { display: grid; grid-template-columns: 1fr 480px; gap: 24px; }
-@media (max-width: 900px) { .quotation-layout { grid-template-columns: 1fr; } }
-.inquiry-ref { margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; background: #fafafe; }
-.ref-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.ref-header h4 { margin: 0; font-size: 14px; }
-.ref-select { font-size: 12px; padding: 4px 8px; border: 1px solid #e2e8f0; border-radius: 4px; max-width: 300px; }
-.ref-content { max-height: 200px; overflow-y: auto; font-size: 13px; line-height: 1.5; }
-.ref-content :deep(img) { max-width: 100%; } .ref-content :deep(table) { border-collapse: collapse; width: 100%; }
-.ref-content :deep(td), .ref-content :deep(th) { border: 1px solid #ddd; padding: 4px 6px; font-size: 12px; }
-
-.quot-right { background: #f8fafc; border-radius: 10px; padding: 16px; }
-.quot-right h4 { margin: 0 0 12px; font-size: 15px; color: #0f172a; }
-.port-row { display: flex; gap: 6px; margin-bottom: 6px; }
-.port-input { flex: 1; padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 13px; }
-
-/* FOB search */
-.fob-search-bar { margin-bottom: 10px; }
-.fob-search-input { width: 100%; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; box-sizing: border-box; }
-.fob-search-input:focus { outline: none; border-color: #2563eb; }
-.fob-search-results { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
-.fob-result-header { font-size: 12px; font-weight: 700; color: #92400e; margin-bottom: 6px; }
-.fob-result-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; border-bottom: 1px solid #fef3c7; }
-
-/* Price calc grid */
-.price-calc-header { display: grid; grid-template-columns: 30px 1fr 1fr 1fr 1fr 1fr 1fr 24px; gap: 4px; font-size: 11px; font-weight: 600; color: #475569; text-align: center; margin-bottom: 4px; }
-.price-calc-row { display: grid; grid-template-columns: 30px 1fr 1fr 1fr 1fr 1fr 1fr 24px; gap: 4px; margin-bottom: 4px; align-items: center; }
-.row-num { font-size: 11px; color: #94a3b8; text-align: center; font-weight: 600; }
-.price-calc-row input { padding: 6px 4px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 12px; text-align: center; width: 100%; box-sizing: border-box; min-width: 0; }
-.cfr-input { background: #f0fdf4 !important; font-weight: 700; color: #059669; }
-.fill-down-btn { padding: 2px 4px; border: 1px solid #e2e8f0; border-radius: 3px; background: #fff; cursor: pointer; font-size: 10px; color: #64748b; }
-.fill-down-btn:hover { background: #eff6ff; color: #2563eb; }
-.fill-down-btn.del { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
-.price-row-actions { display: flex; gap: 8px; margin-top: 8px; }
-
-.img-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.img-thumb { position: relative; width: 80px; height: 80px; border-radius: 6px; overflow: hidden; cursor: pointer; border: 1px solid #e2e8f0; }
+.preview-panel { border: 1px solid var(--crm-border); border-radius: var(--crm-radius-sm); padding: 14px; min-width: 0; }
+.preview-panel h4 { margin: 0 0 8px; font-size: 13.5px; }
+.preview-meta { font-size: 12px; color: var(--crm-text-3); margin-bottom: 8px; }
+.preview-html { font-size: 13px; overflow-x: auto; }
+.preview-html :deep(table) { border-collapse: collapse; max-width: 100%; }
+.preview-html :deep(td), .preview-html :deep(th) { border: 1px solid var(--crm-border); padding: 4px 8px; font-size: 12px; }
+.preview-attach { margin-top: 12px; }
+.preview-attach h5 { margin: 0 0 6px; font-size: 12px; color: var(--crm-text-2); }
+.img-grid { display: flex; gap: 8px; flex-wrap: wrap; }
+.img-thumb { position: relative; width: 72px; height: 72px; border-radius: 8px; overflow: hidden; cursor: zoom-in; border: 1px solid var(--crm-border); }
 .img-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.img-del { position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,0.6); color: #fff; border: none; border-radius: 50%; width: 18px; height: 18px; cursor: pointer; font-size: 12px; }
-.file-item { display: flex; align-items: center; gap: 8px; padding: 6px; background: #f8fafc; border-radius: 4px; margin-top: 4px; font-size: 13px; }
-.file-item a { color: #2563eb; text-decoration: none; font-weight: 500; }
-.file-item a:hover { text-decoration: underline; }
-.preview-attach { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
-.preview-attach h5 { margin: 0 0 8px; font-size: 13px; color: #64748b; }
-
-.btn { padding: 9px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
-.btn-primary { background: #2563eb; color: #fff; } .btn-primary:hover { background: #1d4ed8; }
-.btn-secondary { background: #f1f5f9; color: #334155; }
+.img-del {
+  position: absolute; top: 2px; right: 2px;
+  width: 18px; height: 18px; border-radius: 50%; border: none;
+  background: rgba(220,38,38,0.9); color: #fff; font-size: 11px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.file-item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin-bottom: 4px; }
+.file-item a { color: var(--crm-primary); text-decoration: none; }
+.price-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.price-table th, .price-table td { border: 1px solid var(--crm-border); padding: 5px 8px; text-align: center; }
+.cfr-val { color: var(--crm-primary); font-weight: 700; }
+.img-overlay {
+  position: fixed; inset: 0; z-index: 1100;
+  background: rgba(15,23,42,0.85);
+  display: flex; align-items: center; justify-content: center;
+}
+.img-overlay img { max-width: 92vw; max-height: 88vh; border-radius: 10px; }
+.img-overlay.pinned { background: transparent; pointer-events: none; }
+.img-overlay.pinned img { pointer-events: auto; box-shadow: 0 8px 40px rgba(15,23,42,0.4); }
+.img-overlay-toolbar {
+  position: fixed; top: 16px; right: 16px; display: flex; gap: 8px; z-index: 1101;
+}
+.img-toolbar-btn {
+  padding: 6px 12px; border: none; border-radius: 8px;
+  background: rgba(255,255,255,0.92); color: var(--crm-text);
+  font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.rich-editor {
+  min-height: 180px; max-height: 380px; overflow-y: auto;
+  border: 1px solid var(--crm-border); border-radius: var(--crm-radius-sm);
+  padding: 12px; background: var(--crm-card);
+  font-size: 13px; line-height: 1.6;
+}
+.rich-editor:focus { outline: none; border-color: var(--crm-primary); box-shadow: 0 0 0 3px rgba(30,64,175,.08); }
+.rich-editor:deep(img) { max-width: 100%; border-radius: 6px; }
+.rich-editor:deep(table) { border-collapse: collapse; }
+.rich-editor:deep(td), .rich-editor:deep(th) { border: 1px solid var(--crm-border); padding: 4px 8px; }
+.quotation-layout { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; }
+@media (max-width: 1000px) { .quotation-layout { grid-template-columns: 1fr; } }
+.inquiry-ref { border: 1px solid var(--crm-border); border-radius: var(--crm-radius-sm); padding: 10px 12px; margin-bottom: 12px; }
+.ref-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.ref-header h4 { margin: 0; font-size: 13px; }
+.ref-content { max-height: 160px; overflow-y: auto; font-size: 12px; border-top: 1px dashed var(--crm-border); padding-top: 8px; }
+.quot-right h4 { margin: 0 0 10px; font-size: 13.5px; }
+.port-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.port-row .crm-input { flex: 1; }
+.fob-search-bar { margin-bottom: 8px; }
+.fob-search-bar .crm-input { width: 100%; }
+.fob-search-results { border: 1px solid var(--crm-border); border-radius: var(--crm-radius-sm); margin-bottom: 10px; max-height: 140px; overflow-y: auto; }
+.fob-result-header { padding: 6px 10px; font-size: 11px; font-weight: 700; color: var(--crm-text-3); background: var(--crm-bg); position: sticky; top: 0; }
+.fob-result-row { display: flex; justify-content: space-between; gap: 10px; padding: 5px 10px; font-size: 12px; border-top: 1px solid var(--crm-border); }
+.price-calc-header {
+  display: grid; grid-template-columns: 26px 1fr 1fr 1fr 1fr 1fr 1fr 26px;
+  gap: 4px; font-size: 10.5px; font-weight: 700; color: var(--crm-text-3);
+  margin-bottom: 4px; text-align: center;
+}
+.price-calc-row {
+  display: grid; grid-template-columns: 26px 1fr 1fr 1fr 1fr 1fr 1fr 26px;
+  gap: 4px; align-items: center; margin-bottom: 5px;
+}
+.price-calc-row .crm-input, .price-calc-row input { height: 30px; padding: 0 7px; font-size: 12px; width: 100%; box-sizing: border-box; }
+.row-num { text-align: center; color: var(--crm-text-3); font-size: 11px; }
+.cell-wrap { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.cell-wrap input { flex: 1; min-width: 0; }
+.cell-fill {
+  flex: none; border: none; background: transparent; cursor: pointer;
+  color: var(--crm-text-3); font-size: 11px; padding: 0 1px;
+}
+.cell-fill:hover { color: var(--crm-primary); }
+.cfr-input { font-weight: 700; color: var(--crm-primary); background: var(--crm-primary-soft) !important; }
+.fill-down-btn.del {
+  width: 26px; height: 30px; border: none; border-radius: 6px;
+  background: transparent; color: var(--crm-danger); cursor: pointer; font-size: 14px;
+}
+.fill-down-btn.del:hover { background: #fef2f2; }
+.price-row-actions { display: flex; gap: 8px; margin-top: 8px; }
 </style>
