@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import Database from 'better-sqlite3'
+import fs from 'node:fs'
 import { getSeoCopy } from '../server/services/seoContent.js'
 
 // ── Issue 3: breadcrumb JSON-LD name must be a string, not a char-object ──
@@ -18,6 +19,27 @@ test('getSeoCopy breadcrumb labels stay plain strings (no object-spread corrupti
   assert.equal(copy.products.title, 'Override Title')
   // String keys are NOT clobbered by the overrides loop
   assert.equal(copy.breadcrumbHome, 'Home')
+})
+
+// ── Category page titles: specific on both direct-open and in-site navigation ──
+test('category pages never fall back to generic "Products | company" titles', () => {
+  const router = fs.readFileSync('src/router/index.js', 'utf8')
+  // Hydration guard: first navigation keeps the SSR title
+  assert.match(router, /if \(!window\.__APP_MOUNTED__\) return/)
+  // Generic t('products')-based titles are gone
+  assert.doesNotMatch(router, /'ProductsCategory': t\('products'\)/)
+  // Specific titles rebuild from the SSR-embedded SEO copy
+  assert.match(router, /seoPageCopy/)
+  const products = fs.readFileSync('src/views/Products.vue', 'utf8')
+  assert.match(products, /seoPageCopy/)
+  assert.match(products, /productCategory\?\.title/)
+  assert.match(products, /updatePageTitle/)
+  const news = fs.readFileSync('src/views/News.vue', 'utf8')
+  assert.match(news, /seoPageCopy/)
+  assert.match(news, /newsCategory\?\.title/)
+  // SSR embeds the same copy for the client
+  const index = fs.readFileSync('server/index.js', 'utf8')
+  assert.match(index, /seoPageCopy: \{ \.\.\.seoCopy, \.\.\.staticCopy \}/)
 })
 
 // ── Issue 1: dirty news slugs (raw titles with spaces/"?") get normalized ──

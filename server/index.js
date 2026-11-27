@@ -1773,7 +1773,11 @@ ${contactLines.join('\n')}
           translationSettings: getPublicTranslationSettings(getOne),
           featuredProducts: homeInitialState.featuredProducts,
           categories: homeInitialState.categories,
-          homeFaqs: req.ssrHomeFaqs || null
+          homeFaqs: req.ssrHomeFaqs || null,
+          // SEO copy per page (with admin overrides) lets the client rebuild
+          // the exact same specific titles the SSR renders after in-site
+          // navigation — no generic "Products | company" fallbacks.
+          seoPageCopy: { ...seoCopy, ...staticCopy }
         }
         const stateTag = `<script>window.__INITIAL_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')}</script>`
         html = renderSeoDocument({

@@ -197,6 +197,23 @@ const totalProductCount = computed(() => {
   return categoryTree.value.reduce((total, cat) => total + getTotalCount(cat), 0)
 })
 
+// Specific page title (matches SSR): category pages use the productCategory
+// template with the localized category name — never a generic "Products | company".
+function updatePageTitle() {
+  const state = window.__INITIAL_STATE__ || {}
+  // Same company name convention as SSR listing titles (name_en || name)
+  const companyName = state.company ? (state.company.name_en || state.company.name || '') : ''
+  const copy = state.seoPageCopy || {}
+  if (selectedCategory.value) {
+    const catName = currentCategoryName.value || selectedCategory.value
+    const tpl = copy.productCategory?.title || '{category} Steel Coil Products - Manufacturer & Exporter | {company}'
+    document.title = tpl.replace('{category}', catName).replace('{company}', companyName)
+  } else if (copy.products?.title) {
+    document.title = copy.products.title.replace('{company}', companyName)
+  }
+}
+watch([selectedCategory, currentCategoryName], updatePageTitle)
+
 const getTotalCount = (cat) => {
   let count = cat.product_count || 0
   if (cat.children) {

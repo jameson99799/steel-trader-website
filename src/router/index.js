@@ -209,40 +209,43 @@ router.beforeEach((to, from, next) => {
 
 router.afterEach((to) => {
   const { t, localizedValue } = useLang()
-  const company = window.__INITIAL_STATE__?.company
+  const state = window.__INITIAL_STATE__ || {}
+  const company = state.company
   const baseTitle = company ? (localizedValue(company, 'name') || 'SunSea Steel') : 'SunSea Steel'
-  
-  // Update document title for static routes (Detail pages handle their own title)
-  const nameMap = {
-    'Home': '',
-    'Products': t('products'),
-    'ProductsCategory': t('products'),
-    'News': t('news'),
-    'NewsCategory': t('news'),
-    'NewsRalColors': t('ralColorChart'),
-    'NewsRoofingProfiles': t('roofingTitle'),
-    'NewsFuturesPrice': t('futuresTitle'),
-    'NewsDailyPrice': t('dailyPriceTitle'),
-    'About': t('aboutUs'),
-    'Contact': t('contactUs'),
-    'Factory': t('factoryTour'),
-    'RalColors': t('ralColorChart'),
-    'RoofingProfiles': t('roofingTitle')
+
+  // On the very first (hydration) navigation the SSR-rendered title is
+  // authoritative and specific — never overwrite it with a generic one.
+  if (!window.__APP_MOUNTED__) return
+
+  // After in-site navigation, rebuild the same specific titles the SSR
+  // renders, using the same SEO copy (including admin overrides) the server
+  // embedded in __INITIAL_STATE__. Category pages set their own titles in
+  // their components (they need the loaded category name).
+  const seoCopy = state.seoPageCopy || {}
+  const fill = (tpl, values) => String(tpl || '').replace(/\{(\w+)\}/g, (_, k) => (values[k] == null ? '' : values[k]))
+  const setSpecific = (tpl) => {
+    if (!tpl) return
+    const title = fill(tpl, { company: baseTitle })
+    document.title = title.includes(baseTitle) ? title : `${title} | ${baseTitle}`
   }
 
-  if (to.name in nameMap) {
-    const section = nameMap[to.name]
-    // If it's home, preserve the SSR title if it's the very first load, 
-    // but Vue's afterEach might trigger. Just use baseTitle for home navigation.
-    if (!section && to.name === 'Home') {
-       // Only overwrite if it's not the initial page load to preserve SSR keyword title
-       if (window.__APP_MOUNTED__) {
-         document.title = baseTitle
-       }
-    } else {
-      document.title = `${section} | ${baseTitle}`
-    }
+  const titleMap = {
+    'Products': () => setSpecific(seoCopy.products?.title),
+    'News': () => setSpecific(seoCopy.news?.title),
+    // ProductsCategory / NewsCategory: handled in Products.vue / News.vue
+    'NewsRalColors': () => setSpecific(seoCopy.ralColors?.title),
+    'NewsRoofingProfiles': () => setSpecific(seoCopy.roofingProfiles?.title),
+    'NewsFuturesPrice': () => setSpecific(seoCopy.futuresPrice?.title),
+    'NewsDailyPrice': () => setSpecific(seoCopy.dailyPrice?.title),
+    'About': () => setSpecific(seoCopy.about?.title),
+    'Contact': () => setSpecific(seoCopy.contact?.title),
+    'Factory': () => setSpecific(seoCopy.factory?.title),
+    'RalColors': () => setSpecific(seoCopy.ralColors?.title),
+    'RoofingProfiles': () => setSpecific(seoCopy.roofingProfiles?.title)
   }
+  const setter = titleMap[to.name]
+  if (typeof setter === 'function') setter()
+  else if (to.name === 'Home') document.title = baseTitle
 })
 
 export default router

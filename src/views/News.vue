@@ -161,6 +161,23 @@ const activeCategory = computed(() =>
   activeCatSlug.value ? categories.value.find(c => c.slug === activeCatSlug.value) : null
 )
 
+// Specific page title (matches SSR): news category pages use the newsCategory
+// template with the localized category name — never a generic "News | company".
+function updatePageTitle() {
+  const state = window.__INITIAL_STATE__ || {}
+  const companyName = state.company ? (state.company.name_en || state.company.name || '') : ''
+  const copy = state.seoPageCopy || {}
+  if (route.name !== 'News' && route.name !== 'NewsCategory') return
+  if (activeCategory.value) {
+    const catName = localizedValue(activeCategory.value, 'name') || activeCategory.value.name_en || activeCategory.value.name || ''
+    const tpl = copy.newsCategory?.title || '{category} - Steel Industry Articles | {company}'
+    document.title = tpl.replace('{category}', catName).replace('{company}', companyName)
+  } else if (copy.news?.title) {
+    document.title = copy.news.title.replace('{company}', companyName)
+  }
+}
+watch([activeCategory, () => route.name], updatePageTitle)
+
 function formatDate(d) {
   if (!d) return ''
   return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
