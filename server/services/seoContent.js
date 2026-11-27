@@ -261,7 +261,13 @@ export function getSeoCopy(lang, overrides = null) {
   const copy = LISTING_I18N[lang]
   const merged = {}
   for (const key of Object.keys(base)) {
-    merged[key] = { ...base[key], ...(copy?.[key] || {}) }
+    // String values (breadcrumb labels) must NOT be object-spread — spreading a
+    // string produces {"0":"H","1":"o",...} which corrupts JSON-LD names.
+    if (typeof base[key] === 'string') {
+      merged[key] = (copy && typeof copy[key] === 'string' && copy[key]) || base[key]
+    } else {
+      merged[key] = { ...base[key], ...(copy?.[key] || {}) }
+    }
   }
   if (overrides) {
     for (const key of LISTING_COPY_KEYS) {

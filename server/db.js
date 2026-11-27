@@ -1224,7 +1224,9 @@ Requirements:
     }
   } catch (e) { }
 
-  // Migration: regenerate news slugs that contain timestamp suffixes (13-digit numbers) with clean title+ID slugs
+  // Migration: regenerate news slugs that contain timestamp suffixes (13-digit numbers) with clean title+ID slugs,
+  // and normalize any dirty slug (raw titles with spaces, "?", uppercase, etc.
+  // break URLs — the "?" truncates the path so every language variant 404s).
   try {
     const allNews = db.prepare('SELECT id, title, title_en, slug FROM news').all()
     const slugifyNews = (text, id) => {
@@ -1237,7 +1239,9 @@ Requirements:
     for (const n of allNews) {
       // Detect timestamp-style slug: ends with 13-digit number
       const hasTimestamp = /\-\d{13}$/.test(n.slug || '')
-      if (hasTimestamp || !n.slug) {
+      // Dirty slug: anything outside [a-z0-9-] (spaces, "?", uppercase, unicode…)
+      const isDirty = !/^[a-z0-9-]+$/.test(n.slug || '')
+      if (hasTimestamp || !n.slug || isDirty) {
         const newSlug = slugifyNews(n.title_en || n.title || `article-${n.id}`, n.id)
         updateNewsSlug.run(newSlug, n.id)
       }
@@ -1738,10 +1742,22 @@ Requirements:
   // Runs safely every startup (idempotent: only changes slugs that still end with -id)
   try {
     // Products: slug like 'galvanized-steel-coil-223' → 'galvanized-steel-coil'
-    const products = db.prepare("SELECT id, slug FROM products WHERE slug IS NOT NULL").all()
+    // Dirty product slugs (spaces/"?"/uppercase) are normalized first — same
+    // failure mode as news slugs (raw titles break URLs and the sitemap).
+    const slugifyProduct = (text) => String(text).toLowerCase()
+      .replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '')
+    const products = db.prepare("SELECT id, slug, name_en, name FROM products WHERE slug IS NOT NULL").all()
     for (const p of products) {
+      if (!/^[a-z0-9-]+$/.test(p.slug || '')) {
+        const fixed = slugifyProduct(p.name_en || p.name || `product-${p.id}`)
+        if (fixed) {
+          db.prepare('UPDATE products SET slug = ? WHERE id = ?').run(fixed, p.id)
+          p.slug = fixed
+          continue // fixed slug never ends with -id; skip the suffix strip below
+        }
+      }
       const suffix = `-${p.id}`
-      if (p.slug.endsWith(suffix)) {
+      if (p.slug && p.slug.endsWith(suffix)) {
         const newSlug = p.slug.slice(0, -suffix.length)
         if (newSlug.length > 0) {
           // Check uniqueness — if clash, keep the original slug

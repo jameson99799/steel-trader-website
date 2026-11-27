@@ -638,7 +638,7 @@ function updateProductSeo(comp) {
   const siteUrl = window.location.origin
   const productUrl = new URL(window.location.pathname, siteUrl).href
   const productName = localizedValue(p, 'name') || ''
-  const productDesc = p.seo_description || localizedValue(p, 'description') || ''
+  const productDesc = localizedValue(p, 'seo_description') || p.seo_description || localizedValue(p, 'description') || ''
   const productImages = (p.images || '').split(',').filter(Boolean).map(img => img.startsWith('http') ? img : siteUrl + img)
   const productSchema = {
     '@context': 'https://schema.org',
@@ -710,7 +710,12 @@ function updateProductSeo(comp) {
     } catch (error) {}
   }
 
-  document.title = p.seo_title || productName
+  // Localized SEO title first (matches SSR: translations inject seo_title_<lang>),
+  // then the raw English seo_title, then the visible product name. Append the
+  // company name like SSR does, so hydrated title == server-rendered title.
+  const seoTitle = localizedValue(p, 'seo_title') || p.seo_title || productName
+  const companyName = comp?.name_en || comp?.name || 'SunSea Steel'
+  document.title = seoTitle.includes(companyName) ? seoTitle : `${seoTitle} | ${companyName}`
   const setMeta = (prop, content) => {
     if (!content) return
     let element = document.querySelector(`meta[property="${prop}"]`) || document.querySelector(`meta[name="${prop}"]`)
@@ -723,13 +728,13 @@ function updateProductSeo(comp) {
     element.setAttribute('content', content)
   }
   setMeta('og:type', 'product')
-  setMeta('og:title', productName)
+  setMeta('og:title', document.title)
   setMeta('og:description', productDesc.substring(0, 200))
   setMeta('og:url', productUrl)
   if (productImages.length) setMeta('og:image', productImages[0])
   setMeta('og:site_name', comp?.name_en || comp?.name)
   setMeta('twitter:card', 'summary_large_image')
-  setMeta('twitter:title', productName)
+  setMeta('twitter:title', document.title)
   setMeta('twitter:description', productDesc.substring(0, 200))
   if (productImages.length) setMeta('twitter:image', productImages[0])
 }

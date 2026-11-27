@@ -600,6 +600,9 @@ async function loadArticle(slug) {
       const articleDesc = localizedValue(a, 'seo_description') || a.seo_description
         || localizedValue(a, 'summary') || a.summary_en || a.summary || ''
       const companyName = comp?.name_en || comp?.name || 'SunSea Steel'
+      const companyLogoUrl = comp?.logo
+        ? (String(comp.logo).startsWith('http') ? comp.logo : siteUrl + comp.logo)
+        : ''
       const articleAuthor = seoRes?.default_news_author
         ? { '@type': 'Person', 'name': seoRes.default_news_author }
         : {
@@ -618,14 +621,14 @@ async function loadArticle(slug) {
         ...(a.updated_at && { 'dateModified': String(a.updated_at).replace(' ', 'T') }),
         ...(a.cover_image && { 'image': a.cover_image.startsWith('http') ? a.cover_image : siteUrl + a.cover_image }),
         'author': articleAuthor,
-        'publisher': {
-          '@type': 'Organization',
-          'name': companyName,
-          'logo': {
-            '@type': 'ImageObject',
-            'url': `${siteUrl}/uploads/logo.png`
+        // Logo must be the real configured company logo, never a guessed path.
+        ...(companyLogoUrl && {
+          'publisher': {
+            '@type': 'Organization',
+            'name': companyName,
+            'logo': { '@type': 'ImageObject', 'url': companyLogoUrl }
           }
-        },
+        }),
         'mainEntityOfPage': { '@type': 'WebPage', '@id': articleUrl }
       }
 

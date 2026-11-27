@@ -64,13 +64,10 @@ test('homepage descriptions always carry GI/GL/PPGI/PPGL keywords and specificat
   assert.match(description, /ASTM\/JIS\/EN/)
 })
 
-test('long descriptions are cut at a word boundary and stay within 160 characters', () => {
-  const description = finalizeMetaDescription(
-    'Galvanized steel coil supplier with a very long description that keeps going beyond the search snippet limit and must not end in the middle of a word or contain a broken phrase that looks unprofessional.',
-    { pageType: 'static' }
-  )
-  assert.ok(metaDescriptionLength(description) <= 160)
-  assert.ok(isMetaDescriptionWithinRange(description))
+test('long descriptions are preserved in full — no mid-sentence truncation', () => {
+  const long = 'Galvanized steel coil supplier with a very long description that keeps going beyond the search snippet limit and must not end in the middle of a word or contain a broken phrase that looks unprofessional.'
+  const description = finalizeMetaDescription(long, { pageType: 'static' })
+  assert.equal(description, long) // complete text, no "…" cut
   assert.doesNotMatch(description, /[\s,;:–—-]$/)
 })
 

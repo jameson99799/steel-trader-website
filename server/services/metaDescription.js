@@ -201,7 +201,10 @@ export function finalizeMetaDescription(value, {
   companyName = 'SUNSEA STEEL'
 } = {}) {
   const normalized = cleanMetaText(value)
-  if (lang !== 'en') return cutAtWord(normalized, MAX_DESCRIPTION_LENGTH)
+  // Full sentences are preserved — Google truncates for display itself, and
+  // a cut-off fragment ("...pricing from") looks unprofessional in snippets.
+  // Only short descriptions are enriched (generated filler below).
+  if (lang !== 'en') return normalized
   if (pageType === 'home') return buildHomeMetaDescription(normalized)
   if (pageType === 'product' && product) return buildProductMetaDescription(product, normalized)
   if (pageType === 'news' && article) return buildNewsMetaDescription(article, normalized)
@@ -211,6 +214,7 @@ export function finalizeMetaDescription(value, {
   if (pageType === 'newsCategory' && categoryName) {
     return buildCategoryMetaDescription({ categoryName, companyName, kind: 'news' })
   }
-  if (isMetaDescriptionWithinRange(normalized)) return cutAtWord(normalized, MAX_DESCRIPTION_LENGTH)
+  if (metaDescriptionLength(normalized) > MAX_DESCRIPTION_LENGTH) return normalized
+  if (isMetaDescriptionWithinRange(normalized)) return normalized
   return fitDescription(normalized, ['Factory-direct pricing and fast export.', 'ASTM/JIS/EN certified.'])
 }

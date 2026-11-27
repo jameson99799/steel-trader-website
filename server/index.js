@@ -719,6 +719,11 @@ ${contactLines.join('\n')}
         const company = getOne('SELECT * FROM company WHERE id = 1') || {}
         const siteUrl = 'https://www.sunseasteel.com'
         const companyName = company.name_en || company.name || 'Shandong Sunsea Steel Co., Ltd'
+        // Structured-data logo must point to a real, crawlable image — use the
+        // company's configured logo, never a guessed path like /uploads/logo.png.
+        const companyLogoUrl = company.logo
+          ? (String(company.logo).startsWith('http') ? company.logo : `${siteUrl}${company.logo}`)
+          : ''
         
         // Translation helpers for SSR GEO SEO
         const tMap = lang !== 'en' ? loadTranslationsForLang(lang) : null
@@ -805,6 +810,22 @@ ${contactLines.join('\n')}
             const slug = productMatch[1]
             const visibility = publicProductVisibility('p')
             let product = getOne(`SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.slug=? AND p.status=1${visibility.clause}`, [slug, ...visibility.params])
+            if (!product) {
+              // Dirty-URL rescue (same ladder as news): decode + slugify retry
+              // before the fuzzy fallback; mismatch triggers the canonical 301.
+              const normBase = s => String(s).toLowerCase().replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '')
+              const candidates = new Set()
+              try { candidates.add(decodeURIComponent(slug)) } catch { /* malformed encoding */ }
+              for (const c of [...candidates]) {
+                const b = normBase(c)
+                if (b) candidates.add(b)
+              }
+              candidates.delete(slug)
+              for (const c of candidates) {
+                product = getOne(`SELECT p.*, c.name_en as category_name_en, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.slug=? AND p.status=1${visibility.clause}`, [c, ...visibility.params])
+                if (product) break
+              }
+            }
             if (!product) {
               const fallbackProduct = findFuzzyBySlug('products', slug)
               if (fallbackProduct) {
@@ -992,6 +1013,26 @@ ${contactLines.join('\n')}
             const slug = newsMatch[1]
             let article = getOne('SELECT * FROM news WHERE slug=? AND status=1', [slug])
             if (!article) {
+              // Dirty-URL rescue: legacy indexed URLs may carry raw-title slugs
+              // (spaces, "?", uppercase, percent-encoding). Decode + slugify and
+              // retry — the slug mismatch then triggers the canonical 301 below.
+              const normBase = s => String(s).toLowerCase().replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '')
+              const candidates = new Set()
+              try { candidates.add(decodeURIComponent(slug)) } catch { /* malformed encoding */ }
+              for (const c of [...candidates]) {
+                const b = normBase(c)
+                if (b) {
+                  candidates.add(b)
+                  candidates.add(b.substring(0, 80).replace(/-+$/, ''))
+                }
+              }
+              candidates.delete(slug)
+              for (const c of candidates) {
+                article = getOne('SELECT * FROM news WHERE slug=? AND status=1', [c])
+                if (article) break
+              }
+            }
+            if (!article) {
               const fallbackArticle = findFuzzyBySlug('news', slug)
               if (fallbackArticle) {
                 article = getOne('SELECT * FROM news WHERE id=? AND status=1', [fallbackArticle.id])
@@ -1045,7 +1086,7 @@ ${contactLines.join('\n')}
                 ...(article.updated_at && { dateModified: String(article.updated_at).replace(' ', 'T') }),
                 ...(pageImage && { image: pageImage }),
                 author: articleAuthor,
-                publisher: { '@type': orgType, name: companyNameTranslated, logo: { '@type': 'ImageObject', url: `${siteUrl}/uploads/logo.png` } },
+                ...(companyLogoUrl && { publisher: { '@type': orgType, name: companyNameTranslated, logo: { '@type': 'ImageObject', url: companyLogoUrl } } }),
                 mainEntityOfPage: { '@type': 'WebPage', '@id': pageCanonical }
               }
               extraSchemas += jsonLd(articleSchema, 'article-jsonld')
@@ -1570,7 +1611,7 @@ ${contactLines.join('\n')}
           '@context': 'https://schema.org', '@type': orgType,
           name: companyName,
           url: siteUrl,
-          logo: `${siteUrl}/uploads/logo.png`,
+          ...(companyLogoUrl && { logo: companyLogoUrl }),
           description: (company.description_en || '').substring(0, 300),
           // Address as a structured PostalAddress improves entity parsing by
           // Google and AI (GEO) engines.
@@ -1652,10 +1693,12 @@ ${contactLines.join('\n')}
             companyName: companyNameTranslated
           })
         }
+        // Full title/description in the head — Google truncates for display
+        // itself; pre-truncating with "…" loses ranking-relevant text.
+        // (og/twitter snippets keep their own shorter limits.)
         const ogTitle = (pageTitle || '').substring(0, 110)
         const safeDesc = (pageDesc || '').substring(0, 160)
-        // Google shows roughly 60 characters of the <title> in search results.
-        const titleForHead = (pageTitle || '').length > 60 ? (pageTitle || '').slice(0, 57).trimEnd() + '…' : pageTitle || ''
+        const titleForHead = pageTitle || ''
         const isPrivateRoute = url.startsWith('/admin') || url.startsWith('/crm')
         // Static/listing/category pages only have localized variants in the primary
         // locales; secondary languages picked up here render untranslated content.
@@ -1737,7 +1780,7 @@ ${contactLines.join('\n')}
           html,
           lang: lang === 'zh' ? (seoSettings.hreflang_zh || 'zh-CN') : lang,
           title: titleForHead,
-          description: safeDesc,
+          description: pageDesc || '',
           keywords: pageKeywords,
           canonical: isNotFound ? '' : pageCanonical,
           robots: responsePolicy.robots,

@@ -127,7 +127,9 @@ router.post('/', authMiddleware, upload.single('cover_image'), compressUploads, 
 
         // Generate clean SEO slug before insertion to avoid UNIQUE constraint clashes on hardcoded strings like 'temp'
         const baseSlug = slugify(title_en || title) || 'news'
-        const cleanSlug = req.body.slug || uniqueSlug(baseSlug)
+        // Never trust a client-provided slug — sanitize it (a raw title with
+        // spaces/"?" creates URLs that 404 and pollutes the news sitemap).
+        const cleanSlug = slugify(req.body.slug || '') || uniqueSlug(baseSlug)
 
         const result = run(
             `INSERT INTO news (title, title_en, slug, summary, summary_en, content, cover_image, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, category_id)
@@ -161,9 +163,10 @@ router.put('/:id', authMiddleware, upload.single('cover_image'), compressUploads
         const { title, title_en, summary, summary_en, content, seo_title, seo_description, seo_keywords, status, sort_order, render_mode, category_id, category_name } = req.body
         const resolvedCatId = resolveCategoryId(category_id, category_name) ?? existing.category_id
         const cover_image = req.file ? `/uploads/${req.file.filename}` : (req.body.cover_url || existing.cover_image)
-        // Preserve existing SEO slug unless explicitly modified
+        // Preserve existing SEO slug unless explicitly modified (sanitize any
+        // client-provided slug — never store a raw title with spaces/"?")
         const baseSlug = slugify(title_en || title) || 'news'
-        const updatedSlug = req.body.slug || existing.slug || uniqueSlug(baseSlug, id)
+        const updatedSlug = slugify(req.body.slug || '') || existing.slug || uniqueSlug(baseSlug, id)
 
         run(
             `UPDATE news SET title=?, title_en=?, slug=?, summary=?, summary_en=?, content=?, cover_image=?, seo_title=?, seo_description=?, seo_keywords=?, status=?, sort_order=?, render_mode=?, category_id=?, updated_at=CURRENT_TIMESTAMP
